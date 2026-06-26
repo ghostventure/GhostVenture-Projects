@@ -1,0 +1,28 @@
+{
+  "name": "black-lion-studios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Black Lion Studios service request website with user profiles and SQLite storage.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "smoke:live": "node scripts/live-smoke.mjs",
+    "deploy:full": "npx firebase-tools deploy --project black-lion-media-studio --account blacklionmediastudio@gmail.com",
+    "static:prepare": "node scripts/prepare-static-hosting.mjs",
+    "deploy:static-fast": "npm run build && npm run static:prepare && npx firebase-tools deploy --config firebase.static.json --only hosting --project black-lion-media-studio --account blacklionmediastudio@gmail.com",
+    "deploy:framework-hosting": "npx firebase-tools deploy --only hosting --project black-lion-media-studio --account blacklionmediastudio@gmail.com",
+    "deploy:rules": "npx firebase-tools deploy --only firestore:rules,firestore:indexes --project black-lion-media-studio --account blacklionmediastudio@gmail.com"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.9.0",
+    "lucide-react": "^1.14.0",
+    "next": "16.0.11",
+    "nodemailer": "^8.0.7",
+    "rate-limiter-flexible": "^11.1.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "sonner": "^2.0.7",
+    "zod": "^4.4.3"
+  }
+}

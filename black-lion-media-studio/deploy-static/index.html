@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Black Lion Studios</title>
+    <meta
+      name="description"
+      content="Black Lion Studios offers a more refined destination for creative production, music services, digital support, and private client booking."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f1e8;
+        --panel: rgba(255, 251, 246, 0.84);
+        --line: rgba(84, 67, 43, 0.12);
+        --text: #17130f;
+        --muted: #625648;
+        --ink: #12100e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top right, rgba(236, 215, 182, 0.85), transparent 24rem),
+          linear-gradient(180deg, #f8f4ed 0%, var(--bg) 42%, #eee4d3 100%);
+      }
+
+      main {
+        width: min(1200px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 2rem 0 4rem;
+      }
+
+      .hero,
+      .intro-grid,
+      .essay-grid,
+      .closing-grid,
+      .category-grid,
+      .service-grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .hero {
+        grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+        align-items: center;
+        min-height: 70vh;
+      }
+
+      .brand {
+        display: inline-block;
+        margin-bottom: 1rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #7b6a52;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 10ch;
+        font-size: clamp(3rem, 7vw, 5.7rem);
+        line-height: 0.92;
+        letter-spacing: -0.07em;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: clamp(1.8rem, 3vw, 2.7rem);
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+      }
+
+      p {
+        color: var(--muted);
+        line-height: 1.75;
+        font-size: 1.02rem;
+      }
+
+      .lead {
+        max-width: 56ch;
+        margin: 0;
+      }
+
+      .actions,
+      .notes,
+      .service-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+      }
+
+      .actions {
+        margin-top: 1.8rem;
+      }
+
+      .notes {
+        margin-top: 1rem;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3rem;
+        padding: 0 1.2rem;
+        border-radius: 999px;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .button-primary {
+        background: var(--ink);
+        color: #fdf8f1;
+      }
+
+      .button-secondary {
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+
+      .pill,
+      .service-meta span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 2.15rem;
+        padding: 0 0.9rem;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+        color: #564937;
+        font-size: 0.82rem;
+      }
+
+      .divider {
+        height: 1px;
+        margin: 1rem 0 1.5rem;
+        background: linear-gradient(90deg, transparent, rgba(94, 72, 40, 0.24), transparent);
+      }
+
+      .section {
+        display: grid;
+        gap: 0.9rem;
+        margin-top: 2rem;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #80684b;
+      }
+
+      .card,
+      .panel,
+      .cta {
+        padding: 1.5rem;
+        border: 1px solid var(--line);
+        border-radius: 1.7rem;
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 24px 60px rgba(71, 48, 18, 0.06);
+      }
+
+      .stage {
+        position: relative;
+        min-height: 500px;
+      }
+
+      .stage-backdrop {
+        position: absolute;
+        inset: 1.6rem 0 0 1.6rem;
+        border-radius: 2.1rem;
+        background:
+          radial-gradient(circle at top right, rgba(255, 223, 179, 0.75), transparent 28%),
+          linear-gradient(180deg, rgba(236, 227, 213, 0.98), rgba(225, 212, 192, 0.85));
+      }
+
+      .panel {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: min(470px, 100%);
+        background: linear-gradient(180deg, rgba(255, 252, 247, 0.96), rgba(247, 241, 233, 0.92));
+      }
+
+      .panel strong,
+      .card strong {
+        color: var(--text);
+      }
+
+      .panel-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 1.2rem;
+      }
+
+      .panel-grid div {
+        padding-top: 0.85rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .intro-grid {
+        grid-template-columns: minmax(0, 0.84fr) minmax(320px, 1.16fr);
+        align-items: start;
+      }
+
+      .category-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .essay-grid {
+        grid-template-columns: minmax(0, 0.92fr) minmax(340px, 1.08fr);
+      }
+
+      .service-grid,
+      .closing-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card h3 {
+        margin: 0.9rem 0 0.45rem;
+        font-size: 1.08rem;
+      }
+
+      .cta {
+        background: linear-gradient(160deg, rgba(28, 23, 20, 0.97), rgba(61, 47, 34, 0.94));
+      }
+
+      .cta,
+      .cta p,
+      .cta h2,
+      .cta .eyebrow {
+        color: #fcf8f1;
+      }
+
+      @media (max-width: 960px) {
+        .hero,
+        .intro-grid,
+        .essay-grid,
+        .closing-grid,
+        .category-grid,
+        .service-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          min-height: auto;
+        }
+
+        .stage {
+          min-height: 420px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        main {
+          width: min(100% - 1rem, 1200px);
+        }
+
+        .card,
+        .panel,
+        .cta {
+          padding: 1.25rem;
+          border-radius: 1.4rem;
+        }
+
+        h1 {
+          font-size: clamp(2.4rem, 12vw, 3.8rem);
+        }
+
+        .panel-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .stage-backdrop {
+          inset: 0.75rem 0 0 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div>
+          <span class="brand">Black Lion Studios</span>
+          <h1>A more beautiful way to book creative work.</h1>
+          <p class="lead">
+            Black Lion Studios brings creative production, music, technical support, and merch
+            into one calmer, more polished destination. The experience is designed to feel
+            confident, premium, and easy to move through.
+          </p>
+          <div class="actions">
+            <a class="button button-primary" href="/portal">Enter Client Portal</a>
+            <a class="button button-secondary" href="/store">Browse Store</a>
+          </div>
+          <div class="notes">
+            <span class="pill">6 bookable service lines</span>
+            <span class="pill">2 merch collections</span>
+            <span class="pill">One private account for requests and updates</span>
+          </div>
+        </div>
+
+        <div class="stage" aria-hidden="true">
+          <div class="stage-backdrop"></div>
+          <aside class="panel">
+            <span class="eyebrow">Studio Focus</span>
+            <h2 style="margin-top:.6rem;font-size:1.2rem;line-height:1.45;">Elegant presentation. Clear next steps. Less noise.</h2>
+            <p>
+              The homepage now feels more like a brand destination and less like a crowded utility page.
+            </p>
+            <div class="panel-grid">
+              <div>
+                <span class="eyebrow">Mood</span>
+                <strong style="display:block;margin-top:.35rem;">Editorial</strong>
+              </div>
+              <div>
+                <span class="eyebrow">Experience</span>
+                <strong style="display:block;margin-top:.35rem;">Simple and premium</strong>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <div class="divider"></div>
+
+      <section class="section intro-grid">
+        <div>
+          <span class="eyebrow">What The Studio Offers</span>
+          <h2>A cleaner point of entry for every type of visitor.</h2>
+          <p>
+            Instead of forcing every service into the same visual weight, the homepage now
+            introduces the studio through broader, easier-to-understand categories.
+          </p>
+        </div>
+        <div class="category-grid">
+          <article class="card">
+            <strong>Visual storytelling</strong>
+            <p>Photography and video for brands, events, campaigns, and culture-led work.</p>
+          </article>
+          <article class="card">
+            <strong>Sound and atmosphere</strong>
+            <p>DJ sets and beat sessions shaped for live energy, artist development, and memorable experiences.</p>
+          </article>
+          <article class="card">
+            <strong>Digital support</strong>
+            <p>Website, membership-platform, and technical support handled with the same care as the creative work.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section essay-grid">
+        <article class="card">
+          <span class="eyebrow">Studio Standard</span>
+          <h2>Beautiful enough to invite people in. Clear enough to keep them there.</h2>
+          <p>
+            The goal is no longer to impress with noise. It is to create trust through taste,
+            spacing, typography, and a more thoughtful rhythm across the page.
+          </p>
+        </article>
+        <article class="card">
+          <span class="eyebrow">How It Works</span>
+          <h2>A straightforward path from interest to booking.</h2>
+          <p>Browse services and choose what fits.</p>
+          <p>Create your account.</p>
+          <p>Send your request or booking details.</p>
+          <p>Check updates in one place.</p>
+        </article>
+      </section>
+
+      <section class="section">
+        <span class="eyebrow">Selected Services</span>
+        <h2>A more curated storefront.</h2>
+        <p>
+          Featured services are presented with more space and less clutter so visitors can browse
+          without feeling sold to.
+        </p>
+        <div class="service-grid">
+          <article class="card">
+            <strong>Photography</strong>
+            <p>Portraits, product sessions, events, and branded visual content.</p>
+            <div class="service-meta">
+              <span>Starting at $250</span>
+              <span>Typically 3-7 business days</span>
+            </div>
+          </article>
+          <article class="card">
+            <strong>Videography</strong>
+            <p>Promotional videos, live captures, reels, and campaign footage.</p>
+            <div class="service-meta">
+              <span>Starting at $500</span>
+              <span>Typically 5-10 business days</span>
+            </div>
+          </article>
+          <article class="card">
+            <strong>Platform Membership Site Building &amp; Maintenance</strong>
+            <p>Build and maintain subscription, member, and gated-content platforms.</p>
+            <div class="service-meta">
+              <span>$250 / month</span>
+              <span>Typically 2-4 weeks</span>
+            </div>
+          </article>
+          <article class="card">
+            <strong>DJ Services</strong>
+            <p>Event DJ support for private events, parties, launches, and activations.</p>
+            <div class="service-meta">
+              <span>Starting at $300</span>
+              <span>Booking window typically 3-14 days</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section closing-grid">
+        <article class="card">
+          <span class="eyebrow">Why It Feels Better</span>
+          <h2>The page now gives your traffic a reason to stay.</h2>
+          <p>
+            Cleaner hierarchy, more restraint, and a more intentional visual language make the
+            studio feel more credible at first glance.
+          </p>
+        </article>
+        <aside class="cta">
+          <span class="eyebrow">Client Access</span>
+          <h2>Ready to begin?</h2>
+          <p>
+            Create an account to send requests, track updates, and keep your studio activity in one place.
+          </p>
+          <div class="actions">
+            <a class="button button-primary" href="/portal">Enter Client Portal</a>
+            <a class="button button-secondary" href="/store" style="border-color:rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:#fcf8f1;">Browse Store</a>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>
