@@ -77,3 +77,11 @@ Firebase project:
 ## Operational note
 
 - If a browser still shows an older shell after deploy, clear site data or unregister the previous service worker once, then reload.
+
+## 2026-06-25 GitHub Upload Note
+
+- Uploaded ExcelBolt to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
+- Repository subfolder: `excelbolt/`.
+- Upload commit: `65920a4 Add FoxHub CLTCH EstateHat and ExcelBolt projects`.
+- The GitHub copy is source-focused. It intentionally excludes local dependencies, build output, Firebase cache, environment files, local databases, archives, and release artifacts.
+- The GitHub repository is currently public, so do not commit credentials, private customer workbook data, local databases, or unpublished operational secrets.

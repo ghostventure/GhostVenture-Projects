@@ -264,3 +264,11 @@ Footer boilerplates were added as a starting point, not final legal documents. T
   - Instant recalculation status is present.
   - International catalog entries are present in `estimator.js`.
   - Removed starter-data table is not present in the live HTML.
+
+## 2026-06-25 GitHub Upload Note
+
+- Uploaded the New and Used Car Estimator to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
+- Repository subfolder: `new-and-used-car-estimator/`.
+- Upload commit: `0af21cc Add new and used car estimator project`.
+- The GitHub copy is source-focused. It intentionally excludes Firebase cache, dependency folders, generated/build output, environment files, local databases, keys, and archives.
+- The GitHub repository is currently public, so do not commit credentials, private user data, unpublished valuation feeds, or operational secrets.

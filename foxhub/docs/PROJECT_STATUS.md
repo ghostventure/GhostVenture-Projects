@@ -1772,3 +1772,11 @@ Detailed migration note:
 - `docs/MOBILE_TAMPER_RESISTANCE_2026-04-02.md`
 - `docs/SUPERAPP_MECHANICS_2026-04-02.md`
 - `docs/FRONTEND_AUDIT_AND_ACCESS_2026-04-02.md`
+
+## 2026-06-25 GitHub Upload Note
+
+- Uploaded FoxHub to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
+- Repository subfolder: `foxhub/`.
+- Upload commit: `65920a4 Add FoxHub CLTCH EstateHat and ExcelBolt projects`.
+- The GitHub copy is source-focused. It intentionally excludes local dependencies, build output, Firebase cache, release packages, environment files, local databases, and generated wrapper assets.
+- The GitHub repository is currently public, so do not commit credentials, private user data, local Firebase smoke credentials, or unpublished operational secrets.

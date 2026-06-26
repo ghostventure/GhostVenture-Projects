@@ -400,3 +400,11 @@ Latest handoff record: `docs/HANDOFF_2026-04-17.md`
 - Firebase Storage is still optional and not required for the current core flows.
 - Plaid function routes remain in Hosting config, but Cloud Functions are not fully deployable on the current project plan.
 - Full native release binaries for the SwiftUI and Kotlin alternates still need to be generated from Xcode and Android Studio on your machines.
+
+## 2026-06-25 GitHub Upload Note
+
+- Uploaded CLTCH.NTWRK to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
+- Repository subfolder: `cltch-ntwrk/`.
+- Upload commit: `65920a4 Add FoxHub CLTCH EstateHat and ExcelBolt projects`.
+- The GitHub copy is source-focused. It intentionally excludes local dependencies, build output, Firebase cache, release APKs, environment files, local databases, generated webview bundles, and generated native build artifacts.
+- The GitHub repository is currently public, so do not commit credentials, private user data, payment/provider secrets, or unpublished operational secrets.

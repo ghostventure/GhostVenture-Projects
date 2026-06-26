@@ -225,3 +225,12 @@ Firebase project:
 - Current backend publish blocker is missing secret `SQUARE_ACCESS_TOKEN`.
 - Featured-placement server-side privacy hardening is implemented locally but not yet live because the Functions deploy has not completed.
 - Functions runtime is still on deprecated Node `20`, and `firebase-functions` should be upgraded in a planned follow-up.
+
+## 2026-06-25 GitHub Upload Note
+
+- Uploaded EstateHat to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
+- Repository subfolder: `estatehat/`.
+- Upload commit: `65920a4 Add FoxHub CLTCH EstateHat and ExcelBolt projects`.
+- The GitHub copy is source-focused. It intentionally excludes local dependencies, build output, Firebase cache, release installers/APKs, environment files, local databases, generated wrapper public bundles, temporary recording files, and archived zip packages.
+- Public landing media and investor PDFs already present in the source tree were retained.
+- The GitHub repository is currently public, so do not commit credentials, private transaction data, investor-only drafts, payment/provider secrets, or unpublished operational secrets.

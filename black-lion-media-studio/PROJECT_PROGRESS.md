@@ -942,3 +942,11 @@ Verification:
 - document exact admin workflows if the booking manager surface expands into a fuller admin suite
 - document Firestore schema if the data model expands
 - document environment-variable expectations if more external services are integrated
+
+## 2026-06-25 GitHub Upload Note
+
+- Uploaded Black Lion Media Studio to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
+- Repository subfolder: `black-lion-media-studio/`.
+- Upload commit: `c1f6a5f Add Black Lion Media Studio project`.
+- The GitHub copy is source-focused. It intentionally excludes local dependencies, build output, Firebase cache, environment files, local SQLite runtime data, backup archives, and workspace-only agent metadata.
+- The GitHub repository is currently public, so do not commit credentials, private customer data, local database files, or unpublished operational secrets.
