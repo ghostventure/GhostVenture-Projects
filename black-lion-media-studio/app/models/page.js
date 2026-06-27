@@ -58,6 +58,20 @@ const reviewStandards = [
   "Reliable communication, preparation habits, and no-show awareness."
 ];
 
+const schedulingItems = [
+  { label: "Call time", value: "Confirm first", note: "Project date, arrival window, location, and contact path are confirmed before booking." },
+  { label: "Travel", value: "Discuss range", note: "Applicants should state local range, travel comfort, and transportation constraints." },
+  { label: "Updates", value: "Respond quickly", note: "Fast production work depends on timely confirmations and schedule changes." },
+  { label: "Missed booking", value: "Priority impact", note: "Missing confirmed calls or bookings can move a model behind available applicants." }
+];
+
+const jobTermItems = [
+  { label: "Agreement", value: "Before work", note: "Compensation, usage, release terms, wardrobe, and deliverables are confirmed separately." },
+  { label: "Classification", value: "1099 project", note: "Model opportunities are project-based contractor opportunities, not full-time W-2 jobs." },
+  { label: "Payment", value: "Per scope", note: "Rate, payment timing, tax paperwork, and cancellation terms depend on accepted project terms." },
+  { label: "No guarantee", value: "Review only", note: "Submitting a profile does not guarantee booking, representation, exclusivity, or paid work." }
+];
+
 export default function ModelsPage() {
   return (
     <div className="page-shell">
@@ -136,6 +150,16 @@ export default function ModelsPage() {
                   <li key={item}>{item}</li>
                 ))}
               </ul>
+            </section>
+            <section className="panel model-readiness-panel">
+              <p className="label">Scheduling expectations</p>
+              <h2 className="editorial-heading">Be clear about timing.</h2>
+              <DetailPairGrid items={schedulingItems} />
+            </section>
+            <section className="panel model-readiness-panel">
+              <p className="label">Job terms</p>
+              <h2 className="editorial-heading">Nothing is booked until terms are accepted.</h2>
+              <DetailPairGrid items={jobTermItems} />
             </section>
             <SupportNotice
               title="Important terms"

@@ -81,7 +81,7 @@ for (const marker of ["200 additional", "Campaign Conversion", "Reliability Resi
 }
 
 const models = await (await fetch(`${baseUrl}/models`)).text();
-for (const marker of ["Premium review lane", "Built for models who can move with production.", "Important terms"]) {
+for (const marker of ["Premium review lane", "Built for models who can move with production.", "Scheduling expectations", "Job terms", "Important terms"]) {
   assert(models.includes(marker), `/models missing marker: ${marker}`);
   console.log(`models marker ok: ${marker}`);
 }
