@@ -30,7 +30,7 @@ export default function ServicesPage() {
           </p>
           <div className="hero-actions">
             <Link href="/book" className="button">Start a request</Link>
-            <Link href="/quote" className="button button-secondary">Get quick quote</Link>
+            <Link href="/#service-estimation" className="button button-secondary">Service Estimation</Link>
           </div>
           <ShortcutRail items={serviceRouteItems} className="ui-shortcut-tight" />
         </section>

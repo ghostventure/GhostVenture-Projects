@@ -18,7 +18,7 @@ const footerGroups = [
     title: "Client",
     links: [
       { href: "/book", label: "Book service" },
-      { href: "/quote", label: "Quick quote" },
+      { href: "/#service-estimation", label: "Service Estimation" },
       { href: "/portal", label: "Create account" },
       { href: "/dashboard", label: "Dashboard" },
       { href: "/messages", label: "Messages" },
@@ -80,49 +80,9 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <div className="footer-boilerplate-grid">
-          <div>
-            <strong>Contact</strong>
-            <p>Use your account for service requests and project messages.</p>
-            <a href="mailto:contact@blacklionstudios.com">contact@blacklionstudios.com</a>
-          </div>
-          <div>
-            <strong>Legal</strong>
-            <p>
-              Public browsing does not create a booking. Quotes, deposits, usage rights,
-              cancellation terms, and delivery windows are confirmed per accepted request.
-            </p>
-            <Link href="/terms">Terms of Use</Link>
-          </div>
-          <div>
-            <strong>Privacy</strong>
-            <p>
-              Account details are used for requests, communication, scheduling, billing, delivery,
-              security, and support. Do not submit sensitive payment data in text fields.
-            </p>
-            <Link href="/privacy">Privacy Policy</Link>
-          </div>
-          <div>
-            <strong>Compliance</strong>
-            <p>
-              Government-compliance notes for consumer protection, privacy, security, email/text
-              marketing, accessibility, payments, records, and copyright live in Legal.
-            </p>
-            <Link href="/legal">Legal & compliance</Link>
-          </div>
-          <div>
-            <strong>Copyright</strong>
-            <p>
-              Claims are reviewed as allegations, not automatic proof. False, unsupported, or
-              bad-faith claims may be rejected and answered with original-creation records.
-            </p>
-            <Link href="/dmca">Copyright claims</Link>
-          </div>
-        </div>
-
         <div className="footer-bottom">
           <span>Copyright {year} Black Lion Studios. All rights reserved.</span>
-          <span>Service availability, pricing, and delivery windows may vary by project scope.</span>
+          <span>Webmaster: Black Lion Studios.</span>
         </div>
       </div>
     </footer>

@@ -42,7 +42,7 @@ export const metadata = {
     template: "%s | Black Lion Studios"
   },
   description:
-    "Book Black Lion Studios for photography, video, music, DJ services, membership sites, PC support, and merch requests through one client portal.",
+    "Build a Service Estimation, book Black Lion Studios for photography, video, music, DJ services, membership sites, PC support, and keep requests in one client portal.",
   applicationName: "Black Lion Studios",
   alternates: {
     canonical: "/"
@@ -57,7 +57,7 @@ export const metadata = {
     siteName: "Black Lion Studios",
     title: "Black Lion Studios - Creative Production, Tech Support, and Merch",
     description:
-      "Book photography, video, music, DJ services, membership sites, PC support, and merch requests through one Black Lion Studios portal.",
+      "Build a Service Estimation and book photography, video, music, DJ services, membership sites, PC support, and merch requests through one Black Lion Studios portal.",
     images: [
       {
         url: "/ai/hero-editorial.png",
@@ -71,7 +71,7 @@ export const metadata = {
     card: "summary_large_image",
     title: "Black Lion Studios - Creative Production, Tech Support, and Merch",
     description:
-      "Book photography, video, music, DJ services, membership sites, PC support, and merch requests through one portal.",
+      "Build a Service Estimation and book photography, video, music, DJ services, membership sites, PC support, and merch requests through one portal.",
     images: ["/ai/hero-editorial.png"]
   }
 };

@@ -10,8 +10,8 @@ export default function PrivacyPage() {
           <h1>How client and account information is handled.</h1>
           <p>
             Black Lion Studios uses account information to provide services, communicate with
-            clients, protect sign-in, support Square appointments, process requests, and coordinate
-            delivery. Last updated {lastUpdated}.
+            clients, protect sign-in, support Service Estimation, support Square appointments,
+            process requests, and coordinate delivery. Last updated {lastUpdated}.
           </p>
           <Link href="mailto:contact@blacklionstudios.com" className="button">
             Privacy contact

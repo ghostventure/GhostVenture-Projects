@@ -10,7 +10,7 @@ export default function TermsPage() {
           <h1>Rules for using the site, portal, and service request flow.</h1>
           <p>
             These terms apply to public browsing, account access, service requests, messages,
-            Square appointments, store-related activity, payments, and project coordination.
+            Service Estimation, Square appointments, store-related activity, payments, and project coordination.
             Last updated {lastUpdated}.
           </p>
           <Link href="/portal" className="button">
@@ -21,9 +21,9 @@ export default function TermsPage() {
         <section className="panel legal-section">
           <h2>Short version</h2>
           <p>
-            Public pages are informational. Confirmed appointments, quotes, invoices, payment terms,
-            cancellations, deliverables, and usage rights depend on the accepted project terms and
-            the relevant Square or studio records.
+            Public pages and Service Estimation totals are informational. Confirmed appointments,
+            final quotes, invoices, deposits, payment terms, cancellations, deliverables, and usage
+            rights depend on accepted project terms and the relevant Square or studio records.
           </p>
         </section>
 

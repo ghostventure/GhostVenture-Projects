@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClientNav } from "./client-nav";
 import { BlackLionMediaComponentSuite } from "./black-lion-media-suite";
+import { ServiceQuoteBuilder } from "./service-quote-builder";
 import { trackEvent } from "../lib/client-analytics";
 import { fetchJson, postJson } from "../lib/client-api";
 import { buildClientOnboarding } from "../lib/onboarding";
@@ -43,6 +44,9 @@ export function DashboardApp({ initialState = null }) {
   const [loading, setLoading] = useState(!initialState);
   const [requestMessage, setRequestMessage] = useState("");
   const [selectedService, setSelectedService] = useState(serviceOptions[0] || "");
+  const [requestBudget, setRequestBudget] = useState("");
+  const [requestTimeline, setRequestTimeline] = useState("");
+  const [requestDetails, setRequestDetails] = useState("");
   const [selectedConsultationDate, setSelectedConsultationDate] = useState(
     consultationAvailability[0]?.value || ""
   );
@@ -93,6 +97,9 @@ export function DashboardApp({ initialState = null }) {
       await refreshDashboardState();
       form.reset();
       setSelectedService(serviceOptions[0] || "");
+      setRequestBudget("");
+      setRequestTimeline("");
+      setRequestDetails("");
       setSelectedConsultationDate(consultationAvailability[0]?.value || "");
       setSelectedConsultationTime(consultationAvailability[0]?.timeSlots?.[0] || "");
       setRequestMessage("Request submitted.");
@@ -100,6 +107,17 @@ export function DashboardApp({ initialState = null }) {
     } catch (error) {
       setRequestMessage(error.message);
     }
+  }
+
+  function applyEstimateToRequest(estimate) {
+    setSelectedService(estimate.projectType);
+    setRequestBudget(estimate.budget);
+    setRequestTimeline(estimate.timeline);
+    setRequestDetails(estimate.details);
+    setRequestMessage("Estimate copied into the request form. Review it, then submit when ready.");
+    requestAnimationFrame(() => {
+      document.getElementById("service-request")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   if (loading) {
@@ -229,6 +247,8 @@ export function DashboardApp({ initialState = null }) {
           </div>
         </section>
 
+        <ServiceQuoteBuilder compact dashboard onApplyEstimate={applyEstimateToRequest} />
+
         <section className="panel" id="service-request">
           <p className="label">Service request</p>
           <h2 className="editorial-heading">Tell Black Lion what you want built.</h2>
@@ -286,15 +306,33 @@ export function DashboardApp({ initialState = null }) {
             <FormSectionCard title="Project details" copy="Add the budget range and the details the studio should read first.">
               <label>
                 Budget
-                <input name="budget" type="text" required />
+                <input
+                  name="budget"
+                  type="text"
+                  value={requestBudget}
+                  onChange={(event) => setRequestBudget(event.target.value)}
+                  required
+                />
               </label>
               <label>
                 Timeline
-                <input name="timeline" type="text" required />
+                <input
+                  name="timeline"
+                  type="text"
+                  value={requestTimeline}
+                  onChange={(event) => setRequestTimeline(event.target.value)}
+                  required
+                />
               </label>
               <label>
                 Project details
-                <textarea name="details" rows="6" required />
+                <textarea
+                  name="details"
+                  rows="6"
+                  value={requestDetails}
+                  onChange={(event) => setRequestDetails(event.target.value)}
+                  required
+                />
               </label>
               <FormHint>Plain language is enough here. The goal is clarity, not technical detail.</FormHint>
             </FormSectionCard>

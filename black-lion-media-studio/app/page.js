@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ServiceQuoteBuilder } from "../components/service-quote-builder";
 import {
   HeroBadgeStack,
   LandingAudienceGrid,
@@ -184,7 +185,7 @@ export default async function HomePage() {
   ];
   const adPathItems = [
     { label: "Book", value: "Square appointment", href: squareBookingUrl, note: "Confirmed booking path for visitors ready to move." },
-    { label: "Quote", value: "Get quick quote", href: "/quote", note: "Fast lead capture before account handoff." },
+    { label: "Estimate", value: "Service Estimation", href: "#service-estimation", note: "Live estimate before account handoff." },
     { label: "Support", value: "Ask for help", href: "/support", note: "Billing, scheduling, delivery, and account questions." },
     { label: "Expansion", value: "200-component board", href: "/ad-expansion", note: "Operational controls added for ad traffic." }
   ];
@@ -245,29 +246,7 @@ export default async function HomePage() {
           items={["Photography", "Videography", "Beat sessions", "DJ services", "Membership sites", "PC support", "Merch"]}
         />
 
-        <section className="signup-spark-panel" aria-label="Account signup benefits">
-          <div>
-            <p className="label">Client account</p>
-            <strong>Sign up once. Move faster every time after.</strong>
-          </div>
-          <div className="signup-spark-grid">
-            {signupHighlightItems.map((item) => (
-              <div className="signup-spark-item" key={item.label}>
-                <span>{item.label}</span>
-                <p>{item.value}</p>
-              </div>
-            ))}
-          </div>
-          <Link href="/portal" className="button">
-            Create account
-          </Link>
-        </section>
-
-        <section className="panel">
-          <p className="label">Visible access</p>
-          <h2 className="editorial-heading">Choose the fastest way in.</h2>
-          <ShortcutRail items={adPathItems} className="ui-shortcut-tight" />
-        </section>
+        <ServiceQuoteBuilder />
 
         <section className="two-column">
           <div className="panel splash-booking-card">
@@ -321,67 +300,6 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section className="panel">
-          <p className="label">Who this helps</p>
-          <LandingAudienceGrid items={audienceItems} />
-        </section>
-
-        <section className="panel highlight-panel">
-          <p className="label">Why sign up</p>
-          <div className="feature-grid">
-            <div>
-              <h2 className="editorial-heading">A clearer reason to create the account.</h2>
-              <p className="support-copy muted">
-                The account helps the studio answer faster because your contact details, service
-                request, and messages stay together.
-              </p>
-              <ProcessSteps items={processItems} className="ui-process-compact" />
-            </div>
-            <ValueCardGrid items={promiseItems} />
-          </div>
-        </section>
-
-        <section className="signup-momentum-panel" aria-label="Signup momentum">
-          <div>
-            <p className="label">Account advantage</p>
-            <h2 className="editorial-heading">Make the next request feel already started.</h2>
-            <p className="support-copy muted">
-              The portal is built for people who plan to come back, ask follow-up questions,
-              or keep booking work with the studio.
-            </p>
-          </div>
-          <div className="signup-momentum-grid">
-            {signupMomentumItems.map((item) => (
-              <div className="signup-momentum-card" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <p>{item.note}</p>
-              </div>
-            ))}
-          </div>
-          <div className="section-action-row">
-            <Link href="/portal" className="button">
-              Open client portal
-            </Link>
-            <Link href="/quote" className="button button-secondary">
-              Quick quote
-            </Link>
-          </div>
-        </section>
-
-        <section className="panel">
-          <p className="label">Proof and outcomes</p>
-          <LandingProofStrip items={proofItems} />
-          <LandingOutcomeList items={outcomeItems} />
-        </section>
-
-        <LandingIncentiveBanner
-          title="The account is the shortcut."
-          copy="Once it is set up, the next project starts with saved contact details, billing context, message history, and service preferences."
-          href="/portal"
-          actionLabel="Create account"
-        />
-
         <section className="panel" id="services">
           <p className="label">Services</p>
           <h2 className="editorial-heading">What people can actually book.</h2>
@@ -400,33 +318,6 @@ export default async function HomePage() {
               </SpotlightCard>
             ))}
           </SurfaceGrid>
-        </section>
-
-        <section className="panel">
-          <p className="label">Timing</p>
-          <h2 className="editorial-heading">Know what kind of schedule you are starting.</h2>
-          <LandingServiceTimeline items={serviceTimelineItems} />
-        </section>
-
-        <section className="two-column">
-          <div className="panel">
-            <p className="label">Booking flow</p>
-            <LandingBookingFlow items={bookingFlowItems} />
-          </div>
-          <div className="panel">
-            <p className="label">Account details</p>
-            <LandingPortalPreview items={portalPreviewItems} />
-          </div>
-        </section>
-
-        <section className="panel">
-          <p className="label">Offer map</p>
-          <LandingOfferMatrix items={offerItems} />
-        </section>
-
-        <section className="panel">
-          <p className="label">Trust and handoff</p>
-          <LandingTrustChecklist items={trustItems} />
         </section>
 
         <section className="panel" id="faq">

@@ -54,6 +54,22 @@ Live production URL:
 - Verification: edited JS files passed `node --check`; `npm run build` passed; local API smokes rejected malformed JSON, empty payloads, and under-18 payloads with 400 responses. IRS and U.S. Department of Labor independent-contractor guidance was checked before adding the 1099/W-2 disclosure. New model CSS was checked for theme-variable use. Deployed with `npm run deploy:full`. Live `/models` returned HTTP 200, live content checks found Model Sign-up/FAQ/interests/legal acceptance/1099 disclosure/component inventory, live homepage contained `Are you a model?`, live `/api/model-applications` rejected an empty payload with HTTP 400, rejected an otherwise-valid payload missing the 1099 disclosure with HTTP 400, and rejected an under-18 payload with the disclosure with HTTP 400. After owner approval, a full valid live smoke submission returned HTTP 201 and created model application `BA9lxwvDTJQQm4QocCkf` plus separate model user `wSozquJowaA9VYUMhTqZ`; those smoke-test records and their duplicate-prevention lock/reservation documents were then removed with targeted Firebase CLI deletes.
 - Detailed record: `MODEL_SIGN_UP_2026-06-21.md`
 
+## 2026-06-27 Service Estimation workflow
+
+- Added a landing-page `ServiceQuoteBuilder` at `/#service-estimation` for pick-your-service estimates.
+- Added the same estimator to the authenticated client dashboard with an `Apply to request` action that fills service, budget, timeline, and project details.
+- Reworked the estimator into a main-service multi-select plus relevant sub-service checklist so clients can select more than one main service and more than one sub-service in the same estimate.
+- Added live controls for market rate, usage type, timeline, location, scope, complexity, deliverables, session hours, revision rounds, first-time 25% discount, and travel distance.
+- Added travel/gas handling: the first 30 miles are included, and miles over 30 add a travel adjustment to the live total.
+- Added 50% required-deposit disclosure and estimator math once selected services are requested, so clients see the seriousness/scheduling commitment before submitting.
+- Updated service baselines with 2026 market-rate research and displayed each sub-service reference range in the estimator UI.
+- Consolidated the public quote workflow: `/quote` now permanently redirects to `/#service-estimation`, old quick-quote links point to the landing estimator, and `/quote` was removed from the sitemap.
+- Reduced landing-page redundancy so the main page is focused on the hero, Service Estimation, booking, services, FAQ, and conversion. Detailed legal/compliance text remains on dedicated policy pages linked from the footer.
+- Updated FAQ, Terms of Use, Privacy Policy, DMCA/Copyright Claims, Government Compliance, disclaimers, and site metadata for Service Estimation, multi-service selection, benchmark market-rate language, local estimate storage, 50% deposit expectations, and non-binding quote disclaimers.
+- Updated `scripts/live-smoke.mjs` to verify the redirect and estimator markers.
+- Verification: `node --check` passed for edited files, `npm run build` passed, and local production smoke passed with `BLACK_LION_LIVE_URL=http://localhost:3127 npm run smoke:live`.
+- Detailed record: `SERVICE_ESTIMATOR_2026-06-27.md`
+
 ## 2026-06-12 manager dashboard access fix
 
 - Staff/manager accounts can now open `/dashboard` directly instead of being forced to `/booking-manager`.
@@ -942,11 +958,3 @@ Verification:
 - document exact admin workflows if the booking manager surface expands into a fuller admin suite
 - document Firestore schema if the data model expands
 - document environment-variable expectations if more external services are integrated
-
-## 2026-06-25 GitHub Upload Note
-
-- Uploaded Black Lion Media Studio to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
-- Repository subfolder: `black-lion-media-studio/`.
-- Upload commit: `c1f6a5f Add Black Lion Media Studio project`.
-- The GitHub copy is source-focused. It intentionally excludes local dependencies, build output, Firebase cache, environment files, local SQLite runtime data, backup archives, and workspace-only agent metadata.
-- The GitHub repository is currently public, so do not commit credentials, private customer data, local database files, or unpublished operational secrets.

@@ -16,8 +16,8 @@ export default function LegalPage() {
           <p>
             This page summarizes the operating rules for Black Lion Studios and links to the
             detailed privacy, terms, and copyright-claim pages. It includes current notes for
-            Square appointments, public availability display, account data, marketing, accessibility,
-            payments, merch, DJ/music services, creative deliverables, PC tech support,
+            Service Estimation, deposits, Square appointments, public availability display, account
+            data, marketing, accessibility, payments, merch, DJ/music services, creative deliverables, PC tech support,
             membership-site work, and copyright handling. It is a business policy summary, not
             legal advice. Last updated {lastUpdated}.
           </p>
@@ -49,7 +49,7 @@ export default function LegalPage() {
           <p>
             This section is where Black Lion Studios keeps the practical government-compliance
             position for the website, portal, Square appointment flow, billing, merch, marketing,
-            DJ/music work, creative services, PC tech support, membership-site support, copyright,
+            Service Estimation, deposits, DJ/music work, creative services, PC tech support, membership-site support, copyright,
             privacy, accessibility, and client-service flow. It should be reviewed when operations
             or law changes.
           </p>

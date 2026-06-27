@@ -1,4 +1,4 @@
-export const lastUpdated = "June 21, 2026";
+export const lastUpdated = "June 27, 2026";
 
 export const faqItems = [
   {
@@ -49,12 +49,27 @@ export const faqItems = [
   {
     question: "Are prices and turnaround times guaranteed?",
     answer:
-      "No. Public pricing and timing are guidance only. Final quotes, deposits, usage rights, delivery windows, and cancellation terms depend on the accepted project scope."
+      "No. Public pricing, Service Estimation totals, market-rate references, and timing are guidance only. Final quotes, deposits, usage rights, delivery windows, and cancellation terms depend on the accepted project scope."
+  },
+  {
+    question: "What is Service Estimation?",
+    answer:
+      "Service Estimation is a planning tool that lets clients select one or more main services and related sub-services, then adjust usage, timing, location, market rate, scope, complexity, deliverables, hours, revisions, travel distance, and first-time discount assumptions before submitting a request."
+  },
+  {
+    question: "Can I select more than one service?",
+    answer:
+      "Yes. Service Estimation supports multiple main services and multiple sub-services in the same estimate, such as Photography plus Videography, or DJ Services plus audio support."
+  },
+  {
+    question: "Does Service Estimation create a final quote?",
+    answer:
+      "No. It is a benchmark estimate based on current market-rate research and selected assumptions. Black Lion Studios still has to review availability, scope, files, usage rights, travel, venue, schedule, deliverables, and payment terms before anything is final."
   },
   {
     question: "How are deposits, invoices, and payments handled?",
     answer:
-      "Payment terms are confirmed per accepted request. Approved payment links and invoices should be used for card payments, deposits, balances, refunds, chargebacks, and receipts."
+      "Payment terms are confirmed per accepted request. Once selected services are requested, a 50% deposit is warranted and required to confirm seriousness, scheduling, and production commitment. Approved payment links and invoices should be used for card payments, deposits, balances, refunds, chargebacks, and receipts."
   },
   {
     question: "Can I cancel or change a project after requesting it?",
@@ -215,6 +230,11 @@ export const complianceItems = [
       "Public service descriptions, pricing cues, availability notes, and promotional claims should be accurate, not deceptive, and updated when offers change. Quotes and final project terms control over general website copy."
   },
   {
+    title: "Service Estimation and deposits",
+    copy:
+      "Service Estimation is a planning benchmark, not a final quote. It may use market-rate references, selected main services, sub-services, usage, timing, location, travel, scope, and discount assumptions. Once selected services are requested, a 50% deposit is warranted and required to confirm seriousness, scheduling, and production commitment."
+  },
+  {
     title: "Privacy and data security",
     copy:
       "The account area limits client information to service requests, messages, scheduling, billing follow-up, delivery, security, and support. The site discourages sensitive payment data, passwords, government IDs, and unrelated sensitive details in text fields."
@@ -302,9 +322,20 @@ export const governmentComplianceSections = [
     items: [
       "Service descriptions, price labels, availability, turnaround estimates, discounts, testimonials, endorsements, social posts, and ad claims should be truthful, not misleading, and supported before they are published.",
       "Any limitation on pricing, availability, delivery timing, usage rights, deposits, refunds, or cancellation terms should be stated close to the claim it qualifies.",
+      "Service Estimation should be described as a benchmark planning tool, not a final quote, guarantee, appraisal, financial advice, or binding offer.",
+      "If selected services are requested, the 50% deposit requirement should be shown clearly before a client treats the request as serious scheduling or production commitment.",
       "Before/after examples, portfolio claims, reviews, influencer endorsements, and social proof should reflect real work, real relationships, and any material connection that needs to be disclosed.",
       "Public website pricing is guidance unless a final quote, invoice, or written project agreement accepts the scope.",
       "Reviews and testimonials should not be fabricated, purchased as fake reviews, selectively suppressed to hide negative feedback, or presented as independent when the reviewer has a material relationship with Black Lion Studios."
+    ]
+  },
+  {
+    title: "Service Estimation, market rates, and request handoff",
+    items: [
+      "Service Estimation may let clients select multiple main services, multiple sub-services, usage type, timeline, location, market mode, scope, complexity, deliverables, hours, revisions, travel distance, and first-time discount assumptions.",
+      "Market-rate references should be treated as researched planning ranges for comparable U.S. services, not a promise that every provider, city, venue, deliverable, or production condition will price the same way.",
+      "The 50% deposit notice should be retained in the estimate and copied request details when the client applies the estimate in the dashboard.",
+      "Final terms should still be reviewed for schedule, venue, files, deliverables, usage rights, licensing, travel, rush timing, cancellation terms, taxes, and accepted payment instructions."
     ]
   },
   {
@@ -378,6 +409,7 @@ export const governmentComplianceSections = [
     title: "Payments, invoices, taxes, payment-card handling, and records",
     items: [
       "Invoices, deposits, balances, refunds, chargebacks, and delivery terms should be handled through approved payment links, Square invoice records, project messages, and accepted request terms.",
+      "For requested selected services, the default deposit expectation is 50% unless a written accepted quote, invoice, or project agreement states a different payment schedule.",
       "Receipts, invoice records, project approvals, delivery confirmations, refund decisions, and dispute notes should be retained as business records.",
       "Clients are responsible for giving accurate billing, shipping, tax, appointment, and project information. Black Lion Studios may correct obvious mistakes and may decline work that creates payment, fraud, legal, privacy, or safety risk.",
       "Full payment card numbers and bank credentials should not be collected in portal text fields, messages, project notes, or support forms. Payment-card handling should stay with approved processors and payment data security practices.",
@@ -433,6 +465,8 @@ export const privacySections = [
       "Profile details such as billing, shipping, contact preferences, project goals, social links, accessibility notes, and extra notes.",
       "Model Sign-up details for model accounts, including legal name, public or stage name, username, date of birth for 18+ screening, phone, city or service area, pronouns, portfolio and social links, physical/styling details supplied by the applicant, availability, travel readiness, compensation expectations, usage comfort, wardrobe comfort, production pace, quality standards, reliability examples, preparation process, project interests, no-show/reapplication acknowledgments, and model notes.",
       "Service request details including service type, timeline, budget range, project notes, messages, and delivery preferences.",
+      "Service Estimation details such as selected main services, selected sub-services, usage, timeline, location, market mode, scope, complexity, deliverables, hours, revisions, travel distance, discount status, estimated total, required deposit amount, and copied request details.",
+      "Locally saved Service Estimation records may be stored in the visitor's browser local storage when the visitor chooses to save an estimate. Local browser storage is not the same as a submitted request.",
       "Appointment details from Square or the website, such as date, time, status, contact details, service context, and scheduling metadata.",
       "Payment and invoice references such as Square customer, order, invoice, payment status, receipt, refund, chargeback, and balance information. Full payment card numbers should not be submitted through website text fields.",
       "Site details needed for security, sign-in, abuse prevention, troubleshooting, and site operation."
@@ -444,6 +478,7 @@ export const privacySections = [
       "Create and maintain client accounts.",
       "Create and maintain separate model applicant accounts and model profiles.",
       "Review, schedule, price, fulfill, and support service requests.",
+      "Generate Service Estimation planning totals, show deposit guidance, and copy selected estimate details into the authenticated request form when a client chooses that workflow.",
       "Review model applicants for project fit, adult eligibility, availability, production speed, quality standards, reliability, usage comfort, compensation discussions, release terms, no-show priority, and follow-up.",
       "Display public availability only as general time-block status such as Available, Reserved, or Not Available without exposing client names or appointment details.",
       "Send account, appointment, request, billing, support, and service updates.",
@@ -467,6 +502,7 @@ export const privacySections = [
     items: [
       "Clients and model applicants may request access, correction, deletion, or a copy of account information by using portal messages or emailing contact@blacklionstudios.com.",
       "Clients and model applicants may ask for account closure, but some appointment, application, invoice, tax, fraud-prevention, dispute, security, release, usage-rights, no-show, and business records may need to be retained.",
+      "Visitors can clear locally saved Service Estimation records by clearing browser storage for the site. Submitted request records must be handled through account support or privacy request channels.",
       "Marketing emails should include an opt-out path where required. Transactional account, appointment, invoice, scheduling, delivery, and security messages may still be sent when needed to provide services.",
       "Clients should not submit sensitive payment data, passwords, health information, government IDs, or unrelated confidential material in free-text fields."
     ]
@@ -507,6 +543,7 @@ export const privacySections = [
     title: "Retention",
     items: [
       "Account and profile records are kept while an account is active or as needed for business operations.",
+      "Browser-saved Service Estimation drafts remain on the visitor's device until browser storage is cleared or overwritten.",
       "Model Sign-up applications may be retained for casting review, reapplication windows, no-show priority handling, consent records, legal/business records, and dispute handling.",
       "Service requests, messages, appointments, invoices, receipts, project approvals, delivery notes, and dispute records may be retained for accounting, tax, legal, security, fraud prevention, and client-service reasons.",
       "Data that is no longer needed should be deleted, de-identified, or archived when practical and appropriate."
@@ -539,6 +576,7 @@ export const termsSections = [
     title: "Bookings, quotes, and delivery",
     items: [
       "Public pages do not create a booking, guarantee availability, or lock pricing.",
+      "Service Estimation is a non-binding planning tool. It can combine multiple main services and sub-services, apply assumptions, and show a benchmark total, but it does not create a final quote, booking, invoice, contract, or guarantee.",
       "Square Appointments may be used for appointment scheduling. A Square confirmation may reserve a time block, but final service scope, price, usage rights, deliverables, and payment terms may still require studio acceptance.",
       "Public calendar statuses are informational and may change because of Square sync timing, manual schedule changes, cancellations, holds, or technical delays.",
       "Accepted project terms may include scope, price, deposit, payment schedule, timeline, deliverables, usage rights, cancellation terms, and revision limits.",
@@ -549,6 +587,7 @@ export const termsSections = [
     title: "Payments, invoices, cancellations, and refunds",
     items: [
       "Deposits, invoice links, balances, receipts, refunds, chargebacks, and payment disputes should be handled through approved payment tools and written project communications.",
+      "Once selected services are requested, a 50% deposit is warranted and required to confirm seriousness, scheduling, and production commitment unless a written accepted quote, invoice, or project agreement states otherwise.",
       "Cancellation, reschedule, no-show, refund, revision, and rush-fee decisions depend on the accepted terms, appointment window, work already performed, third-party costs, and project-specific facts.",
       "Do not submit full card numbers, bank details, passwords, Social Security numbers, or unrelated sensitive information through messages, request forms, or profile notes."
     ]
@@ -566,6 +605,8 @@ export const termsSections = [
     title: "Disclaimers and limits",
     items: [
       "The website is provided as available. Service availability, pricing, turnaround, and features may change.",
+      "Service Estimation totals, 2026 market-rate references, deposit calculations, timing ranges, and travel adjustments are informational planning estimates and may change after Black Lion Studios reviews the actual request.",
+      "Service Estimation is not legal, tax, accounting, financial, appraisal, insurance, or procurement advice.",
       "To the extent allowed by law, Black Lion Studios is not responsible for indirect, incidental, special, consequential, or punitive damages from use of the site.",
       "Some jurisdictions do not allow certain limitations, so some terms may not apply to every client."
     ]
@@ -612,6 +653,7 @@ export const copyrightClaimSections = [
     items: [
       "A copyright claim is not proof by itself.",
       "Similarity is not automatically infringement.",
+      "Service Estimation categories, sub-service lists, pricing formulas, market-rate labels, deposit notices, and functional quote interfaces are reviewed as business and functional site material unless a claimant identifies protectable copied expression.",
       "Ideas, business concepts, common layouts, functional elements, generic style, and industry patterns are not treated the same as copied protected expression.",
       "Independent creation, prior drafts, source files, timestamps, deployment history, and project records can matter.",
       "If Black Lion Studios created the material first or independently, the studio may challenge the claim and preserve evidence."

@@ -11,7 +11,9 @@ export default function DMCAPage() {
           <p>
             Black Lion Studios respects valid intellectual property rights, but a complaint is not
             treated as proof by itself. The studio may preserve creation records, challenge false
-            claims, and reject abusive or unsupported allegations. Last updated {lastUpdated}.
+            claims, and reject abusive or unsupported allegations, including claims against
+            functional Service Estimation categories or pricing workflows that do not identify
+            copied protected expression. Last updated {lastUpdated}.
           </p>
           <Link href="mailto:contact@blacklionstudios.com" className="button">
             Send copyright claim

@@ -57,8 +57,8 @@ export default function ServiceAdLandingPage({ page }) {
           <h1>{page.service.name}</h1>
           <p className="muted">{page.service.description}</p>
           <div className="hero-actions">
-            <Link href={`/quote?service=${encodeURIComponent(page.service.name)}`} className="button">
-              Get quick quote
+            <Link href="/#service-estimation" className="button">
+              Service Estimation
             </Link>
             <Link href="/contact" className="button button-secondary">
               Ask first
@@ -149,8 +149,8 @@ export default function ServiceAdLandingPage({ page }) {
           eyebrow="Ready"
           title={`Start a ${page.service.name} request.`}
           copy="Start with the quote details, then continue into the portal for tracked follow-up."
-          href={`/quote?service=${encodeURIComponent(page.service.name)}`}
-          actionLabel="Get quick quote"
+          href="/#service-estimation"
+          actionLabel="Service Estimation"
         />
       </main>
     </div>

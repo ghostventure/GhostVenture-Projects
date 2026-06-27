@@ -15,7 +15,7 @@ const coreRoutes = [
   "/dmca"
 ];
 
-const adConversionRoutes = ["/book", "/quote", "/support", "/ad-expansion"];
+const adConversionRoutes = ["/book", "/support", "/ad-expansion"];
 
 const serviceRoutes = [
   "/photography",
@@ -40,6 +40,14 @@ for (const route of routes) {
   console.log(`${route} ${response.status} length:${text.length}`);
 }
 
+const quoteResponse = await fetch(`${baseUrl}/quote`, { redirect: "manual" });
+assert([307, 308].includes(quoteResponse.status), `/quote returned ${quoteResponse.status}`);
+assert(
+  quoteResponse.headers.get("location")?.includes("/#service-estimation"),
+  "/quote did not redirect to the landing-page Service Estimation section"
+);
+console.log(`/quote ${quoteResponse.status} redirects to ${quoteResponse.headers.get("location")}`);
+
 const home = await (await fetch(baseUrl)).text();
 for (const marker of [
   "Black Lion Studios",
@@ -49,9 +57,13 @@ for (const marker of [
   'property="og:image"',
   'name="twitter:card"',
   'rel="canonical"',
-  "Start a request",
-  "Choose the fastest way in.",
-  "200-component board"
+  "Book appointment",
+  "Create account",
+  "Service Estimation",
+  "Build a Service Estimation before you send the request.",
+  "Travel over 30 miles",
+  "50% deposit",
+  "Appointment calendar"
 ]) {
   assert(home.includes(marker), `home missing marker: ${marker}`);
   console.log(`marker ok: ${marker}`);

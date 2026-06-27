@@ -52,6 +52,15 @@ const nextConfig = {
         headers: securityHeaders
       }
     ];
+  },
+  async redirects() {
+    return [
+      {
+        source: "/quote",
+        destination: "/#service-estimation",
+        permanent: true
+      }
+    ];
   }
 };
 
