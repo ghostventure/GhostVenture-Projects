@@ -61,7 +61,7 @@ for (const marker of [
   "Create account",
   "Service Estimation",
   "Build a Service Estimation before you send the request.",
-  "Travel over 30 miles",
+  "Travel charge over 30 miles",
   "50% deposit",
   "Appointment calendar"
 ]) {

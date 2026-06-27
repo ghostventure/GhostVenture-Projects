@@ -59,8 +59,10 @@ Live production URL:
 - Added a landing-page `ServiceQuoteBuilder` at `/#service-estimation` for pick-your-service estimates.
 - Added the same estimator to the authenticated client dashboard with an `Apply to request` action that fills service, budget, timeline, and project details.
 - Reworked the estimator into a main-service multi-select plus relevant sub-service checklist so clients can select more than one main service and more than one sub-service in the same estimate.
+- Expanded sub-service options across Photography, Videography, Music/events, Web/tech, Planning, and Add-ons so each main service has a deeper set of relevant choices.
+- Hardened estimator logic with safer option lookups, numeric clamping, stale-selection filtering, localStorage parse fallback, capped saved-estimate history, and independent travel-charge calculation.
 - Added live controls for market rate, usage type, timeline, location, scope, complexity, deliverables, session hours, revision rounds, first-time 25% discount, and travel distance.
-- Added travel/gas handling: the first 30 miles are included, and miles over 30 add a travel adjustment to the live total.
+- Added travel/gas handling: the first 30 miles are included, and miles over 30 are a separate independent extra charge outside the service subtotal, market multipliers, and first-time discount.
 - Added 50% required-deposit disclosure and estimator math once selected services are requested, so clients see the seriousness/scheduling commitment before submitting.
 - Updated service baselines with 2026 market-rate research and displayed each sub-service reference range in the estimator UI.
 - Consolidated the public quote workflow: `/quote` now permanently redirects to `/#service-estimation`, old quick-quote links point to the landing estimator, and `/quote` was removed from the sitemap.

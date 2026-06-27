@@ -4,23 +4,51 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 
 const quoteStorageKey = "bls-service-estimates";
+const maxStoredEstimates = 20;
+const includedTravelMiles = 30;
 
 const microServices = [
   { id: "portrait-session", label: "Portrait session", category: "Photography", base: 375, unit: "session", service: "Photography", marketRange: "$250-$1,500 package" },
   { id: "event-photo", label: "Event photo coverage", category: "Photography", base: 900, unit: "event block", service: "Photography", marketRange: "$150-$500/hr" },
   { id: "product-photos", label: "Product or merch photos", category: "Photography", base: 650, unit: "set", service: "Photography", marketRange: "$500-$2,500 half-day" },
+  { id: "headshot-mini", label: "Headshot mini-session", category: "Photography", base: 225, unit: "session", service: "Photography", marketRange: "$150-$500 session" },
+  { id: "brand-lifestyle", label: "Brand lifestyle set", category: "Photography", base: 800, unit: "set", service: "Photography", marketRange: "$800-$5,000 day" },
+  { id: "real-estate-photo", label: "Real estate photo set", category: "Photography", base: 350, unit: "property", service: "Photography", marketRange: "$150-$500 shoot" },
+  { id: "photo-retouching", label: "Photo retouching pack", category: "Photography", base: 175, unit: "pack", service: "Photography", marketRange: "$25-$175 image" },
   { id: "promo-video", label: "Promo video", category: "Videography", base: 1250, unit: "project", service: "Videography", marketRange: "$500-$5,000 project" },
   { id: "social-reels", label: "Short-form reels", category: "Videography", base: 450, unit: "bundle", service: "Videography", marketRange: "$250+ per video" },
   { id: "event-video", label: "Event video capture", category: "Videography", base: 1800, unit: "event block", service: "Videography", marketRange: "$1,500-$4,500 event" },
+  { id: "interview-video", label: "Interview or testimonial video", category: "Videography", base: 900, unit: "project", service: "Videography", marketRange: "$750-$3,000 project" },
+  { id: "music-video", label: "Music video capture", category: "Videography", base: 1500, unit: "project", service: "Videography", marketRange: "$1,000-$10,000+" },
+  { id: "highlight-recap", label: "Event highlight recap", category: "Videography", base: 700, unit: "edit", service: "Videography", marketRange: "$400-$1,500 edit" },
+  { id: "video-edit-only", label: "Video edit-only package", category: "Videography", base: 500, unit: "edit", service: "Videography", marketRange: "$75-$350/hr" },
   { id: "dj-set", label: "DJ event set", category: "Music and events", base: 750, unit: "booking", service: "DJ Services", marketRange: "$400-$1,800 booking" },
   { id: "beat-session", label: "Beat creation session", category: "Music and events", base: 500, unit: "session", service: "Beat Creation Session", marketRange: "$200-$1,500+ song" },
   { id: "audio-edit", label: "Audio edit or cleanup", category: "Music and events", base: 225, unit: "edit", service: "Beat Creation Session", marketRange: "$75-$200/hr" },
+  { id: "sound-setup", label: "Sound setup support", category: "Music and events", base: 300, unit: "setup", service: "DJ Services", marketRange: "$150-$750 setup" },
+  { id: "playlist-curation", label: "Playlist curation", category: "Music and events", base: 125, unit: "list", service: "DJ Services", marketRange: "$75-$250 list" },
+  { id: "recording-session", label: "Recording session support", category: "Music and events", base: 350, unit: "session", service: "Beat Creation Session", marketRange: "$50-$200/hr" },
+  { id: "mix-master", label: "Mixing or mastering pass", category: "Music and events", base: 350, unit: "track", service: "Beat Creation Session", marketRange: "$150-$1,000 track" },
   { id: "membership-page", label: "Membership page setup", category: "Web and tech", base: 850, unit: "page set", service: "Membership Sites & Support", marketRange: "$50-$250/hr" },
   { id: "site-maintenance", label: "Site maintenance block", category: "Web and tech", base: 300, unit: "month", service: "Membership Sites & Support", marketRange: "$35-$650/mo" },
   { id: "pc-support", label: "PC support visit", category: "Web and tech", base: 125, unit: "visit", service: "PC Tech Services", marketRange: "$79-$250 repair" },
+  { id: "landing-page-build", label: "Landing page build", category: "Web and tech", base: 950, unit: "page", service: "Membership Sites & Support", marketRange: "$1,000-$5,000 site" },
+  { id: "form-automation", label: "Form or automation setup", category: "Web and tech", base: 425, unit: "workflow", service: "Membership Sites & Support", marketRange: "$75-$200/hr" },
+  { id: "analytics-setup", label: "Analytics or tracking setup", category: "Web and tech", base: 250, unit: "setup", service: "Membership Sites & Support", marketRange: "$150-$750 setup" },
+  { id: "pc-tuneup", label: "PC tune-up and cleanup", category: "Web and tech", base: 150, unit: "device", service: "PC Tech Services", marketRange: "$89-$250 repair" },
+  { id: "hardware-upgrade", label: "Hardware upgrade labor", category: "Web and tech", base: 175, unit: "device", service: "PC Tech Services", marketRange: "$59-$179 labor" },
   { id: "content-planning", label: "Creative planning call", category: "Planning", base: 125, unit: "call", service: "Photography", marketRange: "$75-$200/hr" },
+  { id: "shot-list", label: "Shot list and production brief", category: "Planning", base: 175, unit: "brief", service: "Photography", marketRange: "$75-$200/hr" },
+  { id: "content-calendar", label: "Content calendar setup", category: "Planning", base: 275, unit: "calendar", service: "Videography", marketRange: "$250-$1,000 plan" },
+  { id: "brand-review", label: "Brand or campaign review", category: "Planning", base: 225, unit: "review", service: "Photography", marketRange: "$100-$250/hr" },
+  { id: "production-roadmap", label: "Production roadmap", category: "Planning", base: 350, unit: "roadmap", service: "Videography", marketRange: "$300-$1,500 plan" },
   { id: "rush-edit", label: "Rush edit window", category: "Add-ons", base: 250, unit: "rush block", service: "Videography", marketRange: "15%-35% rush lift" },
-  { id: "extra-revisions", label: "Revision pack", category: "Add-ons", base: 125, unit: "pack", service: "Videography", marketRange: "$75-$200/hr" }
+  { id: "extra-revisions", label: "Revision pack", category: "Add-ons", base: 125, unit: "pack", service: "Videography", marketRange: "$75-$200/hr" },
+  { id: "extra-location", label: "Extra location", category: "Add-ons", base: 150, unit: "location", service: "Photography", marketRange: "$75-$300 add-on" },
+  { id: "same-day-teaser", label: "Same-day teaser delivery", category: "Add-ons", base: 300, unit: "teaser", service: "Videography", marketRange: "$250-$1,000 add-on" },
+  { id: "raw-file-delivery", label: "Raw file delivery", category: "Add-ons", base: 200, unit: "handoff", service: "Videography", marketRange: "$100-$750 add-on" },
+  { id: "usage-license-extension", label: "Usage license extension", category: "Add-ons", base: 350, unit: "license", service: "Photography", marketRange: "$250-$10,000 usage" },
+  { id: "assistant-operator", label: "Assistant or second operator", category: "Add-ons", base: 450, unit: "day", service: "Videography", marketRange: "$300-$800 day" }
 ];
 
 const mainServiceLanes = ["Photography", "Videography", "Music and events", "Web and tech", "Planning", "Add-ons"];
@@ -50,15 +78,53 @@ const marketModes = [
 ];
 
 function money(value) {
+  const amount = Number.isFinite(Number(value)) ? Number(value) : 0;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0
-  }).format(Math.round(value));
+  }).format(Math.round(amount));
 }
 
 function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, Number(value) || min));
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.min(max, Math.max(min, number));
+}
+
+function getOption(options, label, fallbackIndex = 0) {
+  return options.find((item) => item.label === label) || options[fallbackIndex] || options[0];
+}
+
+function getMarketMode(index) {
+  const safeIndex = clamp(index, 0, marketModes.length - 1);
+  return marketModes[safeIndex] || marketModes[1] || marketModes[0];
+}
+
+function visibleServiceIds(lanes) {
+  const laneSet = new Set(lanes.filter((lane) => mainServiceLanes.includes(lane)));
+  return microServices
+    .filter((item) => laneSet.has(item.category) || laneSet.has(item.service))
+    .map((item) => item.id);
+}
+
+function safeEstimateList(rawValue) {
+  try {
+    const parsed = JSON.parse(rawValue || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function calculateTravelCharge(miles, hasServices) {
+  const safeMiles = clamp(miles, 0, 150);
+  const billableMiles = hasServices ? Math.max(0, safeMiles - includedTravelMiles) : 0;
+  return {
+    safeMiles,
+    billableMiles,
+    fee: billableMiles ? billableMiles * 1.35 + Math.ceil(billableMiles / 25) * 25 : 0
+  };
 }
 
 function budgetLabel(total) {
@@ -94,11 +160,13 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
   const [savedNotice, setSavedNotice] = useState("");
 
   const estimate = useMemo(() => {
-    const selectedItems = microServices.filter((item) => selectedIds.includes(item.id));
-    const usageOption = usageOptions.find((item) => item.label === usage) || usageOptions[0];
-    const timelineOption = timelineOptions.find((item) => item.label === timeline) || timelineOptions[1];
-    const locationOption = locationOptions.find((item) => item.label === location) || locationOptions[0];
-    const marketOption = marketModes[market] || marketModes[1];
+    const safeSelectedIds = new Set(selectedIds.filter((id) => microServices.some((item) => item.id === id)));
+    const selectedItems = microServices.filter((item) => safeSelectedIds.has(item.id));
+    const safeSelectedLanes = selectedLanes.filter((lane) => mainServiceLanes.includes(lane));
+    const usageOption = getOption(usageOptions, usage, 0);
+    const timelineOption = getOption(timelineOptions, timeline, 1);
+    const locationOption = getOption(locationOptions, location, 0);
+    const marketOption = getMarketMode(market);
     const serviceBase = selectedItems.reduce((sum, item) => sum + item.base, 0);
     const setupBase = selectedItems.length ? serviceBase : 0;
     const scopeMultiplier = 1 + (clamp(scope, 0, 4) - 2) * 0.08;
@@ -106,16 +174,18 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
     const deliverableFee = selectedItems.length ? Math.max(0, deliverables - 1) * 45 : 0;
     const hourFee = selectedItems.length ? Math.max(0, hours - 2) * 65 : 0;
     const revisionFee = selectedItems.length ? Math.max(0, revisions - 1) * 55 : 0;
-    const billableTravelMiles = selectedItems.length ? Math.max(0, travelMiles - 30) : 0;
-    const travelFee = billableTravelMiles * 1.35 + Math.ceil(billableTravelMiles / 25) * 25;
-    const marketRate = (setupBase + locationOption.fee + deliverableFee + hourFee + revisionFee + travelFee) *
+    const travelCharge = calculateTravelCharge(travelMiles, selectedItems.length > 0);
+    const billableTravelMiles = travelCharge.billableMiles;
+    const travelFee = travelCharge.fee;
+    const serviceSubtotal = (setupBase + locationOption.fee + deliverableFee + hourFee + revisionFee) *
       scopeMultiplier *
       complexityMultiplier *
       usageOption.multiplier *
       timelineOption.multiplier *
       marketOption.multiplier;
-    const discount = firstTimer ? marketRate * 0.25 : 0;
-    const total = Math.max(0, marketRate - discount);
+    const discount = firstTimer ? serviceSubtotal * 0.25 : 0;
+    const serviceTotal = Math.max(0, serviceSubtotal - discount);
+    const total = serviceTotal + travelFee;
     const deposit = total > 0 ? total * 0.5 : 0;
     const summary = selectedItems.length
       ? selectedItems.map((item) => item.label).join(", ")
@@ -124,21 +194,22 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
     return {
       selectedItems,
       summary,
-      marketRate,
+      marketRate: serviceSubtotal,
       discount,
+      serviceTotal,
       total,
       deposit,
       travelFee,
       billableTravelMiles,
       timelineDays: timelineOption.days,
-      serviceName: primaryServiceName(selectedItems, selectedLanes),
+      serviceName: primaryServiceName(selectedItems, safeSelectedLanes),
       budget: budgetLabel(total),
       details: [
         `Estimate generated from: ${summary}.`,
-        `Main services: ${selectedLanes.length ? selectedLanes.join(", ") : "None selected"}.`,
+        `Main services: ${safeSelectedLanes.length ? safeSelectedLanes.join(", ") : "None selected"}.`,
         `Usage: ${usage}. Timeline: ${timeline}. Location: ${location}. Market: ${marketOption.label}.`,
         `Scope ${scope}/4, complexity ${complexity}/4, deliverables ${deliverables}, hours ${hours}, revisions ${revisions}.`,
-        `Travel distance: ${travelMiles} miles; ${billableTravelMiles} miles are over the included 30-mile window.`,
+        `Travel distance: ${travelCharge.safeMiles} miles; travel under ${includedTravelMiles} miles is included and ${billableTravelMiles} miles are an independent extra charge over the included ${includedTravelMiles}-mile window.`,
         firstTimer ? "First-time client discount included at 25%." : "No first-time discount included.",
         selectedItems.length
           ? "Once selected services are requested, a 50% deposit is warranted and required to confirm the request, scheduling seriousness, and production commitment."
@@ -157,17 +228,14 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
   }
 
   function toggleMainService(lane) {
+    if (!mainServiceLanes.includes(lane)) return;
     setSavedNotice("");
-    setSelectedLanes((current) => {
-      const next = current.includes(lane)
-        ? current.filter((item) => item !== lane)
-        : [...current, lane];
-      const nextVisibleIds = microServices
-        .filter((item) => next.includes(item.category) || next.includes(item.service))
-        .map((item) => item.id);
-      setSelectedIds((selected) => selected.filter((id) => nextVisibleIds.includes(id)));
-      return next;
-    });
+    const next = selectedLanes.includes(lane)
+      ? selectedLanes.filter((item) => item !== lane)
+      : [...selectedLanes, lane];
+    const nextVisibleIds = new Set(visibleServiceIds(next));
+    setSelectedLanes(next);
+    setSelectedIds((selected) => selected.filter((id) => nextVisibleIds.has(id)));
   }
 
   function saveEstimate() {
@@ -183,8 +251,8 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
       createdAt: new Date().toISOString()
     };
     try {
-      const current = JSON.parse(window.localStorage.getItem(quoteStorageKey) || "[]");
-      window.localStorage.setItem(quoteStorageKey, JSON.stringify([record, ...current].slice(0, 20)));
+      const current = safeEstimateList(window.localStorage.getItem(quoteStorageKey));
+      window.localStorage.setItem(quoteStorageKey, JSON.stringify([record, ...current].slice(0, maxStoredEstimates)));
       setSavedNotice("Estimate saved in this browser.");
     } catch {
       setSavedNotice("Estimate ready. Local save was not available in this browser.");
@@ -347,7 +415,7 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
         <aside className="quote-result-card">
           <p className="label">Estimate result</p>
           <div className="quote-price-row">
-            <span>Market baseline</span>
+            <span>Service subtotal</span>
             <strong>{money(estimate.marketRate)}</strong>
           </div>
           <div className="quote-price-row discount">
@@ -355,7 +423,7 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
             <strong>-{money(estimate.discount)}</strong>
           </div>
           <div className="quote-price-row">
-            <span>Travel over 30 miles</span>
+            <span>Travel charge over 30 miles</span>
             <strong>{estimate.billableTravelMiles ? money(estimate.travelFee) : "Included"}</strong>
           </div>
           <div className="quote-price-total">
@@ -380,9 +448,10 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
           <p className="quote-disclaimer">
             Estimate only. Baselines use 2026 market-rate research for comparable U.S. creative,
             web, audio, DJ, and PC-support work. Final quote can change after schedule, venue,
-            files, usage, travel, and delivery needs are reviewed. Once selected services are
-            requested, a 50% deposit is warranted and required to confirm seriousness and reserve
-            production time.
+            files, usage, travel, and delivery needs are reviewed. Travel under 30 miles is
+            included; travel over 30 miles is an independent extra charge. Once selected services
+            are requested, a 50% deposit is warranted and required to confirm seriousness and
+            reserve production time.
           </p>
           <div className="quote-action-row">
             <button type="button" className="button" onClick={saveEstimate}>Save estimation</button>
