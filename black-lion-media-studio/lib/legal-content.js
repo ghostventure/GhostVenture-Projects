@@ -54,7 +54,7 @@ export const faqItems = [
   {
     question: "What is Service Estimation?",
     answer:
-      "Service Estimation is a planning tool that lets clients select one or more main services and related sub-services, then adjust usage, timing, location, market rate, scope, complexity, deliverables, hours, revisions, travel distance, and first-time discount assumptions before submitting a request. Travel under 30 miles is included; travel over 30 miles is a separate independent extra charge."
+      "Service Estimation is a planning tool that lets clients select one or more main services and related sub-services, then adjust usage, timing, location, market rate, scope, complexity, deliverables, hours, revisions, travel distance, and first-time discount assumptions before submitting a request. Dashboard users can send the quote to the manager desk for review and Square workflow follow-up. Two revision rounds are included; additional revision rounds are billable. Travel under 30 miles is included; travel over 30 miles is a separate independent extra charge."
   },
   {
     question: "Can I select more than one service?",
@@ -65,6 +65,11 @@ export const faqItems = [
     question: "Does Service Estimation create a final quote?",
     answer:
       "No. It is a benchmark estimate based on current market-rate research and selected assumptions. Black Lion Studios still has to review availability, scope, files, usage rights, travel, venue, schedule, deliverables, and payment terms before anything is final."
+  },
+  {
+    question: "How will I know if my Service Estimation request is approved?",
+    answer:
+      "After a dashboard quote is sent, the manager reviews it from the request desk. If it is approved or not approved, your dashboard request status and portal messages are updated so you can see the decision and next steps."
   },
   {
     question: "How are deposits, invoices, and payments handled?",
@@ -333,7 +338,9 @@ export const governmentComplianceSections = [
     title: "Service Estimation, market rates, and request handoff",
     items: [
       "Service Estimation may let clients select multiple main services, multiple sub-services, usage type, timeline, location, market mode, scope, complexity, deliverables, hours, revisions, travel distance, and first-time discount assumptions.",
+      "Dashboard Service Estimation submissions should route to the manager request desk for review, approval or adjustment, and Square billing workflow follow-up.",
       "Market-rate references should be treated as researched planning ranges for comparable U.S. services, not a promise that every provider, city, venue, deliverable, or production condition will price the same way.",
+      "Two revision rounds should be treated as included in the estimator; additional revision rounds may add charges and should be reviewed in final terms.",
       "Travel under 30 miles should be treated as included; travel over 30 miles should remain a separate independent charge rather than a discounted or market-multiplied service subtotal item.",
       "The 50% deposit notice should be retained in the estimate and copied request details when the client applies the estimate in the dashboard.",
       "Final terms should still be reviewed for schedule, venue, files, deliverables, usage rights, licensing, travel, rush timing, cancellation terms, taxes, and accepted payment instructions."
@@ -606,7 +613,7 @@ export const termsSections = [
     title: "Disclaimers and limits",
     items: [
       "The website is provided as available. Service availability, pricing, turnaround, and features may change.",
-      "Service Estimation totals, 2026 market-rate references, deposit calculations, timing ranges, and independent travel-over-30-mile charges are informational planning estimates and may change after Black Lion Studios reviews the actual request.",
+      "Service Estimation totals, 2026 market-rate references, deposit calculations, timing ranges, included revision assumptions, billable extra revisions, and independent travel-over-30-mile charges are informational planning estimates and may change after Black Lion Studios reviews the actual request.",
       "Service Estimation is not legal, tax, accounting, financial, appraisal, insurance, or procurement advice.",
       "To the extent allowed by law, Black Lion Studios is not responsible for indirect, incidental, special, consequential, or punitive damages from use of the site.",
       "Some jurisdictions do not allow certain limitations, so some terms may not apply to every client."

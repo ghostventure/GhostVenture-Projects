@@ -6,6 +6,7 @@ import Link from "next/link";
 const quoteStorageKey = "bls-service-estimates";
 const maxStoredEstimates = 20;
 const includedTravelMiles = 30;
+const includedRevisionRounds = 2;
 
 const microServices = [
   { id: "portrait-session", label: "Portrait session", category: "Photography", base: 375, unit: "session", service: "Photography", marketRange: "$250-$1,500 package" },
@@ -86,6 +87,11 @@ function money(value) {
   }).format(Math.round(amount));
 }
 
+function cents(value) {
+  const amount = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return Math.max(0, Math.round(amount * 100));
+}
+
 function clamp(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) return min;
@@ -143,7 +149,13 @@ function primaryServiceName(selectedItems, selectedLanes) {
   return selectedItems[0]?.service || "Photography";
 }
 
-export function ServiceQuoteBuilder({ compact = false, dashboard = false, onApplyEstimate }) {
+export function ServiceQuoteBuilder({
+  compact = false,
+  dashboard = false,
+  onApplyEstimate,
+  onSendQuote,
+  sendingQuote = false
+}) {
   const [selectedIds, setSelectedIds] = useState(["portrait-session"]);
   const [selectedLanes, setSelectedLanes] = useState(["Photography"]);
   const [usage, setUsage] = useState(usageOptions[1].label);
@@ -173,7 +185,8 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
     const complexityMultiplier = 1 + (clamp(complexity, 0, 4) - 2) * 0.1;
     const deliverableFee = selectedItems.length ? Math.max(0, deliverables - 1) * 45 : 0;
     const hourFee = selectedItems.length ? Math.max(0, hours - 2) * 65 : 0;
-    const revisionFee = selectedItems.length ? Math.max(0, revisions - 1) * 55 : 0;
+    const billableRevisionRounds = selectedItems.length ? Math.max(0, revisions - includedRevisionRounds) : 0;
+    const revisionFee = billableRevisionRounds * 55;
     const travelCharge = calculateTravelCharge(travelMiles, selectedItems.length > 0);
     const billableTravelMiles = travelCharge.billableMiles;
     const travelFee = travelCharge.fee;
@@ -201,14 +214,18 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
       deposit,
       travelFee,
       billableTravelMiles,
+      billableRevisionRounds,
       timelineDays: timelineOption.days,
       serviceName: primaryServiceName(selectedItems, safeSelectedLanes),
       budget: budgetLabel(total),
+      budgetSummary: `${money(total)} estimated total | 50% deposit ${money(deposit)} | ${budgetLabel(total)}`,
+      estimateAmountCents: cents(total),
+      depositAmountCents: cents(deposit),
       details: [
         `Estimate generated from: ${summary}.`,
         `Main services: ${safeSelectedLanes.length ? safeSelectedLanes.join(", ") : "None selected"}.`,
         `Usage: ${usage}. Timeline: ${timeline}. Location: ${location}. Market: ${marketOption.label}.`,
-        `Scope ${scope}/4, complexity ${complexity}/4, deliverables ${deliverables}, hours ${hours}, revisions ${revisions}.`,
+        `Scope ${scope}/4, complexity ${complexity}/4, deliverables ${deliverables}, hours ${hours}, revisions ${revisions}; the first ${includedRevisionRounds} revision rounds are included and ${billableRevisionRounds} rounds are billable.`,
         `Travel distance: ${travelCharge.safeMiles} miles; travel under ${includedTravelMiles} miles is included and ${billableTravelMiles} miles are an independent extra charge over the included ${includedTravelMiles}-mile window.`,
         firstTimer ? "First-time client discount included at 25%." : "No first-time discount included.",
         selectedItems.length
@@ -263,8 +280,10 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
     if (!onApplyEstimate) return;
     onApplyEstimate({
       projectType: estimate.serviceName,
-      budget: estimate.budget,
+      budget: estimate.budgetSummary,
       timeline: estimate.timelineDays,
+      estimateAmountCents: estimate.estimateAmountCents,
+      depositAmountCents: estimate.depositAmountCents,
       details: estimate.details
     });
     setSavedNotice("Estimate copied into the service request form.");
@@ -403,7 +422,7 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
           <label>
             Revision rounds
             <input type="range" min="0" max="5" value={revisions} onChange={(event) => setRevisions(Number(event.target.value))} />
-            <span>{revisions}</span>
+            <span>{revisions} selected{estimate.billableRevisionRounds ? ` / ${estimate.billableRevisionRounds} billable` : " / included"}</span>
           </label>
           <label>
             Travel distance
@@ -425,6 +444,10 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
           <div className="quote-price-row">
             <span>Travel charge over 30 miles</span>
             <strong>{estimate.billableTravelMiles ? money(estimate.travelFee) : "Included"}</strong>
+          </div>
+          <div className="quote-price-row">
+            <span>Revision rounds after 2</span>
+            <strong>{estimate.billableRevisionRounds ? `${estimate.billableRevisionRounds} billable` : "Included"}</strong>
           </div>
           <div className="quote-price-total">
             <span>Estimated total</span>
@@ -451,12 +474,25 @@ export function ServiceQuoteBuilder({ compact = false, dashboard = false, onAppl
             files, usage, travel, and delivery needs are reviewed. Travel under 30 miles is
             included; travel over 30 miles is an independent extra charge. Once selected services
             are requested, a 50% deposit is warranted and required to confirm seriousness and
-            reserve production time.
+            reserve production time. Two revision rounds are included; additional revision rounds
+            may add charges.
           </p>
           <div className="quote-action-row">
             <button type="button" className="button" onClick={saveEstimate}>Save estimation</button>
+            {dashboard && onSendQuote ? (
+              <button type="button" className="button" onClick={() => onSendQuote({
+                projectType: estimate.serviceName,
+                budget: estimate.budgetSummary,
+                timeline: estimate.timelineDays,
+                estimateAmountCents: estimate.estimateAmountCents,
+                depositAmountCents: estimate.depositAmountCents,
+                details: estimate.details
+              })} disabled={sendingQuote || estimate.selectedItems.length === 0}>
+                {sendingQuote ? "Sending quote..." : estimate.selectedItems.length === 0 ? "Select services first" : "Send Quote"}
+              </button>
+            ) : null}
             {dashboard && onApplyEstimate ? (
-              <button type="button" className="button button-secondary" onClick={applyEstimate}>Apply to request</button>
+              <button type="button" className="button button-secondary" onClick={applyEstimate}>Apply to request form</button>
             ) : (
               <Link href="/portal" className="button button-secondary">Continue to portal</Link>
             )}

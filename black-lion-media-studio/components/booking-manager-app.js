@@ -32,6 +32,10 @@ function formatMoney(amountCents = 0) {
   }).format(amount);
 }
 
+function appendManagerNote(existingNote = "", nextNote = "") {
+  return [existingNote, nextNote].map((item) => String(item || "").trim()).filter(Boolean).join("\n");
+}
+
 export function BookingManagerApp({ initialState = null }) {
   const router = useRouter();
   const [state, setState] = useState(initialState || emptyState);
@@ -111,6 +115,34 @@ export function BookingManagerApp({ initialState = null }) {
       });
       await loadManagerState();
       setManagerNotice("Request updated.");
+    } catch (error) {
+      setManagerNotice(error.message);
+    } finally {
+      setSavingRequestId("");
+    }
+  }
+
+  async function handleManagerDecision(requestRecord, decision) {
+    const approved = decision === "approved";
+    setManagerNotice("");
+    setSavingRequestId(requestRecord.id);
+
+    try {
+      await patchJson(`/api/manager/requests/${requestRecord.id}`, {
+        status: approved ? "Approved" : "Declined",
+        invoiceStatus: approved ? "Drafted" : "Waived",
+        paymentStatus: approved ? "Deposit Requested" : "Pending",
+        fulfillmentStatus: approved ? "Queued" : "Closed",
+        internalPriority: requestRecord.internal_priority || "Standard",
+        managerNotes: appendManagerNote(
+          requestRecord.manager_notes,
+          approved
+            ? "Approved for processing. Continue deposit, payment, and scheduling through Square."
+            : "Not approved as submitted. Client notified through the portal."
+        )
+      });
+      await loadManagerState();
+      setManagerNotice(approved ? "Request approved. Client was notified." : "Request declined. Client was notified.");
     } catch (error) {
       setManagerNotice(error.message);
     } finally {
@@ -374,11 +406,49 @@ export function BookingManagerApp({ initialState = null }) {
                       { label: "Type", value: selectedRequest.client_type || "Individual" },
                       { label: "Lifecycle", value: selectedRequest.client_lifecycle_stage || "New Lead" },
                       { label: "Budget", value: selectedRequest.budget || "No budget" },
+                      {
+                        label: "Estimate total",
+                        value: selectedRequest.estimate_amount_cents
+                          ? formatMoney(selectedRequest.estimate_amount_cents)
+                          : "Not provided"
+                      },
+                      {
+                        label: "Required deposit",
+                        value: selectedRequest.deposit_amount_cents
+                          ? formatMoney(selectedRequest.deposit_amount_cents)
+                          : "Not provided"
+                      },
                       { label: "Timeline", value: selectedRequest.timeline || "No timeline" },
                       { label: "Invoice", value: selectedRequest.invoice_status || "Pending" },
                       { label: "Payment", value: selectedRequest.payment_status || "Pending" }
                     ]}
                   />
+                </SpotlightCard>
+
+                <SpotlightCard
+                  className="subpanel"
+                  eyebrow="Manager decision"
+                  title="Approve or decline this request."
+                  copy="Approve when the service estimate is ready for Square deposit and scheduling. Decline if the request should not move forward as submitted."
+                >
+                  <div className="quote-action-row">
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={() => handleManagerDecision(selectedRequest, "approved")}
+                      disabled={savingRequestId === selectedRequest.id || selectedRequest.status === "Approved"}
+                    >
+                      {savingRequestId === selectedRequest.id ? "Saving..." : "Approve for processing"}
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      onClick={() => handleManagerDecision(selectedRequest, "declined")}
+                      disabled={savingRequestId === selectedRequest.id || selectedRequest.status === "Declined"}
+                    >
+                      Not approved
+                    </button>
+                  </div>
                 </SpotlightCard>
 
                 {selectedRequest.source === "Square Appointments" ? (
@@ -400,7 +470,9 @@ export function BookingManagerApp({ initialState = null }) {
                     copy={
                       selectedRequest.square_invoice_id
                         ? `Sent for ${formatMoney(selectedRequest.invoice_amount_cents)}. Due ${selectedRequest.invoice_due_date || "by invoice terms"}.`
-                        : "Send an invoice using the listed starting price for this service."
+                        : selectedRequest.deposit_amount_cents
+                          ? `Send the required deposit invoice for ${formatMoney(selectedRequest.deposit_amount_cents)} through Square.`
+                          : "Send an invoice using the listed starting price for this service."
                     }
                   >
                     {selectedRequest.square_invoice_url ? (

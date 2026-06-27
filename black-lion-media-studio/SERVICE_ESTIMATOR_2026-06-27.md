@@ -20,6 +20,7 @@
 - Location dropdown for remote/studio-ready, local on-site, multi-location, and event venue work.
 - Market-rate slider for soft, normal, busy, and high-demand pricing.
 - Scope, complexity, deliverables, session hours, revision rounds, and travel-distance sliders.
+- Two revision rounds are included; selected revision rounds above 2 become billable extras.
 - First-time client discount toggle at 25%.
 - Travel under 30 miles is included. Travel over 30 miles is calculated as a separate independent extra charge outside the service subtotal, market multipliers, and first-time discount.
 - Required deposit display set to 50% of the estimated total once selected services are requested.
@@ -31,9 +32,14 @@ Estimator defaults were adjusted using current 2026 public market-rate research 
 ## Dashboard Workflow
 
 - Dashboard users can build a Service Estimation before submitting a request.
+- Dashboard users can click `Send Quote` to submit the estimate directly to the manager request desk for review.
+- `Send Quote` stores the estimated total and required 50% deposit as structured cents fields on the request, while also keeping the readable estimate summary in the budget/details fields.
 - `Apply to request` copies the service lane, budget range, estimated timing, selected sub-services, usage, timeline, location, market mode, scope, complexity, deliverables, hours, revisions, travel distance, and discount status into the request form.
 - The copied request details include that a 50% deposit is warranted and required once selected services are requested, to confirm seriousness, scheduling, and production commitment.
 - The request form remains the authenticated submission path through `/api/requests`.
+- `Send Quote` also uses `/api/requests`, blocks empty estimates, trims oversized details before submission, and leaves the manager to approve/adjust scope and run the Square invoice workflow from `/booking-manager`.
+- The manager desk now shows estimated total and required deposit values, includes explicit `Approve for processing` and `Not approved` controls, and creates a client portal message when a request is approved or declined.
+- Approved Service Estimation requests prepare the Square workflow for a deposit invoice using the stored required-deposit amount when present, falling back to the service starting invoice amount only when no estimator deposit was submitted.
 - Estimator resilience was tightened with safe option fallbacks, numeric clamping, stale service filtering, malformed local-storage recovery, capped saved-estimate history, and independent travel-charge calculation so the page does not fail on bad browser state.
 
 ## Verification

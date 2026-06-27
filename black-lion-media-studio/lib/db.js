@@ -211,6 +211,8 @@ function normalizeRequestDocument(id, data) {
     square_invoice_version: data.square_invoice_version || "",
     square_invoice_number: data.square_invoice_number || "",
     square_invoice_url: data.square_invoice_url || "",
+    estimate_amount_cents: Number(data.estimate_amount_cents || 0),
+    deposit_amount_cents: Number(data.deposit_amount_cents || 0),
     invoice_amount_cents: data.invoice_amount_cents || 0,
     invoice_due_date: data.invoice_due_date || "",
     invoice_sent_at: data.invoice_sent_at || "",
@@ -545,6 +547,8 @@ export async function createRequest({
   timeline,
   consultationDate,
   consultationTime,
+  estimateAmountCents = 0,
+  depositAmountCents = 0,
   details
 }) {
   const db = getDb();
@@ -555,6 +559,8 @@ export async function createRequest({
     timeline,
     consultation_date: consultationDate,
     consultation_time: consultationTime,
+    estimate_amount_cents: Number(estimateAmountCents || 0),
+    deposit_amount_cents: Number(depositAmountCents || 0),
     details,
     status: "New",
     manager_notes: "",

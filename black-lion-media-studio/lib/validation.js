@@ -118,6 +118,8 @@ export const requestSchema = z.object({
   timeline: requiredText("Timeline"),
   consultationDate: requiredText("Consultation date"),
   consultationTime: requiredText("Consultation time"),
+  estimateAmountCents: z.coerce.number().int().min(0).max(100000000).optional(),
+  depositAmountCents: z.coerce.number().int().min(0).max(100000000).optional(),
   details: z
     .string()
     .trim()
@@ -229,6 +231,7 @@ export const managerRequestUpdateSchema = z.object({
       "Open",
       "In Review",
       "Scheduled",
+      "Approved",
       "In Progress",
       "Awaiting Payment",
       "Completed",
@@ -250,7 +253,7 @@ export const managerRequestUpdateSchema = z.object({
   internalPriority: z
     .enum(["Standard", "Priority", "Rush", "VIP"])
     .optional(),
-  managerNotes: z.string().trim().max(4000, "Manager notes are too long.").optional().default("")
+  managerNotes: z.string().trim().max(4000, "Manager notes are too long.").optional()
 }).refine(
   (value) =>
     Boolean(

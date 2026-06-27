@@ -5,11 +5,32 @@ import {
   parseJsonWithSchema,
   requireBookingManager
 } from "../../../../../lib/api-helpers";
-import { findRequestWithUserById, updateManagerRequest } from "../../../../../lib/db";
+import { createMessage, findRequestWithUserById, updateManagerRequest } from "../../../../../lib/db";
 import { enforceWriteRateLimit } from "../../../../../lib/rate-limit";
 import { managerRequestUpdateSchema, parseWithSchema } from "../../../../../lib/validation";
 
 export const runtime = "nodejs";
+
+function buildDecisionMessage(status, requestRecord, managerNotes = "") {
+  const projectType = requestRecord.project_type || "service";
+  const note = managerNotes ? ` Manager note: ${managerNotes}` : "";
+
+  if (status === "Approved") {
+    return {
+      subject: "Service request approved",
+      body: `Your ${projectType} request has been approved for processing. The studio manager will continue the Square workflow for the required deposit, payment, and scheduling follow-up.${note}`
+    };
+  }
+
+  if (status === "Declined") {
+    return {
+      subject: "Service request not approved",
+      body: `Your ${projectType} request was not approved as submitted. Review any manager notes and message the studio if you want to revise the request or ask about next steps.${note}`
+    };
+  }
+
+  return null;
+}
 
 export async function GET(request, context) {
   const auth = await requireBookingManager(request);
@@ -58,6 +79,23 @@ export async function PATCH(request, context) {
     ...(parsed.data.internalPriority ? { internal_priority: parsed.data.internalPriority } : {}),
     ...(typeof parsed.data.managerNotes === "string" ? { manager_notes: parsed.data.managerNotes } : {})
   });
+
+  const decisionChanged =
+    parsed.data.status &&
+    ["Approved", "Declined"].includes(parsed.data.status) &&
+    existing.status !== parsed.data.status;
+  const decisionMessage = decisionChanged
+    ? buildDecisionMessage(parsed.data.status, existing, parsed.data.managerNotes)
+    : null;
+
+  if (decisionMessage && existing.user_id) {
+    await createMessage({
+      userId: existing.user_id,
+      senderRole: "studio",
+      subject: decisionMessage.subject,
+      body: decisionMessage.body
+    });
+  }
 
   return jsonOk({
     request: await findRequestWithUserById(params.requestId)

@@ -60,6 +60,28 @@ function getServiceInvoiceAmount(projectType) {
   };
 }
 
+function getRequestInvoiceAmount(requestRecord, service) {
+  const depositAmountCents = Number(requestRecord.deposit_amount_cents || 0);
+  if (Number.isInteger(depositAmountCents) && depositAmountCents > 0) {
+    return {
+      amountCents: depositAmountCents,
+      label: "Required 50% deposit",
+      description: `Required 50% deposit for the approved Service Estimation request. Estimated project total: ${
+        Number(requestRecord.estimate_amount_cents || 0) > 0
+          ? `$${Math.round(Number(requestRecord.estimate_amount_cents) / 100).toLocaleString("en-US")}`
+          : service.priceLabel
+      }.`
+    };
+  }
+
+  const fallback = getServiceInvoiceAmount(requestRecord.project_type);
+  return {
+    amountCents: fallback.amountCents,
+    label: "Listed starting price",
+    description: `Invoice for ${service.name}. Listed starting price: ${service.priceLabel}.`
+  };
+}
+
 async function squareRequest(path, body) {
   const config = getSquareConfig();
   const response = await fetch(`${config.baseUrl}${path}`, {
@@ -104,7 +126,7 @@ async function createSquareCustomer(requestRecord) {
   return data.customer;
 }
 
-async function createSquareOrder({ requestRecord, customerId, amountCents, service }) {
+async function createSquareOrder({ requestRecord, customerId, amountCents, service, invoiceLabel }) {
   const config = getSquareConfig();
   const data = await squareRequest("/v2/orders", {
     idempotency_key: buildIdempotencyKey("order", requestRecord.id, amountCents),
@@ -114,7 +136,7 @@ async function createSquareOrder({ requestRecord, customerId, amountCents, servi
       reference_id: requestRecord.id,
       line_items: [
         {
-          name: service.name,
+          name: invoiceLabel ? `${service.name} - ${invoiceLabel}` : service.name,
           quantity: "1",
           note: requestRecord.details || requestRecord.timeline || service.description,
           base_price_money: {
@@ -129,7 +151,7 @@ async function createSquareOrder({ requestRecord, customerId, amountCents, servi
   return data.order;
 }
 
-async function createSquareInvoice({ requestRecord, customerId, orderId, amountCents, service, dueDate }) {
+async function createSquareInvoice({ requestRecord, customerId, orderId, amountCents, service, dueDate, invoiceDescription }) {
   const config = getSquareConfig();
   const emailAddress = requestRecord.billing_email || requestRecord.client_email;
   const data = await squareRequest("/v2/invoices", {
@@ -158,7 +180,7 @@ async function createSquareInvoice({ requestRecord, customerId, orderId, amountC
         cash_app_pay: false
       },
       title: `Black Lion Studios - ${service.name}`,
-      description: `Invoice for ${service.name}. Listed starting price: ${service.priceLabel}.`,
+      description: invoiceDescription,
       sale_or_service_date: new Date().toISOString().slice(0, 10),
       store_payment_method_enabled: false
     }
@@ -182,21 +204,24 @@ export async function createPublishedInvoiceForRequest(requestRecord) {
   }
 
   const dueDate = getDueDate(7);
-  const { service, amountCents } = getServiceInvoiceAmount(requestRecord.project_type);
+  const { service } = getServiceInvoiceAmount(requestRecord.project_type);
+  const invoiceAmount = getRequestInvoiceAmount(requestRecord, service);
   const customer = await createSquareCustomer(requestRecord);
   const order = await createSquareOrder({
     requestRecord,
     customerId: customer.id,
-    amountCents,
-    service
+    amountCents: invoiceAmount.amountCents,
+    service,
+    invoiceLabel: invoiceAmount.label
   });
   const draftInvoice = await createSquareInvoice({
     requestRecord,
     customerId: customer.id,
     orderId: order.id,
-    amountCents,
+    amountCents: invoiceAmount.amountCents,
     service,
-    dueDate
+    dueDate,
+    invoiceDescription: invoiceAmount.description
   });
   const publishedInvoice = await publishSquareInvoice(
     draftInvoice.id,
@@ -211,7 +236,7 @@ export async function createPublishedInvoiceForRequest(requestRecord) {
     squareInvoiceVersion: publishedInvoice.version,
     squareInvoiceNumber: publishedInvoice.invoice_number || "",
     squareInvoiceUrl: publishedInvoice.public_url || "",
-    invoiceAmountCents: amountCents,
+    invoiceAmountCents: invoiceAmount.amountCents,
     invoiceDueDate: dueDate,
     service
   };

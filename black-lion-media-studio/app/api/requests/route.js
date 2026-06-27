@@ -28,7 +28,7 @@ export async function POST(request) {
     return parsed.error;
   }
 
-  const { projectType, budget, timeline, consultationDate, consultationTime, details } =
+  const { projectType, budget, timeline, consultationDate, consultationTime, estimateAmountCents, depositAmountCents, details } =
     parsed.data;
 
   await createRequest({
@@ -38,6 +38,8 @@ export async function POST(request) {
     timeline,
     consultationDate,
     consultationTime,
+    estimateAmountCents,
+    depositAmountCents,
     details
   });
 

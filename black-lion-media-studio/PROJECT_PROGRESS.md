@@ -58,10 +58,13 @@ Live production URL:
 
 - Added a landing-page `ServiceQuoteBuilder` at `/#service-estimation` for pick-your-service estimates.
 - Added the same estimator to the authenticated client dashboard with an `Apply to request` action that fills service, budget, timeline, and project details.
+- Added dashboard `Send Quote` workflow: users can send a Service Estimation directly to the existing manager request desk, where `/booking-manager` can review it and continue approval/billing through Square.
 - Reworked the estimator into a main-service multi-select plus relevant sub-service checklist so clients can select more than one main service and more than one sub-service in the same estimate.
 - Expanded sub-service options across Photography, Videography, Music/events, Web/tech, Planning, and Add-ons so each main service has a deeper set of relevant choices.
 - Hardened estimator logic with safer option lookups, numeric clamping, stale-selection filtering, localStorage parse fallback, capped saved-estimate history, and independent travel-charge calculation.
+- Hardened dashboard quote submission by blocking empty estimates and trimming long copied quote details before sending to the manager queue.
 - Added live controls for market rate, usage type, timeline, location, scope, complexity, deliverables, session hours, revision rounds, first-time 25% discount, and travel distance.
+- Updated revision handling so 2 revision rounds are included and only additional rounds are billable.
 - Added travel/gas handling: the first 30 miles are included, and miles over 30 are a separate independent extra charge outside the service subtotal, market multipliers, and first-time discount.
 - Added 50% required-deposit disclosure and estimator math once selected services are requested, so clients see the seriousness/scheduling commitment before submitting.
 - Updated service baselines with 2026 market-rate research and displayed each sub-service reference range in the estimator UI.
@@ -960,3 +963,12 @@ Verification:
 - document exact admin workflows if the booking manager surface expands into a fuller admin suite
 - document Firestore schema if the data model expands
 - document environment-variable expectations if more external services are integrated
+
+## 2026-06-27 Service Estimation Manager Handoff
+
+- Dashboard `Send Quote` now submits Service Estimation requests directly to the manager request desk with exact estimated total and required 50% deposit cents fields.
+- The booking manager request detail view now displays estimate total, required deposit, explicit `Approve for processing`, and `Not approved` actions.
+- Manager approval marks the request `Approved`, drafts the invoice state, requests the deposit, and notifies the client through a portal message.
+- Manager decline marks the request `Declined`, closes fulfillment, waives the invoice state, and notifies the client through a portal message.
+- Square invoice creation now uses the stored required-deposit amount for Service Estimation requests when present, instead of defaulting to a generic service starting price.
+- FAQ/legal content now explains that approval or non-approval is reflected in dashboard status and portal messages.

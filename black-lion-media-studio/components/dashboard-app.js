@@ -29,6 +29,7 @@ const emptyState = {
 };
 
 const consultationAvailability = getConsultationAvailability();
+const maxQuoteDetailsLength = 1900;
 
 function formatMoney(amountCents = 0) {
   const amount = Number(amountCents || 0) / 100;
@@ -36,6 +37,14 @@ function formatMoney(amountCents = 0) {
     style: "currency",
     currency: "USD"
   }).format(amount);
+}
+
+function trimQuoteDetails(details) {
+  const text = String(details || "").trim();
+  if (text.length <= maxQuoteDetailsLength) {
+    return text;
+  }
+  return `${text.slice(0, maxQuoteDetailsLength - 42).trim()}... [trimmed for manager request handoff]`;
 }
 
 export function DashboardApp({ initialState = null }) {
@@ -47,6 +56,7 @@ export function DashboardApp({ initialState = null }) {
   const [requestBudget, setRequestBudget] = useState("");
   const [requestTimeline, setRequestTimeline] = useState("");
   const [requestDetails, setRequestDetails] = useState("");
+  const [sendingQuote, setSendingQuote] = useState(false);
   const [selectedConsultationDate, setSelectedConsultationDate] = useState(
     consultationAvailability[0]?.value || ""
   );
@@ -113,11 +123,50 @@ export function DashboardApp({ initialState = null }) {
     setSelectedService(estimate.projectType);
     setRequestBudget(estimate.budget);
     setRequestTimeline(estimate.timeline);
-    setRequestDetails(estimate.details);
+    setRequestDetails(trimQuoteDetails(estimate.details));
     setRequestMessage("Estimate copied into the request form. Review it, then submit when ready.");
     requestAnimationFrame(() => {
       document.getElementById("service-request")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
+  }
+
+  async function sendQuoteToManager(estimate) {
+    setRequestMessage("");
+    setSendingQuote(true);
+
+    try {
+      const payload = {
+        projectType: estimate.projectType,
+        budget: estimate.budget,
+        timeline: estimate.timeline,
+        consultationDate: selectedConsultationDate,
+        consultationTime: selectedConsultationTime,
+        details: trimQuoteDetails([
+          "Service Estimation quote sent from the client dashboard.",
+          estimate.details,
+          `Estimator handoff: estimated total cents ${estimate.estimateAmountCents || 0}; required deposit cents ${estimate.depositAmountCents || 0}.`,
+          "Manager workflow: review the quote, approve or adjust scope, then continue billing and scheduling through Square."
+        ].join(" "))
+      };
+      if (Number.isFinite(Number(estimate.estimateAmountCents))) {
+        payload.estimateAmountCents = Number(estimate.estimateAmountCents);
+      }
+      if (Number.isFinite(Number(estimate.depositAmountCents))) {
+        payload.depositAmountCents = Number(estimate.depositAmountCents);
+      }
+      await postJson("/api/requests", payload);
+      await refreshDashboardState();
+      setSelectedService(estimate.projectType);
+      setRequestBudget(estimate.budget);
+      setRequestTimeline(estimate.timeline);
+      setRequestDetails(payload.details);
+      setRequestMessage("Quote sent to the manager desk for review and Square workflow follow-up.");
+      trackEvent("quote_sent_to_manager", { service: estimate.projectType });
+    } catch (error) {
+      setRequestMessage(error.message);
+    } finally {
+      setSendingQuote(false);
+    }
   }
 
   if (loading) {
@@ -247,7 +296,13 @@ export function DashboardApp({ initialState = null }) {
           </div>
         </section>
 
-        <ServiceQuoteBuilder compact dashboard onApplyEstimate={applyEstimateToRequest} />
+        <ServiceQuoteBuilder
+          compact
+          dashboard
+          onApplyEstimate={applyEstimateToRequest}
+          onSendQuote={sendQuoteToManager}
+          sendingQuote={sendingQuote}
+        />
 
         <section className="panel" id="service-request">
           <p className="label">Service request</p>
