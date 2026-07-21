@@ -1,0 +1,31 @@
+[project]
+name = "timmy-trader"
+version = "0.1.0"
+description = "Timmy: guarded trend and pattern trading engine with Webull OpenAPI adapter."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116.0",
+  "python-dotenv>=1.0.1",
+  "uvicorn[standard]>=0.35.0",
+  "webull-openapi-python-sdk>=2.0.14"
+]
+
+[project.scripts]
+timmy = "trend_trader.cli:main"
+timmy-dashboard = "trend_trader.dashboard:main"
+timmy-desktop = "trend_trader.desktop:main"
+
+[project.optional-dependencies]
+dev = [
+  "pyinstaller>=6.0.0",
+  "pytest>=8.0.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["trend_trader*"]
+
+[tool.setuptools.package-data]
+trend_trader = ["static/*"]

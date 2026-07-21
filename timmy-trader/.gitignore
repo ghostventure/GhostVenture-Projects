@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+trade-journal.jsonl
+orders-outbox.jsonl
+.tmp/
+conf/
+webull_trade_sdk.log
+build/
+dist/
+*.spec

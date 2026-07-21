@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Timmy
+GenericName=Trading Assistant
+Comment=Launch Timmy
+Exec=timmy-trader
+Terminal=false
+Categories=Office;Finance;
+StartupNotify=true

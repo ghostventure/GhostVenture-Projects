@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR=${TIMMY_APP_DIR:-/opt/timmy-trader}
+TIMMY_HOME=${TIMMY_HOME:-"$HOME/.config/timmy-trader"}
+DOC_DIR=/usr/share/doc/timmy-trader
+
+mkdir -p "$TIMMY_HOME/examples"
+
+if [ ! -f "$TIMMY_HOME/.env" ] && [ -f "$DOC_DIR/env.example" ]; then
+  cp "$DOC_DIR/env.example" "$TIMMY_HOME/.env"
+  chmod 600 "$TIMMY_HOME/.env"
+fi
+
+cd "$TIMMY_HOME"
+export TIMMY_HOME
+exec "$APP_DIR/Timmy"

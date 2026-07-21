@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Timmy
+Comment=Launch Timmy
+Exec=/home/sniper-lion-main/trading-bots/trend-trader/scripts/launch_timmy.sh
+Path=/home/sniper-lion-main/trading-bots/trend-trader
+Terminal=false
+Categories=Finance;Office;

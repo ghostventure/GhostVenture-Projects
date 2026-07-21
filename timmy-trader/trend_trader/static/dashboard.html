@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Timmy Trader</title>
+    <link rel="stylesheet" href="/static/dashboard.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail">
+        <div class="brand">
+          <div class="mark">T</div>
+          <div>
+            <strong>Timmy</strong>
+            <span>Trader</span>
+          </div>
+        </div>
+        <nav aria-label="Dashboard sections">
+          <a href="#overview" class="active">Overview</a>
+          <a href="#signals">Signals</a>
+          <a href="#orders">Orders</a>
+          <a href="#broker">Broker</a>
+          <a href="#journal">Journal</a>
+        </nav>
+        <div class="rail-card">
+          <span>Runtime</span>
+          <strong id="runtimeStatus">Checking</strong>
+          <small id="dataPath">Local mode</small>
+        </div>
+      </aside>
+
+      <main>
+        <header class="hero" id="overview">
+          <div class="hero-copy">
+            <p class="eyebrow">Webull preview and risk control</p>
+            <h1>Timmy Trader</h1>
+            <p class="subcopy">A local command center for scanning, sizing, previewing, and journaling guarded stock and ETF setups.</p>
+          </div>
+          <div class="hero-actions">
+            <button id="refreshBtn" class="ghost">Refresh</button>
+            <button id="webullBtn" class="secondary">Check Webull</button>
+            <button id="previewBtn" class="primary">Preview Order</button>
+          </div>
+        </header>
+
+        <section class="metric-grid" aria-label="Status metrics">
+          <article class="metric">
+            <span>Mode</span>
+            <strong id="mode">-</strong>
+            <small id="liveGuard">Live locked</small>
+          </article>
+          <article class="metric">
+            <span>Webull Account</span>
+            <strong id="account">-</strong>
+            <small id="previewRule">Preview required</small>
+          </article>
+          <article class="metric">
+            <span>Max Notional</span>
+            <strong id="notional">-</strong>
+            <small id="maxQty">Max qty -</small>
+          </article>
+          <article class="metric accent">
+            <span>Risk / Trade</span>
+            <strong id="risk">-</strong>
+            <small id="positions">- positions</small>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <section class="panel scanner" id="signals">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Ranked scanner</p>
+                <h2>Signal Board</h2>
+              </div>
+              <button id="sampleBtn" class="ghost">Refresh Data</button>
+            </div>
+            <div id="signalsBody" class="signal-list" aria-live="polite"></div>
+          </section>
+
+          <aside class="stack">
+            <section class="panel" id="orders">
+              <div class="panel-head compact">
+                <div>
+                  <p class="eyebrow">Risk capped</p>
+                  <h2>Order Plan</h2>
+                </div>
+                <button id="paperBtn" class="secondary">Paper Trade</button>
+              </div>
+              <div id="plans" class="plans"></div>
+            </section>
+
+            <section class="panel" id="broker">
+              <div class="panel-head compact">
+                <div>
+                  <p class="eyebrow">Broker response</p>
+                  <h2>Webull Preview</h2>
+                </div>
+                <span id="brokerBadge" class="status-pill idle">Idle</span>
+              </div>
+              <div id="previewSummary" class="preview-summary">
+                <span>No broker preview yet.</span>
+              </div>
+              <pre id="previewOutput">Waiting for preview.</pre>
+            </section>
+
+            <section class="panel" id="journal">
+              <div class="panel-head compact">
+                <div>
+                  <p class="eyebrow">Local audit</p>
+                  <h2>Paper Journal</h2>
+                </div>
+              </div>
+              <div id="journalList" class="journal"></div>
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" role="status"></div>
+    <script src="/static/dashboard.js"></script>
+  </body>
+</html>
