@@ -15,6 +15,17 @@ from trend_trader.native_gui import ACCOUNT_REFRESH_MS, TimmyNativeApp
 from trend_trader.risk import create_order_plan
 
 
+class Var:
+    def __init__(self, value):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value) -> None:
+        self.value = value
+
+
 def eligible_signal(symbol: str = "SPY", score: int = 90) -> Signal:
     return Signal(
         symbol=symbol,
@@ -162,6 +173,91 @@ def test_native_profile_writer_restricts_profile_file_permissions(tmp_path) -> N
     assert stat.S_IMODE(profile.stat().st_mode) == 0o600
     content = profile.read_text(encoding="utf-8")
     assert "WEBULL_APP_SECRET=\"secret with spaces\"" in content
+
+
+def profile_app(tmp_path) -> TimmyNativeApp:
+    app = object.__new__(TimmyNativeApp)
+    app.home = tmp_path
+    app.profile_app_key_var = Var("key")
+    app.profile_app_secret_var = Var("secret")
+    app.profile_account_id_var = Var("account-1234")
+    app.profile_region_var = Var("us")
+    app.profile_endpoint_var = Var("api.webull.com")
+    app.profile_live_orders_var = Var(True)
+    app.profile_require_preview_var = Var(False)
+    app.profile_trader_live_var = Var(True)
+    app.profile_auto_live_var = Var(False)
+    app.verified_profile_fingerprint = None
+    app.profile_verification_status = "Not verified"
+    app.selected_webull_account_id_var = Var("")
+    app.execution_target_var = Var("Paper")
+    app.webull_account_choice_var = Var("Configured account")
+    app.webull_account_choices = []
+    app.webull_account_labels = {}
+    app.previewed_order_fingerprints = {}
+    app.trade_cash_snapshot = ("-", "Run Broker Check")
+    app.trade_cash_value = None
+    app.account_snapshot = ("Unknown", "Run Broker Check")
+    app.config = None
+    app.config_error = None
+    app.status_bar = SimpleNamespace(configure=lambda **_kwargs: None)
+    app.broker_text = SimpleNamespace()
+    app.cash_card = (SimpleNamespace(configure=lambda **_kwargs: None), SimpleNamespace(configure=lambda **_kwargs: None))
+    app.guard_label = SimpleNamespace(configure=lambda **_kwargs: None)
+    app.eligible_label = SimpleNamespace(configure=lambda **_kwargs: None)
+    app.runtime_label = SimpleNamespace(configure=lambda **_kwargs: None)
+    app.last_update_label = SimpleNamespace(configure=lambda **_kwargs: None)
+    app.setup_status_text = None
+    app.setup_save_button = None
+    app.webull_account_toggle = None
+    app.plans = []
+    return app
+
+
+def test_native_profile_save_requires_verified_current_values(monkeypatch, tmp_path) -> None:
+    app = profile_app(tmp_path)
+    errors: list[str] = []
+    monkeypatch.setattr("trend_trader.native_gui.messagebox.showerror", lambda _title, message: errors.append(message))
+
+    app.save_webull_profile_from_setup()
+
+    assert not tmp_path.joinpath(".timmy-profile.env").exists()
+    assert errors == ["Verify the current Webull profile before saving."]
+
+
+def test_native_profile_verification_allows_matching_account(monkeypatch, tmp_path) -> None:
+    app = profile_app(tmp_path)
+    app._load_config_safe = load_config
+    app._save_runtime_settings = lambda: None
+    app._render_status = lambda: None
+    app._render_broker_summary = lambda: None
+    app._set_text = lambda *_args, **_kwargs: None
+    app._data_freshness_line = lambda: "test"
+
+    class BrokerStub:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def account_list(self):
+            return {
+                "body": [
+                    {
+                        "account_id": "account-1234",
+                        "account_label": "Individual Cash",
+                        "account_type": "I-Cash",
+                        "cash_available_for_trade": 250.0,
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("trend_trader.native_gui.WebullOpenApiBroker", BrokerStub)
+
+    result = app.verify_webull_profile()
+
+    assert "verified" in result
+    assert app.verified_profile_fingerprint == app._profile_fingerprint(app._current_profile_payload())
+    assert app.selected_webull_account_id_var.get() == "account-1234"
+    assert app.trade_cash_snapshot == ("$250.00", "Available to trade")
 
 
 def test_futures_enable_switch_requires_configured_symbol(monkeypatch) -> None:

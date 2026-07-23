@@ -74,6 +74,8 @@ class TimmyNativeApp:
         self.account_snapshot: tuple[str, str] = ("Unknown", "Run Check Webull")
         self.webull_account_choices: list[dict[str, str]] = []
         self.webull_account_labels: dict[str, str] = {}
+        self.verified_profile_fingerprint: str | None = None
+        self.profile_verification_status = "Not verified"
         self.nav_buttons: dict[str, tk.Button] = {}
         self.manual_controls: list[tk.Button] = []
         self.busy_controls: list[tk.Button] = []
@@ -123,6 +125,7 @@ class TimmyNativeApp:
         self.splash = self._build_splash()
         self._build_layout()
         self._setup_settings_traces()
+        self._setup_profile_traces()
         self.root.withdraw()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.report_callback_exception = self._handle_tk_exception
@@ -685,13 +688,27 @@ class TimmyNativeApp:
         self.setup_panel = setup_panel
         setup_panel.columnconfigure(0, weight=3)
         setup_panel.columnconfigure(1, weight=2)
-        setup_panel.rowconfigure(1, weight=1)
+        setup_panel.rowconfigure(2, weight=1)
         self._section_header(setup_panel, "WEBULL SETUP", "Connection Profile", None, None)
+        setup_steps = tk.Frame(setup_panel, bg=self.colors["panel"])
+        setup_steps.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 14))
+        setup_steps.columnconfigure((0, 1, 2, 3), weight=1)
+        self.setup_badges: dict[str, tuple[tk.Label, tk.Label]] = {}
+        for idx, label in enumerate(("Profile", "Credentials", "Account", "Live")):
+            badge = tk.Frame(setup_steps, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+            badge.grid(row=0, column=idx, sticky="ew", padx=(0 if idx == 0 else 8, 0))
+            title = tk.Label(badge, text=label, bg=self.colors["panel_2"], fg=self.colors["muted"],
+                             font=("Sans", 9, "bold"), anchor="center")
+            title.pack(fill="x", padx=10, pady=(8, 2))
+            value = tk.Label(badge, text="-", bg=self.colors["panel_2"], fg=self.colors["text"],
+                             font=("Sans", 11, "bold"), anchor="center")
+            value.pack(fill="x", padx=10, pady=(0, 8))
+            self.setup_badges[label] = (title, value)
         profile_form = tk.Frame(setup_panel, bg=self.colors["panel"])
-        profile_form.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        profile_form.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
         profile_form.columnconfigure(1, weight=1)
         setup_status = tk.Frame(setup_panel, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
-        setup_status.grid(row=1, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+        setup_status.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
         setup_status.columnconfigure(0, weight=1)
 
         row = 0
@@ -740,19 +757,26 @@ class TimmyNativeApp:
 
         setup_actions = tk.Frame(profile_form, bg=self.colors["panel"])
         setup_actions.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        setup_actions.columnconfigure((0, 1, 2), weight=1)
+        setup_actions.columnconfigure((0, 1), weight=1, minsize=140)
+        self.setup_verify_button = self._button(
+            setup_actions,
+            "Verify Profile",
+            lambda: self._run_action("Verifying Webull profile", self.verify_webull_profile),
+            accent="gold",
+        )
+        self.setup_verify_button.grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 8))
         self.setup_save_button = self._button(setup_actions, "Save Profile", self.save_webull_profile_from_setup, accent="teal")
-        self.setup_save_button.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.setup_save_button.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=(0, 8))
         self.setup_check_button = self._button(
             setup_actions,
             "Broker Check",
             lambda: self._run_action("Checking Webull", self.webull_check),
-            accent="gold",
+            accent="teal",
         )
-        self.setup_check_button.grid(row=0, column=1, sticky="ew", padx=8)
+        self.setup_check_button.grid(row=1, column=0, sticky="ew", padx=(0, 8))
         self.setup_live_button = self._button(setup_actions, "Use Live", self.use_live_from_setup)
-        self.setup_live_button.grid(row=0, column=2, sticky="ew", padx=(8, 0))
-        self.busy_controls.extend([self.setup_save_button, self.setup_check_button, self.setup_live_button])
+        self.setup_live_button.grid(row=1, column=1, sticky="ew", padx=(8, 0))
+        self.busy_controls.extend([self.setup_verify_button, self.setup_save_button, self.setup_check_button, self.setup_live_button])
 
         self.setup_status_text = tk.Text(
             setup_status,
@@ -824,6 +848,7 @@ class TimmyNativeApp:
         self._fit_text(self.status_bar, min_size=8, max_size=10, padding=56, wrap=True)
         self.status_bar.grid(row=4, column=0, sticky="ew", padx=24, pady=(0, 8))
         self._refresh_webull_account_menu()
+        self._sync_profile_save_state()
         self._sync_manual_controls()
         self._show_tab("Overview")
 
@@ -1214,6 +1239,9 @@ class TimmyNativeApp:
             messagebox.showerror("Webull Profile", "App Key and App Secret are required.")
             return
         profile = self._profile_payload_from_values(values)
+        if self._profile_fingerprint(profile) != self.verified_profile_fingerprint:
+            messagebox.showerror("Webull Profile", "Verify the current Webull profile before saving.")
+            return
         try:
             self._write_profile_env(profile)
         except OSError as exc:
@@ -1261,6 +1289,11 @@ class TimmyNativeApp:
             messagebox.showerror("Webull Profile", "App Key and App Secret are required.")
             return
         profile = self._profile_payload_from_values(values)
+        if self._profile_fingerprint(profile) != self.verified_profile_fingerprint:
+            self.status_bar.configure(text="Verify Profile before saving.")
+            messagebox.showerror("Webull Profile", "Verify the current Webull profile before saving.")
+            self._sync_profile_save_state()
+            return
         try:
             self._write_profile_env(profile)
         except OSError as exc:
@@ -1268,6 +1301,79 @@ class TimmyNativeApp:
             messagebox.showerror("Webull Profile", f"Profile save failed: {exc}")
             return
         self._apply_saved_profile(profile, account_id)
+
+    def verify_webull_profile(self) -> str:
+        profile = self._current_profile_payload()
+        app_key = profile.get("WEBULL_APP_KEY", "")
+        app_secret = profile.get("WEBULL_APP_SECRET", "")
+        account_id = profile.get("WEBULL_ACCOUNT_ID", "")
+        if not app_key or not app_secret:
+            self.verified_profile_fingerprint = None
+            self.profile_verification_status = "Missing App Key or App Secret"
+            self._sync_profile_save_state()
+            raise RuntimeError("App Key and App Secret are required before verification.")
+        if not account_id:
+            self.verified_profile_fingerprint = None
+            self.profile_verification_status = "Missing Account ID"
+            self._sync_profile_save_state()
+            raise RuntimeError("Default Account ID is required before verification.")
+        config = self._config_from_profile(profile)
+        broker = WebullOpenApiBroker(config)
+        result = broker.account_list()
+        choices = self._extract_webull_account_choices(result)
+        if not choices:
+            self.verified_profile_fingerprint = None
+            self.profile_verification_status = "No Webull accounts returned"
+            self._sync_profile_save_state()
+            raise RuntimeError("Webull verification failed. No accounts were returned.")
+        account_ids = {choice["id"] for choice in choices if choice.get("id")}
+        if account_id and account_id not in account_ids:
+            self.verified_profile_fingerprint = None
+            self.profile_verification_status = f"Account {self._mask_account_id(account_id)} not found"
+            self._sync_profile_save_state()
+            raise RuntimeError("Webull verification failed. The entered account ID was not returned by Webull.")
+        verified_account_id = account_id
+        config = replace(config, webull_account_id=verified_account_id)
+        self.webull_account_choices = choices
+        self.selected_webull_account_id_var.set(verified_account_id)
+        self.trade_cash_snapshot = self._extract_trade_cash(result, verified_account_id)
+        self.trade_cash_value = self._numeric_money(self.trade_cash_snapshot[0])
+        redacted = self._redact_accounts(result)
+        self.account_snapshot = self._extract_account_summary(redacted, verified_account_id)
+        self.verified_profile_fingerprint = self._profile_fingerprint(profile)
+        self.profile_verification_status = (
+            f"Verified {len(choices)} account(s); selected {self._mask_account_id(verified_account_id)}"
+        )
+        self._refresh_webull_account_menu(config)
+        self._sync_profile_save_state()
+        self._render_setup_status()
+        return json.dumps(
+            {
+                "status": "verified",
+                "accounts_found": len(choices),
+                "selected_account": self._mask_account_id(verified_account_id),
+                "cash_summary": {
+                    "available": self.trade_cash_snapshot[0],
+                    "source": self.trade_cash_snapshot[1],
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+
+    def _current_profile_payload(self) -> dict[str, str]:
+        values = {
+            "WEBULL_APP_KEY": self.profile_app_key_var,
+            "WEBULL_APP_SECRET": self.profile_app_secret_var,
+            "WEBULL_ACCOUNT_ID": self.profile_account_id_var,
+            "WEBULL_REGION": self.profile_region_var,
+            "WEBULL_API_ENDPOINT": self.profile_endpoint_var,
+            "WEBULL_ENABLE_LIVE_ORDERS": self.profile_live_orders_var,
+            "WEBULL_REQUIRE_PREVIEW": self.profile_require_preview_var,
+            "TRADER_LIVE": self.profile_trader_live_var,
+            "AUTO_START_LIVE_ON_MARKET_OPEN": self.profile_auto_live_var,
+        }
+        return self._profile_payload_from_values(values)
 
     def use_live_from_setup(self) -> None:
         self.webull_account_toggle_var.set(True)
@@ -1287,6 +1393,27 @@ class TimmyNativeApp:
             "TRADER_LIVE": "1" if values["TRADER_LIVE"].get() else "0",
             "AUTO_START_LIVE_ON_MARKET_OPEN": "1" if values["AUTO_START_LIVE_ON_MARKET_OPEN"].get() else "0",
         }
+
+    def _config_from_profile(self, profile: dict[str, str]) -> BotConfig:
+        config = self.config or self._load_config_safe()
+        return replace(
+            config,
+            webull_app_key=profile.get("WEBULL_APP_KEY") or None,
+            webull_app_secret=profile.get("WEBULL_APP_SECRET") or None,
+            webull_account_id=profile.get("WEBULL_ACCOUNT_ID") or None,
+            webull_region=profile.get("WEBULL_REGION") or "us",
+            webull_api_endpoint=profile.get("WEBULL_API_ENDPOINT") or None,
+            webull_enable_live_orders=profile.get("WEBULL_ENABLE_LIVE_ORDERS") == "1",
+            webull_require_preview=profile.get("WEBULL_REQUIRE_PREVIEW") != "0",
+            trader_mode=profile.get("TRADER_MODE") or config.trader_mode,
+            trader_live=profile.get("TRADER_LIVE") == "1",
+            auto_start_live_on_market_open=profile.get("AUTO_START_LIVE_ON_MARKET_OPEN") == "1",
+        )
+
+    @staticmethod
+    def _profile_fingerprint(profile: dict[str, str]) -> str:
+        encoded = json.dumps(profile, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     def _apply_saved_profile(self, profile: dict[str, str], account_id: str) -> None:
         os.environ.update(profile)
@@ -1308,6 +1435,7 @@ class TimmyNativeApp:
             "Webull profile saved locally.\n\nRun Broker Check to verify the account and buying power before enabling Live.",
         )
         self.status_bar.configure(text="Webull profile saved. Broker Check required before Live.")
+        self._sync_profile_save_state()
 
     def _sync_profile_form(self, config: BotConfig) -> None:
         self.profile_app_key_var.set(config.webull_app_key or "")
@@ -1326,10 +1454,12 @@ class TimmyNativeApp:
         if widget is None:
             return
         config = self._execution_config(self.config or self._load_config_safe())
+        self._render_setup_badges(config)
         profile_path = self.home / ".timmy-profile.env"
         lines = [
             "Setup status",
             f"- Profile file: {'saved locally' if profile_path.exists() else 'not saved'}",
+            f"- Verification: {self.profile_verification_status}",
             f"- App key: {'present' if config.webull_app_key else 'missing'}",
             f"- App secret: {'present' if config.webull_app_secret else 'missing'}",
             f"- Account: {self._mask_account_id(config.webull_account_id)}",
@@ -1344,11 +1474,31 @@ class TimmyNativeApp:
         ]
         self._set_text(widget, "\n".join(lines))
 
+    def _render_setup_badges(self, config: BotConfig) -> None:
+        badges = getattr(self, "setup_badges", None)
+        if not badges:
+            return
+        profile_saved = (self.home / ".timmy-profile.env").exists()
+        credentials_ok = self._profile_fingerprint(self._current_profile_payload()) == self.verified_profile_fingerprint
+        account_ok = bool(config.webull_account_id) and not self._broker_check_required(config)
+        live_ok = self._live_ready(config) and self.execution_target_var.get() == "Live" and account_ok
+        values = {
+            "Profile": ("Saved" if profile_saved else "Draft", self.colors["teal"] if profile_saved else self.colors["gold"]),
+            "Credentials": ("Verified" if credentials_ok else "Verify", self.colors["teal"] if credentials_ok else self.colors["gold"]),
+            "Account": ("Checked" if account_ok else "Check", self.colors["teal"] if account_ok else self.colors["gold"]),
+            "Live": ("Armed" if live_ok else "Guarded", self.colors["red"] if live_ok else self.colors["muted"]),
+        }
+        for label, (_title, value_label) in badges.items():
+            value, color = values[label]
+            value_label.configure(text=value, fg=color)
+
     def _setup_next_action(self, config: BotConfig) -> str:
         if not config.webull_app_key or not config.webull_app_secret:
-            return "Enter Webull OpenAPI App Key and App Secret, then save the profile."
+            return "Enter Webull OpenAPI App Key and App Secret, then verify the profile."
         if not config.webull_account_id:
-            return "Enter or select a Webull account, then save the profile."
+            return "Enter or select a Webull account, then verify the profile."
+        if self._profile_fingerprint(self._current_profile_payload()) != self.verified_profile_fingerprint:
+            return "Verify Profile must pass before Save Profile is enabled."
         if self._broker_check_required(config):
             return "Run Broker Check to verify the selected account and buying power before Live."
         if not self._live_ready(config):
@@ -2279,6 +2429,7 @@ class TimmyNativeApp:
     def _action_done(self, label: str, result: str) -> None:
         if label in {
             "Checking Webull",
+            "Verifying Webull profile",
             "Auto Webull balance refresh",
             "Previewing order",
             "Paper trade",
@@ -2286,7 +2437,7 @@ class TimmyNativeApp:
             "Previewing and submitting live order",
         }:
             self._set_text(self.broker_text, result)
-        if label in {"Checking Webull", "Auto Webull balance refresh"}:
+        if label in {"Checking Webull", "Verifying Webull profile", "Auto Webull balance refresh"}:
             self.cash_card[0].configure(text=self.trade_cash_snapshot[0])
             self.cash_card[1].configure(text=self.trade_cash_snapshot[1])
             self._render_status()
@@ -2296,6 +2447,7 @@ class TimmyNativeApp:
         self.status_bar.configure(text=f"{label} complete.")
         self._set_buttons_state("normal")
         self._sync_manual_controls()
+        self._sync_profile_save_state()
 
     def _handle_tk_exception(self, exc_type, exc_value, exc_traceback) -> None:
         details = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -2321,10 +2473,15 @@ class TimmyNativeApp:
 
     def _action_error(self, label: str, exc: Exception) -> None:
         self._write_crash_log(f"{label} failed\n{''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))}")
+        if label == "Verifying Webull profile":
+            self.verified_profile_fingerprint = None
+            self.profile_verification_status = "Verification failed"
+            self._render_setup_status()
         self.status_bar.configure(text=f"{label} failed: {exc}")
         self._set_text(self.broker_text, str(exc))
         self._set_buttons_state("normal")
         self._sync_manual_controls()
+        self._sync_profile_save_state()
 
     def _set_buttons_state(self, state: str) -> None:
         for button in self.busy_controls:
@@ -2985,6 +3142,41 @@ class TimmyNativeApp:
             *self.pattern_vars.values(),
         ):
             var.trace_add("write", lambda *_args: self._settings_changed())
+
+    def _setup_profile_traces(self) -> None:
+        for var in (
+            self.profile_app_key_var,
+            self.profile_app_secret_var,
+            self.profile_account_id_var,
+            self.profile_region_var,
+            self.profile_endpoint_var,
+            self.profile_live_orders_var,
+            self.profile_require_preview_var,
+            self.profile_trader_live_var,
+            self.profile_auto_live_var,
+        ):
+            var.trace_add("write", lambda *_args: self._profile_form_changed())
+
+    def _profile_form_changed(self) -> None:
+        current_fingerprint = self._profile_fingerprint(self._current_profile_payload())
+        if self.verified_profile_fingerprint and current_fingerprint != self.verified_profile_fingerprint:
+            self.verified_profile_fingerprint = None
+            self.profile_verification_status = "Changed since verification"
+            self.trade_cash_snapshot = ("-", "Run Broker Check")
+            self.trade_cash_value = None
+            self.execution_target_var.set("Paper")
+        self._sync_profile_save_state()
+        self._render_setup_status()
+
+    def _sync_profile_save_state(self) -> None:
+        button = getattr(self, "setup_save_button", None)
+        if button is None:
+            return
+        state = "normal" if self._profile_fingerprint(self._current_profile_payload()) == self.verified_profile_fingerprint else "disabled"
+        try:
+            button.configure(state=state)
+        except tk.TclError:
+            pass
 
     def _settings_changed(self) -> None:
         self._save_runtime_settings()

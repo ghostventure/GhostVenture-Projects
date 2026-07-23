@@ -29,7 +29,9 @@ Enter:
 - API Endpoint
 - live-order switches
 
-Save the profile, then run `Broker Check` from the same screen. Timmy stores this profile locally in `.timmy-profile.env` with restricted file permissions and does not commit it to source control. Timmy automatically loads that profile for Webull account checks, buying-power refresh, previews, live submits, and watchlist sync. After a profile save or account change, Timmy returns to `Paper` and requires a fresh `Broker Check` before `Live` can be enabled.
+Run `Verify Profile` from the same screen. Timmy checks the App Key, App Secret, and Account ID against Webull before saving anything. `Save Profile` stays disabled until the current form values pass verification; editing any field requires a new verification.
+
+After verification, save the profile, then run `Broker Check` from the same screen. Timmy stores this profile locally in `.timmy-profile.env` with restricted file permissions and does not commit it to source control. Timmy automatically loads that profile for Webull account checks, buying-power refresh, previews, live submits, and watchlist sync. After a profile save or account change, Timmy returns to `Paper` and requires a fresh `Broker Check` before `Live` can be enabled.
 
 Do not paste broker usernames, passwords, MFA codes, App Secrets, or tokens into chat.
 

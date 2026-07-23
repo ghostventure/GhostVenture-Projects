@@ -54,7 +54,7 @@ ENABLE_EQUITY_FRACTIONAL_TRADING=1
 
 2. Confirm the account/buying-power check succeeds from Timmy. If buying power is unavailable, live submission should be treated as blocked.
 
-3. To configure or change accounts, use the native GUI `Setup` tab. Enter the Webull OpenAPI App Key, App Secret, default account ID, region, endpoint, and live switches, save the profile, run `Broker Check`, choose the desired masked account label, then run `Broker Check` again before switching target back to `Live`.
+3. To configure or change accounts, use the native GUI `Setup` tab. Enter the Webull OpenAPI App Key, App Secret, default account ID, region, endpoint, and live switches, run `Verify Profile`, save only after verification passes, run `Broker Check`, choose the desired masked account label, then run `Broker Check` again before switching target back to `Live`.
 
 4. Confirm Timmy has exactly one running process for the active `TIMMY_HOME`.
 
@@ -270,7 +270,7 @@ Overview-only widgets such as the hero, pipeline metric band, and execution cont
 
 Focused tabs should carry their own operational context:
 
-- `Setup`: Webull OpenAPI key fields, masked account ID entry, region/endpoint, live switches, account picker, save profile, broker check, and setup readiness status.
+- `Setup`: Webull OpenAPI key fields, masked account ID entry, region/endpoint, live switches, verification gate, account picker, save profile, broker check, and setup readiness status.
 - `Universe`: universe source, bundled snapshot counts, runtime cache, generated watchlists, and Webull watchlist-sync names.
 - `Execution`: current live/fractional/risk gates, executable queue, and common blockers when no plan exists.
 - `Broker`: current account lane, buying-power snapshot, live switches, preview state, and Webull route controls until a real broker response replaces it.
@@ -278,4 +278,4 @@ Focused tabs should carry their own operational context:
 
 Use icons only where the command is obvious: run, live submit, stop, and power cycle. Keep text on higher-context actions such as scan, broker check, and route preview.
 
-Account setup and switching are GUI workflows. The Setup tab should save the Webull profile locally, the account picker should show masked labels discovered from `Broker Check`, save the selected account locally, clear stale live previews, return execution to `Paper`, and require a fresh broker check before the user enables `Live` for the newly selected account.
+Account setup and switching are GUI workflows. The Setup tab should verify the Webull profile before saving anything, save the verified profile locally, show masked account labels discovered from verification or `Broker Check`, save the selected account locally, clear stale live previews, return execution to `Paper`, and require a fresh broker check before the user enables `Live` for the newly selected account.
