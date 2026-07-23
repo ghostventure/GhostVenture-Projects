@@ -130,15 +130,23 @@ class WebullOpenApiBroker:
                 "order_plan": asdict(order),
             }
 
-        response = self.trade_client.order_v2.place_order(
-            self.config.webull_account_id,
-            payload["new_orders"],
-        )
-        return {
-            **self._json_response(response),
-            "request_payload": self._redacted_payload(payload),
-            "order_plan": asdict(order),
-        }
+        try:
+            response = self.trade_client.order_v2.place_order(
+                self.config.webull_account_id,
+                payload["new_orders"],
+            )
+            return {
+                **self._json_response(response),
+                "request_payload": self._redacted_payload(payload),
+                "order_plan": asdict(order),
+            }
+        except Exception as exc:
+            return {
+                "status": "rejected",
+                "error": str(exc),
+                "request_payload": self._redacted_payload(payload),
+                "order_plan": asdict(order),
+            }
 
     def _ensure_connected(self) -> None:
         if self.trade_client is None:

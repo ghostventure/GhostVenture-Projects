@@ -6,8 +6,7 @@ from datetime import datetime, timedelta
 from trend_trader.brokers.webull_openapi import WebullOpenApiBroker
 from trend_trader.asset_classes import enabled_asset_classes
 from trend_trader.config import load_config
-from trend_trader.models import OrderPlan
-from trend_trader.models import Candle
+from trend_trader.models import Candle, OrderPlan, Signal
 from trend_trader.risk import create_order_plan
 from trend_trader.strategy import rank_signals, score_symbol
 
@@ -71,6 +70,39 @@ def test_scores_bearish_change_as_watch_not_live_plan() -> None:
     assert signal.sensible_action in {"watch", "avoid"}
 
 
+def test_aggressive_style_collects_smaller_market_moves() -> None:
+    bars = make_bars("SPY")
+    previous = bars[-2].close
+    bars[-1] = Candle(
+        symbol="SPY",
+        timestamp=bars[-1].timestamp,
+        open=previous,
+        high=previous * 1.025,
+        low=previous * 0.998,
+        close=previous * 1.02,
+        volume=2_000_000,
+    )
+
+    aggressive = score_symbol("SPY", bars, trading_style="aggressive")
+    conservative = score_symbol("SPY", bars, trading_style="conservative")
+
+    assert aggressive.direction == "bullish"
+    assert conservative.direction == "neutral"
+    assert aggressive.scout_score > conservative.scout_score
+
+
+def test_pattern_filter_can_keep_breakout_watch_only() -> None:
+    bars = make_bars("SPY")
+
+    enabled = score_symbol("SPY", bars)
+    filtered = score_symbol("SPY", bars, enabled_trade_patterns={"momentum", "pullback", "volume"})
+
+    assert enabled.setup == "breakout"
+    assert enabled.decision == "eligible"
+    assert filtered.decision == "watch"
+    assert any("breakout pattern is disabled" in reason for reason in filtered.reasons)
+
+
 def test_quiet_symbol_does_not_create_trade_alert() -> None:
     bars = make_bars("DIA")
     previous = bars[-2].close
@@ -92,6 +124,7 @@ def test_order_plan_respects_risk_limits(monkeypatch) -> None:
     monkeypatch.setenv("WEBULL_SYMBOL_WHITELIST", "SPY")
     monkeypatch.setenv("WEBULL_MAX_ORDER_NOTIONAL_USD", "250")
     monkeypatch.setenv("WEBULL_MAX_ORDER_QUANTITY", "10")
+    monkeypatch.setenv("ENABLE_EQUITY_FRACTIONAL_TRADING", "0")
     config = load_config()
     signal = score_symbol("SPY", make_bars())
     plan = create_order_plan(signal, config)
@@ -111,6 +144,89 @@ def test_order_plan_respects_configured_min_score(monkeypatch) -> None:
     signal = score_symbol("SPY", make_bars())
     assert signal.score < 101
     assert create_order_plan(signal, config) is None
+
+
+def test_equity_fractional_plan_when_notional_is_below_one_share(monkeypatch) -> None:
+    monkeypatch.setenv("WEBULL_SYMBOL_WHITELIST", "AMD")
+    monkeypatch.setenv("WEBULL_MAX_ORDER_NOTIONAL_USD", "250")
+    monkeypatch.setenv("WEBULL_MAX_ORDER_QUANTITY", "10")
+    monkeypatch.setenv("ENABLE_EQUITY_FRACTIONAL_TRADING", "1")
+    config = load_config()
+    signal = Signal(
+        symbol="AMD",
+        score=90,
+        decision="eligible",
+        direction="bullish",
+        setup="fractional equity test",
+        reasons=("test",),
+        close=544.43,
+        change_pct=8.11,
+        entry=533.54,
+        stop=484.53,
+        target=651.17,
+        volatility_pct=1.0,
+        volume_ratio=2.0,
+        reward_risk=2.4,
+        expense_status="fair",
+        expense_reasons=(),
+        sensible_score=90,
+        sensible_action="trade",
+        scout_score=90,
+        scout_action="alert",
+    )
+
+    plan = create_order_plan(signal, config)
+
+    assert plan is not None
+    assert 0 < plan.quantity < 1
+    assert plan.order_type == "MARKET"
+    assert plan.limit_price is None
+    assert plan.notional <= 250
+    assert "fractional" in plan.reason
+
+
+def test_equity_fractional_plan_is_prioritized_when_full_shares_fit(monkeypatch) -> None:
+    monkeypatch.setenv("WEBULL_SYMBOL_WHITELIST", "SPY")
+    monkeypatch.setenv("WEBULL_MAX_ORDER_NOTIONAL_USD", "250")
+    monkeypatch.setenv("WEBULL_MAX_ORDER_QUANTITY", "10")
+    monkeypatch.setenv("ENABLE_EQUITY_FRACTIONAL_TRADING", "1")
+    config = load_config()
+    signal = score_symbol("SPY", make_bars())
+
+    plan = create_order_plan(signal, config)
+
+    assert plan is not None
+    assert plan.quantity > 1
+    assert not float(plan.quantity).is_integer()
+    assert plan.order_type == "MARKET"
+    assert plan.limit_price is None
+    assert plan.notional <= 250
+    assert "fractional-priority" in plan.reason
+
+
+def test_equity_fractional_payload_uses_market_quantity_without_limit(monkeypatch) -> None:
+    monkeypatch.setenv("ENABLE_EQUITY_FRACTIONAL_TRADING", "1")
+    config = load_config()
+    order = OrderPlan(
+        symbol="AMD",
+        side="BUY",
+        quantity=0.4686,
+        order_type="MARKET",
+        limit_price=None,
+        stop_price=484.53,
+        target_price=651.17,
+        notional=250.02,
+        reason="fractional equity payload",
+        instrument_type="EQUITY",
+    )
+
+    payload = WebullOpenApiBroker(config).new_order_payload(order)
+
+    assert payload["instrument_type"] == "EQUITY"
+    assert payload["order_type"] == "MARKET"
+    assert payload["quantity"] == "0.4686"
+    assert payload["entrust_type"] == "QTY"
+    assert "limit_price" not in payload
 
 
 def test_rank_signals_uses_configured_rsi_expense_threshold(monkeypatch) -> None:

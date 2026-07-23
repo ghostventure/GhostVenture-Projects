@@ -229,7 +229,7 @@ When the native GUI is set to `Auto`, manual execution buttons are disabled to p
 
 The native dashboard now includes a `Cash Available` card. It updates after `Check Webull` reads the account response and displays the best available cash or buying-power value Timmy can extract. Account identifiers remain redacted in the broker response panel.
 
-The native dashboard also schedules a Webull account/balance auto-refresh every four hours while Timmy is open. It only runs when the Webull app key, app secret, and account ID are configured; otherwise it skips safely and keeps the manual `Check Webull` button available.
+The native dashboard also schedules a Webull account/balance auto-refresh every 15 minutes by default while Timmy is open. It only runs when the Webull app key, app secret, and account ID are configured; otherwise it skips safely and keeps the manual `Check Webull` button available.
 
 ### Too-Expensive Buy Gate
 

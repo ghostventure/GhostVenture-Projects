@@ -15,21 +15,22 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from zoneinfo import ZoneInfo
 
-from .asset_classes import enabled_asset_classes
+from .asset_classes import asset_profile, enabled_asset_classes
 from .brokers.paper import PaperBroker
 from .brokers.webull_openapi import WebullOpenApiBroker
 from .config import BotConfig, load_config
 from .data import load_csv_bars, write_csv_bars
 from .market_calendar import market_session, seconds_until_next_open
 from .market_data import fetch_daily_bars
+from .models import OrderPlan
 from .readiness import readiness_flags
 from .risk import create_order_plan
 from .sample_data import write_sample_bars
 from .strategy import rank_signals
 from .watchlist import load_watchlist, write_watchlist_template
 
-AUTO_REFRESH_MS = 180_000
-ACCOUNT_REFRESH_MS = 4 * 60 * 60 * 1000
+AUTO_REFRESH_MS = max(30, int(os.getenv("TIMMY_DASHBOARD_REFRESH_SECONDS", "60"))) * 1000
+ACCOUNT_REFRESH_MS = max(5, int(os.getenv("TIMMY_ACCOUNT_REFRESH_MINUTES", "15"))) * 60 * 1000
 LIVE_PREVIEW_TTL_SECONDS = 180
 
 
@@ -42,6 +43,7 @@ class TimmyNativeApp:
         self.event_log_path = home / "execution-events.jsonl"
         self.paper_research_path = home / "paper-training-summary.json"
         self.audit_key_path = home / ".timmy-audit-key"
+        self.settings_path = home / "timmy-ui-settings.json"
         self.crash_log_path = home / "timmy-crash.log"
         self.config: BotConfig | None = None
         self.config_error: str | None = None
@@ -56,7 +58,7 @@ class TimmyNativeApp:
         self.closing = False
         self.min_score_value = 72
         self.plan_limit_value = 3
-        self.auto_interval_value = 3
+        self.auto_interval_value = 1
         self.trade_cash_snapshot: tuple[str, str] = ("-", "Run Check Webull")
         self.trade_cash_value: float | None = None
         self.account_snapshot: tuple[str, str] = ("Unknown", "Run Check Webull")
@@ -78,16 +80,25 @@ class TimmyNativeApp:
         self.root.configure(bg=self.colors["bg"])
         self.min_score_var = tk.StringVar(value="72")
         self.plan_limit_var = tk.StringVar(value="3")
-        self.auto_interval_var = tk.StringVar(value="3")
+        self.auto_interval_var = tk.StringVar(value="1")
         self.paper_auto_var = tk.BooleanVar(value=False)
         self.execution_mode_var = tk.StringVar(value="User")
         self.execution_target_var = tk.StringVar(value="Paper")
         self.webull_account_toggle_var = tk.BooleanVar(value=False)
         self.account_lane_var = tk.StringVar(value="I-Cash")
+        self.trading_style_var = tk.StringVar(value="Adaptive")
+        self.pattern_vars = {
+            "breakout": tk.BooleanVar(value=True),
+            "momentum": tk.BooleanVar(value=True),
+            "pullback": tk.BooleanVar(value=True),
+            "volume": tk.BooleanVar(value=True),
+        }
+        self._load_persisted_settings()
 
         self._configure_style()
         self.splash = self._build_splash()
         self._build_layout()
+        self._setup_settings_traces()
         self.root.withdraw()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.report_callback_exception = self._handle_tk_exception
@@ -98,6 +109,8 @@ class TimmyNativeApp:
         self.refresh_all()
         self._close_splash()
         self._arm_market_open_automation()
+        if self.paper_auto_var.get() or self.execution_mode_var.get() == "Auto":
+            self._schedule_automation()
         self.refresh_after_id = self.root.after(AUTO_REFRESH_MS, self._auto_refresh)
         self.account_refresh_after_id = self.root.after(ACCOUNT_REFRESH_MS, self._auto_account_refresh)
         self.root.mainloop()
@@ -226,6 +239,7 @@ class TimmyNativeApp:
                 pass
 
     def close(self) -> None:
+        self._save_runtime_settings()
         self.closing = True
         if getattr(self, "splash", None):
             try:
@@ -379,7 +393,7 @@ class TimmyNativeApp:
             metrics.columnconfigure(idx, weight=1)
         self.mode_card = self._metric(metrics, 0, 0, "Mode")
         self.account_card = self._metric(metrics, 0, 1, "Webull Account")
-        self.cash_card = self._metric(metrics, 0, 2, "Cash Available", highlight=True)
+        self.cash_card = self._metric(metrics, 0, 2, "Buying Power", highlight=True)
         self.notional_card = self._metric(metrics, 1, 0, "Max Notional")
         self.risk_card = self._metric(metrics, 1, 1, "Risk / Trade")
 
@@ -517,6 +531,38 @@ class TimmyNativeApp:
         self.stop_button.grid(row=0, column=2, sticky="ew", padx=(7, 0))
         self.manual_controls.extend([self.run_button, self.live_button])
         self.busy_controls.extend([self.run_button, self.live_button])
+
+        style_box = tk.Frame(controls, bg=self.colors["panel"])
+        style_box.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 14))
+        style_label = tk.Label(style_box, text="Style", bg=self.colors["panel"], fg=self.colors["muted"],
+                               font=("Sans", 9, "bold"), anchor="center", justify="center")
+        style_label.pack(side="left", padx=(0, 8))
+        style_menu = tk.OptionMenu(style_box, self.trading_style_var, "Adaptive", "Aggressive", "Balanced", "Conservative")
+        style_menu.configure(bg=self.colors["button"], fg=self.colors["button_text"],
+                             activebackground=self.colors["panel_2"], activeforeground=self.colors["text"],
+                             relief="flat", font=("Sans", 9, "bold"), highlightthickness=0)
+        style_menu.pack(side="left", fill="x", expand=True)
+
+        pattern_box = tk.Frame(controls, bg=self.colors["panel"])
+        pattern_box.grid(row=3, column=2, columnspan=4, sticky="ew", padx=10, pady=(0, 14))
+        pattern_label = tk.Label(pattern_box, text="Patterns", bg=self.colors["panel"], fg=self.colors["muted"],
+                                 font=("Sans", 9, "bold"), anchor="w", justify="left")
+        pattern_label.pack(side="left", padx=(0, 8))
+        for key, label in (("breakout", "Breakout"), ("momentum", "Momentum"), ("pullback", "Pullback"), ("volume", "Volume")):
+            tk.Checkbutton(
+                pattern_box,
+                text=label,
+                variable=self.pattern_vars[key],
+                command=self.refresh_all,
+                bg=self.colors["panel"],
+                fg=self.colors["text"],
+                selectcolor=self.colors["panel_2"],
+                activebackground=self.colors["panel"],
+                activeforeground=self.colors["text"],
+                disabledforeground=self.colors["disabled"],
+                font=("Sans", 8, "bold"),
+                justify="center",
+            ).pack(side="left", padx=(0, 6))
 
         body = tk.Frame(main, bg=self.colors["bg"])
         self.body = body
@@ -879,8 +925,10 @@ class TimmyNativeApp:
             )
         broker = WebullOpenApiBroker(config)
         results = [broker.submit_order(plan) for plan in plans[: self.plan_limit_value]]
+        self._update_buying_power_from_broker_results(results)
         for result in results:
             self._append_execution_event(self._event_from_broker_result(result, mode="live"))
+        self._render_status()
         return json.dumps(results, indent=2, sort_keys=True)
 
     def run_decision_cycle(self) -> None:
@@ -906,7 +954,7 @@ class TimmyNativeApp:
 
     def _refresh_payload(self) -> str:
         self._splash_step("Loading configuration")
-        self.config = self._load_config_safe()
+        self.config = self._runtime_config(self._load_config_safe())
         self._splash_step("Reading execution journals")
         self.execution_events = self._load_execution_events()
         self.recent_bad_event_counts = self._build_bad_event_counts(self.execution_events)
@@ -948,17 +996,27 @@ class TimmyNativeApp:
             age_seconds = datetime.now().timestamp() - self.data_file.stat().st_mtime
             if age_seconds < config.market_data_max_age_minutes * 60:
                 return
-        write_watchlist_template(config.watchlist_path or self.watchlist_path, config.watchlist_template)
-        symbols = load_watchlist(config.watchlist_path or self.watchlist_path, config.symbol_whitelist)
+        watchlist_path = self._runtime_path(config.watchlist_path or self.watchlist_path)
+        write_watchlist_template(watchlist_path, config.watchlist_template)
+        symbols = load_watchlist(watchlist_path, config.symbol_whitelist)
         bars = fetch_daily_bars(config.market_data_provider, symbols)
         if bars:
             write_csv_bars(self.data_file, bars)
             self.status_bar.configure(text=f"Market data refreshed for {len(bars)} symbols.")
 
+    def _runtime_path(self, path: str | Path) -> Path:
+        candidate = Path(path).expanduser()
+        if candidate.is_absolute():
+            return candidate
+        return self.home / candidate
+
     def _load_plans(self, config: BotConfig):
         if self._data_is_stale():
             return []
-        return self._plans_from_signals(config, self.signals)
+        plans = self._plans_from_signals(config, self.signals)
+        if plans or not self._paper_simulation_enabled(config):
+            return plans
+        return self._paper_scout_plans(config, self.signals)
 
     def _plans_from_signals(self, config: BotConfig, signals):
         min_score = self._min_score(config)
@@ -975,6 +1033,70 @@ class TimmyNativeApp:
             if plan:
                 plans.append(plan)
         return plans
+
+    def _paper_simulation_enabled(self, config: BotConfig) -> bool:
+        target = getattr(self, "execution_target_var", None)
+        target_value = target.get() if target is not None else "Paper"
+        return (
+            config.trader_mode == "paper"
+            and target_value == "Paper"
+            and config.paper_simulation_enabled
+        )
+
+    def _paper_scout_plans(self, config: BotConfig, signals) -> list[OrderPlan]:
+        plans: list[OrderPlan] = []
+        min_scout_score = config.paper_simulation_min_scout_score
+        for signal in signals:
+            if signal.direction != "bullish":
+                continue
+            if signal.scout_score < min_scout_score:
+                continue
+            if signal.scout_action not in {"alert", "watch"}:
+                continue
+            if config.symbol_whitelist and signal.symbol.upper() not in config.symbol_whitelist:
+                continue
+            operational_blocks = self._operational_blocks(
+                signal,
+                config,
+                include_session=not config.paper_simulation_ignore_market_hours,
+                include_signal_quality=False,
+            )
+            if operational_blocks:
+                continue
+            plan = self._paper_scout_plan(signal, config)
+            if plan:
+                plans.append(plan)
+        return plans
+
+    def _paper_scout_plan(self, signal, config: BotConfig) -> OrderPlan | None:
+        profile = asset_profile(signal.symbol, config)
+        if profile.instrument_type != "EQUITY" or not profile.enabled:
+            return None
+        risk_per_share = max(signal.entry - signal.stop, 0.01)
+        risk_qty = config.risk_per_trade_usd / risk_per_share
+        notional_qty = profile.max_notional / max(signal.entry, 0.01)
+        quantity = round(max(0.0, min(risk_qty, notional_qty, profile.max_quantity)), 4)
+        if quantity <= 0 or quantity * signal.entry < 2.0:
+            return None
+        return OrderPlan(
+            symbol=signal.symbol,
+            side="BUY",
+            quantity=quantity,
+            order_type="LIMIT",
+            limit_price=signal.entry,
+            stop_price=signal.stop,
+            target_price=signal.target,
+            notional=round(quantity * signal.entry, 2),
+            reason=(
+                f"paper-scout-simulation {signal.setup} score={signal.score} "
+                f"scout={signal.scout_score} buy-low/sell-high band"
+            ),
+            instrument_type=profile.instrument_type,
+            time_in_force=profile.time_in_force,
+            entrust_type=profile.entrust_type,
+            support_trading_session=profile.support_trading_session,
+            extra_payload=profile.extra_payload,
+        )
 
     def _render_status(self) -> None:
         config = self.config
@@ -1066,6 +1188,7 @@ class TimmyNativeApp:
         return {
             "paper_schema": 2,
             "source": "native",
+            "simulation_lane": "paper-scout" if "paper-scout-simulation" in plan.reason else None,
             "latest_candle_timestamp": self._latest_candle_timestamp(plan.symbol),
             "signal_snapshot": {
                 "symbol": signal.symbol,
@@ -1090,6 +1213,8 @@ class TimmyNativeApp:
                 "plan_limit": self.plan_limit_value,
                 "execution_mode": self.execution_mode_var.get(),
                 "paper_auto": self.paper_auto_var.get(),
+                "trading_style": self.trading_style_var.get(),
+                "patterns": sorted(self._runtime_strategy_patterns()),
             },
         }
 
@@ -1248,10 +1373,10 @@ class TimmyNativeApp:
             try:
                 result = action()
                 if not self.closing:
-                    self.root.after(0, lambda: self._action_done(label, result))
+                    self.root.after(0, lambda result=result: self._action_done(label, result))
             except Exception as exc:
                 if not self.closing:
-                    self.root.after(0, lambda: self._action_error(label, exc))
+                    self.root.after(0, lambda exc=exc: self._action_error(label, exc))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1445,6 +1570,7 @@ class TimmyNativeApp:
             f"Execution: {self.execution_mode_var.get()}",
             f"Target: {self.execution_target_var.get()}",
             f"Guard: {'live enabled' if self._live_ready(config) else 'live orders locked'}",
+            f"Style: {config.trading_style} | Patterns: {', '.join(sorted(config.enabled_trade_patterns)) or 'none'}",
             f"Min score: {self._min_score(config)} | Plan limit: {limit}",
             self._data_freshness_line(),
             *asset_lines,
@@ -1685,12 +1811,17 @@ class TimmyNativeApp:
                 symbol_whitelist={"AAPL", "AMD", "DIA", "IWM", "MSFT", "NVDA", "QQQ", "SPY", "TSLA"},
                 max_order_notional_usd=250.0,
                 max_order_quantity=10.0,
+                enable_equity_fractional_trading=False,
+                min_equity_fractional_notional_usd=5.0,
+                equity_fractional_quantity_decimals=5,
                 max_price_over_sma20_pct=6.0,
                 max_price_over_sma50_pct=12.0,
                 max_rsi_to_buy=78.0,
                 max_entry_cash_pct=20.0,
                 min_reward_risk_to_trade=1.6,
                 max_signal_volatility_pct=4.5,
+                trading_style="adaptive",
+                enabled_trade_patterns={"breakout", "momentum", "pullback", "volume"},
                 max_daily_trades=5,
                 max_symbol_daily_trades=2,
                 order_cooldown_minutes=15,
@@ -1699,6 +1830,9 @@ class TimmyNativeApp:
                 auto_start_paper_on_market_open=True,
                 auto_start_live_on_market_open=False,
                 market_open_poll_seconds=30,
+                paper_simulation_enabled=False,
+                paper_simulation_ignore_market_hours=True,
+                paper_simulation_min_scout_score=40,
                 market_data_provider="csv",
                 market_data_max_age_minutes=15,
                 watchlist_path=None,
@@ -1728,6 +1862,87 @@ class TimmyNativeApp:
                 webull_require_preview=True,
             )
 
+    def _runtime_config(self, config: BotConfig) -> BotConfig:
+        if not is_dataclass(config):
+            return config
+        return replace(
+            config,
+            trading_style=self.trading_style_var.get().strip().lower() or config.trading_style,
+            enabled_trade_patterns=self._runtime_strategy_patterns(),
+        )
+
+    def _runtime_strategy_patterns(self) -> set[str]:
+        patterns = {key for key, var in self.pattern_vars.items() if var.get()}
+        return patterns or {"breakout", "momentum", "pullback", "volume"}
+
+    def _load_persisted_settings(self) -> None:
+        if not self.settings_path.exists():
+            return
+        try:
+            settings = json.loads(self.settings_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        self.min_score_var.set(str(self._coerce_int(settings.get("min_score"), 72, 0, 100)))
+        self.plan_limit_var.set(str(self._coerce_int(settings.get("plan_limit"), 3, 1, 20)))
+        self.auto_interval_var.set(str(self._coerce_int(settings.get("auto_interval_minutes"), 1, 1, 60)))
+        if settings.get("execution_mode") in {"User", "Auto"}:
+            self.execution_mode_var.set(settings["execution_mode"])
+        if settings.get("execution_target") in {"Paper", "Live"}:
+            self.execution_target_var.set(settings["execution_target"])
+        if settings.get("account_lane") in {"I-Cash", "Crypto"}:
+            self.account_lane_var.set(settings["account_lane"])
+        style = str(settings.get("trading_style", "Adaptive")).strip().title()
+        if style in {"Adaptive", "Aggressive", "Balanced", "Conservative"}:
+            self.trading_style_var.set(style)
+        patterns = settings.get("patterns")
+        if isinstance(patterns, list):
+            enabled = {str(item).strip().lower() for item in patterns}
+            for key, var in self.pattern_vars.items():
+                var.set(key in enabled)
+
+    def _setup_settings_traces(self) -> None:
+        for var in (
+            self.min_score_var,
+            self.plan_limit_var,
+            self.auto_interval_var,
+            self.paper_auto_var,
+            self.execution_mode_var,
+            self.execution_target_var,
+            self.account_lane_var,
+            self.trading_style_var,
+            *self.pattern_vars.values(),
+        ):
+            var.trace_add("write", lambda *_args: self._settings_changed())
+
+    def _settings_changed(self) -> None:
+        self._save_runtime_settings()
+
+    def _save_runtime_settings(self) -> None:
+        settings = {
+            "min_score": self._coerce_int(self.min_score_var.get(), 72, 0, 100),
+            "plan_limit": self._coerce_int(self.plan_limit_var.get(), 3, 1, 20),
+            "auto_interval_minutes": self._coerce_int(self.auto_interval_var.get(), 1, 1, 60),
+            "paper_auto": bool(self.paper_auto_var.get()),
+            "execution_mode": self.execution_mode_var.get(),
+            "execution_target": self.execution_target_var.get(),
+            "account_lane": self.account_lane_var.get(),
+            "trading_style": self.trading_style_var.get(),
+            "patterns": sorted(self._runtime_strategy_patterns()),
+            "saved_at": datetime.now().isoformat(),
+        }
+        try:
+            self.settings_path.write_text(json.dumps(settings, indent=2, sort_keys=True), encoding="utf-8")
+        except OSError:
+            pass
+
+    @staticmethod
+    def _coerce_int(value, fallback: int, minimum: int, maximum: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = fallback
+        return max(minimum, min(maximum, parsed))
+
     def _sync_automation(self) -> None:
         if self.paper_auto_var.get():
             self.status_bar.configure(text="Paper automation armed.")
@@ -1746,7 +1961,7 @@ class TimmyNativeApp:
         if live_enabled:
             self.execution_target_var.set("Live")
             self.execution_mode_var.set("Auto")
-        if self._regular_market_open_now():
+        if self._regular_market_open_now() or (paper_enabled and self._paper_simulation_enabled(config)):
             self.status_bar.configure(text="Market open automation active.")
             self._run_market_open_cycle(paper_enabled, live_enabled)
             self._schedule_automation()
@@ -1818,7 +2033,7 @@ class TimmyNativeApp:
             return
         if self.automation_after_id:
             self.root.after_cancel(self.automation_after_id)
-        self.auto_interval_value = self._bounded_int(self.auto_interval_var, 3, 1, 60)
+        self.auto_interval_value = self._bounded_int(self.auto_interval_var, 1, 1, 60)
         self.automation_after_id = self.root.after(self.auto_interval_value * 60_000, self._automation_tick)
 
     def _automation_tick(self) -> None:
@@ -1952,7 +2167,33 @@ class TimmyNativeApp:
             "stop_price": plan.get("stop_price"),
             "sold_price": None,
             "sell_status": "target-pending" if status == "accepted" else "not-opened",
+            "broker_error": result.get("error"),
+            "broker_body": result.get("body"),
         }
+
+    def _update_buying_power_from_broker_results(self, results: list[dict]) -> None:
+        for result in results:
+            if self._broker_result_mentions(result, "buying power is insufficient"):
+                self.trade_cash_snapshot = ("$0.00", "Insufficient buying power")
+                self.trade_cash_value = 0.0
+                return
+            if self._broker_result_mentions(result, "insufficient buying power"):
+                self.trade_cash_snapshot = ("$0.00", "Insufficient buying power")
+                self.trade_cash_value = 0.0
+                return
+
+    @staticmethod
+    def _broker_result_mentions(result: dict, phrase: str) -> bool:
+        haystack = " ".join(
+            str(value)
+            for value in (
+                result.get("status"),
+                result.get("error"),
+                result.get("message"),
+                result.get("body"),
+            )
+        ).lower()
+        return phrase.lower() in haystack
 
     @staticmethod
     def _broker_event_status(result: dict) -> str:
@@ -2044,20 +2285,28 @@ class TimmyNativeApp:
         max_entry = self.trade_cash_value * (config.max_entry_cash_pct / 100)
         return signal.entry > max_entry
 
-    def _operational_blocks(self, signal, config: BotConfig) -> list[str]:
+    def _operational_blocks(
+        self,
+        signal,
+        config: BotConfig,
+        *,
+        include_session: bool = True,
+        include_signal_quality: bool = True,
+    ) -> list[str]:
         blocks: list[str] = []
         symbol = signal.symbol.upper()
         today_events = self._today_execution_events()
 
-        if config.require_market_hours and not self._regular_market_open_now():
+        if include_session and config.require_market_hours and not self._regular_market_open_now():
             blocks.append("regular market session is closed")
         if self._symbol_data_is_stale(symbol):
             latest = self._latest_candle_timestamp(symbol) or "missing"
             blocks.append(f"market data stale: latest {symbol} candle {latest}")
-        if signal.reward_risk < config.min_reward_risk_to_trade:
-            blocks.append(f"reward/risk {signal.reward_risk:.2f} below {config.min_reward_risk_to_trade:.2f}")
-        if signal.volatility_pct > config.max_signal_volatility_pct:
-            blocks.append(f"volatility {signal.volatility_pct:.2f}% above {config.max_signal_volatility_pct:.2f}%")
+        if include_signal_quality:
+            if signal.reward_risk < config.min_reward_risk_to_trade:
+                blocks.append(f"reward/risk {signal.reward_risk:.2f} below {config.min_reward_risk_to_trade:.2f}")
+            if signal.volatility_pct > config.max_signal_volatility_pct:
+                blocks.append(f"volatility {signal.volatility_pct:.2f}% above {config.max_signal_volatility_pct:.2f}%")
         if self._entry_too_large_for_cash(signal, config):
             blocks.append(f"entry exceeds {config.max_entry_cash_pct:g}% cash cap")
         if self._recent_bad_events(symbol) >= config.max_recent_rejections:

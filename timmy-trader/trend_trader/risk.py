@@ -30,7 +30,34 @@ def create_order_plan(signal: Signal, config: BotConfig) -> OrderPlan | None:
 
     risk_qty = config.risk_per_trade_usd / risk_per_share
     notional_qty = profile.max_notional / signal.entry
-    quantity = max(0.0, min(risk_qty, notional_qty, profile.max_quantity))
+    raw_quantity = max(0.0, min(risk_qty, notional_qty, profile.max_quantity))
+    if (
+        profile.instrument_type == "EQUITY"
+        and config.enable_equity_fractional_trading
+        and raw_quantity > 0
+    ):
+        decimals = max(1, min(config.equity_fractional_quantity_decimals, 5))
+        quantity = round(raw_quantity, decimals)
+        if quantity * signal.entry < config.min_equity_fractional_notional_usd:
+            return None
+        return OrderPlan(
+            symbol=signal.symbol,
+            side="BUY",
+            quantity=quantity,
+            order_type="MARKET",
+            limit_price=None,
+            stop_price=signal.stop,
+            target_price=signal.target,
+            notional=round(quantity * signal.entry, 2),
+            reason=f"{signal.setup} score={signal.score} equity fractional-priority market order",
+            instrument_type=profile.instrument_type,
+            time_in_force=profile.time_in_force,
+            entrust_type=profile.entrust_type,
+            support_trading_session=profile.support_trading_session,
+            extra_payload=profile.extra_payload,
+        )
+
+    quantity = raw_quantity
     if profile.quantity_decimals == 0:
         quantity = float(floor(quantity))
     else:

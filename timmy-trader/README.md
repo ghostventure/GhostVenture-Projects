@@ -34,8 +34,11 @@ docs/TIMMY_MASTER_DOCUMENTATION.md
 - Adds guarded instrument-class routing for equities, crypto, configured futures, and configured option legs.
 - Shows enabled asset classes, configured non-equity symbols, and disabled/scouting-only warnings in the native Decision Brief.
 - Includes a guarded Webull OpenAPI adapter for account verification.
-- Displays available cash or buying power after `Check Webull` can read the account response, then auto-refreshes that Webull balance snapshot every four hours while the native app is open and the account is fully configured.
+- Displays available cash or buying power after `Check Webull` can read the account response, then auto-refreshes that Webull balance snapshot every 15 minutes by default while the native app is open and the account is fully configured.
 - Blocks live order placement by default.
+- Prioritizes fractional US equity orders when enabled, so Timmy can place decimal-share buys inside the same risk and notional caps.
+- Remembers the last UI runtime settings on the next launch, including target, mode, account lane, score, plan limit, auto interval, trading style, and enabled patterns.
+- Adds adaptable trading style presets and pattern toggles for breakout, momentum, pullback, and volume-expansion setups.
 - Documents practical guardrails for asset-class expansion beyond stocks/ETFs, including crypto, commodity exposure, forex/currencies, index proxies, and unsupported instruments.
 
 ## What It Does Not Do Yet
@@ -70,6 +73,28 @@ WEBULL_APP_KEY=
 WEBULL_APP_SECRET=
 WEBULL_ACCOUNT_ID=
 ```
+
+Fractional equity priority:
+
+```text
+ENABLE_EQUITY_FRACTIONAL_TRADING=1
+WEBULL_MIN_EQUITY_FRACTIONAL_NOTIONAL_USD=5
+WEBULL_EQUITY_FRACTIONAL_QUANTITY_DECIMALS=5
+TRADING_STYLE=adaptive
+TRADING_PATTERNS=breakout,momentum,pullback,volume
+TIMMY_DASHBOARD_REFRESH_SECONDS=60
+TIMMY_ACCOUNT_REFRESH_MINUTES=15
+```
+
+When enabled, Timmy prioritizes fractional `MARKET` equity orders with decimal `quantity` for eligible US stock/ETF buys. It still honors the configured risk, max-notional, max-quantity, market-hours, daily-trade, per-symbol, and minimum-notional guards. Whole-share limit orders remain the fallback when fractional equity trading is disabled.
+
+Runtime settings:
+
+Timmy stores non-secret UI preferences in `timmy-ui-settings.json` under `TIMMY_HOME`. This includes the last selected execution target/mode, account lane, score threshold, plan limit, auto interval, trading style, and enabled patterns. Broker credentials remain in `.env` only.
+
+Market adaptability:
+
+`TRADING_STYLE` accepts `adaptive`, `aggressive`, `balanced`, or `conservative`. Aggressive reacts to smaller movement and volume shifts; conservative waits for stronger confirmation. `TRADING_PATTERNS` can include `breakout`, `momentum`, `pullback`, and `volume`; removing a pattern keeps matching setups watch-only instead of executable.
 
 Do not put broker usernames, passwords, MFA codes, API keys, or tokens in chat.
 

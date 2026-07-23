@@ -5,6 +5,12 @@ __pycache__/
 .pytest_cache/
 trade-journal.jsonl
 orders-outbox.jsonl
+execution-events.jsonl
+paper-training-summary.json
+timmy-crash.log
+timmy-ui-settings.json
+.timmy-audit-key
+timmy.lock
 .tmp/
 conf/
 webull_trade_sdk.log

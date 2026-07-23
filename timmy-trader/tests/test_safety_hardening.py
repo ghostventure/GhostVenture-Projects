@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+from threading import Event
 from types import SimpleNamespace
 
 import pytest
 
 from trend_trader.config import load_config
+from trend_trader.brokers.webull_openapi import WebullOpenApiBroker
 from trend_trader.models import Candle, OrderPlan, Signal
 from trend_trader.native_gui import ACCOUNT_REFRESH_MS, TimmyNativeApp
 from trend_trader.risk import create_order_plan
@@ -157,6 +159,66 @@ def test_native_planning_blocks_entries_above_cash_cap(monkeypatch) -> None:
 
     assert app._plans_from_signals(app.config, app.signals) == []
     assert any("cash cap" in block for block in app._operational_blocks(app.signals[0], app.config))
+
+
+def test_paper_simulation_creates_fractional_scout_plan_when_strict_plan_is_empty(monkeypatch) -> None:
+    monkeypatch.setenv("TRADER_MODE", "paper")
+    monkeypatch.setenv("PAPER_SIMULATION_ENABLED", "1")
+    monkeypatch.setenv("PAPER_SIMULATION_MIN_SCOUT_SCORE", "40")
+    monkeypatch.setenv("WEBULL_SYMBOL_WHITELIST", "AMD")
+    app = native_app_with_bars(datetime.now())
+    app.execution_target_var = SimpleNamespace(get=lambda: "Paper")
+    app.signals = [
+        replace(
+            eligible_signal("AMD", score=48),
+            decision="watch",
+            setup="trend-continuation",
+            scout_score=44,
+            scout_action="alert",
+            sensible_score=44,
+            sensible_action="avoid",
+            close=544.43,
+            change_pct=8.11,
+            entry=533.54,
+            stop=484.53,
+            target=651.17,
+            volatility_pct=7.2,
+        )
+    ]
+    app.bars_by_symbol = {"AMD": app.bars_by_symbol["SPY"]}
+    config = load_config()
+
+    plans = app._load_plans(config)
+
+    assert len(plans) == 1
+    assert plans[0].symbol == "AMD"
+    assert plans[0].quantity > 0
+    assert plans[0].quantity < 1
+    assert "paper-scout-simulation" in plans[0].reason
+
+
+def test_paper_simulation_does_not_backfill_live_target(monkeypatch) -> None:
+    monkeypatch.setenv("PAPER_SIMULATION_ENABLED", "1")
+    monkeypatch.setenv("WEBULL_SYMBOL_WHITELIST", "AMD")
+    app = native_app_with_bars(datetime.now())
+    app.execution_target_var = SimpleNamespace(get=lambda: "Live")
+    app.signals = [
+        replace(
+            eligible_signal("AMD", score=48),
+            decision="watch",
+            scout_score=44,
+            scout_action="alert",
+            sensible_score=44,
+            sensible_action="avoid",
+            entry=533.54,
+            stop=484.53,
+            target=651.17,
+            volatility_pct=7.2,
+        )
+    ]
+    app.bars_by_symbol = {"AMD": app.bars_by_symbol["SPY"]}
+
+    assert app._load_plans(load_config()) == []
 
 
 @pytest.mark.parametrize(
@@ -328,6 +390,44 @@ def test_broker_success_records_accepted_pending_position() -> None:
     assert event["sell_status"] == "target-pending"
 
 
+def test_live_rejection_updates_buying_power_indicator() -> None:
+    app = native_app_with_bars(datetime.now())
+    app.trade_cash_snapshot = ("-", "Run Check Webull")
+    app.trade_cash_value = None
+
+    app._update_buying_power_from_broker_results([
+        {
+            "status": "rejected",
+            "error": "HTTP Status: 417, Code: OAUTH_OPENAPI_DAY_BUYING_POWER_INSUFFICIENT, Msg: Buying power is insufficient.",
+        }
+    ])
+
+    assert app.trade_cash_snapshot == ("$0.00", "Insufficient buying power")
+    assert app.trade_cash_value == 0.0
+
+
+def test_broker_submit_returns_rejected_result_when_webull_raises(monkeypatch) -> None:
+    monkeypatch.setenv("TRADER_MODE", "live")
+    monkeypatch.setenv("TRADER_LIVE", "1")
+    monkeypatch.setenv("WEBULL_ENABLE_LIVE_ORDERS", "1")
+    monkeypatch.setenv("WEBULL_REQUIRE_PREVIEW", "0")
+    monkeypatch.setenv("WEBULL_ACCOUNT_ID", "configured-account")
+    broker = WebullOpenApiBroker(load_config())
+
+    class OrderClient:
+        @staticmethod
+        def place_order(_account_id, _orders):
+            raise RuntimeError("Buying power is insufficient.")
+
+    broker.trade_client = SimpleNamespace(order_v2=OrderClient())
+
+    result = broker.submit_order(order_plan())
+
+    assert result["status"] == "rejected"
+    assert "Buying power is insufficient" in result["error"]
+    assert result["request_payload"]["account_id"] == "<configured>"
+
+
 def test_auto_account_refresh_skips_when_webull_is_incomplete() -> None:
     app = object.__new__(TimmyNativeApp)
     app.closing = False
@@ -368,3 +468,37 @@ def test_auto_account_refresh_runs_webull_check_when_configured() -> None:
 
     assert actions == ["Auto Webull balance refresh"]
     assert scheduled == [ACCOUNT_REFRESH_MS]
+
+
+def test_native_runtime_path_anchors_relative_paths_to_home(tmp_path) -> None:
+    app = object.__new__(TimmyNativeApp)
+    app.home = tmp_path
+
+    assert app._runtime_path("watchlist.txt") == tmp_path / "watchlist.txt"
+    assert app._runtime_path(tmp_path / "already-absolute.txt") == tmp_path / "already-absolute.txt"
+
+
+def test_threaded_action_binds_exception_before_tk_callback() -> None:
+    app = object.__new__(TimmyNativeApp)
+    app.closing = False
+    callbacks = []
+    errors = []
+    callback_ready = Event()
+
+    def after(_ms, callback):
+        callbacks.append(callback)
+        callback_ready.set()
+
+    app.status_bar = SimpleNamespace(configure=lambda **_kwargs: None)
+    app.root = SimpleNamespace(after=after)
+    app._set_buttons_state = lambda _state: None
+    app._action_done = lambda _label, _result: None
+    app._action_error = lambda label, exc: errors.append((label, str(exc)))
+    app._sync_manual_controls = lambda: None
+
+    app._run_action("Exploding action", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    assert callback_ready.wait(2)
+    assert len(callbacks) == 1
+    callbacks[0]()
+    assert errors == [("Exploding action", "boom")]

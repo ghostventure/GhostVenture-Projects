@@ -10,4 +10,8 @@ else
   export TIMMY_THEME=dark
 fi
 
+if [ -x .venv/bin/timmy-desktop ]; then
+  exec .venv/bin/timmy-desktop
+fi
+
 exec ./dist/Timmy/Timmy

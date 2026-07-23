@@ -25,6 +25,9 @@ def readiness_flags(config: BotConfig, plans_count: int = 0, events_count: int =
     else:
         red.append(f"Unknown trader mode: {config.trader_mode}.")
 
+    if config.enable_equity_fractional_trading:
+        green.append("Equity fractional-priority trading is enabled.")
+
     if config.webull_require_preview:
         green.append("Webull preview requirement is enabled.")
     else:

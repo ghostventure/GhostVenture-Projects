@@ -9,6 +9,46 @@ if TYPE_CHECKING:
     from .config import BotConfig
 
 EARLY_CHANGE_THRESHOLD_PCT = 2.5
+SUPPORTED_TRADE_PATTERNS = {"breakout", "momentum", "pullback", "volume"}
+
+
+def _style_profile(style: str) -> dict[str, float]:
+    profiles = {
+        "aggressive": {
+            "change_threshold": 1.8,
+            "watch_threshold": 1.0,
+            "volume_alert": 1.45,
+            "volume_building": 1.1,
+            "breakout_near_high": 0.99,
+            "volatility_limit": 0.06,
+            "reward_watch": 1.35,
+            "sensible_trade": 72,
+            "sensible_watch": 44,
+        },
+        "balanced": {
+            "change_threshold": 2.2,
+            "watch_threshold": 1.1,
+            "volume_alert": 1.65,
+            "volume_building": 1.18,
+            "breakout_near_high": 0.993,
+            "volatility_limit": 0.052,
+            "reward_watch": 1.45,
+            "sensible_trade": 76,
+            "sensible_watch": 48,
+        },
+        "conservative": {
+            "change_threshold": 3.0,
+            "watch_threshold": 1.5,
+            "volume_alert": 1.9,
+            "volume_building": 1.35,
+            "breakout_near_high": 0.997,
+            "volatility_limit": 0.04,
+            "reward_watch": 1.7,
+            "sensible_trade": 82,
+            "sensible_watch": 55,
+        },
+    }
+    return profiles.get(style, profiles["balanced"])
 
 
 def _adaptive_bands(close: float, current_atr: float | None, vol_ratio: float | None) -> tuple[float, float, float, float, str]:
@@ -43,7 +83,9 @@ def _sensible_score(
     reward_risk: float,
     volatility_pct: float,
     vol_ratio: float | None,
+    style_profile: dict[str, float] | None = None,
 ) -> tuple[int, str]:
+    style_profile = style_profile or _style_profile("adaptive")
     sensible = score
     if direction == "bearish":
         sensible -= 22
@@ -56,17 +98,17 @@ def _sensible_score(
         sensible -= 30
     if reward_risk >= 2.0:
         sensible += 8
-    elif reward_risk < 1.5:
+    elif reward_risk < style_profile["reward_watch"]:
         sensible -= 18
     if vol_ratio is not None and vol_ratio >= 1.4:
         sensible += 5
-    if volatility_pct > 0.045:
+    if volatility_pct > style_profile["volatility_limit"]:
         sensible -= 18
 
     sensible = max(0, min(100, sensible))
-    if sensible >= 78 and direction == "bullish" and expense_status != "too-expensive":
+    if sensible >= style_profile["sensible_trade"] and direction == "bullish" and expense_status != "too-expensive":
         return sensible, "trade"
-    if sensible >= 50:
+    if sensible >= style_profile["sensible_watch"]:
         return sensible, "watch"
     return sensible, "avoid"
 
@@ -88,24 +130,26 @@ def _scout_score(
     vol_ratio: float | None,
     volatility_pct: float,
     current_rsi: float | None,
+    style_profile: dict[str, float] | None = None,
 ) -> tuple[int, str, list[str]]:
+    style_profile = style_profile or _style_profile("adaptive")
     score = 0
     reasons: list[str] = []
     abs_change = abs(change_pct)
     abs_three_bar = abs(three_bar_change_pct)
     abs_gap = abs(gap_pct)
 
-    if abs_change >= EARLY_CHANGE_THRESHOLD_PCT:
+    if abs_change >= style_profile["change_threshold"]:
         score += 26
         reasons.append(f"single-bar movement crossed vigilance threshold at {change_pct:+.2f}%")
-    elif abs_change >= 1.2:
+    elif abs_change >= style_profile["watch_threshold"]:
         score += 12
         reasons.append(f"single-bar movement is building at {change_pct:+.2f}%")
 
-    if abs_three_bar >= EARLY_CHANGE_THRESHOLD_PCT:
+    if abs_three_bar >= style_profile["change_threshold"]:
         score += 24
         reasons.append(f"three-bar acceleration is active at {three_bar_change_pct:+.2f}%")
-    elif abs_three_bar >= 1.5:
+    elif abs_three_bar >= max(1.2, style_profile["watch_threshold"] + 0.3):
         score += 12
         reasons.append(f"three-bar drift is worth watching at {three_bar_change_pct:+.2f}%")
 
@@ -113,10 +157,10 @@ def _scout_score(
         score += 10
         reasons.append(f"opening gap/shift detected at {gap_pct:+.2f}%")
 
-    if vol_ratio is not None and vol_ratio >= 1.8:
+    if vol_ratio is not None and vol_ratio >= style_profile["volume_alert"]:
         score += 18
         reasons.append(f"unusual volume alert at {vol_ratio:.1f}x average")
-    elif vol_ratio is not None and vol_ratio >= 1.25:
+    elif vol_ratio is not None and vol_ratio >= style_profile["volume_building"]:
         score += 10
         reasons.append(f"volume is above baseline at {vol_ratio:.1f}x")
     elif vol_ratio is not None and vol_ratio < 0.75:
@@ -137,7 +181,7 @@ def _scout_score(
         score += 10
         reasons.append("bearish move is near recent lows")
 
-    if volatility_pct > 0.055:
+    if volatility_pct > style_profile["volatility_limit"] + 0.01:
         score -= 16
         reasons.append("volatility is high enough to reduce scouting confidence")
     if current_rsi is not None and (current_rsi >= 84 or current_rsi <= 18):
@@ -158,7 +202,11 @@ def score_symbol(
     max_rsi_to_buy: float = 78.0,
     max_price_over_sma20_pct: float = 6.0,
     max_price_over_sma50_pct: float = 12.0,
+    trading_style: str = "adaptive",
+    enabled_trade_patterns: set[str] | None = None,
 ) -> Signal:
+    style_profile = _style_profile(trading_style)
+    patterns = enabled_trade_patterns or SUPPORTED_TRADE_PATTERNS
     values = closes(bars)
     last = bars[-1]
     sma_20 = sma(values, 20)
@@ -172,7 +220,8 @@ def score_symbol(
     change_pct = _percent_change(last.close, previous_close)
     three_bar_change_pct = _percent_change(last.close, values[-4] if len(values) >= 4 else previous_close)
     gap_pct = _percent_change(last.open, previous_close)
-    direction = "bullish" if change_pct >= EARLY_CHANGE_THRESHOLD_PCT else "bearish" if change_pct <= -EARLY_CHANGE_THRESHOLD_PCT else "neutral"
+    change_threshold = style_profile["change_threshold"]
+    direction = "bullish" if change_pct >= change_threshold else "bearish" if change_pct <= -change_threshold else "neutral"
 
     score = 0
     reasons: list[str] = []
@@ -211,10 +260,10 @@ def score_symbol(
     if current_rsi is not None and current_rsi > max_rsi_to_buy:
         expense_reasons.append(f"RSI is expensive/overextended at {current_rsi:.1f}")
 
-    if vol_ratio is not None and vol_ratio >= 1.4:
+    if vol_ratio is not None and vol_ratio >= style_profile["volume_building"] + 0.15:
         score += 18
         reasons.append(f"volume is {vol_ratio:.1f}x recent average")
-    elif vol_ratio is not None and vol_ratio >= 1.0:
+    elif vol_ratio is not None and vol_ratio >= max(1.0, style_profile["volume_building"] - 0.15):
         score += 8
         reasons.append("volume is at or above recent average")
 
@@ -225,7 +274,7 @@ def score_symbol(
     )
     latest_range = max(last.high - last.low, 0)
     range_expansion = (latest_range / current_atr) if current_atr and current_atr > 0 else 1.0
-    near_high = bool(prior_high and last.close >= prior_high * 0.995)
+    near_high = bool(prior_high and last.close >= prior_high * style_profile["breakout_near_high"])
     near_low = bool(prior_low and last.close <= prior_low * 1.005)
     scout_score, scout_action, scout_reasons = _scout_score(
         change_pct,
@@ -238,6 +287,7 @@ def score_symbol(
         vol_ratio,
         volatility_pct,
         current_rsi,
+        style_profile,
     )
     reasons.extend(f"scout: {reason}" for reason in scout_reasons)
 
@@ -251,6 +301,14 @@ def score_symbol(
     stop = round(max(entry - stop_distance, 0.01), 2)
     target = round(entry + stop_distance * target_multiplier, 2)
     reward_risk = round((target - entry) / max(entry - stop, 0.01), 2)
+    entry_label = "planned buy-limit entry waits for a pullback"
+    if "pullback" not in patterns:
+        pullback_distance = 0.0
+        entry = round(max(last.close, 0.01), 2)
+        stop = round(max(entry - stop_distance, 0.01), 2)
+        target = round(entry + stop_distance * target_multiplier, 2)
+        reward_risk = round((target - entry) / max(entry - stop, 0.01), 2)
+        entry_label = "pullback pattern disabled; entry tracks the latest close"
     if sma_20:
         over_sma20_pct = (last.close - sma_20) / sma_20 * 100
         if over_sma20_pct > max_price_over_sma20_pct:
@@ -259,7 +317,7 @@ def score_symbol(
         over_sma50_pct = (last.close - sma_50) / sma_50 * 100
         if over_sma50_pct > max_price_over_sma50_pct:
             expense_reasons.append(f"price is {over_sma50_pct:.2f}% above 50-period average")
-    if reward_risk < 1.5:
+    if reward_risk < style_profile["reward_watch"]:
         expense_reasons.append(f"reward/risk is thin at {reward_risk:.2f}")
     expense_status = "too-expensive" if len(expense_reasons) >= 2 and direction == "bullish" else "fair"
     sensible_score, sensible_action = _sensible_score(
@@ -269,12 +327,27 @@ def score_symbol(
         reward_risk,
         volatility_pct,
         vol_ratio,
+        style_profile,
     )
+    pattern_block = False
+    if "breakout" not in patterns and setup == "breakout":
+        pattern_block = True
+        reasons.append("breakout pattern is disabled")
+    if "momentum" not in patterns and direction == "bullish" and change_pct >= change_threshold:
+        pattern_block = True
+        reasons.append("momentum pattern is disabled")
+    if "volume" not in patterns and vol_ratio is not None and vol_ratio >= style_profile["volume_building"]:
+        pattern_block = True
+        reasons.append("volume-expansion pattern is disabled")
+
+    reasons.append(f"style profile: {trading_style}")
     reasons.append(f"adaptive profile: {adaptive_profile}")
-    reasons.append(f"planned buy-limit entry waits for a pullback near {entry:.2f}")
+    reasons.append(f"{entry_label} near {entry:.2f}")
     reasons.append(f"planned sell target aims near {target:.2f} with stop near {stop:.2f}")
 
     decision = "eligible" if sensible_action == "trade" else "watch"
+    if pattern_block and decision == "eligible":
+        decision = "watch"
     if current_atr and stop <= 0:
         decision = "skip"
         reasons.append("invalid stop distance")
@@ -316,6 +389,8 @@ def rank_signals(bars_by_symbol: dict[str, list[Candle]], config: "BotConfig | N
             max_rsi_to_buy=config.max_rsi_to_buy if config else 78.0,
             max_price_over_sma20_pct=config.max_price_over_sma20_pct if config else 6.0,
             max_price_over_sma50_pct=config.max_price_over_sma50_pct if config else 12.0,
+            trading_style=config.trading_style if config else "adaptive",
+            enabled_trade_patterns=config.enabled_trade_patterns if config else None,
         )
         for symbol, bars in bars_by_symbol.items()
         if len(bars) >= 55

@@ -9,6 +9,10 @@ def _csv_set(value: str | None) -> set[str]:
     return {item.strip().upper() for item in (value or "").split(",") if item.strip()}
 
 
+def _csv_lower_set(value: str | None) -> set[str]:
+    return {item.strip().lower() for item in (value or "").split(",") if item.strip()}
+
+
 def _json_map(value: str | None) -> dict[str, object]:
     if not value:
         return {}
@@ -19,6 +23,11 @@ def _json_map(value: str | None) -> dict[str, object]:
     if not isinstance(parsed, dict):
         return {}
     return {str(key).strip().upper(): item for key, item in parsed.items() if str(key).strip()}
+
+
+def _style(value: str | None) -> str:
+    style = (value or "adaptive").strip().lower()
+    return style if style in {"adaptive", "aggressive", "balanced", "conservative"} else "adaptive"
 
 
 @dataclass(frozen=True)
@@ -32,12 +41,17 @@ class BotConfig:
     symbol_whitelist: set[str]
     max_order_notional_usd: float
     max_order_quantity: float
+    enable_equity_fractional_trading: bool
+    min_equity_fractional_notional_usd: float
+    equity_fractional_quantity_decimals: int
     max_price_over_sma20_pct: float
     max_price_over_sma50_pct: float
     max_rsi_to_buy: float
     max_entry_cash_pct: float
     min_reward_risk_to_trade: float
     max_signal_volatility_pct: float
+    trading_style: str
+    enabled_trade_patterns: set[str]
     max_daily_trades: int
     max_symbol_daily_trades: int
     order_cooldown_minutes: int
@@ -46,6 +60,9 @@ class BotConfig:
     auto_start_paper_on_market_open: bool
     auto_start_live_on_market_open: bool
     market_open_poll_seconds: int
+    paper_simulation_enabled: bool
+    paper_simulation_ignore_market_hours: bool
+    paper_simulation_min_scout_score: int
     market_data_provider: str
     market_data_max_age_minutes: int
     watchlist_path: str | None
@@ -94,12 +111,17 @@ def load_config() -> BotConfig:
         symbol_whitelist=_csv_set(os.getenv("WEBULL_SYMBOL_WHITELIST")),
         max_order_notional_usd=float(os.getenv("WEBULL_MAX_ORDER_NOTIONAL_USD", "250")),
         max_order_quantity=float(os.getenv("WEBULL_MAX_ORDER_QUANTITY", "10")),
+        enable_equity_fractional_trading=os.getenv("ENABLE_EQUITY_FRACTIONAL_TRADING", "0") == "1",
+        min_equity_fractional_notional_usd=float(os.getenv("WEBULL_MIN_EQUITY_FRACTIONAL_NOTIONAL_USD", "5")),
+        equity_fractional_quantity_decimals=int(os.getenv("WEBULL_EQUITY_FRACTIONAL_QUANTITY_DECIMALS", "5")),
         max_price_over_sma20_pct=float(os.getenv("MAX_PRICE_OVER_SMA20_PCT", "6")),
         max_price_over_sma50_pct=float(os.getenv("MAX_PRICE_OVER_SMA50_PCT", "12")),
         max_rsi_to_buy=float(os.getenv("MAX_RSI_TO_BUY", "78")),
         max_entry_cash_pct=float(os.getenv("MAX_ENTRY_CASH_PCT", "20")),
         min_reward_risk_to_trade=float(os.getenv("MIN_REWARD_RISK_TO_TRADE", "1.6")),
         max_signal_volatility_pct=float(os.getenv("MAX_SIGNAL_VOLATILITY_PCT", "4.5")),
+        trading_style=_style(os.getenv("TRADING_STYLE")),
+        enabled_trade_patterns=_csv_lower_set(os.getenv("TRADING_PATTERNS", "breakout,momentum,pullback,volume")),
         max_daily_trades=int(os.getenv("MAX_DAILY_TRADES", "5")),
         max_symbol_daily_trades=int(os.getenv("MAX_SYMBOL_DAILY_TRADES", "2")),
         order_cooldown_minutes=int(os.getenv("ORDER_COOLDOWN_MINUTES", "15")),
@@ -108,6 +130,9 @@ def load_config() -> BotConfig:
         auto_start_paper_on_market_open=os.getenv("AUTO_START_PAPER_ON_MARKET_OPEN", "1") != "0",
         auto_start_live_on_market_open=os.getenv("AUTO_START_LIVE_ON_MARKET_OPEN", "0") == "1",
         market_open_poll_seconds=int(os.getenv("MARKET_OPEN_POLL_SECONDS", "30")),
+        paper_simulation_enabled=os.getenv("PAPER_SIMULATION_ENABLED", "0") == "1",
+        paper_simulation_ignore_market_hours=os.getenv("PAPER_SIMULATION_IGNORE_MARKET_HOURS", "1") != "0",
+        paper_simulation_min_scout_score=int(os.getenv("PAPER_SIMULATION_MIN_SCOUT_SCORE", "40")),
         market_data_provider=os.getenv("MARKET_DATA_PROVIDER", "csv").lower(),
         market_data_max_age_minutes=int(os.getenv("MARKET_DATA_MAX_AGE_MINUTES", "15")),
         watchlist_path=os.getenv("WATCHLIST_PATH") or None,
