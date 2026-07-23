@@ -222,7 +222,7 @@ def test_native_profile_save_requires_verified_current_values(monkeypatch, tmp_p
     app.save_webull_profile_from_setup()
 
     assert not tmp_path.joinpath(".timmy-profile.env").exists()
-    assert errors == ["Verify the current Webull profile before saving."]
+    assert errors == ["Verify Keys before saving this account."]
 
 
 def test_native_profile_verification_allows_matching_account(monkeypatch, tmp_path) -> None:

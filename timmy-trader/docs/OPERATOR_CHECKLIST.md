@@ -10,6 +10,8 @@ Timmy is a decision and order-planning tool. It does not guarantee profits, and 
 
 - Confirm only one Timmy instance is running for the active runtime home.
 - Confirm the `.env` file belongs to this machine and account; do not paste broker credentials, secrets, tokens, MFA codes, or screenshots into chat.
+- Use `Setup` -> `Boilerplates` for starter examples only; real broker keys
+  still go through `Verify Keys` and `Save Account` in the Setup tab.
 - Confirm the GUI is using the standardized workflow layout:
   - `Overview` shows summary only.
   - Market Pulse, Today's Guardrails, Orders Ready, Broker Desk, and Trade Log

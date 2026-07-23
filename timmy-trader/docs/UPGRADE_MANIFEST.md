@@ -65,6 +65,7 @@ The GUI/workflow standardization slice installs these documentation contracts:
 - Paper vs Live Scorecard hook.
 - Trading Scoreboard hook.
 - Setup/workflow standardization docs.
+- Setup boilerplates for paper, guarded live, and runtime reliability examples.
 - Tab ownership standard.
 - Operator checklist updates.
 - Redundant widget audit notes.

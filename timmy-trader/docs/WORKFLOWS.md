@@ -230,10 +230,10 @@ ENABLE_EQUITY_FRACTIONAL_TRADING=1
    power is unavailable, live submission should be treated as blocked.
 
 3. To configure or change accounts, use the native GUI `Setup` tab. Enter the
-   Webull OpenAPI App Key, App Secret, default account ID, region, endpoint,
-   and live switches, run `Verify Profile`, save only after verification
-   passes, run `Account Check`, choose the desired masked account label, then
-   run `Account Check` again before switching target back to `Live`.
+   Webull App Key, App Secret, account ID, region, endpoint, and live switches,
+   run `Verify Keys`, save only after verification passes, run `Account Check`,
+   choose the desired masked account label, then run `Account Check` again
+   before switching target back to `Live`.
 
 4. Confirm Timmy has exactly one running process for the active `TIMMY_HOME`.
 
@@ -459,7 +459,8 @@ The native GUI is organized around Timmy's model:
 Setup -> Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
 ```
 
-- `Setup` is the Webull profile form, account picker, Account Check, and setup status.
+- `Setup` is the Account Setup desk: Webull keys, account lane, Account Check,
+  buying power, save gate, setup boilerplates, and local profile status.
 - `Universe` is the known stock/ETF ticker pool and rotating market batch.
 - `Scanner` is the ranked activity board.
 - `Strategy` is the decision brief and eligibility explanation.
@@ -479,7 +480,7 @@ Focused tabs should carry their own operational context:
 
 - `Setup`: Account Setup for Webull keys, masked account ID, region/endpoint,
   live switches, verification, account picker, save profile, account check,
-  setup readiness, and local profile/integrity file status.
+  setup boilerplates, setup readiness, and local profile/integrity file status.
 - `Universe`: Market Pulse source, bundled snapshot counts, runtime cache,
   generated watchlists, and Webull watchlist-sync names.
 - `Scanner`: Market Pulse ticker table with scanned, moving, tradeable, and
@@ -506,6 +507,11 @@ locally, show masked account labels discovered from verification or `Account
 Check`, save the selected account locally, clear stale live previews, return
 execution to `Paper`, and require a fresh account check before the user enables
 `Live` for the newly selected account.
+
+Setup boilerplates live in `docs/boilerplates/` and are example-only starters
+for paper, guarded live, and runtime reliability settings. Opening boilerplates
+from the Setup tab must not overwrite the local profile, bypass verification,
+or introduce real broker credentials into source.
 
 Tamper-resistance is also a GUI-visible workflow. Timmy signs execution events
 into a local hash chain and keeps `.timmy-integrity.json` as a signed baseline
