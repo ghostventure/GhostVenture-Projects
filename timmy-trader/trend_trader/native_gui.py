@@ -83,6 +83,8 @@ class TimmyNativeApp:
         self.scanner_summary_labels: dict[str, tk.Label] = {}
         self.strategy_summary_labels: dict[str, tk.Label] = {}
         self.execution_summary_labels: dict[str, tk.Label] = {}
+        self.broker_summary_labels: dict[str, tk.Label] = {}
+        self.audit_summary_labels: dict[str, tk.Label] = {}
         self.manual_controls: list[tk.Button] = []
         self.busy_controls: list[tk.Button] = []
         self.execution_events: list[dict] = []
@@ -973,9 +975,9 @@ class TimmyNativeApp:
         self.right_panel = right
         right.grid(row=0, column=1, sticky="nsew")
         right.rowconfigure(0, weight=0)
-        right.rowconfigure(1, weight=0)
+        right.rowconfigure(1, weight=1)
         right.rowconfigure(2, weight=1)
-        right.rowconfigure(3, weight=1)
+        right.rowconfigure(3, weight=0)
         right.columnconfigure(0, weight=1)
 
         decision_panel = self._panel(right)
@@ -1003,22 +1005,34 @@ class TimmyNativeApp:
         broker_panel = self._panel(right)
         self.broker_panel = broker_panel
         broker_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 18))
-        broker_panel.rowconfigure(1, weight=1)
+        broker_panel.rowconfigure(2, weight=1)
         self._section_header(broker_panel, "WEBULL ROUTE", "Broker Response", None, None, compact=True)
+        broker_summary = tk.Frame(broker_panel, bg=self.colors["panel"])
+        broker_summary.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
+        broker_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        self.broker_summary_labels = {}
+        for idx, title in enumerate(("Account", "Cash", "Live", "Preview")):
+            self.broker_summary_labels[title] = self._mini_stat(broker_summary, idx, title)
         self.broker_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["broker_text"],
                                    insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                    font=("Monospace", 10), wrap="word")
-        self.broker_text.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.broker_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
 
         journal_panel = self._panel(right)
         self.journal_panel = journal_panel
         journal_panel.grid(row=3, column=0, sticky="nsew")
-        journal_panel.rowconfigure(1, weight=1)
+        journal_panel.rowconfigure(2, weight=1)
         self._section_header(journal_panel, "AUDIT TRAIL", "Execution Events", None, None, compact=True)
+        audit_summary = tk.Frame(journal_panel, bg=self.colors["panel"])
+        audit_summary.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
+        audit_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        self.audit_summary_labels = {}
+        for idx, title in enumerate(("Integrity", "Events", "Live", "Rejected")):
+            self.audit_summary_labels[title] = self._mini_stat(audit_summary, idx, title)
         self.journal_text = tk.Text(journal_panel, height=8, bg=self.colors["panel_2"], fg=self.colors["muted"],
                                     insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                     font=("Monospace", 10), wrap="word")
-        self.journal_text.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.journal_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
 
         self.status_bar = tk.Label(main, text="Ready", bg=self.colors["panel_3"], fg=self.colors["muted"],
                                    anchor="center", justify="center", padx=12, pady=8)
@@ -1082,16 +1096,15 @@ class TimmyNativeApp:
         self.body.columnconfigure(1, weight=1)
 
         if overview_active:
-            for row, weight in ((0, 0), (1, 0), (2, 1), (3, 1)):
+            for row, weight in ((0, 0), (1, 1), (2, 1), (3, 0)):
                 self.right_panel.rowconfigure(row, weight=weight)
             self.body.columnconfigure(0, weight=3)
             self.body.columnconfigure(1, weight=2)
             self.signals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
             self.right_panel.grid(row=0, column=1, sticky="nsew")
             self.decision_panel.grid(row=0, column=0, sticky="ew", pady=(0, 18))
-            self.order_panel.grid(row=1, column=0, sticky="ew", pady=(0, 18))
-            self.broker_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 18))
-            self.journal_panel.grid(row=3, column=0, sticky="nsew")
+            self.broker_panel.grid(row=1, column=0, sticky="nsew", pady=(0, 18))
+            self.journal_panel.grid(row=2, column=0, sticky="nsew")
         elif tab == "Setup":
             self.body.columnconfigure(0, weight=1)
             self._sync_profile_form(self.config or self._load_config_safe())
@@ -1120,6 +1133,10 @@ class TimmyNativeApp:
                 "Audit": self.journal_panel,
             }
             panel = panel_by_tab.get(tab, self.decision_panel)
+            if tab == "Broker":
+                self._render_broker_summary(force=True)
+            elif tab == "Audit":
+                self._load_journal()
             self.right_panel.grid(row=0, column=0, columnspan=2, sticky="nsew")
             panel.grid(row=0, column=0, sticky="nsew", pady=0)
 
@@ -1691,6 +1708,9 @@ class TimmyNativeApp:
             f"- Account check: {self.trade_cash_snapshot[1]}",
             f"- Buying power: {self.trade_cash_snapshot[0]}",
             f"- Save lock: {'open' if profile_verified else 'locked'}",
+            f"- Profile permissions: {self._runtime_file_mode_label(profile_path)}",
+            f"- Integrity manifest: {self._runtime_file_mode_label(self.integrity_manifest_path)}",
+            f"- Audit status: {self.audit_status}",
             f"- Live mode: {'on' if config.trader_live else 'off'}",
             f"- Live submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
             f"- Live target: {self.execution_target_var.get()}",
@@ -1747,6 +1767,14 @@ class TimmyNativeApp:
             if label == "Live" and value == "Armed":
                 color = self.colors["red"]
             widget.configure(text=value, fg=color)
+
+    def _runtime_file_mode_label(self, path: Path) -> str:
+        if not path.exists():
+            return "missing"
+        try:
+            return oct(path.stat().st_mode & 0o777)
+        except OSError:
+            return "unreadable"
 
     def _render_setup_badges(self, config: BotConfig) -> None:
         badges = getattr(self, "setup_badges", None)
@@ -2494,6 +2522,7 @@ class TimmyNativeApp:
 
     def _strategy_gate_detail(self, config: BotConfig, readiness: dict, eligible_signals: list) -> str:
         pattern_line = ", ".join(sorted(config.enabled_trade_patterns)) or "none"
+        signal_mix = self._strategy_signal_mix(config)
         top_watch = [
             signal
             for signal in self.signals[:12]
@@ -2507,6 +2536,12 @@ class TimmyNativeApp:
             f"- Min score: {self._min_score(config)}",
             "- Sensible threshold: trade >= 78, watch >= 50",
             f"- Data: {self._data_freshness_line()}",
+            "",
+            "Signal mix",
+            f"- Alert/watch: {signal_mix['moving']}",
+            f"- Trade-score candidates: {signal_mix['score_ready']}",
+            f"- Sensible trade candidates: {signal_mix['sensible_ready']}",
+            f"- Operationally blocked: {signal_mix['blocked']}",
             "",
             "Readiness gates",
         ]
@@ -2530,6 +2565,30 @@ class TimmyNativeApp:
                 f"- {signal.symbol}: scout {getattr(signal, 'scout_score', 0)} | sensible {self._local_sensible_score(signal)} | {block_label}"
             )
         return "\n".join(lines)
+
+    def _strategy_signal_mix(self, config: BotConfig) -> dict[str, int]:
+        moving = 0
+        score_ready = 0
+        sensible_ready = 0
+        blocked = 0
+        min_score = self._min_score(config)
+        for signal in self.signals:
+            if getattr(signal, "scout_action", "quiet") in {"alert", "watch"}:
+                moving += 1
+            score_ok = signal.score >= min_score
+            sensible_ok = self._local_sensible_action(signal) == "trade"
+            if score_ok:
+                score_ready += 1
+            if sensible_ok:
+                sensible_ready += 1
+            if (score_ok or sensible_ok) and self._operational_blocks(signal, config):
+                blocked += 1
+        return {
+            "moving": moving,
+            "score_ready": score_ready,
+            "sensible_ready": sensible_ready,
+            "blocked": blocked,
+        }
 
     def _render_execution_tab(self) -> None:
         if not hasattr(self, "execution_queue_text"):
@@ -2612,22 +2671,36 @@ class TimmyNativeApp:
             if widget is not None:
                 widget.configure(text=value)
 
-    def _render_broker_summary(self) -> None:
+    def _render_broker_summary(self, force: bool = False) -> None:
         current = self._text_value(self.broker_text).strip()
-        if current and not current.startswith("Broker route ready"):
+        if current and not force and not current.startswith("Broker route ready"):
             return
         config = self.config or self._load_config_safe()
         execution_config = self._execution_config(config)
+        account_value = self._webull_account_card_value(execution_config)
+        cash_value = self.trade_cash_snapshot[0]
+        live_value = "On" if self._live_ready(execution_config) else "Locked"
+        preview_value = "Req" if config.webull_require_preview else "Off"
+        self._update_label_map(
+            getattr(self, "broker_summary_labels", {}),
+            {
+                "Account": account_value,
+                "Cash": cash_value,
+                "Live": live_value,
+                "Preview": preview_value,
+            },
+        )
         lines = [
             "Broker route ready",
             f"- Account lane: {self._account_lane()}",
-            f"- Account target: {self._webull_account_card_value(execution_config)}",
+            f"- Account target: {account_value}",
             f"- Account detail: {self._webull_account_card_detail(execution_config)}",
-            f"- Buying power: {self.trade_cash_snapshot[0]} ({self.trade_cash_snapshot[1]})",
-            f"- Live switches: {'enabled' if self._live_ready(execution_config) else 'locked'}",
+            f"- Buying power: {cash_value} ({self.trade_cash_snapshot[1]})",
+            f"- Live switches: {'enabled' if live_value == 'On' else 'locked'}",
             f"- Require broker preview flag: {'on' if config.webull_require_preview else 'off'}",
             f"- OpenAPI live submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
             f"- Watchlist sync: {'on' if config.webull_sync_watchlists else 'off'}",
+            f"- Broker check: {'required' if self._broker_check_required(execution_config) else 'current'}",
             "",
             "Controls",
             "- Broker Check refreshes account/buying-power state.",
@@ -2638,6 +2711,7 @@ class TimmyNativeApp:
 
     def _load_journal(self) -> None:
         events = self.execution_events
+        self._render_audit_summary(events)
         if not events:
             self._set_text(self.journal_text, f"{self.audit_status}\n\nNo buy/sell events recorded.")
             return
@@ -2671,6 +2745,20 @@ class TimmyNativeApp:
                 f"sell {sell_status} | target {money(target)} | stop {money(stop)}"
             )
         self._set_text(self.journal_text, "\n\n".join(lines))
+
+    def _render_audit_summary(self, events: list[dict]) -> None:
+        live_count = sum(1 for event in events if event.get("mode") == "live")
+        rejected_count = sum(1 for event in events if str(event.get("status", "")).lower() == "rejected")
+        integrity = "Warn" if str(self.audit_status).startswith("Audit warning") else "OK"
+        self._update_label_map(
+            getattr(self, "audit_summary_labels", {}),
+            {
+                "Integrity": integrity,
+                "Events": f"{len(events):,}",
+                "Live": f"{live_count:,}",
+                "Rejected": f"{rejected_count:,}",
+            },
+        )
 
     def _paper_context_for_plan(self, plan) -> dict:
         signal = self.signal_by_symbol.get(plan.symbol)
