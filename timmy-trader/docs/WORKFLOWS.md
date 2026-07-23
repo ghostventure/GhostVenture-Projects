@@ -73,7 +73,65 @@ MAX_ENTRY_CASH_PCT
 
 7. Confirm broker rejections are logged and reviewed before loosening any thresholds.
 
-## 3. Fractional-First Trading Workflow
+## 3. Actual Trade Placement Workflow
+
+Use this for the real order lifecycle. This workflow is local-only and must not be moved into GitHub Actions.
+
+1. Timmy scans the current active watchlist and rotating market batch.
+
+2. Timmy writes the generated watchlists:
+
+```text
+active-watchlist.txt
+movement-watchlist.txt
+trade-ready-watchlist.txt
+quiet-watchlist.txt
+```
+
+3. Timmy builds executable plans only for symbols that pass strategy, score, market, cooldown, daily-cap, per-symbol-cap, risk, notional, quantity, buying-power, and asset-class gates.
+
+4. In `Live / Auto`, the native app runs this order path without requiring the operator to be present:
+
+```text
+decision cycle -> exact Webull preview -> live submit -> execution event -> account/buying-power refresh
+```
+
+5. The live submit path uses `WebullOpenApiBroker.submit_order()`, which calls the Webull OpenAPI order placement endpoint after the configured live guards pass.
+
+6. The live guards that must remain intentional are:
+
+```text
+TRADER_MODE=live
+TRADER_LIVE=1
+WEBULL_ENABLE_LIVE_ORDERS=1
+WEBULL_REQUIRE_PREVIEW=0
+WEBULL_ACCOUNT_ID configured locally
+```
+
+7. The native app still performs the exact-current-plan preview immediately before submit in `Live / Auto`. This is part of the unattended workflow and does not require a Webull Desktop click.
+
+8. Every live broker result is appended to `execution-events.jsonl` with the submitted plan context. Use the event log to confirm whether an order was submitted, rejected, or blocked.
+
+9. After a submitted or rejected order, Timmy should refresh buying power/account state before the next cycle. If account refresh fails, treat the next live cycle as blocked until the broker state is readable again.
+
+10. If no live trade occurs, classify the miss before changing settings:
+
+```text
+no executable plan
+stale market data
+market closed
+buying power unavailable
+symbol blocked by whitelist or asset-class guard
+score below threshold
+cooldown or daily cap active
+fractional minimum notional not met
+Webull preview rejected
+Webull submit rejected
+```
+
+11. Webull Desktop is not part of the placement path. It is only a viewer for account, order, position, and watchlist state that came from Webull.
+
+## 4. Fractional-First Trading Workflow
 
 Use this when a symbol is too expensive for a whole-share order or when buying power is limited.
 
@@ -91,7 +149,7 @@ WEBULL_EQUITY_FRACTIONAL_QUANTITY_DECIMALS=5
 
 4. Treat repeated fractional-order broker rejections as a configuration issue, not a signal issue.
 
-## 4. All-Market Scanning Workflow
+## 5. All-Market Scanning Workflow
 
 Use this to keep Timmy looking across the U.S. listed universe instead of a fixed watchlist.
 
@@ -116,7 +174,7 @@ WATCHLIST_UNIVERSE_REFRESH_HOURS=24
 
 7. If Timmy scans but does not trade, check `trade-ready-watchlist.txt`, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
 
-## 5. Webull Watchlist Sync Workflow
+## 6. Webull Watchlist Sync Workflow
 
 Use this to reflect Timmy's generated lists in Webull account-side watchlists. Webull Desktop is only the viewer.
 
@@ -138,7 +196,7 @@ WEBULL_QUIET_WATCHLIST_NAME=Timmy Quiet Removed
 
 5. If Webull Desktop does not immediately show the changes, refresh or restart Webull Desktop. The account-side API read-back is the source of truth.
 
-## 6. Publication Workflow
+## 7. Publication Workflow
 
 Use this when updating the public mirror.
 
@@ -168,7 +226,7 @@ git push origin HEAD
 git ls-remote origin HEAD
 ```
 
-## 7. GitHub CI Workflow
+## 8. GitHub CI Workflow
 
 The repository includes `.github/workflows/ci.yml` for source validation on pushes, pull requests, and manual dispatch.
 
