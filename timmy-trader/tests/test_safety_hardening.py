@@ -628,6 +628,31 @@ def test_live_rejection_updates_buying_power_indicator() -> None:
     assert app.trade_cash_value == 0.0
 
 
+def test_paper_account_balance_indicator_tracks_open_cash_and_pnl(monkeypatch) -> None:
+    monkeypatch.setenv("PAPER_ACCOUNT_STARTING_BALANCE_USD", "1000")
+    app = native_app_with_bars(datetime.now())
+    app.execution_events = [
+        {
+            "mode": "paper",
+            "sell_status": "target-pending",
+            "quantity": 2,
+            "buy_price": 100,
+        },
+        {
+            "mode": "paper",
+            "sell_status": "target-hit",
+            "paper_pnl": 24.5,
+        },
+        {
+            "mode": "paper",
+            "sell_status": "stopped",
+            "paper_pnl": -10,
+        },
+    ]
+
+    assert app._paper_account_snapshot() == ("$814.50", "1 open / P&L $14.50")
+
+
 def test_broker_submit_returns_rejected_result_when_webull_raises(monkeypatch) -> None:
     monkeypatch.setenv("TRADER_MODE", "live")
     monkeypatch.setenv("TRADER_LIVE", "1")

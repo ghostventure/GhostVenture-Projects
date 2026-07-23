@@ -11,6 +11,12 @@ trading desk with dedicated workflow tabs, stronger live-account setup, broader
 market scanning support, fractional order priority, watchlist automation,
 runtime health hooks, and operator documentation.
 
+The product principle is profit-seeking automation: Timmy's job is to find and
+act on sensible money-making setups while keeping cash, broker, market-data,
+risk, and audit controls visible. It should be practical about making money
+without pretending any trade is guaranteed. The operating rule is simple:
+make money without being reckless, clumsy, or wasteful.
+
 ## Trading And Execution
 
 - Installed fractional equity trading priority so Timmy can size a fractional
@@ -60,9 +66,16 @@ runtime health hooks, and operator documentation.
   and `Health` with workflow-specific status and context.
 - Installed sensible icons for obvious commands while keeping higher-context
   finance actions as text buttons.
+- Added a restrained icon pass for scan, account check, preview, verify, save,
+  examples, paper trade, live, stop, and power-cycle controls.
 - Reduced redundant controls and standardized casual finance copy across the
   desk.
 - Added a `Health` tab for readiness and guardrail status.
+- Added Cash Account and Paper Account balance indicators on Overview, Setup,
+  and Broker. Cash Account uses the broker buying-power snapshot; Paper Account
+  is derived from Timmy's paper journal.
+- Whispered the trading principle into the program as a quiet Health tab rule:
+  make money, but never be reckless, clumsy, or wasteful.
 
 ## Reliability, Health, And Adaptability
 

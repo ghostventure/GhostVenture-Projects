@@ -39,6 +39,7 @@ from .webull_watchlists import sync_generated_watchlists
 AUTO_REFRESH_MS = max(30, int(os.getenv("TIMMY_DASHBOARD_REFRESH_SECONDS", "60"))) * 1000
 ACCOUNT_REFRESH_MS = max(5, int(os.getenv("TIMMY_ACCOUNT_REFRESH_MINUTES", "15"))) * 60 * 1000
 LIVE_PREVIEW_TTL_SECONDS = 180
+TRADING_PRINCIPLE = "Make money, but never be reckless, clumsy, or wasteful."
 
 
 class TimmyNativeApp:
@@ -75,6 +76,7 @@ class TimmyNativeApp:
         self.auto_interval_value = 1
         self.trade_cash_snapshot: tuple[str, str] = ("-", "Run Account Check")
         self.trade_cash_value: float | None = None
+        self.paper_cash_snapshot: tuple[str, str] = ("$10,000.00", "Paper cash")
         self.account_snapshot: tuple[str, str] = ("Unknown", "Run Account Check")
         self.webull_account_choices: list[dict[str, str]] = []
         self.webull_account_labels: dict[str, str] = {}
@@ -401,7 +403,7 @@ class TimmyNativeApp:
         hero_title.grid(row=1, column=0, sticky="ew", padx=(30, 24), pady=(2, 0))
         hero_copy = tk.Label(
             hero,
-            text="Timmy rotates through the listed market, promotes active tickers, builds fractional-first order plans, routes through Webull, and records the result.",
+            text="Timmy looks for sensible money-making setups, promotes active tickers, builds fractional-first order plans, and trades without being reckless, clumsy, or wasteful.",
             bg=self.colors["panel"],
             fg=self.colors["muted"],
             font=("Sans", 12),
@@ -412,20 +414,22 @@ class TimmyNativeApp:
         hero_copy.grid(row=2, column=0, sticky="ew", padx=(30, 24), pady=(7, 20))
         actions = tk.Frame(hero, bg=self.colors["panel_3"], highlightbackground=self.colors["line"], highlightthickness=1)
         actions.grid(row=0, column=1, rowspan=3, sticky="e", padx=(0, 24), pady=18)
-        self.refresh_button = self._button(actions, "Scan Now", self.refresh_all)
+        self.refresh_button = self._button(actions, "↻ Scan", self.refresh_all, tooltip="Scan market data now")
         self.refresh_button.pack(fill="x", pady=(0, 7))
         self.webull_check_button = self._button(
             actions,
-            "Account Check",
+            "✓ Account",
             lambda: self._run_action("Checking Webull", self.webull_check),
             accent="teal",
+            tooltip="Refresh account status and buying power",
         )
         self.webull_check_button.pack(fill="x", pady=7)
         self.preview_button = self._button(
             actions,
-            "Preview Route",
+            "◇ Preview",
             lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
             accent="gold",
+            tooltip="Preview current Webull route",
         )
         self.preview_button.pack(fill="x", pady=(7, 0))
         self.manual_controls.append(self.preview_button)
@@ -441,7 +445,8 @@ class TimmyNativeApp:
         self.movement_card = self._metric(metrics, 0, 2, "Movement")
         self.trade_ready_card = self._metric(metrics, 1, 0, "Trade Ready")
         self.plan_card = self._metric(metrics, 1, 1, "Orders Ready")
-        self.cash_card = self._metric(metrics, 1, 2, "Buying Power", highlight=True)
+        self.cash_card = self._metric(metrics, 1, 2, "Cash Account", highlight=True)
+        self.paper_cash_card = self._metric(metrics, 2, 0, "Paper Account", highlight=True)
 
         controls = self._panel(main)
         self.controls = controls
@@ -611,7 +616,7 @@ class TimmyNativeApp:
         self.run_button.grid(row=0, column=0, sticky="ew", padx=(0, 7))
         self.execution_preview_button = self._button(
             button_box,
-            "Preview",
+            "◇",
             lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
             accent="gold",
             tooltip="Preview current Webull route",
@@ -619,7 +624,7 @@ class TimmyNativeApp:
         self.execution_preview_button.grid(row=0, column=1, sticky="ew", padx=7)
         self.execution_paper_button = self._button(
             button_box,
-            "Paper",
+            "○",
             lambda: self._run_action("Paper trade", self.paper_trade, threaded=False),
             accent="teal",
             tooltip="Paper trade current queue",
@@ -831,7 +836,7 @@ class TimmyNativeApp:
         setup_actions.columnconfigure((0, 1, 2), weight=1, minsize=120)
         self.setup_verify_button = self._button(
             setup_actions,
-            "Verify Keys",
+            "✓ Keys",
             lambda: self._run_action("Verifying Webull profile", self.verify_webull_profile),
             accent="gold",
             tooltip="Checks the current draft credentials with Webull before saving.",
@@ -839,7 +844,7 @@ class TimmyNativeApp:
         self.setup_verify_button.grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 8))
         self.setup_save_button = self._button(
             setup_actions,
-            "Save Account",
+            "✓ Save",
             self.save_webull_profile_from_setup,
             accent="teal",
             tooltip="Writes the verified profile to this machine.",
@@ -847,14 +852,14 @@ class TimmyNativeApp:
         self.setup_save_button.grid(row=0, column=1, sticky="ew", padx=8, pady=(0, 8))
         self.setup_boilerplate_button = self._button(
             setup_actions,
-            "Boilerplates",
+            "≡ Examples",
             self.open_setup_boilerplates,
             tooltip="Opens example setup templates without changing your live profile.",
         )
         self.setup_boilerplate_button.grid(row=0, column=2, sticky="ew", padx=(8, 0), pady=(0, 8))
         self.setup_check_button = self._button(
             setup_actions,
-            "Account Check",
+            "✓ Account",
             lambda: self._run_action("Checking Webull", self.webull_check),
             accent="teal",
             tooltip="Refreshes account status and buying power from Webull.",
@@ -862,7 +867,7 @@ class TimmyNativeApp:
         self.setup_check_button.grid(row=1, column=0, sticky="ew", padx=(0, 8))
         self.setup_live_button = self._button(
             setup_actions,
-            "Use Live",
+            "⚡ Live",
             self.use_live_from_setup,
             tooltip="Switches Timmy's execution target to Live after readiness checks.",
         )
@@ -891,9 +896,9 @@ class TimmyNativeApp:
 
         account_strip = tk.Frame(setup_status, bg=self.colors["panel_2"])
         account_strip.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
-        account_strip.columnconfigure((0, 1, 2), weight=1)
+        account_strip.columnconfigure((0, 1, 2, 3), weight=1)
         self.setup_account_labels = {}
-        for idx, label in enumerate(("Account", "Buying Power", "Status")):
+        for idx, label in enumerate(("Account", "Cash Account", "Paper Account", "Status")):
             tile = tk.Frame(account_strip, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
             tile.grid(row=0, column=idx, sticky="ew", padx=(0 if idx == 0 else 8, 0))
             tk.Label(tile, text=label, bg=self.colors["panel"], fg=self.colors["muted"],
@@ -1106,9 +1111,9 @@ class TimmyNativeApp:
         self._section_header(broker_panel, "BROKER DESK", "Account And Orders", None, None, compact=True)
         broker_summary = tk.Frame(broker_panel, bg=self.colors["panel"])
         broker_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
-        broker_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        broker_summary.columnconfigure((0, 1, 2, 3, 4), weight=1)
         self.broker_summary_labels = {}
-        for idx, title in enumerate(("Account", "Buying Power", "Live", "Dry Run")):
+        for idx, title in enumerate(("Account", "Cash Account", "Paper Account", "Live", "Dry Run")):
             self.broker_summary_labels[title] = self._mini_stat(broker_summary, idx, title)
         self.broker_readiness_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["text"],
                                              insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
@@ -1446,7 +1451,13 @@ class TimmyNativeApp:
         self._fit_text(title_label, min_size=12, max_size=16, padding=20, wrap=True)
         title_label.grid(row=1, column=0, sticky="ew", pady=(2, 0))
         if button_text and command:
-            button = self._button(header, button_text, command, accent="teal" if button_text == "Paper Trade" else None)
+            display_text, tooltip = {
+                "Refresh Data": ("↻", "Refresh market data"),
+                "Run Model": ("▶", "Run strategy model"),
+                "Run Check": ("✓", "Run desk health check"),
+                "Paper Trade": ("○", "Paper trade current queue"),
+            }.get(button_text, (button_text, button_text))
+            button = self._button(header, display_text, command, accent="teal" if button_text == "Paper Trade" else None, tooltip=tooltip)
             button.grid(row=0, column=1, rowspan=2, sticky="e")
             return button
         return None
@@ -1563,12 +1574,13 @@ class TimmyNativeApp:
 
         button_row = tk.Frame(frame, bg=self.colors["panel"])
         button_row.grid(row=row, column=0, columnspan=2, sticky="e", pady=(14, 0))
-        self._button(button_row, "Cancel", dialog.destroy).pack(side="left", padx=(0, 8))
+        self._button(button_row, "×", dialog.destroy, tooltip="Cancel").pack(side="left", padx=(0, 8))
         self._button(
             button_row,
-            "Save Account",
+            "✓ Save",
             lambda: self._save_webull_profile_from_dialog(dialog, values),
             accent="teal",
+            tooltip="Save verified account profile",
         ).pack(side="left")
 
         frame.columnconfigure(1, weight=1)
@@ -1888,9 +1900,11 @@ class TimmyNativeApp:
                 color = self.colors["red"]
             widget.configure(text=value, fg=color)
         account_labels = getattr(self, "setup_account_labels", {})
+        paper_cash_value, _paper_cash_detail = self._paper_account_snapshot()
         account_values = {
             "Account": self._webull_account_card_value(config),
-            "Buying Power": self.trade_cash_snapshot[0],
+            "Cash Account": self.trade_cash_snapshot[0],
+            "Paper Account": paper_cash_value,
             "Status": "Fresh" if broker_checked else "Check",
         }
         for label, value in account_values.items():
@@ -2443,8 +2457,11 @@ class TimmyNativeApp:
         self.trade_ready_card[1].configure(text="before broker gates")
         self.plan_card[0].configure(text=f"{len(self.plans):,}")
         self.plan_card[1].configure(text=f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}")
+        self.paper_cash_snapshot = self._paper_account_snapshot()
         self.cash_card[0].configure(text=self.trade_cash_snapshot[0])
         self.cash_card[1].configure(text=self.trade_cash_snapshot[1])
+        self.paper_cash_card[0].configure(text=self.paper_cash_snapshot[0])
+        self.paper_cash_card[1].configure(text=self.paper_cash_snapshot[1])
         self.guard_label.configure(
             text="Live on" if self._live_ready(execution_config) else "Live locked",
             fg=self.colors["red"] if self._live_ready(execution_config) else self.colors["gold"],
@@ -2806,6 +2823,7 @@ class TimmyNativeApp:
         signal_lines = [
             "Desk health",
             f"- Overall: {health.overall}",
+            f"- Principle: {TRADING_PRINCIPLE}",
             f"- Safe mode: {'on' if health.safe_mode else 'off'}",
             f"- Account check: {'needed' if account_value == 'Needed' else 'fresh'}",
             f"- Buying power: {self.trade_cash_snapshot[0]} ({self.trade_cash_snapshot[1]})",
@@ -2894,11 +2912,13 @@ class TimmyNativeApp:
 
     def _execution_gate_detail(self, config: BotConfig, execution_config: BotConfig) -> str:
         readiness = readiness_flags(config, plans_count=len(self.plans), events_count=len(self.execution_events))
+        paper_cash_value, paper_cash_detail = self._paper_account_snapshot()
         lines = [
             "Broker and risk gates",
             f"- Account lane: {self._account_lane()}",
             f"- Account: {self._webull_account_card_value(execution_config)}",
-            f"- Buying power: {self.trade_cash_snapshot[0]} ({self.trade_cash_snapshot[1]})",
+            f"- Cash account: {self.trade_cash_snapshot[0]} ({self.trade_cash_snapshot[1]})",
+            f"- Paper account: {paper_cash_value} ({paper_cash_detail})",
             f"- Live switches: {'enabled' if self._live_ready(execution_config) else 'locked'}",
             f"- Account check: {'needed' if self._broker_check_required(execution_config) else 'fresh'}",
             f"- Dry run required: {'yes' if config.webull_require_preview else 'no'}",
@@ -2930,13 +2950,15 @@ class TimmyNativeApp:
         execution_config = self._execution_config(config)
         account_value = self._webull_account_card_value(execution_config)
         cash_value = self.trade_cash_snapshot[0]
+        paper_cash_value, paper_cash_detail = self._paper_account_snapshot()
         live_value = "On" if self._live_ready(execution_config) else "Locked"
         preview_value = "Req" if config.webull_require_preview else "Off"
         self._update_label_map(
             getattr(self, "broker_summary_labels", {}),
             {
                 "Account": account_value,
-                "Buying Power": cash_value,
+                "Cash Account": cash_value,
+                "Paper Account": paper_cash_value,
                 "Live": live_value,
                 "Dry Run": preview_value,
             },
@@ -2946,7 +2968,8 @@ class TimmyNativeApp:
             f"- Account lane: {self._account_lane()}",
             f"- Account target: {account_value}",
             f"- Account detail: {self._webull_account_card_detail(execution_config)}",
-            f"- Buying power: {cash_value} ({self.trade_cash_snapshot[1]})",
+            f"- Cash account: {cash_value} ({self.trade_cash_snapshot[1]})",
+            f"- Paper account: {paper_cash_value} ({paper_cash_detail})",
             f"- Live switches: {'enabled' if live_value == 'On' else 'locked'}",
             f"- Dry run required: {'yes' if config.webull_require_preview else 'no'}",
             f"- OpenAPI live submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
@@ -2969,7 +2992,8 @@ class TimmyNativeApp:
             "",
             "Current account lane",
             f"- Account: {account_value}",
-            f"- Buying power: {cash_value}",
+            f"- Cash account: {cash_value}",
+            f"- Paper account: {paper_cash_value}",
             f"- Live: {live_value}",
             f"- Dry run: {preview_value}",
         ]
@@ -2991,6 +3015,7 @@ class TimmyNativeApp:
             f"- Live: {live_count}",
             f"- Paper: {paper_count}",
             f"- Rejected: {rejected_count}",
+            f"- Paper account: {self._paper_account_snapshot()[0]}",
             "",
             "Recent trade notes",
         ]
@@ -3189,6 +3214,36 @@ class TimmyNativeApp:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    def _paper_account_snapshot(self) -> tuple[str, str]:
+        starting_balance = self._paper_starting_balance()
+        paper_events = [event for event in getattr(self, "execution_events", []) if event.get("mode") == "paper"]
+        closed_pnl = round(
+            sum(
+                self._float_or_none(event.get("paper_pnl")) or 0.0
+                for event in paper_events
+                if event.get("sell_status") in {"target-hit", "stopped"}
+            ),
+            2,
+        )
+        pending_notional = 0.0
+        pending_count = 0
+        for event in paper_events:
+            if event.get("sell_status") != "target-pending":
+                continue
+            quantity = self._float_or_none(event.get("quantity") or event.get("order", {}).get("quantity")) or 0.0
+            buy_price = self._float_or_none(event.get("buy_price") or event.get("order", {}).get("limit_price")) or 0.0
+            pending_notional += quantity * buy_price
+            pending_count += 1
+        available = round(starting_balance + closed_pnl - pending_notional, 2)
+        return money(available), f"{pending_count} open / P&L {money(closed_pnl)}"
+
+    @staticmethod
+    def _paper_starting_balance() -> float:
+        try:
+            return float(os.getenv("PAPER_ACCOUNT_STARTING_BALANCE_USD", "10000"))
+        except ValueError:
+            return 10000.0
 
     def _write_paper_training_summary(self) -> None:
         paper_events = [event for event in self.execution_events if event.get("mode") == "paper"]
