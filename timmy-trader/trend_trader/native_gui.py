@@ -439,13 +439,12 @@ class TimmyNativeApp:
 
         controls = self._panel(main)
         self.controls = controls
-        controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
         for idx in range(6):
             controls.columnconfigure(idx, weight=1, minsize=118)
         controls_title = tk.Label(controls, text="Execution Controls", bg=self.colors["panel"], fg=self.colors["text"],
                                   font=("Sans", 13, "bold"), anchor="w", justify="left")
         controls_title.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 0))
-        controls_status = tk.Label(controls, text="Target, automation, broker lane, style, and pattern gates drive order placement.",
+        controls_status = tk.Label(controls, text="Execution tab controls target, automation, broker lane, style, and pattern gates.",
                                    bg=self.colors["panel"], fg=self.colors["muted"], font=("Sans", 9),
                                    anchor="e", justify="right")
         controls_status.grid(row=0, column=2, columnspan=4, sticky="ew", padx=18, pady=(14, 0))
@@ -604,14 +603,36 @@ class TimmyNativeApp:
         button_box.columnconfigure((0, 1, 2, 3), weight=1)
         self.run_button = self._button(button_box, "▶", self.run_decision_cycle, accent="teal", tooltip="Run decision cycle")
         self.run_button.grid(row=0, column=0, sticky="ew", padx=(0, 7))
+        self.execution_preview_button = self._button(
+            button_box,
+            "Preview",
+            lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
+            accent="gold",
+            tooltip="Preview current Webull route",
+        )
+        self.execution_preview_button.grid(row=0, column=1, sticky="ew", padx=7)
+        self.execution_paper_button = self._button(
+            button_box,
+            "Paper",
+            lambda: self._run_action("Paper trade", self.paper_trade, threaded=False),
+            accent="teal",
+            tooltip="Paper trade current queue",
+        )
+        self.execution_paper_button.grid(row=0, column=2, sticky="ew", padx=7)
         self.live_button = self._button(button_box, "⚡", self.submit_live_interactive, accent="gold", tooltip="Submit live")
-        self.live_button.grid(row=0, column=1, sticky="ew", padx=7)
+        self.live_button.grid(row=0, column=3, sticky="ew", padx=(7, 0))
         self.stop_button = self._button(button_box, "■", self.stop_automation, tooltip="Stop automation")
-        self.stop_button.grid(row=0, column=2, sticky="ew", padx=7)
+        self.stop_button.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 7), pady=(8, 0))
         self.power_cycle_button = self._button(button_box, "⟳", self.power_cycle, tooltip="Power cycle Timmy")
-        self.power_cycle_button.grid(row=0, column=3, sticky="ew", padx=(7, 0))
-        self.manual_controls.extend([self.run_button, self.live_button])
-        self.busy_controls.extend([self.run_button, self.live_button, self.power_cycle_button])
+        self.power_cycle_button.grid(row=1, column=2, columnspan=2, sticky="ew", padx=(7, 0), pady=(8, 0))
+        self.manual_controls.extend([self.run_button, self.execution_preview_button, self.execution_paper_button, self.live_button])
+        self.busy_controls.extend([
+            self.run_button,
+            self.execution_preview_button,
+            self.execution_paper_button,
+            self.live_button,
+            self.power_cycle_button,
+        ])
 
         style_box = tk.Frame(controls, bg=self.colors["panel"])
         style_box.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 14))
@@ -913,7 +934,7 @@ class TimmyNativeApp:
         self.execution_tab_panel = execution_tab_panel
         execution_tab_panel.columnconfigure(0, weight=3)
         execution_tab_panel.columnconfigure(1, weight=2)
-        execution_tab_panel.rowconfigure(3, weight=1)
+        execution_tab_panel.rowconfigure(2, weight=1)
         self._section_header(execution_tab_panel, "EXECUTION DESK", "Orders And Broker Gates", None, None)
         execution_summary = tk.Frame(execution_tab_panel, bg=self.colors["panel"])
         execution_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
@@ -921,32 +942,9 @@ class TimmyNativeApp:
         self.execution_summary_labels = {}
         for idx, title in enumerate(("Target", "Queue", "Fractional", "Broker")):
             self.execution_summary_labels[title] = self._mini_stat(execution_summary, idx, title)
-        execution_actions = tk.Frame(execution_tab_panel, bg=self.colors["panel"])
-        execution_actions.grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 12))
-        execution_actions.columnconfigure((0, 1, 2, 3), weight=1)
-        execution_run = self._button(execution_actions, "Run Model", self.run_decision_cycle, accent="teal")
-        execution_run.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        execution_preview = self._button(
-            execution_actions,
-            "Preview Route",
-            lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
-            accent="gold",
-        )
-        execution_preview.grid(row=0, column=1, sticky="ew", padx=8)
-        execution_paper = self._button(
-            execution_actions,
-            "Paper Trade",
-            lambda: self._run_action("Paper trade", self.paper_trade, threaded=False),
-            accent="teal",
-        )
-        execution_paper.grid(row=0, column=2, sticky="ew", padx=8)
-        execution_live = self._button(execution_actions, "Submit Live", self.submit_live_interactive, accent="gold")
-        execution_live.grid(row=0, column=3, sticky="ew", padx=(8, 0))
-        self.manual_controls.extend([execution_run, execution_preview, execution_paper, execution_live])
-        self.busy_controls.extend([execution_run, execution_preview, execution_paper, execution_live])
         self.execution_queue_text = tk.Text(
             execution_tab_panel,
-            height=18,
+            height=12,
             bg=self.colors["panel_2"],
             fg=self.colors["text"],
             insertbackground=self.colors["text"],
@@ -956,10 +954,10 @@ class TimmyNativeApp:
             font=("Monospace", 10),
             wrap="word",
         )
-        self.execution_queue_text.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.execution_queue_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.execution_gate_text = tk.Text(
             execution_tab_panel,
-            height=18,
+            height=12,
             bg=self.colors["panel_2"],
             fg=self.colors["muted"],
             insertbackground=self.colors["text"],
@@ -969,7 +967,7 @@ class TimmyNativeApp:
             font=("Monospace", 10),
             wrap="word",
         )
-        self.execution_gate_text.grid(row=3, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+        self.execution_gate_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
         right = tk.Frame(body, bg=self.colors["bg"])
         self.right_panel = right
@@ -1065,7 +1063,6 @@ class TimmyNativeApp:
         if overview_active:
             self.hero.grid(row=0, column=0, sticky="ew", padx=24, pady=(24, 14))
             self.metrics.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
-            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
             self.body.grid_configure(pady=(0, 24))
         else:
             self.hero.grid_remove()
@@ -1112,6 +1109,7 @@ class TimmyNativeApp:
             self.strategy_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         elif tab == "Execution":
             self.body.columnconfigure(0, weight=1)
+            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
             self._render_execution_tab()
             self.execution_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         else:
