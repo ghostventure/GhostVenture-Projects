@@ -264,3 +264,12 @@ Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
 The top metric band should show the model state first: universe size, active list count, movement count, trade-ready count, executable plan count, and buying power.
 
 Overview-only widgets such as the hero, pipeline metric band, and execution controls should not stay pinned across focused tabs. `Universe`, `Scanner`, `Strategy`, `Execution`, `Broker`, and `Audit` should use the main content area for the selected workflow surface.
+
+Focused tabs should carry their own operational context:
+
+- `Universe`: universe source, bundled snapshot counts, runtime cache, generated watchlists, and Webull watchlist-sync names.
+- `Execution`: current live/fractional/risk gates, executable queue, and common blockers when no plan exists.
+- `Broker`: current account lane, buying-power snapshot, live switches, preview state, and Webull route controls until a real broker response replaces it.
+- `Audit`: audit-chain state, event totals, live/paper/rejected counts, and recent execution events.
+
+Use icons only where the command is obvious: run, live submit, stop, and power cycle. Keep text on higher-context actions such as scan, broker check, and route preview.

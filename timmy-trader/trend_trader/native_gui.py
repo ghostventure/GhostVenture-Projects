@@ -24,7 +24,7 @@ from .config import BotConfig, load_config
 from .data import load_csv_bars, write_csv_bars
 from .market_calendar import market_session, seconds_until_next_open
 from .market_data import fetch_daily_bars
-from .market_universe import fetch_us_listed_symbols, load_bundled_us_listed_symbols
+from .market_universe import fetch_us_listed_symbols, load_bundled_us_listed_instruments, load_bundled_us_listed_symbols
 from .models import OrderPlan
 from .readiness import readiness_flags
 from .risk import create_order_plan
@@ -80,6 +80,7 @@ class TimmyNativeApp:
         self.recent_bad_event_counts: dict[str, int] = {}
         self._execution_events_cache_key: tuple | None = None
         self._execution_events_cache: list[dict] = []
+        self._tooltip: tk.Toplevel | None = None
         self.audit_status = "Audit chain ready"
 
         self.root = tk.Tk()
@@ -392,8 +393,12 @@ class TimmyNativeApp:
             accent="teal",
         )
         self.webull_check_button.pack(fill="x", pady=7)
-        self.preview_button = self._button(actions, "Preview Route", lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
-                                           accent="gold")
+        self.preview_button = self._button(
+            actions,
+            "Preview Route",
+            lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
+            accent="gold",
+        )
         self.preview_button.pack(fill="x", pady=(7, 0))
         self.manual_controls.append(self.preview_button)
         self.busy_controls.extend([self.refresh_button, self.webull_check_button, self.preview_button])
@@ -537,13 +542,13 @@ class TimmyNativeApp:
         button_box = tk.Frame(controls, bg=self.colors["panel"])
         button_box.grid(row=2, column=3, columnspan=3, sticky="ew", padx=10, pady=(0, 14))
         button_box.columnconfigure((0, 1, 2, 3), weight=1)
-        self.run_button = self._button(button_box, "Run", self.run_decision_cycle, accent="teal")
+        self.run_button = self._button(button_box, "▶", self.run_decision_cycle, accent="teal", tooltip="Run decision cycle")
         self.run_button.grid(row=0, column=0, sticky="ew", padx=(0, 7))
-        self.live_button = self._button(button_box, "Live", self.submit_live_interactive, accent="gold")
+        self.live_button = self._button(button_box, "⚡", self.submit_live_interactive, accent="gold", tooltip="Submit live")
         self.live_button.grid(row=0, column=1, sticky="ew", padx=7)
-        self.stop_button = self._button(button_box, "Stop", self.stop_automation)
+        self.stop_button = self._button(button_box, "■", self.stop_automation, tooltip="Stop automation")
         self.stop_button.grid(row=0, column=2, sticky="ew", padx=7)
-        self.power_cycle_button = self._button(button_box, "Power Cycle", self.power_cycle)
+        self.power_cycle_button = self._button(button_box, "⟳", self.power_cycle, tooltip="Power cycle Timmy")
         self.power_cycle_button.grid(row=0, column=3, sticky="ew", padx=(7, 0))
         self.manual_controls.extend([self.run_button, self.live_button])
         self.busy_controls.extend([self.run_button, self.live_button, self.power_cycle_button])
@@ -614,6 +619,16 @@ class TimmyNativeApp:
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=10,
                                      font=("Monospace", 10), wrap="word")
         self.signal_detail.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 18))
+
+        universe_panel = self._panel(body)
+        self.universe_panel = universe_panel
+        universe_panel.rowconfigure(1, weight=1)
+        self._section_header(universe_panel, "MARKET INTAKE", "Universe And Watchlists", "Refresh Data",
+                             self.refresh_data)
+        self.universe_text = tk.Text(universe_panel, height=18, bg=self.colors["panel_2"], fg=self.colors["text"],
+                                     insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
+                                     font=("Monospace", 10), wrap="word")
+        self.universe_text.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
 
         right = tk.Frame(body, bg=self.colors["bg"])
         self.right_panel = right
@@ -690,6 +705,7 @@ class TimmyNativeApp:
             self.controls.grid_remove()
             self.body.grid_configure(pady=(24, 24))
         self.signals_panel.grid_remove()
+        self.universe_panel.grid_remove()
         self.right_panel.grid_remove()
         for panel in (self.decision_panel, self.order_panel, self.broker_panel, self.journal_panel):
             panel.grid_remove()
@@ -708,7 +724,10 @@ class TimmyNativeApp:
             self.order_panel.grid(row=1, column=0, sticky="ew", pady=(0, 18))
             self.broker_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 18))
             self.journal_panel.grid(row=3, column=0, sticky="nsew")
-        elif tab in {"Universe", "Scanner"}:
+        elif tab == "Universe":
+            self.body.columnconfigure(0, weight=1)
+            self.universe_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Scanner":
             self.body.columnconfigure(0, weight=1)
             self.signals_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         else:
@@ -734,7 +753,7 @@ class TimmyNativeApp:
                 fg=self.colors["selected_text"] if selected else self.colors["rail_muted"],
             )
 
-    def _button(self, parent: tk.Widget, text: str, command, accent: str | None = None) -> tk.Button:
+    def _button(self, parent: tk.Widget, text: str, command, accent: str | None = None, tooltip: str | None = None) -> tk.Button:
         bg = self.colors["button"]
         fg = self.colors["button_text"]
         active_bg = self.colors["panel_2"]
@@ -746,12 +765,57 @@ class TimmyNativeApp:
             bg = self.colors["teal_button"]
             fg = self.colors["teal_button_text"]
             active_bg = self.colors["cyan"]
+        icon_only = len(text) <= 2
         button = tk.Button(parent, text=text, command=command, bg=bg, fg=fg, activebackground=active_bg,
-                           activeforeground=fg, relief="flat", padx=16, pady=10, font=("Sans", 10, "bold"),
+                           activeforeground=fg, relief="flat", padx=16, pady=10,
+                           font=("Sans", 14 if icon_only else 10, "bold"),
                            disabledforeground=self.colors["disabled"], cursor="hand2", anchor="center",
                            justify="center", highlightbackground=self.colors["line"], highlightthickness=1)
-        self._fit_text(button, min_size=8, max_size=10, padding=28, wrap=True)
+        if icon_only:
+            button.configure(width=3)
+        else:
+            self._fit_text(button, min_size=8, max_size=10, padding=28, wrap=True)
+        if tooltip:
+            self._add_tooltip(button, tooltip)
         return button
+
+    def _add_tooltip(self, widget: tk.Widget, text: str) -> None:
+        def show(_event=None) -> None:
+            self._hide_tooltip()
+            try:
+                x = widget.winfo_rootx() + 8
+                y = widget.winfo_rooty() + widget.winfo_height() + 8
+            except tk.TclError:
+                return
+            tip = tk.Toplevel(self.root)
+            tip.wm_overrideredirect(True)
+            tip.wm_geometry(f"+{x}+{y}")
+            label = tk.Label(
+                tip,
+                text=text,
+                bg=self.colors["panel_3"],
+                fg=self.colors["text"],
+                padx=8,
+                pady=5,
+                font=("Sans", 9, "bold"),
+                highlightbackground=self.colors["line"],
+                highlightthickness=1,
+            )
+            label.pack()
+            self._tooltip = tip
+
+        widget.bind("<Enter>", show, add="+")
+        widget.bind("<Leave>", lambda _event=None: self._hide_tooltip(), add="+")
+        widget.bind("<ButtonPress>", lambda _event=None: self._hide_tooltip(), add="+")
+
+    def _hide_tooltip(self) -> None:
+        if self._tooltip is None:
+            return
+        try:
+            self._tooltip.destroy()
+        except tk.TclError:
+            pass
+        self._tooltip = None
 
     def _fit_text(
         self,
@@ -1025,8 +1089,10 @@ class TimmyNativeApp:
         self.plans = self._load_plans(self.config)
         self._splash_step("Rendering dashboard")
         self._render_status()
+        self._render_universe()
         self._render_signals()
         self._render_plans()
+        self._render_broker_summary()
         self._load_journal()
         self._write_paper_training_summary()
         return "Dashboard refreshed."
@@ -1379,6 +1445,83 @@ class TimmyNativeApp:
             return 0
         return len([symbol for symbol in dict.fromkeys(symbols) if symbol])
 
+    def _render_universe(self) -> None:
+        config = self.config or self._load_config_safe()
+        bundled = load_bundled_us_listed_instruments()
+        bundled_counts = {
+            "stock": sum(1 for item in bundled if item.asset_type == "stock"),
+            "etf": sum(1 for item in bundled if item.asset_type == "etf"),
+        }
+        active_path = self._runtime_path(config.active_watchlist_path or self.active_watchlist_path)
+        movement_path = self._runtime_path(config.movement_watchlist_path or self.movement_watchlist_path)
+        trade_ready_path = self._runtime_path(config.trade_ready_watchlist_path or self.trade_ready_watchlist_path)
+        quiet_path = self._runtime_path(config.quiet_watchlist_path or self.quiet_watchlist_path)
+        lines = [
+            "Universe source",
+            f"- Mode: {config.watchlist_universe}",
+            f"- Rotation: {'enabled' if config.enable_watchlist_rotation else 'disabled'}",
+            f"- Runtime cache: {self._file_summary(self.universe_path)}",
+            f"- Bundled snapshot: {len(bundled):,} symbols ({bundled_counts['stock']:,} stocks / {bundled_counts['etf']:,} ETFs)",
+            f"- Batch size: {config.watchlist_universe_batch_size:,}",
+            f"- Refresh window: {config.watchlist_universe_refresh_hours}h",
+            "",
+            "Generated watchlists",
+            self._watchlist_summary_line("Active trade source", active_path),
+            self._watchlist_summary_line("Movement candidates", movement_path),
+            self._watchlist_summary_line("Trade-ready before broker", trade_ready_path),
+            self._watchlist_summary_line("Quiet removed", quiet_path),
+            "",
+            "Webull account-side sync",
+            f"- Sync: {'enabled' if config.webull_sync_watchlists else 'disabled'}",
+            f"- Active: {config.webull_active_watchlist_name}",
+            f"- Movement: {config.webull_movement_watchlist_name}",
+            f"- Trade ready: {config.webull_trade_ready_watchlist_name}",
+            f"- Quiet removed: {config.webull_quiet_watchlist_name}",
+            "",
+            "Trading boundary",
+            f"- Webull symbol whitelist: {'all rotated symbols allowed' if not config.symbol_whitelist else self._compact_symbols(config.symbol_whitelist, 8)}",
+            f"- Active cap: {config.max_watchlist_symbols:,}",
+            f"- Movement cap: {config.max_movement_watchlist_symbols:,}",
+            f"- Movement threshold: scout >= {config.min_watchlist_scout_score}",
+            f"- Quiet threshold: scout < {config.quiet_watchlist_scout_score}",
+        ]
+        self._set_text(self.universe_text, "\n".join(lines))
+
+    def _watchlist_summary_line(self, label: str, path: Path) -> str:
+        symbols = self._read_watchlist_symbols(path)
+        return f"- {label}: {len(symbols):,} | {self._preview_symbols(symbols)}"
+
+    def _read_watchlist_symbols(self, path: Path) -> list[str]:
+        if not path.exists():
+            return []
+        try:
+            raw_symbols = [
+                line.split("#", 1)[0].strip().upper()
+                for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+            ]
+        except OSError:
+            return []
+        return sorted(symbol for symbol in dict.fromkeys(raw_symbols) if symbol)
+
+    def _preview_symbols(self, symbols: list[str], limit: int = 12) -> str:
+        if not symbols:
+            return "-"
+        if len(symbols) <= limit:
+            return ", ".join(symbols)
+        return f"{', '.join(symbols[:limit])}, +{len(symbols) - limit} more"
+
+    def _file_summary(self, path: Path) -> str:
+        if not path.exists():
+            return "missing"
+        try:
+            age = datetime.now() - datetime.fromtimestamp(path.stat().st_mtime)
+        except OSError:
+            return "unreadable"
+        if age.days:
+            return f"{self._watchlist_count(path):,} symbols, {age.days}d old"
+        minutes = max(0, int(age.total_seconds() // 60))
+        return f"{self._watchlist_count(path):,} symbols, {minutes}m old"
+
     def _render_signals(self) -> None:
         self.signal_tree.delete(*self.signal_tree.get_children())
         for signal in self.signals:
@@ -1403,6 +1546,20 @@ class TimmyNativeApp:
         lines = []
         if self.config_error:
             lines.append(f"Config fallback active:\n{self.config_error}")
+        config = self.config or self._load_config_safe()
+        lines.extend([
+            "Execution gates",
+            f"- Target / mode: {self.execution_target_var.get()} / {self.execution_mode_var.get()}",
+            f"- Live guard: {'enabled' if self._live_ready(self._execution_config(config)) else 'locked'}",
+            f"- Fractional priority: {'on' if config.enable_equity_fractional_trading else 'off'}",
+            f"- Plan limit: {self._plan_limit(config)}",
+            f"- Max notional: {money(config.max_order_notional_usd)}",
+            f"- Max quantity: {config.max_order_quantity:g}",
+            f"- Risk per trade: {money(config.risk_per_trade_usd)}",
+            f"- Max positions: {config.max_positions}",
+            "",
+            "Executable queue",
+        ])
         for plan in self.plans:
             lines.append(
                 f"{plan.side} {_format_quantity(plan.quantity)} {plan.symbol} {plan.instrument_type} {plan.order_type}\n"
@@ -1410,15 +1567,56 @@ class TimmyNativeApp:
                 f"Stop {money(plan.stop_price)} | Target {money(plan.target_price)}\n"
                 f"{plan.reason}"
             )
-        self._set_text(self.plan_text, "\n\n".join(lines) if lines else "No eligible plans at current risk settings.")
+        if not self.plans:
+            lines.append("No eligible plans at current risk settings.")
+            lines.append("")
+            lines.append("Common blockers: no trade-ready symbol, stale data, score below threshold, cooldown, daily cap, buying power, fractional minimum, preview rejection, or broker rejection.")
+        self._set_text(self.plan_text, "\n\n".join(lines))
         self._set_text(self.decision_text, self._decision_summary())
+
+    def _render_broker_summary(self) -> None:
+        current = self._text_value(self.broker_text).strip()
+        if current and not current.startswith("Broker route ready"):
+            return
+        config = self.config or self._load_config_safe()
+        execution_config = self._execution_config(config)
+        lines = [
+            "Broker route ready",
+            f"- Account lane: {self._account_lane()}",
+            f"- Account target: {self._webull_account_card_value(execution_config)}",
+            f"- Account detail: {self._webull_account_card_detail(execution_config)}",
+            f"- Buying power: {self.trade_cash_snapshot[0]} ({self.trade_cash_snapshot[1]})",
+            f"- Live switches: {'enabled' if self._live_ready(execution_config) else 'locked'}",
+            f"- Require broker preview flag: {'on' if config.webull_require_preview else 'off'}",
+            f"- OpenAPI live submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
+            f"- Watchlist sync: {'on' if config.webull_sync_watchlists else 'off'}",
+            "",
+            "Controls",
+            "- Broker Check refreshes account/buying-power state.",
+            "- Preview Route validates the exact current order payload.",
+            "- Live / Auto previews the exact current plan before submit.",
+        ]
+        self._set_text(self.broker_text, "\n".join(lines))
 
     def _load_journal(self) -> None:
         events = self.execution_events
         if not events:
             self._set_text(self.journal_text, f"{self.audit_status}\n\nNo buy/sell events recorded.")
             return
-        lines = [self.audit_status, ""]
+        live_count = sum(1 for event in events if event.get("mode") == "live")
+        paper_count = sum(1 for event in events if event.get("mode") == "paper")
+        rejected_count = sum(1 for event in events if str(event.get("status", "")).lower() == "rejected")
+        lines = [
+            self.audit_status,
+            "",
+            "Event summary",
+            f"- Total loaded: {len(events)}",
+            f"- Live: {live_count}",
+            f"- Paper: {paper_count}",
+            f"- Rejected: {rejected_count}",
+            "",
+            "Recent events",
+        ]
         for event in reversed(events[-14:]):
             symbol = event.get("symbol") or event.get("order", {}).get("symbol") or "-"
             quantity = event.get("quantity") or event.get("order", {}).get("quantity") or "-"
@@ -2335,6 +2533,12 @@ class TimmyNativeApp:
         widget.delete("1.0", "end")
         widget.insert("1.0", value)
         widget.configure(state="disabled")
+
+    def _text_value(self, widget: tk.Text) -> str:
+        try:
+            return widget.get("1.0", "end-1c")
+        except tk.TclError:
+            return ""
 
     def _append_execution_event(self, event: dict) -> None:
         payload = dict(event)
