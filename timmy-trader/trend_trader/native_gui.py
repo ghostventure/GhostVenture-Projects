@@ -29,6 +29,7 @@ from .risk import create_order_plan
 from .sample_data import write_sample_bars
 from .strategy import rank_signals
 from .watchlist import DEFAULT_ROTATION_CANDIDATES, load_watchlist, rotate_watchlist, write_watchlist, write_watchlist_template
+from .webull_watchlists import sync_generated_watchlists
 
 AUTO_REFRESH_MS = max(30, int(os.getenv("TIMMY_DASHBOARD_REFRESH_SECONDS", "60"))) * 1000
 ACCOUNT_REFRESH_MS = max(5, int(os.getenv("TIMMY_ACCOUNT_REFRESH_MINUTES", "15"))) * 60 * 1000
@@ -1089,6 +1090,26 @@ class TimmyNativeApp:
         for path, symbols, export_name in outputs:
             write_watchlist(path, symbols)
             self._write_watchlist_exports(symbols, export_name)
+        self._sync_webull_generated_watchlists(config, {
+            config.webull_active_watchlist_name: active_symbols,
+            config.webull_movement_watchlist_name: movement,
+            config.webull_trade_ready_watchlist_name: trade_ready,
+            config.webull_quiet_watchlist_name: quiet,
+        })
+
+    def _sync_webull_generated_watchlists(self, config: BotConfig, lists: dict[str, list[str]]) -> None:
+        if not config.webull_sync_watchlists:
+            return
+        results = sync_generated_watchlists(config, lists)
+        failures = [result for result in results if result.status == "failed"]
+        if failures:
+            self.status_bar.configure(text=f"Webull watchlist sync failed for {len(failures)} list(s).")
+            return
+        synced = [result for result in results if result.status == "synced"]
+        if synced:
+            added = sum(result.added_count for result in synced)
+            removed = sum(result.removed_count for result in synced)
+            self.status_bar.configure(text=f"Webull watchlists synced: +{added} / -{removed}.")
 
     def _write_watchlist_exports(self, symbols: list[str], export_name: str = "active-watchlist") -> None:
         clean = sorted(dict.fromkeys(symbol.strip().upper() for symbol in symbols if symbol.strip()))
@@ -2000,6 +2021,11 @@ class TimmyNativeApp:
                 movement_watchlist_path=None,
                 trade_ready_watchlist_path=None,
                 quiet_watchlist_path=None,
+                webull_sync_watchlists=False,
+                webull_active_watchlist_name="Timmy Active",
+                webull_movement_watchlist_name="Timmy Movement",
+                webull_trade_ready_watchlist_name="Timmy Trade Ready",
+                webull_quiet_watchlist_name="Timmy Quiet Removed",
                 watchlist_template="equity",
                 enable_watchlist_rotation=False,
                 watchlist_universe="custom",

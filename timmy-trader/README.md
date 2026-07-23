@@ -210,6 +210,11 @@ ACTIVE_WATCHLIST_PATH=active-watchlist.txt
 MOVEMENT_WATCHLIST_PATH=movement-watchlist.txt
 TRADE_READY_WATCHLIST_PATH=trade-ready-watchlist.txt
 QUIET_WATCHLIST_PATH=quiet-watchlist.txt
+WEBULL_SYNC_WATCHLISTS=1
+WEBULL_ACTIVE_WATCHLIST_NAME=Timmy Active
+WEBULL_MOVEMENT_WATCHLIST_NAME=Timmy Movement
+WEBULL_TRADE_READY_WATCHLIST_NAME=Timmy Trade Ready
+WEBULL_QUIET_WATCHLIST_NAME=Timmy Quiet Removed
 MAX_WATCHLIST_SYMBOLS=12
 MAX_MOVEMENT_WATCHLIST_SYMBOLS=50
 MIN_WATCHLIST_SCOUT_SCORE=42
@@ -225,6 +230,8 @@ Generated watchlists are updated together on every rotation cycle:
 - `trade-ready-watchlist.txt`: active symbols whose strategy signal is eligible/trade before broker/risk submission checks.
 - `quiet-watchlist.txt`: symbols removed from active rotation because movement fell below the quiet threshold.
 - Matching `*-webull.txt` and `*-webull.csv` export files are written beside them for visibility or manual import workflows.
+
+When `WEBULL_SYNC_WATCHLISTS=1`, Timmy also syncs those generated lists into Webull account-side watchlists through the Webull OpenAPI watchlist endpoints. It creates or updates the configured `Timmy ...` lists, adds symbols that Timmy is watching, and removes symbols that no longer belong in each generated list. Existing non-Timmy watchlists are left alone.
 
 Fetch delayed daily bars into Timmy's CSV format:
 

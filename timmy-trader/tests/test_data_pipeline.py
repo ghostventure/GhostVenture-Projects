@@ -9,6 +9,7 @@ from trend_trader.market_data import _stooq_symbol, _yahoo_symbol
 from trend_trader.market_universe import _parse_nasdaq_listed, _parse_other_listed
 from trend_trader.models import Candle
 from trend_trader.watchlist import load_watchlist, rotate_watchlist, write_watchlist_template
+from trend_trader.webull_watchlists import _instrument_items
 from trend_trader.strategy import score_symbol
 
 
@@ -84,6 +85,13 @@ def test_rotate_watchlist_replaces_quiet_symbols_with_movers() -> None:
     assert "SPY" in rotated
     assert "MSFT" in rotated
     assert "DIA" not in rotated
+
+
+def test_webull_watchlist_instrument_items_handles_response_shapes() -> None:
+    assert _instrument_items({"instruments": [{"symbol": "AAPL"}]}) == [{"symbol": "AAPL"}]
+    assert _instrument_items({"data": [{"symbol": "MSFT"}]}) == [{"symbol": "MSFT"}]
+    assert _instrument_items([{"symbol": "NVDA"}]) == [{"symbol": "NVDA"}]
+    assert _instrument_items({"instruments": ["bad"]}) == []
 
 
 def _moving_bars(symbol: str, latest_move: float) -> list[Candle]:

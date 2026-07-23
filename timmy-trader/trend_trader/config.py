@@ -72,6 +72,11 @@ class BotConfig:
     movement_watchlist_path: str | None
     trade_ready_watchlist_path: str | None
     quiet_watchlist_path: str | None
+    webull_sync_watchlists: bool
+    webull_active_watchlist_name: str
+    webull_movement_watchlist_name: str
+    webull_trade_ready_watchlist_name: str
+    webull_quiet_watchlist_name: str
     watchlist_template: str
     enable_watchlist_rotation: bool
     watchlist_universe: str
@@ -157,6 +162,11 @@ def load_config() -> BotConfig:
         movement_watchlist_path=os.getenv("MOVEMENT_WATCHLIST_PATH") or None,
         trade_ready_watchlist_path=os.getenv("TRADE_READY_WATCHLIST_PATH") or None,
         quiet_watchlist_path=os.getenv("QUIET_WATCHLIST_PATH") or None,
+        webull_sync_watchlists=os.getenv("WEBULL_SYNC_WATCHLISTS", "0") == "1",
+        webull_active_watchlist_name=os.getenv("WEBULL_ACTIVE_WATCHLIST_NAME", "Timmy Active"),
+        webull_movement_watchlist_name=os.getenv("WEBULL_MOVEMENT_WATCHLIST_NAME", "Timmy Movement"),
+        webull_trade_ready_watchlist_name=os.getenv("WEBULL_TRADE_READY_WATCHLIST_NAME", "Timmy Trade Ready"),
+        webull_quiet_watchlist_name=os.getenv("WEBULL_QUIET_WATCHLIST_NAME", "Timmy Quiet Removed"),
         watchlist_template=os.getenv("WATCHLIST_TEMPLATE", "equity"),
         enable_watchlist_rotation=os.getenv("ENABLE_WATCHLIST_ROTATION", "0") == "1",
         watchlist_universe=os.getenv("WATCHLIST_UNIVERSE", "custom").strip().lower(),
