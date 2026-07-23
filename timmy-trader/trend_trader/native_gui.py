@@ -303,11 +303,11 @@ class TimmyNativeApp:
         brand = tk.Label(brand_box, text="Timmy", bg=self.colors["rail"], fg=self.colors["rail_text"],
                          justify="left", anchor="w", font=("Sans", 15, "bold"))
         brand.pack(anchor="w")
-        brand_sub = tk.Label(brand_box, text="TRADER DESK", bg=self.colors["rail"], fg=self.colors["rail_muted"],
+        brand_sub = tk.Label(brand_box, text="TRADING MODEL", bg=self.colors["rail"], fg=self.colors["rail_muted"],
                              justify="left", anchor="w", font=("Sans", 8, "bold"))
         brand_sub.pack(anchor="w", pady=(1, 0))
 
-        nav_items = ["Overview", "Signals", "Automation", "Orders", "Broker", "Event Log"]
+        nav_items = ["Pipeline", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit"]
         nav = tk.Frame(rail, bg=self.colors["rail"])
         nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(18, 0))
         for item in nav_items:
@@ -315,8 +315,8 @@ class TimmyNativeApp:
                 nav,
                 text=item,
                 command=lambda target=item: self._show_tab(target),
-                bg=self.colors["selected"] if item == "Overview" else self.colors["rail"],
-                fg=self.colors["selected_text"] if item == "Overview" else self.colors["rail_muted"],
+                bg=self.colors["selected"] if item == "Pipeline" else self.colors["rail"],
+                fg=self.colors["selected_text"] if item == "Pipeline" else self.colors["rail_muted"],
                 activebackground=self.colors["selected"],
                 activeforeground=self.colors["selected_text"],
                 relief="flat",
@@ -361,7 +361,7 @@ class TimmyNativeApp:
         accent.grid(row=0, column=0, rowspan=3, sticky="nsw")
         cyan_rule = tk.Frame(hero, bg=self.colors["cyan"], height=4)
         cyan_rule.grid(row=3, column=0, columnspan=2, sticky="ew")
-        hero_eyebrow = tk.Label(hero, text="WEBULL PREVIEW AND RISK CONTROL", bg=self.colors["panel"],
+        hero_eyebrow = tk.Label(hero, text="UNIVERSE -> SCANNER -> STRATEGY -> EXECUTION", bg=self.colors["panel"],
                                 fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w", justify="left")
         self._fit_text(hero_eyebrow, min_size=8, max_size=9, padding=56, wrap=True)
         hero_eyebrow.grid(row=0, column=0, sticky="ew", padx=(30, 24), pady=(20, 0))
@@ -371,7 +371,7 @@ class TimmyNativeApp:
         hero_title.grid(row=1, column=0, sticky="ew", padx=(30, 24), pady=(2, 0))
         hero_copy = tk.Label(
             hero,
-            text="Scout movement, rank setups, set buy-low/sell-high limits, and keep live execution gated by account, preview, and risk controls.",
+            text="Timmy rotates through the listed market, promotes active tickers, builds fractional-first order plans, routes through Webull, and records the result.",
             bg=self.colors["panel"],
             fg=self.colors["muted"],
             font=("Sans", 12),
@@ -382,16 +382,16 @@ class TimmyNativeApp:
         hero_copy.grid(row=2, column=0, sticky="ew", padx=(30, 24), pady=(7, 20))
         actions = tk.Frame(hero, bg=self.colors["panel_3"], highlightbackground=self.colors["line"], highlightthickness=1)
         actions.grid(row=0, column=1, rowspan=3, sticky="e", padx=(0, 24), pady=18)
-        self.refresh_button = self._button(actions, "Refresh", self.refresh_all)
+        self.refresh_button = self._button(actions, "Scan Now", self.refresh_all)
         self.refresh_button.pack(fill="x", pady=(0, 7))
         self.webull_check_button = self._button(
             actions,
-            "Check Webull",
+            "Broker Check",
             lambda: self._run_action("Checking Webull", self.webull_check),
             accent="teal",
         )
         self.webull_check_button.pack(fill="x", pady=7)
-        self.preview_button = self._button(actions, "Preview Order", lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
+        self.preview_button = self._button(actions, "Preview Route", lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
                                            accent="gold")
         self.preview_button.pack(fill="x", pady=(7, 0))
         self.manual_controls.append(self.preview_button)
@@ -401,20 +401,21 @@ class TimmyNativeApp:
         metrics.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
         for idx in range(3):
             metrics.columnconfigure(idx, weight=1)
-        self.mode_card = self._metric(metrics, 0, 0, "Mode")
-        self.account_card = self._metric(metrics, 0, 1, "Webull Account")
-        self.cash_card = self._metric(metrics, 0, 2, "Buying Power", highlight=True)
-        self.notional_card = self._metric(metrics, 1, 0, "Max Notional")
-        self.risk_card = self._metric(metrics, 1, 1, "Risk / Trade")
+        self.universe_card = self._metric(metrics, 0, 0, "Universe")
+        self.active_card = self._metric(metrics, 0, 1, "Active List")
+        self.movement_card = self._metric(metrics, 0, 2, "Movement")
+        self.trade_ready_card = self._metric(metrics, 1, 0, "Trade Ready")
+        self.plan_card = self._metric(metrics, 1, 1, "Executable Plans")
+        self.cash_card = self._metric(metrics, 1, 2, "Buying Power", highlight=True)
 
         controls = self._panel(main)
         controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
         for idx in range(6):
             controls.columnconfigure(idx, weight=1, minsize=118)
-        controls_title = tk.Label(controls, text="Controls", bg=self.colors["panel"], fg=self.colors["text"],
+        controls_title = tk.Label(controls, text="Execution Controls", bg=self.colors["panel"], fg=self.colors["text"],
                                   font=("Sans", 13, "bold"), anchor="w", justify="left")
         controls_title.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 0))
-        controls_status = tk.Label(controls, text="Preview, cash, score, and live switches stay in command.",
+        controls_status = tk.Label(controls, text="Target, automation, broker lane, style, and pattern gates drive order placement.",
                                    bg=self.colors["panel"], fg=self.colors["muted"], font=("Sans", 9),
                                    anchor="e", justify="right")
         controls_status.grid(row=0, column=2, columnspan=4, sticky="ew", padx=18, pady=(14, 0))
@@ -588,7 +589,7 @@ class TimmyNativeApp:
         signals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
         signals_panel.rowconfigure(1, weight=1)
         signals_panel.rowconfigure(2, weight=0)
-        self._section_header(signals_panel, "RANKED SCANNER", "Signal Board", "Refresh Data",
+        self._section_header(signals_panel, "SCANNER OUTPUT", "Ticker Activity", "Refresh Data",
                              self.refresh_data)
         columns = ("symbol", "scout", "score", "sense", "direction", "decision", "price", "change", "entry")
         self.signal_tree = ttk.Treeview(signals_panel, columns=columns, show="headings", selectmode="browse")
@@ -623,7 +624,7 @@ class TimmyNativeApp:
         decision_panel = self._panel(right)
         self.decision_panel = decision_panel
         decision_panel.grid(row=0, column=0, sticky="ew", pady=(0, 18))
-        self._section_header(decision_panel, "DECISION ENGINE", "Decision Brief", None, None, compact=True)
+        self._section_header(decision_panel, "STRATEGY MODEL", "Decision Brief", None, None, compact=True)
         self.decision_text = tk.Text(decision_panel, height=7, bg=self.colors["panel_2"], fg=self.colors["text"],
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                      font=("Monospace", 10), wrap="word")
@@ -632,7 +633,7 @@ class TimmyNativeApp:
         order_panel = self._panel(right)
         self.order_panel = order_panel
         order_panel.grid(row=1, column=0, sticky="ew", pady=(0, 18))
-        self.paper_trade_button = self._section_header(order_panel, "RISK CAPPED", "Order Plan", "Paper Trade",
+        self.paper_trade_button = self._section_header(order_panel, "EXECUTION QUEUE", "Order Plan", "Paper Trade",
                                                        lambda: self._run_action("Paper trade", self.paper_trade, threaded=False), compact=True)
         if self.paper_trade_button:
             self.manual_controls.append(self.paper_trade_button)
@@ -646,7 +647,7 @@ class TimmyNativeApp:
         self.broker_panel = broker_panel
         broker_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 18))
         broker_panel.rowconfigure(1, weight=1)
-        self._section_header(broker_panel, "BROKER RESPONSE", "Webull Preview", None, None, compact=True)
+        self._section_header(broker_panel, "WEBULL ROUTE", "Broker Response", None, None, compact=True)
         self.broker_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["broker_text"],
                                    insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                    font=("Monospace", 10), wrap="word")
@@ -656,7 +657,7 @@ class TimmyNativeApp:
         self.journal_panel = journal_panel
         journal_panel.grid(row=3, column=0, sticky="nsew")
         journal_panel.rowconfigure(1, weight=1)
-        self._section_header(journal_panel, "LOCAL AUDIT", "Event Log", None, None, compact=True)
+        self._section_header(journal_panel, "AUDIT TRAIL", "Execution Events", None, None, compact=True)
         self.journal_text = tk.Text(journal_panel, height=8, bg=self.colors["panel_2"], fg=self.colors["muted"],
                                     insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                     font=("Monospace", 10), wrap="word")
@@ -681,7 +682,7 @@ class TimmyNativeApp:
         self.body.columnconfigure(0, weight=1)
         self.body.columnconfigure(1, weight=1)
 
-        if tab == "Overview":
+        if tab == "Pipeline":
             for row, weight in ((0, 0), (1, 0), (2, 1), (3, 1)):
                 self.right_panel.rowconfigure(row, weight=weight)
             self.body.columnconfigure(0, weight=3)
@@ -692,17 +693,17 @@ class TimmyNativeApp:
             self.order_panel.grid(row=1, column=0, sticky="ew", pady=(0, 18))
             self.broker_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 18))
             self.journal_panel.grid(row=3, column=0, sticky="nsew")
-        elif tab == "Signals":
+        elif tab in {"Universe", "Scanner"}:
             self.body.columnconfigure(0, weight=1)
             self.signals_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         else:
             for row in range(4):
                 self.right_panel.rowconfigure(row, weight=1 if row == 0 else 0)
             panel_by_tab = {
-                "Automation": self.decision_panel,
-                "Orders": self.order_panel,
+                "Strategy": self.decision_panel,
+                "Execution": self.order_panel,
                 "Broker": self.broker_panel,
-                "Event Log": self.journal_panel,
+                "Audit": self.journal_panel,
             }
             panel = panel_by_tab.get(tab, self.decision_panel)
             self.right_panel.grid(row=0, column=0, columnspan=2, sticky="nsew")
@@ -1316,16 +1317,22 @@ class TimmyNativeApp:
         if config is None:
             return
         execution_config = self._execution_config(config)
-        self.mode_card[0].configure(text=f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}")
-        self.mode_card[1].configure(text=f"{self._account_lane()} | {'Live on' if config.trader_live else 'Live locked'}")
-        self.account_card[0].configure(text=self._webull_account_card_value(execution_config))
-        self.account_card[1].configure(text=self._webull_account_card_detail(execution_config))
+        universe_count = self._pipeline_universe_count(config)
+        active_count = self._watchlist_count(config.active_watchlist_path or self.active_watchlist_path)
+        movement_count = self._watchlist_count(config.movement_watchlist_path or self.movement_watchlist_path)
+        trade_ready_count = self._watchlist_count(config.trade_ready_watchlist_path or self.trade_ready_watchlist_path)
+        self.universe_card[0].configure(text=f"{universe_count:,}")
+        self.universe_card[1].configure(text=config.watchlist_universe if config.enable_watchlist_rotation else "custom seed")
+        self.active_card[0].configure(text=f"{active_count:,}")
+        self.active_card[1].configure(text="trade source" if config.enable_watchlist_rotation else "manual watchlist")
+        self.movement_card[0].configure(text=f"{movement_count:,}")
+        self.movement_card[1].configure(text=f"score >= {config.min_watchlist_scout_score}")
+        self.trade_ready_card[0].configure(text=f"{trade_ready_count:,}")
+        self.trade_ready_card[1].configure(text="before broker gates")
+        self.plan_card[0].configure(text=f"{len(self.plans):,}")
+        self.plan_card[1].configure(text=f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}")
         self.cash_card[0].configure(text=self.trade_cash_snapshot[0])
         self.cash_card[1].configure(text=self.trade_cash_snapshot[1])
-        self.notional_card[0].configure(text=money(config.max_order_notional_usd))
-        self.notional_card[1].configure(text=f"Max qty {config.max_order_quantity:g}")
-        self.risk_card[0].configure(text=money(config.risk_per_trade_usd))
-        self.risk_card[1].configure(text=f"{config.max_positions} max positions")
         self.guard_label.configure(
             text="Live on" if self._live_ready(execution_config) else "Live locked",
             fg=self.colors["red"] if self._live_ready(execution_config) else self.colors["gold"],
@@ -1334,6 +1341,28 @@ class TimmyNativeApp:
         self.runtime_label.configure(text="Ready" if not self.config_error else "Safe fallback")
         self.last_update_label.configure(text=self._data_freshness_line())
         self._sync_webull_account_toggle(execution_config)
+
+    def _pipeline_universe_count(self, config: BotConfig) -> int:
+        if config.watchlist_universe == "all-us":
+            if self.universe_path.exists():
+                return len(load_watchlist(self.universe_path, None))
+            bundled = load_bundled_us_listed_symbols()
+            if bundled:
+                return len(bundled)
+        return len(load_watchlist(self._runtime_path(config.watchlist_path or self.watchlist_path), config.symbol_whitelist))
+
+    def _watchlist_count(self, path: str | Path) -> int:
+        source = self._runtime_path(path)
+        if not source.exists():
+            return 0
+        try:
+            symbols = [
+                line.split("#", 1)[0].strip().upper()
+                for line in source.read_text(encoding="utf-8", errors="replace").splitlines()
+            ]
+        except OSError:
+            return 0
+        return len([symbol for symbol in dict.fromkeys(symbols) if symbol])
 
     def _render_signals(self) -> None:
         self.signal_tree.delete(*self.signal_tree.get_children())

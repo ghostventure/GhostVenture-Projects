@@ -245,3 +245,20 @@ CI performs:
 - source-only boundary check.
 
 CI intentionally does not call live Webull endpoints, inspect account state, submit orders, or mutate watchlists. Those checks must run locally on the authorized machine.
+
+## 9. Native GUI Model
+
+The native GUI is organized around Timmy's model:
+
+```text
+Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
+```
+
+- `Universe` is the known stock/ETF ticker pool and rotating market batch.
+- `Scanner` is the ranked activity board.
+- `Strategy` is the decision brief and eligibility explanation.
+- `Execution` is the risk-capped order queue.
+- `Broker` is the Webull check, preview, submit, and rejection surface.
+- `Audit` is the local event trail for submitted, rejected, and paper events.
+
+The top metric band should show the model state first: universe size, active list count, movement count, trade-ready count, executable plan count, and buying power.

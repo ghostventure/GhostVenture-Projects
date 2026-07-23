@@ -45,6 +45,7 @@ docs/WORKFLOWS.md
 - Prioritizes fractional US equity orders when enabled, so Timmy can place decimal-share buys inside the same risk and notional caps.
 - Remembers the last UI runtime settings on the next launch, including target, mode, account lane, score, plan limit, auto interval, trading style, and enabled patterns.
 - Adds a native `Power Cycle` control to save settings, relaunch Timmy, and replace the old process cleanly.
+- Organizes the native GUI around Timmy's operating model: Universe, Scanner, Strategy, Execution, Broker, and Audit.
 - Adds adaptable trading style presets and pattern toggles for breakout, momentum, pullback, and volume-expansion setups.
 - Bundles a current U.S. listed stock/ETF universe snapshot so all-market rotation can start from known tickers before the live universe refresh completes.
 - Documents practical guardrails for asset-class expansion beyond stocks/ETFs, including crypto, commodity exposure, forex/currencies, index proxies, and unsupported instruments.
