@@ -69,13 +69,15 @@ python3 -m venv .venv
 pip install -e .
 ```
 
-Copy the environment template, then review `docs/OPERATOR_CHECKLIST.md` before enabling Auto mode, switching to Live, previewing Webull orders, or expanding beyond the default equity/ETF path:
+For normal setup, open Timmy and use `Profile` in the Account controls. Add the Webull OpenAPI app key, app secret, default account, region, endpoint, and live switches there, save, then run `Broker Check`. Timmy stores that profile locally and keeps execution on `Paper` until the selected account has been checked.
+
+Advanced/manual setup can still use the environment template, then `docs/OPERATOR_CHECKLIST.md` before enabling Auto mode, switching to Live, previewing Webull orders, or expanding beyond the default equity/ETF path:
 
 ```bash
 cp .env.example .env
 ```
 
-Put Webull OpenAPI credentials in `.env` only:
+Put Webull OpenAPI credentials in `.env` only for advanced/manual setup:
 
 ```text
 WEBULL_APP_KEY=
@@ -99,7 +101,7 @@ When enabled, Timmy prioritizes fractional `MARKET` equity orders with decimal `
 
 Runtime settings:
 
-Timmy stores non-secret UI preferences in `timmy-ui-settings.json` under `TIMMY_HOME`. This includes the last selected execution target/mode, account lane, score threshold, plan limit, auto interval, trading style, and enabled patterns. Broker credentials remain in `.env` only.
+Timmy stores non-secret UI preferences in `timmy-ui-settings.json` under `TIMMY_HOME`. This includes the last selected execution target/mode, account lane, score threshold, plan limit, auto interval, trading style, and enabled patterns. Webull profile values are stored locally in `.timmy-profile.env` when saved from the GUI; advanced users can still keep broker credentials in `.env`.
 
 Market adaptability:
 
@@ -127,7 +129,7 @@ The executable is created at:
 dist/Timmy/Timmy
 ```
 
-The ELF does not bundle `.env`; keep `.env` next to the project so Webull credentials stay external.
+The ELF does not bundle `.env` or `.timmy-profile.env`; keep local Webull credentials next to the project through the GUI profile or advanced environment file.
 
 If launching the ELF from outside the project folder, set `TIMMY_HOME` first:
 

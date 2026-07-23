@@ -1,4 +1,5 @@
 .env
+.timmy-profile.env
 .venv/
 __pycache__/
 *.pyc

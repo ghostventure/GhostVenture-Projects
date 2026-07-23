@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 
 def _csv_set(value: str | None) -> set[str]:
@@ -118,6 +119,10 @@ def load_config() -> BotConfig:
         from dotenv import load_dotenv
 
         load_dotenv()
+        profile_env = os.getenv("TIMMY_PROFILE_ENV")
+        if not profile_env:
+            profile_env = str(Path(os.getenv("TIMMY_HOME", ".")).expanduser() / ".timmy-profile.env")
+        load_dotenv(profile_env, override=True)
     except Exception:
         pass
 

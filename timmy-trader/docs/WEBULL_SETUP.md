@@ -16,7 +16,24 @@ Create or confirm Webull OpenAPI access from Webull's developer portal. Timmy ex
 
 Webull's official SDK handles signatures and token management from App Key and App Secret.
 
-## 2. Local Environment
+## 2. Webull Profile In Timmy
+
+For normal setup, open Timmy and use `Profile` in the Account controls.
+
+Enter:
+
+- App Key
+- App Secret
+- Default Account ID
+- Region
+- API Endpoint
+- live-order switches
+
+Save the profile, then run `Broker Check`. Timmy stores this profile locally in `.timmy-profile.env` with restricted file permissions and does not commit it to source control. After a profile save or account change, Timmy returns to `Paper` and requires a fresh `Broker Check` before `Live` can be enabled.
+
+Do not paste broker usernames, passwords, MFA codes, App Secrets, or tokens into chat.
+
+## 3. Advanced Local Environment
 
 ```bash
 cd /home/sniper-lion-main/trading-bots/trend-trader
@@ -24,9 +41,9 @@ cd /home/sniper-lion-main/trading-bots/trend-trader
 cp .env.example .env
 ```
 
-Edit `.env` locally. Do not paste broker usernames, passwords, MFA codes, App Secrets, or tokens into chat.
+Edit `.env` locally only if you are doing advanced/manual setup. The GUI profile overrides matching `.env` values.
 
-## 3. Account Check
+## 4. Account Check
 
 ```bash
 timmy webull-check
@@ -36,7 +53,7 @@ This should return the accounts visible to your approved Webull OpenAPI app. If 
 
 On the first successful credential check, Webull may create a `PENDING` token and wait for verification. Open the Webull mobile app, then check Menu -> Messages -> OpenAPI Notifications. Tap the latest verification message, choose Check Now, enter the SMS code, and confirm. Keep `timmy webull-check` running while you do this.
 
-## 4. Scanner And Preview
+## 5. Scanner And Preview
 
 ```bash
 timmy sample-data --out examples/sample_bars.csv
@@ -47,7 +64,7 @@ timmy webull-preview --data examples/sample_bars.csv
 
 `webull-preview` sends Timmy's eligible order plan to Webull's preview endpoint. It does not place an order.
 
-## 5. Live Trading Gate
+## 6. Live Trading Gate
 
 Live placement stays disabled unless all of these are set:
 
@@ -68,7 +85,7 @@ RISK_PER_TRADE_USD=5
 MAX_POSITIONS=1
 ```
 
-## 6. Current Safety Defaults
+## 7. Current Safety Defaults
 
 - Timmy enables stock/ETF `EQUITY` orders for the US market by default.
 - Crypto and futures order routing fields exist, but those classes stay disabled unless their explicit `.env` switches are enabled.
@@ -78,7 +95,7 @@ MAX_POSITIONS=1
 - Timmy caps entry size against available account cash with `MAX_ENTRY_CASH_PCT=20` by default.
 - Timmy uses `CORE` regular market session unless `WEBULL_SUPPORT_TRADING_SESSION` is changed.
 
-## 7. Broker Validation Before Live Crypto Or Futures
+## 8. Broker Validation Before Live Crypto Or Futures
 
 Do not enable `ENABLE_CRYPTO_TRADING=1` or `ENABLE_FUTURES_TRADING=1` for live orders until the exact account and instrument path has been validated with Webull. The local adapter can carry `instrument_type`, `market`, `time_in_force`, `entrust_type`, session, quantity, and limit fields into `new_orders`, but it does not prove that a given account can trade a given crypto pair or futures contract.
 

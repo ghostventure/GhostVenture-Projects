@@ -24,6 +24,7 @@ def _load_runtime_env(home: Path) -> None:
         return
 
     load_dotenv(home / ".env")
+    load_dotenv(home / ".timmy-profile.env", override=True)
     load_dotenv(Path.home() / ".config" / "timmy-trader" / ".env", override=False)
 
 

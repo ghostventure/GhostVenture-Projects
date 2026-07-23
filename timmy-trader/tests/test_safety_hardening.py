@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import stat
 from dataclasses import replace
 from datetime import datetime, timedelta
 from threading import Event
@@ -99,6 +100,68 @@ def test_auto_start_live_on_market_open_defaults_false(monkeypatch) -> None:
     config = load_config()
 
     assert config.auto_start_live_on_market_open is False
+
+
+def test_timmy_profile_env_overrides_manual_env_file(monkeypatch, tmp_path) -> None:
+    for key in (
+        "WEBULL_APP_KEY",
+        "WEBULL_APP_SECRET",
+        "WEBULL_ACCOUNT_ID",
+        "WEBULL_ENABLE_LIVE_ORDERS",
+        "TRADER_MODE",
+        "TRADER_LIVE",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TIMMY_HOME", str(tmp_path))
+    tmp_path.joinpath(".env").write_text(
+        "\n".join((
+            "WEBULL_APP_KEY=env-key",
+            "WEBULL_APP_SECRET=env-secret",
+            "WEBULL_ACCOUNT_ID=env-account",
+            "WEBULL_ENABLE_LIVE_ORDERS=0",
+            "TRADER_MODE=paper",
+            "TRADER_LIVE=0",
+        )),
+        encoding="utf-8",
+    )
+    tmp_path.joinpath(".timmy-profile.env").write_text(
+        "\n".join((
+            "WEBULL_APP_KEY=profile-key",
+            "WEBULL_APP_SECRET=profile-secret",
+            "WEBULL_ACCOUNT_ID=profile-account",
+            "WEBULL_ENABLE_LIVE_ORDERS=1",
+            "TRADER_MODE=live",
+            "TRADER_LIVE=1",
+        )),
+        encoding="utf-8",
+    )
+
+    config = load_config()
+
+    assert config.webull_app_key == "profile-key"
+    assert config.webull_app_secret == "profile-secret"
+    assert config.webull_account_id == "profile-account"
+    assert config.webull_enable_live_orders is True
+    assert config.trader_mode == "live"
+    assert config.trader_live is True
+
+
+def test_native_profile_writer_restricts_profile_file_permissions(tmp_path) -> None:
+    app = object.__new__(TimmyNativeApp)
+    app.home = tmp_path
+
+    app._write_profile_env({
+        "WEBULL_APP_KEY": "key",
+        "WEBULL_APP_SECRET": "secret with spaces",
+        "WEBULL_ACCOUNT_ID": "account",
+    })
+
+    profile = tmp_path / ".timmy-profile.env"
+    assert profile.exists()
+    assert stat.S_IMODE(profile.stat().st_mode) == 0o600
+    content = profile.read_text(encoding="utf-8")
+    assert "WEBULL_APP_SECRET=\"secret with spaces\"" in content
 
 
 def test_futures_enable_switch_requires_configured_symbol(monkeypatch) -> None:

@@ -54,11 +54,13 @@ ENABLE_EQUITY_FRACTIONAL_TRADING=1
 
 2. Confirm the account/buying-power check succeeds from Timmy. If buying power is unavailable, live submission should be treated as blocked.
 
-3. Confirm Timmy has exactly one running process for the active `TIMMY_HOME`.
+3. To change accounts, use the native GUI account picker. Run `Broker Check`, choose the desired masked account label, then run `Broker Check` again before switching target back to `Live`.
 
-4. Confirm the current market session and quote freshness are valid for the symbols being traded.
+4. Confirm Timmy has exactly one running process for the active `TIMMY_HOME`.
 
-5. Confirm order sizing gates before market open:
+5. Confirm the current market session and quote freshness are valid for the symbols being traded.
+
+6. Confirm order sizing gates before market open:
 
 ```text
 MAX_POSITIONS
@@ -71,9 +73,9 @@ WEBULL_MAX_ORDER_QUANTITY
 MAX_ENTRY_CASH_PCT
 ```
 
-6. Confirm Timmy is producing executable plans. Scanning alone is not the same as order placement.
+7. Confirm Timmy is producing executable plans. Scanning alone is not the same as order placement.
 
-7. Confirm broker rejections are logged and reviewed before loosening any thresholds.
+8. Confirm broker rejections are logged and reviewed before loosening any thresholds.
 
 ## 3. Actual Trade Placement Workflow
 
@@ -273,3 +275,5 @@ Focused tabs should carry their own operational context:
 - `Audit`: audit-chain state, event totals, live/paper/rejected counts, and recent execution events.
 
 Use icons only where the command is obvious: run, live submit, stop, and power cycle. Keep text on higher-context actions such as scan, broker check, and route preview.
+
+Account switching is a GUI workflow. The account picker should show masked labels discovered from `Broker Check`, save the selected account locally, clear stale live previews, return execution to `Paper`, and require a fresh broker check before the user enables `Live` for the newly selected account.
