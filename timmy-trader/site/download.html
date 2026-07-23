@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Download Timmy for Linux and verify the package checksum.">
+    <title>Download Timmy for Linux</title>
+    <link rel="stylesheet" href="css/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html"><span class="brand-mark">T</span><span>Timmy</span></a>
+      <button class="icon-button" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <nav class="nav" id="site-nav" data-nav><a href="download.html">Download</a><a href="boilerplates.html">Boilerplates</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="legal.html">Legal</a></nav>
+    </header>
+    <main class="section">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Linux package</p>
+            <h1>Download Timmy.</h1>
+          </div>
+          <p>Install the desktop package, then open Timmy from the app menu. Broker credentials are entered inside Timmy's Setup tab, not on this website.</p>
+        </div>
+        <div class="download-panel">
+          <div class="card">
+            <h2>Debian package</h2>
+            <p>For Ubuntu, Debian, Linux Mint, Pop!_OS, and other Debian-style amd64 desktops.</p>
+            <div class="actions">
+              <a class="button" href="downloads/timmy-trader_0.1.0_amd64.deb" download>Download .deb</a>
+              <a class="button secondary" href="downloads/SHA256SUMS.txt">Checksum</a>
+            </div>
+          </div>
+          <div class="facts">
+            <div class="fact"><strong>File</strong><span>timmy-trader_0.1.0_amd64.deb</span></div>
+            <div class="fact"><strong>Release</strong><span>0.1.0</span></div>
+            <div class="fact"><strong>Architecture</strong><span>amd64</span></div>
+            <div class="fact"><strong>Built</strong><span>July 23, 2026</span></div>
+          </div>
+        </div>
+        <h2 style="margin-top: 34px;">Install</h2>
+        <pre class="terminal"><code>sha256sum -c SHA256SUMS.txt
+sudo apt install ./timmy-trader_0.1.0_amd64.deb
+timmy-trader</code></pre>
+        <p class="fineprint">Live brokerage depends on your broker permissions, account setup, buying power, market hours, and Timmy's own safety settings.</p>
+      </div>
+    </main>
+    <footer class="site-footer"><div class="footer-inner"><strong>Timmy by Black Lion Studios</strong><div class="footer-links"><a href="contact.html">Contact</a><a href="support.html">Support</a><a href="legal.html#privacy">Privacy</a><a href="legal.html#terms">Terms</a></div></div></footer>
+    <script src="js/site.js"></script>
+  </body>
+</html>

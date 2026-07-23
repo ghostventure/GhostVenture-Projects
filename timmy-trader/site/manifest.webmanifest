@@ -1,0 +1,8 @@
+{
+  "name": "Timmy",
+  "short_name": "Timmy",
+  "start_url": "index.html",
+  "display": "browser",
+  "background_color": "#f5f0e8",
+  "theme_color": "#111111"
+}

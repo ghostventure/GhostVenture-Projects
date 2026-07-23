@@ -116,6 +116,10 @@ make money without being reckless, clumsy, or wasteful.
 - `docs/boilerplates/live-guarded.env.example`: guarded live starter settings.
 - `docs/boilerplates/runtime-reliability.env.example`: watchdog and runtime
   reliability starter settings.
+- `site/`: public Timmy website with Linux download, support, FAQ, contact,
+  boilerplates, legal/risk/privacy pages, generated hero imagery, and Firebase
+  hosting config for the Timmy-like project ID found under the signed-in
+  `solidartentertainment@gmail.com` Firebase account.
 
 ## Verification Completed
 
@@ -129,6 +133,8 @@ make money without being reckless, clumsy, or wasteful.
 - Source-only mirror checks: runtime artifacts, caches, build output, local
   profiles, and credential files excluded.
 - Secret scan before push: clean.
+- Public site link and checksum checks: passed.
+- Public site desktop/mobile screenshot checks: passed.
 
 ## GitHub Commits
 
@@ -155,6 +161,7 @@ The following Timmy mirror commits were created on July 23, 2026:
 - `94caf93` - Streamline Timmy workflow tabs
 - `f694fb6` - Install Timmy trading desk upgrades
 - `a2831c3` - Upgrade Timmy account setup desk
+- Pending - Add Timmy public Linux download site
 
 ## Current Boundary
 
@@ -164,3 +171,11 @@ account, current buying power, a fresh account check, market-data freshness,
 valid risk limits, and live switches intentionally enabled. The repository and
 public mirror intentionally do not contain those live credentials or runtime
 state.
+
+## Public Website Boundary
+
+The public website intentionally serves only static site files, setup examples,
+and the Linux `.deb` download package. It does not publish `.env`, profile,
+broker token, account, journal, audit-key, crash-log, cache, build, or local
+runtime files. The contact form opens the user's mail client and does not
+collect broker credentials on the website.
