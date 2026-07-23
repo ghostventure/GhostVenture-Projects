@@ -65,8 +65,19 @@ class BotConfig:
     paper_simulation_min_scout_score: int
     market_data_provider: str
     market_data_max_age_minutes: int
+    market_data_fetch_timeout_seconds: int
+    market_data_fetch_workers: int
     watchlist_path: str | None
+    active_watchlist_path: str | None
     watchlist_template: str
+    enable_watchlist_rotation: bool
+    watchlist_universe: str
+    watchlist_universe_batch_size: int
+    watchlist_universe_refresh_hours: int
+    watchlist_rotation_candidates: set[str]
+    max_watchlist_symbols: int
+    min_watchlist_scout_score: int
+    quiet_watchlist_scout_score: int
     enable_crypto_trading: bool
     enable_futures_trading: bool
     enable_options_trading: bool
@@ -135,8 +146,19 @@ def load_config() -> BotConfig:
         paper_simulation_min_scout_score=int(os.getenv("PAPER_SIMULATION_MIN_SCOUT_SCORE", "40")),
         market_data_provider=os.getenv("MARKET_DATA_PROVIDER", "csv").lower(),
         market_data_max_age_minutes=int(os.getenv("MARKET_DATA_MAX_AGE_MINUTES", "15")),
+        market_data_fetch_timeout_seconds=int(os.getenv("MARKET_DATA_FETCH_TIMEOUT_SECONDS", "4")),
+        market_data_fetch_workers=int(os.getenv("MARKET_DATA_FETCH_WORKERS", "12")),
         watchlist_path=os.getenv("WATCHLIST_PATH") or None,
+        active_watchlist_path=os.getenv("ACTIVE_WATCHLIST_PATH") or None,
         watchlist_template=os.getenv("WATCHLIST_TEMPLATE", "equity"),
+        enable_watchlist_rotation=os.getenv("ENABLE_WATCHLIST_ROTATION", "0") == "1",
+        watchlist_universe=os.getenv("WATCHLIST_UNIVERSE", "custom").strip().lower(),
+        watchlist_universe_batch_size=int(os.getenv("WATCHLIST_UNIVERSE_BATCH_SIZE", "100")),
+        watchlist_universe_refresh_hours=int(os.getenv("WATCHLIST_UNIVERSE_REFRESH_HOURS", "24")),
+        watchlist_rotation_candidates=_csv_set(os.getenv("WATCHLIST_ROTATION_CANDIDATES")),
+        max_watchlist_symbols=int(os.getenv("MAX_WATCHLIST_SYMBOLS", "12")),
+        min_watchlist_scout_score=int(os.getenv("MIN_WATCHLIST_SCOUT_SCORE", "42")),
+        quiet_watchlist_scout_score=int(os.getenv("QUIET_WATCHLIST_SCOUT_SCORE", "30")),
         enable_crypto_trading=os.getenv("ENABLE_CRYPTO_TRADING", "0") == "1",
         enable_futures_trading=os.getenv("ENABLE_FUTURES_TRADING", "0") == "1",
         enable_options_trading=os.getenv("ENABLE_OPTIONS_TRADING", "0") == "1",

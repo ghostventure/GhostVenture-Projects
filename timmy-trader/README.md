@@ -198,6 +198,22 @@ timmy watchlist-init --template futures-watch --out watchlist-futures.txt
 
 The native app uses `WATCHLIST_TEMPLATE` when it needs to create a missing watchlist file. Available templates are `equity`, `crypto`, `commodity-etf`, `index-proxy`, and `futures-watch`.
 
+Dynamic watchlist rotation:
+
+```text
+ENABLE_WATCHLIST_ROTATION=1
+WATCHLIST_UNIVERSE=all-us
+WATCHLIST_UNIVERSE_BATCH_SIZE=250
+WATCHLIST_UNIVERSE_REFRESH_HOURS=24
+WATCHLIST_ROTATION_CANDIDATES=SPY,QQQ,IWM,DIA,AAPL,MSFT,NVDA,AMD,TSLA,META,GOOGL,AMZN,AVGO,NFLX,COST,JPM,XOM,UNH,LLY,ORCL,CRM,ADBE,INTC,MU,SMH,XLK,XLF,XLE,VTI
+ACTIVE_WATCHLIST_PATH=active-watchlist.txt
+MAX_WATCHLIST_SYMBOLS=12
+MIN_WATCHLIST_SCOUT_SCORE=42
+QUIET_WATCHLIST_SCOUT_SCORE=30
+```
+
+When enabled with a live market-data provider, Timmy fetches the current custom active list plus the candidate pool, scores every loaded symbol, keeps names showing movement, removes quiet low-ranked names, and writes the rotated active list to `ACTIVE_WATCHLIST_PATH`. Timmy then writes market data for that active custom list, and that is the list the strategy can trade from. `watchlist.txt` remains the seed list. Set `WATCHLIST_UNIVERSE=all-us` to refresh the current U.S. listed-symbol universe from Nasdaq Trader and scan it in rotating batches. The active list stays capped by `MAX_WATCHLIST_SYMBOLS`, while `WATCHLIST_UNIVERSE_BATCH_SIZE` controls how many new market symbols are inspected per refresh cycle. Any symbol that may become tradable must also be permitted by `WEBULL_SYMBOL_WHITELIST`; leaving that whitelist blank allows the rotated universe to create order plans when all other risk gates pass.
+
 Fetch delayed daily bars into Timmy's CSV format:
 
 ```bash

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -12,33 +13,42 @@ from .models import Candle
 STOOQ_DAILY_URL = "https://stooq.com/q/d/l/"
 
 
-def fetch_stooq_daily(symbols: list[str], days: int = 90, timeout: int = 10) -> dict[str, list[Candle]]:
-    bars: dict[str, list[Candle]] = {}
-    for symbol in symbols:
-        candles = _fetch_one_stooq_symbol(symbol, timeout=timeout)
-        if candles:
-            bars[symbol.upper()] = candles[-days:]
-    return bars
+def fetch_stooq_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
+    return _fetch_parallel(symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, timeout=timeout), days, max_workers)
 
 
-def fetch_yahoo_daily(symbols: list[str], days: int = 90, timeout: int = 10) -> dict[str, list[Candle]]:
-    bars: dict[str, list[Candle]] = {}
-    for symbol in symbols:
-        candles = _fetch_one_yahoo_symbol(symbol, days=days, timeout=timeout)
-        if candles:
-            bars[symbol.upper()] = candles[-days:]
-    return bars
+def fetch_yahoo_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
+    return _fetch_parallel(symbols, lambda symbol: _fetch_one_yahoo_symbol(symbol, days=days, timeout=timeout), days, max_workers)
 
 
-def fetch_daily_bars(provider: str, symbols: list[str], days: int = 90, timeout: int = 10) -> dict[str, list[Candle]]:
+def fetch_daily_bars(provider: str, symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
     if provider == "stooq":
-        bars = fetch_stooq_daily(symbols, days=days, timeout=timeout)
+        bars = fetch_stooq_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
         if bars:
             return bars
-        return fetch_yahoo_daily(symbols, days=days, timeout=timeout)
+        return fetch_yahoo_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
     if provider == "yahoo":
-        return fetch_yahoo_daily(symbols, days=days, timeout=timeout)
+        return fetch_yahoo_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
     raise ValueError(f"Unsupported market data provider: {provider}")
+
+
+def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) -> dict[str, list[Candle]]:
+    bars: dict[str, list[Candle]] = {}
+    clean_symbols = sorted(dict.fromkeys(symbol.upper() for symbol in symbols if symbol.strip()))
+    if not clean_symbols:
+        return bars
+    workers = max(1, min(max_workers, len(clean_symbols)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_by_symbol = {executor.submit(fetch_one, symbol): symbol for symbol in clean_symbols}
+        for future in as_completed(future_by_symbol):
+            symbol = future_by_symbol[future]
+            try:
+                candles = future.result()
+            except Exception:
+                continue
+            if candles:
+                bars[symbol] = candles[-days:]
+    return bars
 
 
 def _fetch_one_stooq_symbol(symbol: str, timeout: int = 10) -> list[Candle]:

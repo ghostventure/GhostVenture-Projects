@@ -9,6 +9,11 @@ execution-events.jsonl
 paper-training-summary.json
 timmy-crash.log
 timmy-ui-settings.json
+timmy-watchlist-universe.txt
+timmy-watchlist-rotation.json
+active-watchlist.txt
+active-watchlist-webull.csv
+active-watchlist-webull.txt
 .timmy-audit-key
 timmy.lock
 .tmp/

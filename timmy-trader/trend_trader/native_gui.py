@@ -22,12 +22,13 @@ from .config import BotConfig, load_config
 from .data import load_csv_bars, write_csv_bars
 from .market_calendar import market_session, seconds_until_next_open
 from .market_data import fetch_daily_bars
+from .market_universe import fetch_us_listed_symbols
 from .models import OrderPlan
 from .readiness import readiness_flags
 from .risk import create_order_plan
 from .sample_data import write_sample_bars
 from .strategy import rank_signals
-from .watchlist import load_watchlist, write_watchlist_template
+from .watchlist import DEFAULT_ROTATION_CANDIDATES, load_watchlist, rotate_watchlist, write_watchlist, write_watchlist_template
 
 AUTO_REFRESH_MS = max(30, int(os.getenv("TIMMY_DASHBOARD_REFRESH_SECONDS", "60"))) * 1000
 ACCOUNT_REFRESH_MS = max(5, int(os.getenv("TIMMY_ACCOUNT_REFRESH_MINUTES", "15"))) * 60 * 1000
@@ -39,11 +40,14 @@ class TimmyNativeApp:
         self.home = home
         self.data_file = home / "examples" / "sample_bars.csv"
         self.watchlist_path = home / "watchlist.txt"
+        self.active_watchlist_path = home / "active-watchlist.txt"
         self.journal_path = home / "trade-journal.jsonl"
         self.event_log_path = home / "execution-events.jsonl"
         self.paper_research_path = home / "paper-training-summary.json"
         self.audit_key_path = home / ".timmy-audit-key"
         self.settings_path = home / "timmy-ui-settings.json"
+        self.universe_path = home / "timmy-watchlist-universe.txt"
+        self.rotation_state_path = home / "timmy-watchlist-rotation.json"
         self.crash_log_path = home / "timmy-crash.log"
         self.config: BotConfig | None = None
         self.config_error: str | None = None
@@ -998,11 +1002,118 @@ class TimmyNativeApp:
                 return
         watchlist_path = self._runtime_path(config.watchlist_path or self.watchlist_path)
         write_watchlist_template(watchlist_path, config.watchlist_template)
+        if config.enable_watchlist_rotation:
+            seed_symbols = load_watchlist(watchlist_path, config.symbol_whitelist)
+            active_watchlist_path = self._runtime_path(config.active_watchlist_path or self.active_watchlist_path)
+            symbols = load_watchlist(active_watchlist_path, set(seed_symbols))
+            candidates = self._rotation_candidates(config, symbols)
+            bars = fetch_daily_bars(
+                config.market_data_provider,
+                candidates,
+                timeout=config.market_data_fetch_timeout_seconds,
+                max_workers=config.market_data_fetch_workers,
+            )
+            if bars:
+                candidate_signals = rank_signals(bars, config)
+                rotated = rotate_watchlist(
+                    symbols,
+                    candidate_signals,
+                    set(candidates),
+                    max_symbols=config.max_watchlist_symbols,
+                    min_scout_score=config.min_watchlist_scout_score,
+                    quiet_scout_score=config.quiet_watchlist_scout_score,
+                )
+                if rotated != symbols:
+                    write_watchlist(active_watchlist_path, rotated)
+                    symbols = rotated
+                self._write_watchlist_exports(rotated)
+                selected_bars = {symbol: bars[symbol] for symbol in symbols if symbol in bars}
+                if selected_bars:
+                    write_csv_bars(self.data_file, selected_bars)
+                    self.status_bar.configure(text=f"Market data refreshed for {len(selected_bars)} custom watchlist symbols.")
+                return
         symbols = load_watchlist(watchlist_path, config.symbol_whitelist)
-        bars = fetch_daily_bars(config.market_data_provider, symbols)
+        bars = fetch_daily_bars(
+            config.market_data_provider,
+            symbols,
+            timeout=config.market_data_fetch_timeout_seconds,
+            max_workers=config.market_data_fetch_workers,
+        )
         if bars:
             write_csv_bars(self.data_file, bars)
             self.status_bar.configure(text=f"Market data refreshed for {len(bars)} symbols.")
+
+    def _write_watchlist_exports(self, symbols: list[str]) -> None:
+        clean = sorted(dict.fromkeys(symbol.strip().upper() for symbol in symbols if symbol.strip()))
+        try:
+            (self.home / "active-watchlist-webull.txt").write_text("\n".join(clean) + "\n", encoding="utf-8")
+            csv_lines = ["Symbol", *clean]
+            (self.home / "active-watchlist-webull.csv").write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+    def _rotation_candidates(self, config: BotConfig, current_symbols: list[str]) -> list[str]:
+        if config.watchlist_universe == "all-us":
+            universe = self._load_market_universe(config)
+            batch = self._next_universe_batch(universe, config.watchlist_universe_batch_size)
+            return sorted(set(current_symbols) | set(batch))
+        return sorted(
+            set(current_symbols)
+            | set(DEFAULT_ROTATION_CANDIDATES)
+            | set(config.watchlist_rotation_candidates)
+        )
+
+    def _load_market_universe(self, config: BotConfig) -> list[str]:
+        stale = True
+        if self.universe_path.exists():
+            age_seconds = datetime.now().timestamp() - self.universe_path.stat().st_mtime
+            stale = age_seconds >= max(1, config.watchlist_universe_refresh_hours) * 3600
+        if stale:
+            try:
+                symbols = fetch_us_listed_symbols(timeout=10)
+                if symbols:
+                    self.universe_path.write_text("\n".join(symbols) + "\n", encoding="utf-8")
+                    return symbols
+            except Exception as exc:
+                self.status_bar.configure(text=f"Universe refresh skipped: {exc}")
+        if self.universe_path.exists():
+            return load_watchlist(self.universe_path, None)
+        return sorted(DEFAULT_ROTATION_CANDIDATES)
+
+    def _next_universe_batch(self, universe: list[str], batch_size: int) -> list[str]:
+        if not universe:
+            return []
+        limit = max(1, min(batch_size, len(universe)))
+        cursor = self._rotation_cursor()
+        start = cursor % len(universe)
+        end = start + limit
+        if end <= len(universe):
+            batch = universe[start:end]
+        else:
+            batch = universe[start:] + universe[: end - len(universe)]
+        self._save_rotation_cursor((start + limit) % len(universe), len(universe))
+        return batch
+
+    def _rotation_cursor(self) -> int:
+        try:
+            state = json.loads(self.rotation_state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return 0
+        try:
+            return int(state.get("cursor", 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def _save_rotation_cursor(self, cursor: int, universe_size: int) -> None:
+        state = {
+            "cursor": cursor,
+            "universe_size": universe_size,
+            "saved_at": datetime.now().isoformat(),
+        }
+        try:
+            self.rotation_state_path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+        except OSError:
+            pass
 
     def _runtime_path(self, path: str | Path) -> Path:
         candidate = Path(path).expanduser()
@@ -1835,8 +1946,19 @@ class TimmyNativeApp:
                 paper_simulation_min_scout_score=40,
                 market_data_provider="csv",
                 market_data_max_age_minutes=15,
+                market_data_fetch_timeout_seconds=4,
+                market_data_fetch_workers=12,
                 watchlist_path=None,
+                active_watchlist_path=None,
                 watchlist_template="equity",
+                enable_watchlist_rotation=False,
+                watchlist_universe="custom",
+                watchlist_universe_batch_size=100,
+                watchlist_universe_refresh_hours=24,
+                watchlist_rotation_candidates=set(),
+                max_watchlist_symbols=12,
+                min_watchlist_scout_score=42,
+                quiet_watchlist_scout_score=30,
                 enable_crypto_trading=False,
                 enable_futures_trading=False,
                 enable_options_trading=False,
