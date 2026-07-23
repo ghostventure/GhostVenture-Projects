@@ -41,6 +41,9 @@ class TimmyNativeApp:
         self.data_file = home / "examples" / "sample_bars.csv"
         self.watchlist_path = home / "watchlist.txt"
         self.active_watchlist_path = home / "active-watchlist.txt"
+        self.movement_watchlist_path = home / "movement-watchlist.txt"
+        self.trade_ready_watchlist_path = home / "trade-ready-watchlist.txt"
+        self.quiet_watchlist_path = home / "quiet-watchlist.txt"
         self.journal_path = home / "trade-journal.jsonl"
         self.event_log_path = home / "execution-events.jsonl"
         self.paper_research_path = home / "paper-training-summary.json"
@@ -1006,6 +1009,7 @@ class TimmyNativeApp:
             seed_symbols = load_watchlist(watchlist_path, config.symbol_whitelist)
             active_watchlist_path = self._runtime_path(config.active_watchlist_path or self.active_watchlist_path)
             symbols = load_watchlist(active_watchlist_path, set(seed_symbols))
+            previous_symbols = list(symbols)
             candidates = self._rotation_candidates(config, symbols)
             bars = fetch_daily_bars(
                 config.market_data_provider,
@@ -1026,7 +1030,7 @@ class TimmyNativeApp:
                 if rotated != symbols:
                     write_watchlist(active_watchlist_path, rotated)
                     symbols = rotated
-                self._write_watchlist_exports(rotated)
+                self._write_generated_watchlists(config, candidate_signals, previous_symbols, rotated)
                 selected_bars = {symbol: bars[symbol] for symbol in symbols if symbol in bars}
                 if selected_bars:
                     write_csv_bars(self.data_file, selected_bars)
@@ -1043,12 +1047,55 @@ class TimmyNativeApp:
             write_csv_bars(self.data_file, bars)
             self.status_bar.configure(text=f"Market data refreshed for {len(bars)} symbols.")
 
-    def _write_watchlist_exports(self, symbols: list[str]) -> None:
+    def _write_generated_watchlists(
+        self,
+        config: BotConfig,
+        signals,
+        previous_symbols: list[str],
+        active_symbols: list[str],
+    ) -> None:
+        active = set(symbol.upper() for symbol in active_symbols)
+        previous = set(symbol.upper() for symbol in previous_symbols)
+        ranked = sorted(
+            signals,
+            key=lambda signal: (signal.scout_score, signal.sensible_score, signal.score),
+            reverse=True,
+        )
+        movement = [
+            signal.symbol.upper()
+            for signal in ranked
+            if signal.scout_score >= config.min_watchlist_scout_score
+        ][: max(1, config.max_movement_watchlist_symbols)]
+        trade_ready = [
+            signal.symbol.upper()
+            for signal in ranked
+            if signal.symbol.upper() in active
+            and signal.decision == "eligible"
+            and signal.sensible_action == "trade"
+        ]
+        quiet = sorted(
+            signal.symbol.upper()
+            for signal in ranked
+            if signal.symbol.upper() in previous - active
+            and signal.scout_score < config.quiet_watchlist_scout_score
+        )
+
+        outputs = (
+            (self._runtime_path(config.active_watchlist_path or self.active_watchlist_path), active_symbols, "active-watchlist"),
+            (self._runtime_path(config.movement_watchlist_path or self.movement_watchlist_path), movement, "movement-watchlist"),
+            (self._runtime_path(config.trade_ready_watchlist_path or self.trade_ready_watchlist_path), trade_ready, "trade-ready-watchlist"),
+            (self._runtime_path(config.quiet_watchlist_path or self.quiet_watchlist_path), quiet, "quiet-watchlist"),
+        )
+        for path, symbols, export_name in outputs:
+            write_watchlist(path, symbols)
+            self._write_watchlist_exports(symbols, export_name)
+
+    def _write_watchlist_exports(self, symbols: list[str], export_name: str = "active-watchlist") -> None:
         clean = sorted(dict.fromkeys(symbol.strip().upper() for symbol in symbols if symbol.strip()))
         try:
-            (self.home / "active-watchlist-webull.txt").write_text("\n".join(clean) + "\n", encoding="utf-8")
+            (self.home / f"{export_name}-webull.txt").write_text("\n".join(clean) + "\n", encoding="utf-8")
             csv_lines = ["Symbol", *clean]
-            (self.home / "active-watchlist-webull.csv").write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
+            (self.home / f"{export_name}-webull.csv").write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
         except OSError:
             pass
 
@@ -1950,6 +1997,9 @@ class TimmyNativeApp:
                 market_data_fetch_workers=12,
                 watchlist_path=None,
                 active_watchlist_path=None,
+                movement_watchlist_path=None,
+                trade_ready_watchlist_path=None,
+                quiet_watchlist_path=None,
                 watchlist_template="equity",
                 enable_watchlist_rotation=False,
                 watchlist_universe="custom",
@@ -1957,6 +2007,7 @@ class TimmyNativeApp:
                 watchlist_universe_refresh_hours=24,
                 watchlist_rotation_candidates=set(),
                 max_watchlist_symbols=12,
+                max_movement_watchlist_symbols=50,
                 min_watchlist_scout_score=42,
                 quiet_watchlist_scout_score=30,
                 enable_crypto_trading=False,

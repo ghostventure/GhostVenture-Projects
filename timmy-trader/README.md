@@ -207,12 +207,24 @@ WATCHLIST_UNIVERSE_BATCH_SIZE=250
 WATCHLIST_UNIVERSE_REFRESH_HOURS=24
 WATCHLIST_ROTATION_CANDIDATES=SPY,QQQ,IWM,DIA,AAPL,MSFT,NVDA,AMD,TSLA,META,GOOGL,AMZN,AVGO,NFLX,COST,JPM,XOM,UNH,LLY,ORCL,CRM,ADBE,INTC,MU,SMH,XLK,XLF,XLE,VTI
 ACTIVE_WATCHLIST_PATH=active-watchlist.txt
+MOVEMENT_WATCHLIST_PATH=movement-watchlist.txt
+TRADE_READY_WATCHLIST_PATH=trade-ready-watchlist.txt
+QUIET_WATCHLIST_PATH=quiet-watchlist.txt
 MAX_WATCHLIST_SYMBOLS=12
+MAX_MOVEMENT_WATCHLIST_SYMBOLS=50
 MIN_WATCHLIST_SCOUT_SCORE=42
 QUIET_WATCHLIST_SCOUT_SCORE=30
 ```
 
 When enabled with a live market-data provider, Timmy fetches the current custom active list plus the candidate pool, scores every loaded symbol, keeps names showing movement, removes quiet low-ranked names, and writes the rotated active list to `ACTIVE_WATCHLIST_PATH`. Timmy then writes market data for that active custom list, and that is the list the strategy can trade from. `watchlist.txt` remains the seed list. Set `WATCHLIST_UNIVERSE=all-us` to refresh the current U.S. listed-symbol universe from Nasdaq Trader and scan it in rotating batches. The active list stays capped by `MAX_WATCHLIST_SYMBOLS`, while `WATCHLIST_UNIVERSE_BATCH_SIZE` controls how many new market symbols are inspected per refresh cycle. Any symbol that may become tradable must also be permitted by `WEBULL_SYMBOL_WHITELIST`; leaving that whitelist blank allows the rotated universe to create order plans when all other risk gates pass.
+
+Generated watchlists are updated together on every rotation cycle:
+
+- `active-watchlist.txt`: the custom list Timmy trades/scouts from.
+- `movement-watchlist.txt`: symbols with enough activity to keep an eye on.
+- `trade-ready-watchlist.txt`: active symbols whose strategy signal is eligible/trade before broker/risk submission checks.
+- `quiet-watchlist.txt`: symbols removed from active rotation because movement fell below the quiet threshold.
+- Matching `*-webull.txt` and `*-webull.csv` export files are written beside them for visibility or manual import workflows.
 
 Fetch delayed daily bars into Timmy's CSV format:
 
