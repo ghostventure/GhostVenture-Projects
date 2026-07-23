@@ -18,7 +18,7 @@ Webull's official SDK handles signatures and token management from App Key and A
 
 ## 2. Webull Profile In Timmy
 
-For normal setup, open Timmy and use `Profile` in the Account controls.
+For normal setup, open Timmy and use the `Setup` tab. The `Profile` button in the Account controls also opens this same setup screen.
 
 Enter:
 
@@ -29,7 +29,7 @@ Enter:
 - API Endpoint
 - live-order switches
 
-Save the profile, then run `Broker Check`. Timmy stores this profile locally in `.timmy-profile.env` with restricted file permissions and does not commit it to source control. After a profile save or account change, Timmy returns to `Paper` and requires a fresh `Broker Check` before `Live` can be enabled.
+Save the profile, then run `Broker Check` from the same screen. Timmy stores this profile locally in `.timmy-profile.env` with restricted file permissions and does not commit it to source control. Timmy automatically loads that profile for Webull account checks, buying-power refresh, previews, live submits, and watchlist sync. After a profile save or account change, Timmy returns to `Paper` and requires a fresh `Broker Check` before `Live` can be enabled.
 
 Do not paste broker usernames, passwords, MFA codes, App Secrets, or tokens into chat.
 

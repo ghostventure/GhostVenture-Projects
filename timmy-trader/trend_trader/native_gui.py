@@ -101,6 +101,15 @@ class TimmyNativeApp:
         self.account_lane_var = tk.StringVar(value="I-Cash")
         self.webull_account_choice_var = tk.StringVar(value="Configured account")
         self.selected_webull_account_id_var = tk.StringVar(value="")
+        self.profile_app_key_var = tk.StringVar(value="")
+        self.profile_app_secret_var = tk.StringVar(value="")
+        self.profile_account_id_var = tk.StringVar(value="")
+        self.profile_region_var = tk.StringVar(value="us")
+        self.profile_endpoint_var = tk.StringVar(value="")
+        self.profile_live_orders_var = tk.BooleanVar(value=False)
+        self.profile_require_preview_var = tk.BooleanVar(value=True)
+        self.profile_trader_live_var = tk.BooleanVar(value=False)
+        self.profile_auto_live_var = tk.BooleanVar(value=False)
         self.trading_style_var = tk.StringVar(value="Adaptive")
         self.pattern_vars = {
             "breakout": tk.BooleanVar(value=True),
@@ -312,7 +321,7 @@ class TimmyNativeApp:
                              justify="left", anchor="w", font=("Sans", 8, "bold"))
         brand_sub.pack(anchor="w", pady=(1, 0))
 
-        nav_items = ["Overview", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit"]
+        nav_items = ["Overview", "Setup", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit"]
         nav = tk.Frame(rail, bg=self.colors["rail"])
         nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(18, 0))
         for item in nav_items:
@@ -524,7 +533,7 @@ class TimmyNativeApp:
         self.profile_button = tk.Button(
             lane_radios,
             text="Profile",
-            command=self.open_webull_profile,
+            command=lambda: self._show_tab("Setup"),
             bg=self.colors["button"],
             fg=self.colors["button_text"],
             activebackground=self.colors["panel_2"],
@@ -672,6 +681,93 @@ class TimmyNativeApp:
                                      font=("Monospace", 10), wrap="word")
         self.universe_text.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
 
+        setup_panel = self._panel(body)
+        self.setup_panel = setup_panel
+        setup_panel.columnconfigure(0, weight=3)
+        setup_panel.columnconfigure(1, weight=2)
+        setup_panel.rowconfigure(1, weight=1)
+        self._section_header(setup_panel, "WEBULL SETUP", "Connection Profile", None, None)
+        profile_form = tk.Frame(setup_panel, bg=self.colors["panel"])
+        profile_form.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        profile_form.columnconfigure(1, weight=1)
+        setup_status = tk.Frame(setup_panel, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+        setup_status.grid(row=1, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+        setup_status.columnconfigure(0, weight=1)
+
+        row = 0
+        for label, variable, secret in (
+            ("App Key", self.profile_app_key_var, True),
+            ("App Secret", self.profile_app_secret_var, True),
+            ("Default Account", self.profile_account_id_var, True),
+            ("Region", self.profile_region_var, False),
+            ("API Endpoint", self.profile_endpoint_var, False),
+        ):
+            self._profile_field(profile_form, row, label, variable, secret=secret)
+            row += 1
+
+        switch_box = tk.Frame(profile_form, bg=self.colors["panel"])
+        switch_box.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 8))
+        switch_box.columnconfigure((0, 1), weight=1)
+        for idx, (label, variable) in enumerate((
+            ("Live mode", self.profile_trader_live_var),
+            ("Allow live orders", self.profile_live_orders_var),
+            ("Require preview", self.profile_require_preview_var),
+            ("Auto live at open", self.profile_auto_live_var),
+        )):
+            tk.Checkbutton(
+                switch_box,
+                text=label,
+                variable=variable,
+                bg=self.colors["panel"],
+                fg=self.colors["text"],
+                selectcolor=self.colors["panel_2"],
+                activebackground=self.colors["panel"],
+                activeforeground=self.colors["text"],
+                font=("Sans", 9),
+                anchor="w",
+                justify="left",
+            ).grid(row=idx // 2, column=idx % 2, sticky="ew", padx=(0, 10), pady=2)
+        row += 1
+
+        account_select = tk.Frame(profile_form, bg=self.colors["panel"])
+        account_select.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(6, 8))
+        account_select.columnconfigure(1, weight=1)
+        tk.Label(account_select, text="Account", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="w", padx=(0, 10))
+        self.setup_account_menu = self._account_option_menu(account_select)
+        self.setup_account_menu.grid(row=0, column=1, sticky="ew")
+        row += 1
+
+        setup_actions = tk.Frame(profile_form, bg=self.colors["panel"])
+        setup_actions.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        setup_actions.columnconfigure((0, 1, 2), weight=1)
+        self.setup_save_button = self._button(setup_actions, "Save Profile", self.save_webull_profile_from_setup, accent="teal")
+        self.setup_save_button.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.setup_check_button = self._button(
+            setup_actions,
+            "Broker Check",
+            lambda: self._run_action("Checking Webull", self.webull_check),
+            accent="gold",
+        )
+        self.setup_check_button.grid(row=0, column=1, sticky="ew", padx=8)
+        self.setup_live_button = self._button(setup_actions, "Use Live", self.use_live_from_setup)
+        self.setup_live_button.grid(row=0, column=2, sticky="ew", padx=(8, 0))
+        self.busy_controls.extend([self.setup_save_button, self.setup_check_button, self.setup_live_button])
+
+        self.setup_status_text = tk.Text(
+            setup_status,
+            height=18,
+            bg=self.colors["panel_2"],
+            fg=self.colors["text"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            padx=14,
+            pady=12,
+            font=("Monospace", 10),
+            wrap="word",
+        )
+        self.setup_status_text.grid(row=0, column=0, sticky="nsew")
+
         right = tk.Frame(body, bg=self.colors["bg"])
         self.right_panel = right
         right.grid(row=0, column=1, sticky="nsew")
@@ -749,6 +845,7 @@ class TimmyNativeApp:
             self.body.grid_configure(pady=(24, 24))
         self.signals_panel.grid_remove()
         self.universe_panel.grid_remove()
+        self.setup_panel.grid_remove()
         self.right_panel.grid_remove()
         for panel in (self.decision_panel, self.order_panel, self.broker_panel, self.journal_panel):
             panel.grid_remove()
@@ -767,6 +864,11 @@ class TimmyNativeApp:
             self.order_panel.grid(row=1, column=0, sticky="ew", pady=(0, 18))
             self.broker_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 18))
             self.journal_panel.grid(row=3, column=0, sticky="nsew")
+        elif tab == "Setup":
+            self.body.columnconfigure(0, weight=1)
+            self._sync_profile_form(self.config or self._load_config_safe())
+            self._render_setup_status()
+            self.setup_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         elif tab == "Universe":
             self.body.columnconfigure(0, weight=1)
             self.universe_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
@@ -787,6 +889,43 @@ class TimmyNativeApp:
             panel.grid(row=0, column=0, sticky="nsew", pady=0)
 
         self.status_bar.configure(text=f"{tab} tab active.")
+
+    def _profile_field(self, parent: tk.Widget, row: int, label: str, variable: tk.StringVar, secret: bool = False) -> None:
+        tk.Label(parent, text=label, bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold"), anchor="w").grid(row=row, column=0, sticky="w", pady=5, padx=(0, 12))
+        tk.Entry(
+            parent,
+            textvariable=variable,
+            bg=self.colors["entry"],
+            fg=self.colors["text"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            show="*" if secret else "",
+            highlightbackground=self.colors["line"],
+            highlightthickness=1,
+            font=("Sans", 10),
+        ).grid(row=row, column=1, sticky="ew", pady=5, ipady=5)
+
+    def _account_option_menu(self, parent: tk.Widget) -> tk.OptionMenu:
+        menu = tk.OptionMenu(parent, self.webull_account_choice_var, "Configured account")
+        menu.configure(
+            bg=self.colors["button"],
+            fg=self.colors["button_text"],
+            activebackground=self.colors["panel_2"],
+            activeforeground=self.colors["text"],
+            relief="flat",
+            font=("Sans", 8, "bold"),
+            highlightthickness=1,
+            highlightbackground=self.colors["line"],
+        )
+        menu["menu"].configure(
+            bg=self.colors["panel_2"],
+            fg=self.colors["text"],
+            activebackground=self.colors["selected"],
+            activeforeground=self.colors["selected_text"],
+            font=("Sans", 9),
+        )
+        return menu
 
     def _set_nav_active(self, active: str) -> None:
         for label, button in self.nav_buttons.items():
@@ -1074,40 +1213,13 @@ class TimmyNativeApp:
         if not app_key or not app_secret:
             messagebox.showerror("Webull Profile", "App Key and App Secret are required.")
             return
-        profile = {
-            "WEBULL_APP_KEY": app_key,
-            "WEBULL_APP_SECRET": app_secret,
-            "WEBULL_ACCOUNT_ID": account_id,
-            "WEBULL_REGION": values["WEBULL_REGION"].get().strip() or "us",
-            "WEBULL_API_ENDPOINT": values["WEBULL_API_ENDPOINT"].get().strip(),
-            "WEBULL_ENABLE_LIVE_ORDERS": "1" if values["WEBULL_ENABLE_LIVE_ORDERS"].get() else "0",
-            "WEBULL_REQUIRE_PREVIEW": "1" if values["WEBULL_REQUIRE_PREVIEW"].get() else "0",
-            "TRADER_MODE": "live" if values["TRADER_LIVE"].get() else "paper",
-            "TRADER_LIVE": "1" if values["TRADER_LIVE"].get() else "0",
-            "AUTO_START_LIVE_ON_MARKET_OPEN": "1" if values["AUTO_START_LIVE_ON_MARKET_OPEN"].get() else "0",
-        }
+        profile = self._profile_payload_from_values(values)
         try:
             self._write_profile_env(profile)
         except OSError as exc:
             messagebox.showerror("Webull Profile", f"Profile save failed: {exc}")
             return
-        os.environ.update(profile)
-        if account_id:
-            self.selected_webull_account_id_var.set(account_id)
-        self.previewed_order_fingerprints.clear()
-        self.trade_cash_snapshot = ("-", "Run Broker Check")
-        self.trade_cash_value = None
-        self.account_snapshot = ("Profile saved", "Run Broker Check")
-        self.execution_target_var.set("Paper")
-        self.config = self._runtime_config(self._load_config_safe())
-        self._save_runtime_settings()
-        self._render_status()
-        self._render_broker_summary()
-        self._set_text(
-            self.broker_text,
-            "Webull profile saved locally.\n\nRun Broker Check to verify the account and buying power before enabling Live.",
-        )
-        self.status_bar.configure(text="Webull profile saved. Broker Check required before Live.")
+        self._apply_saved_profile(profile, account_id)
         dialog.destroy()
 
     def _write_profile_env(self, profile: dict[str, str]) -> None:
@@ -1128,6 +1240,122 @@ class TimmyNativeApp:
     def _env_quote(value: str) -> str:
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
+
+    def save_webull_profile_from_setup(self) -> None:
+        values = {
+            "WEBULL_APP_KEY": self.profile_app_key_var,
+            "WEBULL_APP_SECRET": self.profile_app_secret_var,
+            "WEBULL_ACCOUNT_ID": self.profile_account_id_var,
+            "WEBULL_REGION": self.profile_region_var,
+            "WEBULL_API_ENDPOINT": self.profile_endpoint_var,
+            "WEBULL_ENABLE_LIVE_ORDERS": self.profile_live_orders_var,
+            "WEBULL_REQUIRE_PREVIEW": self.profile_require_preview_var,
+            "TRADER_LIVE": self.profile_trader_live_var,
+            "AUTO_START_LIVE_ON_MARKET_OPEN": self.profile_auto_live_var,
+        }
+        app_key = values["WEBULL_APP_KEY"].get().strip()
+        app_secret = values["WEBULL_APP_SECRET"].get().strip()
+        account_id = values["WEBULL_ACCOUNT_ID"].get().strip()
+        if not app_key or not app_secret:
+            self.status_bar.configure(text="Webull profile needs App Key and App Secret.")
+            messagebox.showerror("Webull Profile", "App Key and App Secret are required.")
+            return
+        profile = self._profile_payload_from_values(values)
+        try:
+            self._write_profile_env(profile)
+        except OSError as exc:
+            self.status_bar.configure(text=f"Profile save failed: {exc}")
+            messagebox.showerror("Webull Profile", f"Profile save failed: {exc}")
+            return
+        self._apply_saved_profile(profile, account_id)
+
+    def use_live_from_setup(self) -> None:
+        self.webull_account_toggle_var.set(True)
+        self._toggle_webull_account_target()
+        self._render_setup_status()
+
+    def _profile_payload_from_values(self, values: dict[str, tk.Variable]) -> dict[str, str]:
+        return {
+            "WEBULL_APP_KEY": values["WEBULL_APP_KEY"].get().strip(),
+            "WEBULL_APP_SECRET": values["WEBULL_APP_SECRET"].get().strip(),
+            "WEBULL_ACCOUNT_ID": values["WEBULL_ACCOUNT_ID"].get().strip(),
+            "WEBULL_REGION": values["WEBULL_REGION"].get().strip() or "us",
+            "WEBULL_API_ENDPOINT": values["WEBULL_API_ENDPOINT"].get().strip(),
+            "WEBULL_ENABLE_LIVE_ORDERS": "1" if values["WEBULL_ENABLE_LIVE_ORDERS"].get() else "0",
+            "WEBULL_REQUIRE_PREVIEW": "1" if values["WEBULL_REQUIRE_PREVIEW"].get() else "0",
+            "TRADER_MODE": "live" if values["TRADER_LIVE"].get() else "paper",
+            "TRADER_LIVE": "1" if values["TRADER_LIVE"].get() else "0",
+            "AUTO_START_LIVE_ON_MARKET_OPEN": "1" if values["AUTO_START_LIVE_ON_MARKET_OPEN"].get() else "0",
+        }
+
+    def _apply_saved_profile(self, profile: dict[str, str], account_id: str) -> None:
+        os.environ.update(profile)
+        if account_id:
+            self.selected_webull_account_id_var.set(account_id)
+        self.previewed_order_fingerprints.clear()
+        self.trade_cash_snapshot = ("-", "Run Broker Check")
+        self.trade_cash_value = None
+        self.account_snapshot = ("Profile saved", "Run Broker Check")
+        self.execution_target_var.set("Paper")
+        self.config = self._runtime_config(self._load_config_safe())
+        self._sync_profile_form(self.config)
+        self._save_runtime_settings()
+        self._render_status()
+        self._render_broker_summary()
+        self._render_setup_status()
+        self._set_text(
+            self.broker_text,
+            "Webull profile saved locally.\n\nRun Broker Check to verify the account and buying power before enabling Live.",
+        )
+        self.status_bar.configure(text="Webull profile saved. Broker Check required before Live.")
+
+    def _sync_profile_form(self, config: BotConfig) -> None:
+        self.profile_app_key_var.set(config.webull_app_key or "")
+        self.profile_app_secret_var.set(config.webull_app_secret or "")
+        self.profile_account_id_var.set(config.webull_account_id or "")
+        self.profile_region_var.set(config.webull_region or "us")
+        self.profile_endpoint_var.set(config.webull_api_endpoint or "")
+        self.profile_live_orders_var.set(config.webull_enable_live_orders)
+        self.profile_require_preview_var.set(config.webull_require_preview)
+        self.profile_trader_live_var.set(config.trader_live)
+        self.profile_auto_live_var.set(config.auto_start_live_on_market_open)
+        self._refresh_webull_account_menu(config)
+
+    def _render_setup_status(self) -> None:
+        widget = getattr(self, "setup_status_text", None)
+        if widget is None:
+            return
+        config = self._execution_config(self.config or self._load_config_safe())
+        profile_path = self.home / ".timmy-profile.env"
+        lines = [
+            "Setup status",
+            f"- Profile file: {'saved locally' if profile_path.exists() else 'not saved'}",
+            f"- App key: {'present' if config.webull_app_key else 'missing'}",
+            f"- App secret: {'present' if config.webull_app_secret else 'missing'}",
+            f"- Account: {self._mask_account_id(config.webull_account_id)}",
+            f"- Account check: {self.trade_cash_snapshot[1]}",
+            f"- Buying power: {self.trade_cash_snapshot[0]}",
+            f"- Live mode: {'on' if config.trader_live else 'off'}",
+            f"- Live submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
+            f"- Live target: {self.execution_target_var.get()}",
+            "",
+            "Next action",
+            self._setup_next_action(config),
+        ]
+        self._set_text(widget, "\n".join(lines))
+
+    def _setup_next_action(self, config: BotConfig) -> str:
+        if not config.webull_app_key or not config.webull_app_secret:
+            return "Enter Webull OpenAPI App Key and App Secret, then save the profile."
+        if not config.webull_account_id:
+            return "Enter or select a Webull account, then save the profile."
+        if self._broker_check_required(config):
+            return "Run Broker Check to verify the selected account and buying power before Live."
+        if not self._live_ready(config):
+            return "Turn on live mode and live order submission if this account should trade live."
+        if self.execution_target_var.get() != "Live":
+            return "Use Live after Broker Check if this account should place real orders."
+        return "Webull profile is ready for guarded live workflow."
 
     def webull_check(self) -> str:
         config = self._execution_config(self._load_config_safe())
@@ -2062,6 +2290,7 @@ class TimmyNativeApp:
             self.cash_card[0].configure(text=self.trade_cash_snapshot[0])
             self.cash_card[1].configure(text=self.trade_cash_snapshot[1])
             self._render_status()
+            self._render_setup_status()
         if label == "Paper trade":
             self._load_journal()
         self.status_bar.configure(text=f"{label} complete.")
@@ -2148,6 +2377,7 @@ class TimmyNativeApp:
             self.status_bar.configure(text="Paper target selected. Webull account is visible but not active for execution.")
         self._sync_manual_controls()
         self._render_status()
+        self._render_setup_status()
 
     def _sync_account_lane(self) -> None:
         config = self.config or self._load_config_safe()
@@ -2162,6 +2392,7 @@ class TimmyNativeApp:
             self.status_bar.configure(text=f"{self._account_lane()} account selected: {self._mask_account_id(active)}")
         self._sync_manual_controls()
         self._render_status()
+        self._render_setup_status()
 
     def _sync_webull_account_toggle(self, config: BotConfig) -> None:
         toggle = getattr(self, "webull_account_toggle", None)
@@ -2191,11 +2422,13 @@ class TimmyNativeApp:
 
     def _selected_account_needs_broker_check(self, config: BotConfig) -> bool:
         selected = self._selected_webull_account_override()
-        return bool(
-            selected
-            and selected == config.webull_account_id
-            and self.trade_cash_snapshot[1] == "Run Broker Check"
-        )
+        if selected and selected != config.webull_account_id:
+            return False
+        return self._broker_check_required(config)
+
+    def _broker_check_required(self, config: BotConfig) -> bool:
+        source = str(self.trade_cash_snapshot[1] or "")
+        return bool(config.webull_account_id and source in {"Run Broker Check", "Run Check Webull"})
 
     def _webull_account_card_value(self, config: BotConfig) -> str:
         if not config.webull_account_id:
@@ -2213,8 +2446,15 @@ class TimmyNativeApp:
         return f"{self._account_lane()} | {target} | {masked} | {detail}"[:40]
 
     def _refresh_webull_account_menu(self, config: BotConfig | None = None) -> None:
-        menu_widget = getattr(self, "webull_account_menu", None)
-        if menu_widget is None:
+        menu_widgets = [
+            widget
+            for widget in (
+                getattr(self, "webull_account_menu", None),
+                getattr(self, "setup_account_menu", None),
+            )
+            if widget is not None
+        ]
+        if not menu_widgets:
             return
         config = config or self.config or self._load_config_safe()
         choices = list(self.webull_account_choices)
@@ -2222,12 +2462,13 @@ class TimmyNativeApp:
         if configured_id and not any(choice.get("id") == configured_id for choice in choices):
             choices.insert(0, {"id": configured_id, "label": "Configured", "detail": "Local default"})
         labels: dict[str, str] = {}
-        menu = menu_widget["menu"]
-        menu.delete(0, "end")
+        for menu_widget in menu_widgets:
+            menu_widget["menu"].delete(0, "end")
         if not choices:
             label = "No account loaded"
             labels[label] = ""
-            menu.add_command(label=label, command=lambda value=label: self._select_webull_account(value))
+            for menu_widget in menu_widgets:
+                menu_widget["menu"].add_command(label=label, command=lambda value=label: self._select_webull_account(value))
             self.webull_account_choice_var.set(label)
             self.webull_account_labels = labels
             return
@@ -2244,7 +2485,8 @@ class TimmyNativeApp:
                 label = f"{base_label} ({suffix})"
                 suffix += 1
             labels[label] = account_id
-            menu.add_command(label=label, command=lambda value=label: self._select_webull_account(value))
+            for menu_widget in menu_widgets:
+                menu_widget["menu"].add_command(label=label, command=lambda value=label: self._select_webull_account(value))
             if account_id == selected_id:
                 selected_label = label
         self.webull_account_labels = labels

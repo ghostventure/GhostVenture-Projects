@@ -69,7 +69,7 @@ python3 -m venv .venv
 pip install -e .
 ```
 
-For normal setup, open Timmy and use `Profile` in the Account controls. Add the Webull OpenAPI app key, app secret, default account, region, endpoint, and live switches there, save, then run `Broker Check`. Timmy stores that profile locally and keeps execution on `Paper` until the selected account has been checked.
+For normal setup, open Timmy and use the `Setup` tab. Add the Webull OpenAPI app key, app secret, default account, region, endpoint, and live switches there, save, then run `Broker Check`. Timmy stores that profile locally and keeps execution on `Paper` until the selected account has been checked.
 
 Advanced/manual setup can still use the environment template, then `docs/OPERATOR_CHECKLIST.md` before enabling Auto mode, switching to Live, previewing Webull orders, or expanding beyond the default equity/ETF path:
 

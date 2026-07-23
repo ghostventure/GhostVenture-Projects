@@ -54,7 +54,7 @@ ENABLE_EQUITY_FRACTIONAL_TRADING=1
 
 2. Confirm the account/buying-power check succeeds from Timmy. If buying power is unavailable, live submission should be treated as blocked.
 
-3. To change accounts, use the native GUI account picker. Run `Broker Check`, choose the desired masked account label, then run `Broker Check` again before switching target back to `Live`.
+3. To configure or change accounts, use the native GUI `Setup` tab. Enter the Webull OpenAPI App Key, App Secret, default account ID, region, endpoint, and live switches, save the profile, run `Broker Check`, choose the desired masked account label, then run `Broker Check` again before switching target back to `Live`.
 
 4. Confirm Timmy has exactly one running process for the active `TIMMY_HOME`.
 
@@ -253,9 +253,10 @@ CI intentionally does not call live Webull endpoints, inspect account state, sub
 The native GUI is organized around Timmy's model:
 
 ```text
-Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
+Setup -> Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
 ```
 
+- `Setup` is the Webull profile form, account picker, broker check, and setup status.
 - `Universe` is the known stock/ETF ticker pool and rotating market batch.
 - `Scanner` is the ranked activity board.
 - `Strategy` is the decision brief and eligibility explanation.
@@ -265,10 +266,11 @@ Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
 
 The top metric band should show the model state first: universe size, active list count, movement count, trade-ready count, executable plan count, and buying power.
 
-Overview-only widgets such as the hero, pipeline metric band, and execution controls should not stay pinned across focused tabs. `Universe`, `Scanner`, `Strategy`, `Execution`, `Broker`, and `Audit` should use the main content area for the selected workflow surface.
+Overview-only widgets such as the hero, pipeline metric band, and execution controls should not stay pinned across focused tabs. `Setup`, `Universe`, `Scanner`, `Strategy`, `Execution`, `Broker`, and `Audit` should use the main content area for the selected workflow surface.
 
 Focused tabs should carry their own operational context:
 
+- `Setup`: Webull OpenAPI key fields, masked account ID entry, region/endpoint, live switches, account picker, save profile, broker check, and setup readiness status.
 - `Universe`: universe source, bundled snapshot counts, runtime cache, generated watchlists, and Webull watchlist-sync names.
 - `Execution`: current live/fractional/risk gates, executable queue, and common blockers when no plan exists.
 - `Broker`: current account lane, buying-power snapshot, live switches, preview state, and Webull route controls until a real broker response replaces it.
@@ -276,4 +278,4 @@ Focused tabs should carry their own operational context:
 
 Use icons only where the command is obvious: run, live submit, stop, and power cycle. Keep text on higher-context actions such as scan, broker check, and route preview.
 
-Account switching is a GUI workflow. The account picker should show masked labels discovered from `Broker Check`, save the selected account locally, clear stale live previews, return execution to `Paper`, and require a fresh broker check before the user enables `Live` for the newly selected account.
+Account setup and switching are GUI workflows. The Setup tab should save the Webull profile locally, the account picker should show masked labels discovered from `Broker Check`, save the selected account locally, clear stale live previews, return execution to `Paper`, and require a fresh broker check before the user enables `Live` for the newly selected account.
