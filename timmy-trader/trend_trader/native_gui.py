@@ -80,6 +80,9 @@ class TimmyNativeApp:
         self.nav_buttons: dict[str, tk.Button] = {}
         self.profile_field_status_labels: dict[str, tk.Label] = {}
         self.setup_readiness_labels: dict[str, tk.Label] = {}
+        self.scanner_summary_labels: dict[str, tk.Label] = {}
+        self.strategy_summary_labels: dict[str, tk.Label] = {}
+        self.execution_summary_labels: dict[str, tk.Label] = {}
         self.manual_controls: list[tk.Button] = []
         self.busy_controls: list[tk.Button] = []
         self.execution_events: list[dict] = []
@@ -652,10 +655,16 @@ class TimmyNativeApp:
         signals_panel = self._panel(body)
         self.signals_panel = signals_panel
         signals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
-        signals_panel.rowconfigure(1, weight=1)
-        signals_panel.rowconfigure(2, weight=0)
+        signals_panel.rowconfigure(2, weight=1)
+        signals_panel.rowconfigure(3, weight=0)
         self._section_header(signals_panel, "SCANNER OUTPUT", "Ticker Activity", "Refresh Data",
                              self.refresh_data)
+        scanner_summary = tk.Frame(signals_panel, bg=self.colors["panel"])
+        scanner_summary.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
+        scanner_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        self.scanner_summary_labels = {}
+        for idx, title in enumerate(("Scanned", "Moving", "Tradeable", "Blocked")):
+            self.scanner_summary_labels[title] = self._mini_stat(scanner_summary, idx, title)
         columns = ("symbol", "scout", "score", "sense", "direction", "decision", "price", "change", "entry")
         self.signal_tree = ttk.Treeview(signals_panel, columns=columns, show="headings", selectmode="browse")
         headings = {
@@ -670,12 +679,12 @@ class TimmyNativeApp:
             anchor = "w" if key == "symbol" else "center"
             self.signal_tree.heading(key, text=headings[key], anchor="center")
             self.signal_tree.column(key, width=widths[key], anchor=anchor)
-        self.signal_tree.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.signal_tree.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.signal_tree.bind("<<TreeviewSelect>>", self._show_selected_signal)
         self.signal_detail = tk.Text(signals_panel, height=6, bg=self.colors["panel_2"], fg=self.colors["muted"],
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=10,
                                      font=("Monospace", 10), wrap="word")
-        self.signal_detail.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 18))
+        self.signal_detail.grid(row=3, column=0, sticky="ew", padx=18, pady=(0, 18))
 
         universe_panel = self._panel(body)
         self.universe_panel = universe_panel
@@ -861,6 +870,107 @@ class TimmyNativeApp:
         )
         self.setup_status_text.grid(row=4, column=0, sticky="nsew")
 
+        strategy_tab_panel = self._panel(body)
+        self.strategy_tab_panel = strategy_tab_panel
+        strategy_tab_panel.columnconfigure(0, weight=3)
+        strategy_tab_panel.columnconfigure(1, weight=2)
+        strategy_tab_panel.rowconfigure(2, weight=1)
+        self._section_header(strategy_tab_panel, "STRATEGY MODEL", "Decision Logic", "Run Model", self.run_decision_cycle)
+        strategy_summary = tk.Frame(strategy_tab_panel, bg=self.colors["panel"])
+        strategy_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        strategy_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        self.strategy_summary_labels = {}
+        for idx, title in enumerate(("Style", "Patterns", "Eligible", "Readiness")):
+            self.strategy_summary_labels[title] = self._mini_stat(strategy_summary, idx, title)
+        self.strategy_decision_text = tk.Text(
+            strategy_tab_panel,
+            height=18,
+            bg=self.colors["panel_2"],
+            fg=self.colors["text"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            padx=14,
+            pady=12,
+            font=("Monospace", 10),
+            wrap="word",
+        )
+        self.strategy_decision_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.strategy_gate_text = tk.Text(
+            strategy_tab_panel,
+            height=18,
+            bg=self.colors["panel_2"],
+            fg=self.colors["muted"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            padx=14,
+            pady=12,
+            font=("Monospace", 10),
+            wrap="word",
+        )
+        self.strategy_gate_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+
+        execution_tab_panel = self._panel(body)
+        self.execution_tab_panel = execution_tab_panel
+        execution_tab_panel.columnconfigure(0, weight=3)
+        execution_tab_panel.columnconfigure(1, weight=2)
+        execution_tab_panel.rowconfigure(3, weight=1)
+        self._section_header(execution_tab_panel, "EXECUTION DESK", "Orders And Broker Gates", None, None)
+        execution_summary = tk.Frame(execution_tab_panel, bg=self.colors["panel"])
+        execution_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        execution_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        self.execution_summary_labels = {}
+        for idx, title in enumerate(("Target", "Queue", "Fractional", "Broker")):
+            self.execution_summary_labels[title] = self._mini_stat(execution_summary, idx, title)
+        execution_actions = tk.Frame(execution_tab_panel, bg=self.colors["panel"])
+        execution_actions.grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 12))
+        execution_actions.columnconfigure((0, 1, 2, 3), weight=1)
+        execution_run = self._button(execution_actions, "Run Model", self.run_decision_cycle, accent="teal")
+        execution_run.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        execution_preview = self._button(
+            execution_actions,
+            "Preview Route",
+            lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
+            accent="gold",
+        )
+        execution_preview.grid(row=0, column=1, sticky="ew", padx=8)
+        execution_paper = self._button(
+            execution_actions,
+            "Paper Trade",
+            lambda: self._run_action("Paper trade", self.paper_trade, threaded=False),
+            accent="teal",
+        )
+        execution_paper.grid(row=0, column=2, sticky="ew", padx=8)
+        execution_live = self._button(execution_actions, "Submit Live", self.submit_live_interactive, accent="gold")
+        execution_live.grid(row=0, column=3, sticky="ew", padx=(8, 0))
+        self.manual_controls.extend([execution_run, execution_preview, execution_paper, execution_live])
+        self.busy_controls.extend([execution_run, execution_preview, execution_paper, execution_live])
+        self.execution_queue_text = tk.Text(
+            execution_tab_panel,
+            height=18,
+            bg=self.colors["panel_2"],
+            fg=self.colors["text"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            padx=14,
+            pady=12,
+            font=("Monospace", 10),
+            wrap="word",
+        )
+        self.execution_queue_text.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.execution_gate_text = tk.Text(
+            execution_tab_panel,
+            height=18,
+            bg=self.colors["panel_2"],
+            fg=self.colors["muted"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            padx=14,
+            pady=12,
+            font=("Monospace", 10),
+            wrap="word",
+        )
+        self.execution_gate_text.grid(row=3, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+
         right = tk.Frame(body, bg=self.colors["bg"])
         self.right_panel = right
         right.grid(row=0, column=1, sticky="nsew")
@@ -924,6 +1034,31 @@ class TimmyNativeApp:
     def _panel(self, parent: tk.Widget) -> tk.Frame:
         return tk.Frame(parent, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
 
+    def _mini_stat(self, parent: tk.Widget, column: int, title: str) -> tk.Label:
+        frame = tk.Frame(parent, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+        frame.grid(row=0, column=column, sticky="ew", padx=6)
+        tk.Label(
+            frame,
+            text=title,
+            bg=self.colors["panel_2"],
+            fg=self.colors["muted"],
+            font=("Sans", 8, "bold"),
+            anchor="center",
+            justify="center",
+        ).pack(fill="x", padx=10, pady=(8, 2))
+        value = tk.Label(
+            frame,
+            text="-",
+            bg=self.colors["panel_2"],
+            fg=self.colors["text"],
+            font=("Sans", 13, "bold"),
+            anchor="center",
+            justify="center",
+        )
+        self._fit_text(value, min_size=9, max_size=13, padding=24, wrap=True)
+        value.pack(fill="x", padx=10, pady=(0, 8))
+        return value
+
     def _show_tab(self, tab: str) -> None:
         self._set_nav_active(tab)
         overview_active = tab == "Overview"
@@ -940,6 +1075,8 @@ class TimmyNativeApp:
         self.signals_panel.grid_remove()
         self.universe_panel.grid_remove()
         self.setup_panel.grid_remove()
+        self.strategy_tab_panel.grid_remove()
+        self.execution_tab_panel.grid_remove()
         self.right_panel.grid_remove()
         for panel in (self.decision_panel, self.order_panel, self.broker_panel, self.journal_panel):
             panel.grid_remove()
@@ -969,12 +1106,18 @@ class TimmyNativeApp:
         elif tab == "Scanner":
             self.body.columnconfigure(0, weight=1)
             self.signals_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Strategy":
+            self.body.columnconfigure(0, weight=1)
+            self._render_strategy_tab()
+            self.strategy_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Execution":
+            self.body.columnconfigure(0, weight=1)
+            self._render_execution_tab()
+            self.execution_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         else:
             for row in range(4):
                 self.right_panel.rowconfigure(row, weight=1 if row == 0 else 0)
             panel_by_tab = {
-                "Strategy": self.decision_panel,
-                "Execution": self.order_panel,
                 "Broker": self.broker_panel,
                 "Audit": self.journal_panel,
             }
@@ -2251,7 +2394,22 @@ class TimmyNativeApp:
 
     def _render_signals(self) -> None:
         self.signal_tree.delete(*self.signal_tree.get_children())
+        moving_count = 0
+        tradeable_count = 0
+        blocked_count = 0
+        config = self.config or self._load_config_safe()
         for signal in self.signals:
+            if getattr(signal, "scout_action", "quiet") in {"alert", "watch"}:
+                moving_count += 1
+            operational_blocks = self._operational_blocks(signal, config)
+            if (
+                signal.score >= self._min_score(config)
+                and self._local_sensible_action(signal) == "trade"
+                and not operational_blocks
+            ):
+                tradeable_count += 1
+            elif signal.score >= self._min_score(config) or self._local_sensible_action(signal) == "trade":
+                blocked_count += 1
             self.signal_tree.insert("", "end", values=(
                 signal.symbol,
                 self._scout_label(signal),
@@ -2263,6 +2421,15 @@ class TimmyNativeApp:
                 f"{signal.change_pct:+.2f}%",
                 money(signal.entry),
             ))
+        self._update_label_map(
+            getattr(self, "scanner_summary_labels", {}),
+            {
+                "Scanned": f"{len(self.signals):,}",
+                "Moving": f"{moving_count:,}",
+                "Tradeable": f"{tradeable_count:,}",
+                "Blocked": f"{blocked_count:,}",
+            },
+        )
         if self.signals:
             first = self.signal_tree.get_children()[0]
             self.signal_tree.selection_set(first)
@@ -2300,6 +2467,152 @@ class TimmyNativeApp:
             lines.append("Common blockers: no trade-ready symbol, stale data, score below threshold, cooldown, daily cap, buying power, fractional minimum, preview rejection, or broker rejection.")
         self._set_text(self.plan_text, "\n\n".join(lines))
         self._set_text(self.decision_text, self._decision_summary())
+        self._render_strategy_tab()
+        self._render_execution_tab()
+
+    def _render_strategy_tab(self) -> None:
+        if not hasattr(self, "strategy_decision_text"):
+            return
+        config = self.config or self._load_config_safe()
+        readiness = readiness_flags(config, plans_count=len(self.plans), events_count=len(self.execution_events))
+        eligible_signals = [
+            signal
+            for signal in self.signals
+            if signal.score >= self._min_score(config)
+            and self._local_sensible_action(signal) == "trade"
+            and not self._operational_blocks(signal, config)
+        ]
+        self._update_label_map(
+            getattr(self, "strategy_summary_labels", {}),
+            {
+                "Style": config.trading_style.title(),
+                "Patterns": str(len(config.enabled_trade_patterns)),
+                "Eligible": f"{len(eligible_signals):,}",
+                "Readiness": f"{len(readiness['green_flags'])}G / {len(readiness['red_flags'])}R",
+            },
+        )
+        self._set_text(self.strategy_decision_text, self._decision_summary())
+        self._set_text(self.strategy_gate_text, self._strategy_gate_detail(config, readiness, eligible_signals))
+
+    def _strategy_gate_detail(self, config: BotConfig, readiness: dict, eligible_signals: list) -> str:
+        pattern_line = ", ".join(sorted(config.enabled_trade_patterns)) or "none"
+        top_watch = [
+            signal
+            for signal in self.signals[:12]
+            if self._local_sensible_action(signal) in {"trade", "watch"}
+            or getattr(signal, "scout_action", "quiet") in {"alert", "watch"}
+        ]
+        lines = [
+            "Model controls",
+            f"- Style: {config.trading_style}",
+            f"- Patterns: {pattern_line}",
+            f"- Min score: {self._min_score(config)}",
+            "- Sensible threshold: trade >= 78, watch >= 50",
+            f"- Data: {self._data_freshness_line()}",
+            "",
+            "Readiness gates",
+        ]
+        lines.extend(f"- Green: {flag}" for flag in readiness["green_flags"][:8])
+        lines.extend(f"- Red: {flag}" for flag in readiness["red_flags"][:8])
+        if not readiness["green_flags"] and not readiness["red_flags"]:
+            lines.append("- No readiness flags reported")
+        lines.extend([
+            "",
+            "Eligible symbols",
+            self._preview_symbols([signal.symbol for signal in eligible_signals], limit=16),
+            "",
+            "Watch focus",
+        ])
+        if not top_watch:
+            lines.append("- No active watch focus at current thresholds")
+        for signal in top_watch[:8]:
+            blocks = self._operational_blocks(signal, config)
+            block_label = "clear" if not blocks else blocks[0]
+            lines.append(
+                f"- {signal.symbol}: scout {getattr(signal, 'scout_score', 0)} | sensible {self._local_sensible_score(signal)} | {block_label}"
+            )
+        return "\n".join(lines)
+
+    def _render_execution_tab(self) -> None:
+        if not hasattr(self, "execution_queue_text"):
+            return
+        config = self.config or self._load_config_safe()
+        execution_config = self._execution_config(config)
+        live_ready = self._live_ready(execution_config)
+        broker_label = "Ready" if live_ready and not self._broker_check_required(execution_config) else "Guarded"
+        self._update_label_map(
+            getattr(self, "execution_summary_labels", {}),
+            {
+                "Target": f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}",
+                "Queue": f"{len(self.plans):,}",
+                "Fractional": "On" if config.enable_equity_fractional_trading else "Off",
+                "Broker": broker_label,
+            },
+        )
+        self._set_text(self.execution_queue_text, self._execution_queue_detail(config))
+        self._set_text(self.execution_gate_text, self._execution_gate_detail(config, execution_config))
+
+    def _execution_queue_detail(self, config: BotConfig) -> str:
+        lines = [
+            "Executable queue",
+            f"- Plan limit this pass: {self._plan_limit(config)}",
+            f"- Current queue: {len(self.plans):,}",
+            "",
+        ]
+        if not self.plans:
+            lines.extend([
+                "No executable order plans at current settings.",
+                "",
+                "Most common causes",
+                "- Scanner found movement but score stayed below threshold",
+                "- Sensible score did not reach trade",
+                "- Market data is stale or market-hours gate is closed",
+                "- Cash, fractional minimum, reward/risk, cooldown, or daily cap blocked the plan",
+            ])
+            return "\n".join(lines)
+        for idx, plan in enumerate(self.plans[: self._plan_limit(config)], start=1):
+            latest = self._latest_candle_timestamp(plan.symbol) or "unknown"
+            preview = "fresh preview" if self._has_fresh_preview(plan, self._execution_config(config)) else "preview needed"
+            lines.append(
+                f"{idx}. {plan.symbol} {plan.side} {_format_quantity(plan.quantity)} {plan.instrument_type}\n"
+                f"   Limit {money(plan.limit_price)} | Notional {money(plan.notional)} | {preview}\n"
+                f"   Stop {money(plan.stop_price)} | Target {money(plan.target_price)} | Candle {latest}\n"
+                f"   {plan.reason}"
+            )
+        return "\n\n".join(lines)
+
+    def _execution_gate_detail(self, config: BotConfig, execution_config: BotConfig) -> str:
+        readiness = readiness_flags(config, plans_count=len(self.plans), events_count=len(self.execution_events))
+        lines = [
+            "Broker and risk gates",
+            f"- Account lane: {self._account_lane()}",
+            f"- Account: {self._webull_account_card_value(execution_config)}",
+            f"- Buying power: {self.trade_cash_snapshot[0]} ({self.trade_cash_snapshot[1]})",
+            f"- Live switches: {'enabled' if self._live_ready(execution_config) else 'locked'}",
+            f"- Broker check: {'required' if self._broker_check_required(execution_config) else 'current'}",
+            f"- Preview required: {'yes' if config.webull_require_preview else 'no'}",
+            "",
+            "Risk controls",
+            f"- Max notional: {money(config.max_order_notional_usd)}",
+            f"- Max quantity: {config.max_order_quantity:g}",
+            f"- Risk per trade: {money(config.risk_per_trade_usd)}",
+            f"- Max daily trades: {config.max_daily_trades}",
+            f"- Cooldown: {config.order_cooldown_minutes}m",
+            "",
+            "Readiness",
+        ]
+        lines.extend(f"- Green: {flag}" for flag in readiness["green_flags"][:8])
+        lines.extend(f"- Red: {flag}" for flag in readiness["red_flags"][:8])
+        if not readiness["green_flags"] and not readiness["red_flags"]:
+            lines.append("- No readiness flags reported")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _update_label_map(labels: dict[str, tk.Label], values: dict[str, str]) -> None:
+        for key, value in values.items():
+            widget = labels.get(key)
+            if widget is not None:
+                widget.configure(text=value)
 
     def _render_broker_summary(self) -> None:
         current = self._text_value(self.broker_text).strip()

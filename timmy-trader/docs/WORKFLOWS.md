@@ -272,7 +272,9 @@ Focused tabs should carry their own operational context:
 
 - `Setup`: Webull OpenAPI key fields, masked account ID entry, region/endpoint, live switches, verification gate, account picker, save profile, broker check, and setup readiness status.
 - `Universe`: universe source, bundled snapshot counts, runtime cache, generated watchlists, and Webull watchlist-sync names.
-- `Execution`: current live/fractional/risk gates, executable queue, and common blockers when no plan exists.
+- `Scanner`: scanned ticker table with summary counts for scanned, moving, tradeable, and blocked symbols plus selected-symbol scout, price, and operational gate details.
+- `Strategy`: full decision surface with style/pattern/readiness summary, decision brief, eligible symbols, watch focus, and model gate explanations.
+- `Execution`: full order desk with target/queue/fractional/broker summary, run/preview/paper/live actions, executable queue details, preview freshness, broker gates, and risk blockers.
 - `Broker`: current account lane, buying-power snapshot, live switches, preview state, and Webull route controls until a real broker response replaces it.
 - `Audit`: audit-chain state, protected-file integrity status, event totals, live/paper/rejected counts, and recent execution events.
 
