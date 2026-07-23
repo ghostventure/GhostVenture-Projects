@@ -538,7 +538,13 @@ Timmy writes an audit key at:
 .timmy-audit-key
 ```
 
-New execution events include tamper-evident chain data. This is not a full security system and does not prevent host-level tampering by someone with filesystem control, but it helps detect event-log edits after the fact.
+New execution events include tamper-evident chain data. Timmy also writes a signed protected-file baseline at:
+
+```text
+.timmy-integrity.json
+```
+
+The integrity manifest tracks local profile, settings, watchlist, paper-journal, and execution-event files. Timmy refreshes the baseline after its own writes and shows an Audit warning if protected files change outside Timmy or the manifest signature is edited. This is not a full security system and does not prevent host-level tampering by someone with filesystem control, but it helps detect event-log and runtime-file edits after the fact.
 
 Sensitive runtime files should remain local and private.
 

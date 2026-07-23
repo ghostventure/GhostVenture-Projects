@@ -29,7 +29,7 @@ docs/WORKFLOWS.md
 - Enriches paper trades with signal, scout, sensible-score, controls, and candle-timestamp context so the paper path can become useful training data.
 - Reconciles pending paper trades against newer candles when target or stop thresholds are hit.
 - Shows an execution event log with buy price, sold price when available, target, stop, quantity, and status.
-- Adds a tamper-evident audit chain to new execution events.
+- Adds a tamper-evident audit chain to new execution events and a signed local integrity manifest for protected runtime files.
 - Adds operational gates for market session timing, daily trade caps, per-symbol caps, symbol cooldowns, recent rejection history, minimum reward/risk, and maximum volatility.
 - Uses an NYSE-aware market calendar for regular sessions, 2026 full-market holidays, and known 1 p.m. early closes.
 - Shows a native splash screen that follows startup workflow: config, journals, market data, paper reconciliation, trade plans, and dashboard rendering.
@@ -311,6 +311,14 @@ New execution events are signed into a local hash chain using:
 ```
 
 If execution records are edited, deleted, or reordered, the Event Log panel will show an audit warning.
+
+Timmy also maintains a signed local integrity manifest at:
+
+```text
+.timmy-integrity.json
+```
+
+The manifest tracks protected local runtime files such as the Webull profile, UI settings, generated watchlists, paper journal, and execution-event log. Timmy refreshes the manifest after its own writes and warns in the Audit panel if those files change outside Timmy or if the manifest signature no longer matches.
 
 Paper-trade training statistics are summarized at:
 

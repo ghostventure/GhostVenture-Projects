@@ -274,8 +274,10 @@ Focused tabs should carry their own operational context:
 - `Universe`: universe source, bundled snapshot counts, runtime cache, generated watchlists, and Webull watchlist-sync names.
 - `Execution`: current live/fractional/risk gates, executable queue, and common blockers when no plan exists.
 - `Broker`: current account lane, buying-power snapshot, live switches, preview state, and Webull route controls until a real broker response replaces it.
-- `Audit`: audit-chain state, event totals, live/paper/rejected counts, and recent execution events.
+- `Audit`: audit-chain state, protected-file integrity status, event totals, live/paper/rejected counts, and recent execution events.
 
 Use icons only where the command is obvious: run, live submit, stop, and power cycle. Keep text on higher-context actions such as scan, broker check, and route preview.
 
 Account setup and switching are GUI workflows. The Setup tab should verify the Webull profile before saving anything, save the verified profile locally, show masked account labels discovered from verification or `Broker Check`, save the selected account locally, clear stale live previews, return execution to `Paper`, and require a fresh broker check before the user enables `Live` for the newly selected account.
+
+Tamper-resistance is also a GUI-visible workflow. Timmy signs execution events into a local hash chain and keeps `.timmy-integrity.json` as a signed baseline for protected runtime files. Timmy updates that baseline after its own profile, settings, watchlist, journal, and event-log writes. If those files are edited outside Timmy, the Audit tab should show an audit warning before the operator trusts recent activity.

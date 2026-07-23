@@ -549,6 +549,69 @@ def test_broker_success_records_accepted_pending_position() -> None:
     assert event["sell_status"] == "target-pending"
 
 
+def test_integrity_manifest_detects_external_runtime_file_change(tmp_path) -> None:
+    app = object.__new__(TimmyNativeApp)
+    app.home = tmp_path
+    app.watchlist_path = tmp_path / "watchlist.txt"
+    app.active_watchlist_path = tmp_path / "active-watchlist.txt"
+    app.movement_watchlist_path = tmp_path / "movement-watchlist.txt"
+    app.trade_ready_watchlist_path = tmp_path / "trade-ready-watchlist.txt"
+    app.quiet_watchlist_path = tmp_path / "quiet-watchlist.txt"
+    app.journal_path = tmp_path / "trade-journal.jsonl"
+    app.event_log_path = tmp_path / "execution-events.jsonl"
+    app.audit_key_path = tmp_path / ".timmy-audit-key"
+    app.integrity_manifest_path = tmp_path / ".timmy-integrity.json"
+    app.settings_path = tmp_path / "timmy-ui-settings.json"
+    app.universe_path = tmp_path / "timmy-watchlist-universe.txt"
+    app.rotation_state_path = tmp_path / "timmy-watchlist-rotation.json"
+    app.audit_status = "Audit chain ok"
+    app.settings_path.write_text('{"plan_limit": 3}\n', encoding="utf-8")
+
+    app._refresh_integrity_manifest()
+    app.settings_path.write_text('{"plan_limit": 9}\n', encoding="utf-8")
+
+    app._validate_integrity_manifest()
+
+    assert "protected runtime files changed outside Timmy" in app.audit_status
+
+
+def test_integrity_manifest_refreshes_after_internal_write(tmp_path) -> None:
+    app = object.__new__(TimmyNativeApp)
+    app.home = tmp_path
+    app.watchlist_path = tmp_path / "watchlist.txt"
+    app.active_watchlist_path = tmp_path / "active-watchlist.txt"
+    app.movement_watchlist_path = tmp_path / "movement-watchlist.txt"
+    app.trade_ready_watchlist_path = tmp_path / "trade-ready-watchlist.txt"
+    app.quiet_watchlist_path = tmp_path / "quiet-watchlist.txt"
+    app.journal_path = tmp_path / "trade-journal.jsonl"
+    app.event_log_path = tmp_path / "execution-events.jsonl"
+    app.audit_key_path = tmp_path / ".timmy-audit-key"
+    app.integrity_manifest_path = tmp_path / ".timmy-integrity.json"
+    app.settings_path = tmp_path / "timmy-ui-settings.json"
+    app.universe_path = tmp_path / "timmy-watchlist-universe.txt"
+    app.rotation_state_path = tmp_path / "timmy-watchlist-rotation.json"
+    app.audit_status = "Audit chain ok"
+    app.min_score_var = Var("72")
+    app.plan_limit_var = Var("4")
+    app.auto_interval_var = Var("2")
+    app.paper_auto_var = Var(False)
+    app.execution_mode_var = Var("Auto")
+    app.execution_target_var = Var("Live")
+    app.account_lane_var = Var("I-Cash")
+    app.selected_webull_account_id_var = Var("")
+    app.trading_style_var = Var("Adaptive")
+    app.pattern_vars = {"breakout": Var(True), "momentum": Var(True)}
+    app._runtime_strategy_patterns = lambda: {"breakout", "momentum"}
+
+    app._save_runtime_settings()
+    app.audit_status = "Audit chain ok"
+    app._validate_integrity_manifest()
+
+    assert app.audit_status == "Audit chain ok; integrity manifest ok"
+    assert stat.S_IMODE(app.settings_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(app.integrity_manifest_path.stat().st_mode) == 0o600
+
+
 def test_live_rejection_updates_buying_power_indicator() -> None:
     app = native_app_with_bars(datetime.now())
     app.trade_cash_snapshot = ("-", "Run Check Webull")

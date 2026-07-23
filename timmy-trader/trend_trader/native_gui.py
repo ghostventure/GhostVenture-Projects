@@ -51,6 +51,7 @@ class TimmyNativeApp:
         self.event_log_path = home / "execution-events.jsonl"
         self.paper_research_path = home / "paper-training-summary.json"
         self.audit_key_path = home / ".timmy-audit-key"
+        self.integrity_manifest_path = home / ".timmy-integrity.json"
         self.settings_path = home / "timmy-ui-settings.json"
         self.universe_path = home / "timmy-watchlist-universe.txt"
         self.rotation_state_path = home / "timmy-watchlist-rotation.json"
@@ -77,6 +78,8 @@ class TimmyNativeApp:
         self.verified_profile_fingerprint: str | None = None
         self.profile_verification_status = "Not verified"
         self.nav_buttons: dict[str, tk.Button] = {}
+        self.profile_field_status_labels: dict[str, tk.Label] = {}
+        self.setup_readiness_labels: dict[str, tk.Label] = {}
         self.manual_controls: list[tk.Button] = []
         self.busy_controls: list[tk.Button] = []
         self.execution_events: list[dict] = []
@@ -710,6 +713,7 @@ class TimmyNativeApp:
         setup_status = tk.Frame(setup_panel, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
         setup_status.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
         setup_status.columnconfigure(0, weight=1)
+        setup_status.rowconfigure(4, weight=1)
 
         row = 0
         for label, variable, secret in (
@@ -723,7 +727,7 @@ class TimmyNativeApp:
             row += 1
 
         switch_box = tk.Frame(profile_form, bg=self.colors["panel"])
-        switch_box.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 8))
+        switch_box.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(8, 8))
         switch_box.columnconfigure((0, 1), weight=1)
         for idx, (label, variable) in enumerate((
             ("Live mode", self.profile_trader_live_var),
@@ -747,7 +751,7 @@ class TimmyNativeApp:
         row += 1
 
         account_select = tk.Frame(profile_form, bg=self.colors["panel"])
-        account_select.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(6, 8))
+        account_select.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(6, 8))
         account_select.columnconfigure(1, weight=1)
         tk.Label(account_select, text="Account", bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="w", padx=(0, 10))
@@ -756,31 +760,96 @@ class TimmyNativeApp:
         row += 1
 
         setup_actions = tk.Frame(profile_form, bg=self.colors["panel"])
-        setup_actions.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        setup_actions.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         setup_actions.columnconfigure((0, 1), weight=1, minsize=140)
         self.setup_verify_button = self._button(
             setup_actions,
             "Verify Profile",
             lambda: self._run_action("Verifying Webull profile", self.verify_webull_profile),
             accent="gold",
+            tooltip="Checks the current draft credentials with Webull before saving.",
         )
         self.setup_verify_button.grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 8))
-        self.setup_save_button = self._button(setup_actions, "Save Profile", self.save_webull_profile_from_setup, accent="teal")
+        self.setup_save_button = self._button(
+            setup_actions,
+            "Save Profile",
+            self.save_webull_profile_from_setup,
+            accent="teal",
+            tooltip="Writes the verified profile to this machine.",
+        )
         self.setup_save_button.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=(0, 8))
         self.setup_check_button = self._button(
             setup_actions,
             "Broker Check",
             lambda: self._run_action("Checking Webull", self.webull_check),
             accent="teal",
+            tooltip="Refreshes account status and buying power from Webull.",
         )
         self.setup_check_button.grid(row=1, column=0, sticky="ew", padx=(0, 8))
-        self.setup_live_button = self._button(setup_actions, "Use Live", self.use_live_from_setup)
+        self.setup_live_button = self._button(
+            setup_actions,
+            "Use Live",
+            self.use_live_from_setup,
+            tooltip="Switches Timmy's execution target to Live after readiness checks.",
+        )
         self.setup_live_button.grid(row=1, column=1, sticky="ew", padx=(8, 0))
         self.busy_controls.extend([self.setup_verify_button, self.setup_save_button, self.setup_check_button, self.setup_live_button])
 
+        tk.Label(
+            setup_status,
+            text="NEXT ACTION",
+            bg=self.colors["panel_2"],
+            fg=self.colors["muted"],
+            font=("Sans", 9, "bold"),
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew", padx=14, pady=(12, 2))
+        self.setup_next_action_label = tk.Label(
+            setup_status,
+            text="-",
+            bg=self.colors["panel_2"],
+            fg=self.colors["text"],
+            font=("Sans", 11, "bold"),
+            anchor="w",
+            justify="left",
+            wraplength=360,
+        )
+        self.setup_next_action_label.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+        readiness = tk.Frame(setup_status, bg=self.colors["panel_2"])
+        readiness.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
+        readiness.columnconfigure(1, weight=1)
+        self.setup_readiness_labels = {}
+        for idx, label in enumerate(("Draft", "Verify", "Save", "Broker", "Live")):
+            tk.Label(
+                readiness,
+                text=label,
+                bg=self.colors["panel_2"],
+                fg=self.colors["muted"],
+                font=("Sans", 8, "bold"),
+                anchor="w",
+            ).grid(row=idx, column=0, sticky="w", pady=2, padx=(0, 10))
+            value = tk.Label(
+                readiness,
+                text="-",
+                bg=self.colors["panel_2"],
+                fg=self.colors["text"],
+                font=("Sans", 9),
+                anchor="w",
+            )
+            value.grid(row=idx, column=1, sticky="ew", pady=2)
+            self.setup_readiness_labels[label] = value
+
+        tk.Label(
+            setup_status,
+            text="VERIFICATION DETAILS",
+            bg=self.colors["panel_2"],
+            fg=self.colors["muted"],
+            font=("Sans", 9, "bold"),
+            anchor="w",
+        ).grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 4))
         self.setup_status_text = tk.Text(
             setup_status,
-            height=18,
+            height=10,
             bg=self.colors["panel_2"],
             fg=self.colors["text"],
             insertbackground=self.colors["text"],
@@ -790,7 +859,7 @@ class TimmyNativeApp:
             font=("Monospace", 10),
             wrap="word",
         )
-        self.setup_status_text.grid(row=0, column=0, sticky="nsew")
+        self.setup_status_text.grid(row=4, column=0, sticky="nsew")
 
         right = tk.Frame(body, bg=self.colors["bg"])
         self.right_panel = right
@@ -930,6 +999,17 @@ class TimmyNativeApp:
             highlightthickness=1,
             font=("Sans", 10),
         ).grid(row=row, column=1, sticky="ew", pady=5, ipady=5)
+        status = tk.Label(
+            parent,
+            text="-",
+            bg=self.colors["panel"],
+            fg=self.colors["muted"],
+            font=("Sans", 8, "bold"),
+            anchor="e",
+            width=12,
+        )
+        status.grid(row=row, column=2, sticky="e", pady=5, padx=(10, 0))
+        self.profile_field_status_labels[label] = status
 
     def _account_option_menu(self, parent: tk.Widget) -> tk.OptionMenu:
         menu = tk.OptionMenu(parent, self.webull_account_choice_var, "Configured account")
@@ -1263,6 +1343,7 @@ class TimmyNativeApp:
         ]
         path.write_text("\n".join(lines), encoding="utf-8")
         path.chmod(0o600)
+        self._refresh_integrity_manifest()
 
     @staticmethod
     def _env_quote(value: str) -> str:
@@ -1450,12 +1531,15 @@ class TimmyNativeApp:
         self._refresh_webull_account_menu(config)
 
     def _render_setup_status(self) -> None:
+        profile = self._current_profile_payload()
+        config = self._execution_config(self._config_from_profile(profile))
+        self._render_setup_badges(config)
+        self._render_setup_guidance(profile, config)
         widget = getattr(self, "setup_status_text", None)
         if widget is None:
             return
-        config = self._execution_config(self.config or self._load_config_safe())
-        self._render_setup_badges(config)
         profile_path = self.home / ".timmy-profile.env"
+        profile_verified = self._profile_fingerprint(profile) == self.verified_profile_fingerprint
         lines = [
             "Setup status",
             f"- Profile file: {'saved locally' if profile_path.exists() else 'not saved'}",
@@ -1465,14 +1549,63 @@ class TimmyNativeApp:
             f"- Account: {self._mask_account_id(config.webull_account_id)}",
             f"- Account check: {self.trade_cash_snapshot[1]}",
             f"- Buying power: {self.trade_cash_snapshot[0]}",
+            f"- Save lock: {'open' if profile_verified else 'locked'}",
             f"- Live mode: {'on' if config.trader_live else 'off'}",
             f"- Live submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
             f"- Live target: {self.execution_target_var.get()}",
-            "",
-            "Next action",
-            self._setup_next_action(config),
         ]
         self._set_text(widget, "\n".join(lines))
+
+    def _render_setup_guidance(self, profile: dict[str, str], config: BotConfig) -> None:
+        profile_verified = self._profile_fingerprint(profile) == self.verified_profile_fingerprint
+        broker_checked = bool(config.webull_account_id) and not self._broker_check_required(config)
+        live_ready = self._live_ready(config) and self.execution_target_var.get() == "Live" and broker_checked
+
+        next_action = getattr(self, "setup_next_action_label", None)
+        if next_action is not None:
+            color = self.colors["teal"] if live_ready else self.colors["gold"]
+            next_action.configure(text=self._setup_next_action(config), fg=color)
+
+        field_status = getattr(self, "profile_field_status_labels", {})
+        field_values = {
+            "App Key": ("Verified" if profile_verified else ("Present" if profile.get("WEBULL_APP_KEY") else "Missing")),
+            "App Secret": ("Verified" if profile_verified else ("Present" if profile.get("WEBULL_APP_SECRET") else "Missing")),
+            "Default Account": (
+                "Verified" if profile_verified else ("Present" if profile.get("WEBULL_ACCOUNT_ID") else "Missing")
+            ),
+            "Region": "Ready" if profile.get("WEBULL_REGION") else "Default",
+            "API Endpoint": "Ready" if profile.get("WEBULL_API_ENDPOINT") else "Default",
+        }
+        for label, value in field_values.items():
+            widget = field_status.get(label)
+            if widget is None:
+                continue
+            if value in {"Verified", "Ready"}:
+                color = self.colors["teal"]
+            elif value in {"Missing"}:
+                color = self.colors["red"]
+            else:
+                color = self.colors["gold"]
+            widget.configure(text=value, fg=color)
+
+        readiness = getattr(self, "setup_readiness_labels", {})
+        readiness_values = {
+            "Draft": ("Complete" if config.webull_app_key and config.webull_app_secret and config.webull_account_id else "Needs fields"),
+            "Verify": ("Passed" if profile_verified else self.profile_verification_status),
+            "Save": ("Enabled" if profile_verified else "Locked"),
+            "Broker": ("Checked" if broker_checked else self.trade_cash_snapshot[1]),
+            "Live": ("Armed" if live_ready else "Guarded"),
+        }
+        for label, value in readiness_values.items():
+            widget = readiness.get(label)
+            if widget is None:
+                continue
+            good = value in {"Complete", "Passed", "Enabled", "Checked", "Armed"}
+            caution = value in {"Locked", "Guarded", "Needs fields"} or "Missing" in str(value) or "Run" in str(value)
+            color = self.colors["teal"] if good else (self.colors["gold"] if caution else self.colors["muted"])
+            if label == "Live" and value == "Armed":
+                color = self.colors["red"]
+            widget.configure(text=value, fg=color)
 
     def _render_setup_badges(self, config: BotConfig) -> None:
         badges = getattr(self, "setup_badges", None)
@@ -1793,6 +1926,7 @@ class TimmyNativeApp:
         for path, symbols, export_name in outputs:
             write_watchlist(path, symbols)
             self._write_watchlist_exports(symbols, export_name)
+        self._refresh_integrity_manifest()
         self._sync_webull_generated_watchlists(config, {
             config.webull_active_watchlist_name: active_symbols,
             config.webull_movement_watchlist_name: movement,
@@ -1844,6 +1978,7 @@ class TimmyNativeApp:
                 symbols = fetch_us_listed_symbols(timeout=10)
                 if symbols:
                     self.universe_path.write_text("\n".join(symbols) + "\n", encoding="utf-8")
+                    self._refresh_integrity_manifest()
                     return symbols
             except Exception as exc:
                 self.status_bar.configure(text=f"Universe refresh skipped: {exc}")
@@ -1886,6 +2021,7 @@ class TimmyNativeApp:
         }
         try:
             self.rotation_state_path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+            self._refresh_integrity_manifest()
         except OSError:
             pass
 
@@ -2300,6 +2436,8 @@ class TimmyNativeApp:
             updated_lines.append(json.dumps(event, sort_keys=True))
         if changed:
             self.journal_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+            self.journal_path.chmod(0o600)
+            self._refresh_integrity_manifest()
         return changed
 
     def _paper_outcome_for_event(self, event: dict, bars_by_symbol: dict) -> dict | None:
@@ -3197,6 +3335,8 @@ class TimmyNativeApp:
         }
         try:
             self.settings_path.write_text(json.dumps(settings, indent=2, sort_keys=True), encoding="utf-8")
+            self.settings_path.chmod(0o600)
+            self._refresh_integrity_manifest()
         except OSError:
             pass
 
@@ -3338,6 +3478,8 @@ class TimmyNativeApp:
         self.event_log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.event_log_path.open("a", encoding="utf-8") as file:
             file.write(json.dumps(payload, sort_keys=True) + "\n")
+        self.event_log_path.chmod(0o600)
+        self._refresh_integrity_manifest()
         self.execution_events.append(payload)
         self.recent_bad_event_counts = self._build_bad_event_counts(self.execution_events)
         self._execution_events_cache_key = None
@@ -3349,6 +3491,7 @@ class TimmyNativeApp:
         events: list[dict] = []
         seen: set[tuple[str, str, str]] = set()
         self.audit_status = "Audit chain ready"
+        self._harden_runtime_files()
         for path in (self.journal_path, self.event_log_path):
             if not path.exists():
                 continue
@@ -3372,13 +3515,14 @@ class TimmyNativeApp:
                     continue
                 seen.add(key)
                 events.append(event)
+        self._validate_integrity_manifest()
         self._execution_events_cache_key = cache_key
         self._execution_events_cache = list(events)
         return events
 
     def _event_files_cache_key(self) -> tuple:
         key = []
-        for path in (self.journal_path, self.event_log_path):
+        for path in (self.journal_path, self.event_log_path, self.integrity_manifest_path):
             try:
                 stat = path.stat()
                 key.append((str(path), stat.st_mtime_ns, stat.st_size))
@@ -3509,11 +3653,127 @@ class TimmyNativeApp:
         return hmac.new(self._audit_key(), encoded, hashlib.sha256).hexdigest()
 
     def _audit_key(self) -> bytes:
-        if not self.audit_key_path.exists():
-            self.audit_key_path.parent.mkdir(parents=True, exist_ok=True)
-            self.audit_key_path.write_text(secrets.token_hex(32), encoding="utf-8")
-            self.audit_key_path.chmod(0o600)
-        return self.audit_key_path.read_text(encoding="utf-8").strip().encode("utf-8")
+        audit_key_path = getattr(self, "audit_key_path", getattr(self, "home", Path(".")) / ".timmy-audit-key")
+        if not audit_key_path.exists():
+            audit_key_path.parent.mkdir(parents=True, exist_ok=True)
+            audit_key_path.write_text(secrets.token_hex(32), encoding="utf-8")
+            audit_key_path.chmod(0o600)
+        else:
+            audit_key_path.chmod(0o600)
+        return audit_key_path.read_text(encoding="utf-8").strip().encode("utf-8")
+
+    def _tamper_tracked_paths(self) -> dict[str, Path]:
+        home = getattr(self, "home", Path("."))
+        return {
+            "profile": home / ".timmy-profile.env",
+            "settings": getattr(self, "settings_path", home / "timmy-ui-settings.json"),
+            "watchlist": getattr(self, "watchlist_path", home / "watchlist.txt"),
+            "active_watchlist": getattr(self, "active_watchlist_path", home / "active-watchlist.txt"),
+            "movement_watchlist": getattr(self, "movement_watchlist_path", home / "movement-watchlist.txt"),
+            "trade_ready_watchlist": getattr(self, "trade_ready_watchlist_path", home / "trade-ready-watchlist.txt"),
+            "quiet_watchlist": getattr(self, "quiet_watchlist_path", home / "quiet-watchlist.txt"),
+            "universe": getattr(self, "universe_path", home / "timmy-watchlist-universe.txt"),
+            "rotation_state": getattr(self, "rotation_state_path", home / "timmy-watchlist-rotation.json"),
+            "paper_journal": getattr(self, "journal_path", home / "trade-journal.jsonl"),
+            "execution_events": getattr(self, "event_log_path", home / "execution-events.jsonl"),
+        }
+
+    def _harden_runtime_files(self) -> None:
+        home = getattr(self, "home", Path("."))
+        audit_key_path = getattr(self, "audit_key_path", home / ".timmy-audit-key")
+        manifest_path = getattr(self, "integrity_manifest_path", home / ".timmy-integrity.json")
+        settings_path = getattr(self, "settings_path", home / "timmy-ui-settings.json")
+        journal_path = getattr(self, "journal_path", home / "trade-journal.jsonl")
+        event_log_path = getattr(self, "event_log_path", home / "execution-events.jsonl")
+        for path in (audit_key_path, manifest_path, home / ".timmy-profile.env"):
+            if path.exists():
+                try:
+                    path.chmod(0o600)
+                except OSError:
+                    self._set_audit_warning(f"could not harden {path.name}")
+        for path in (settings_path, journal_path, event_log_path):
+            if path.exists():
+                try:
+                    path.chmod(0o600)
+                except OSError:
+                    self._set_audit_warning(f"could not harden {path.name}")
+
+    def _refresh_integrity_manifest(self) -> None:
+        try:
+            self._harden_runtime_files()
+            payload = self._integrity_manifest_payload()
+            signed = {
+                **payload,
+                "signature": self._integrity_signature(payload),
+            }
+            manifest_path = getattr(self, "integrity_manifest_path", getattr(self, "home", Path(".")) / ".timmy-integrity.json")
+            manifest_path.write_text(json.dumps(signed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            manifest_path.chmod(0o600)
+        except OSError as exc:
+            self._set_audit_warning(f"integrity manifest update failed: {exc}")
+
+    def _validate_integrity_manifest(self) -> None:
+        manifest_path = getattr(self, "integrity_manifest_path", getattr(self, "home", Path(".")) / ".timmy-integrity.json")
+        if not manifest_path.exists():
+            self._refresh_integrity_manifest()
+            if not self.audit_status.startswith("Audit warning"):
+                self.audit_status = "Audit chain ok; integrity baseline created"
+            return
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            self._set_audit_warning("integrity manifest is unreadable")
+            return
+        signature = str(manifest.get("signature") or "")
+        payload = {key: value for key, value in manifest.items() if key != "signature"}
+        expected_signature = self._integrity_signature(payload)
+        if not signature or not hmac.compare_digest(signature, expected_signature):
+            self._set_audit_warning("integrity manifest signature mismatch")
+            return
+        current_files = self._integrity_manifest_payload()["files"]
+        stored_files = payload.get("files", {})
+        if current_files != stored_files:
+            self._set_audit_warning("protected runtime files changed outside Timmy")
+            return
+        if self.audit_status in {"Audit chain ready", "Audit chain ok"}:
+            self.audit_status = "Audit chain ok; integrity manifest ok"
+
+    def _integrity_manifest_payload(self) -> dict:
+        return {
+            "version": 1,
+            "files": {
+                label: self._integrity_file_record(path)
+                for label, path in self._tamper_tracked_paths().items()
+            },
+        }
+
+    def _integrity_file_record(self, path: Path) -> dict:
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            return {"exists": False}
+        try:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            digest = "unreadable"
+        return {
+            "exists": True,
+            "sha256": digest,
+            "size": stat.st_size,
+            "mode": oct(stat.st_mode & 0o777),
+        }
+
+    def _integrity_signature(self, payload: dict) -> str:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hmac.new(self._audit_key(), encoded, hashlib.sha256).hexdigest()
+
+    def _set_audit_warning(self, message: str) -> None:
+        current = getattr(self, "audit_status", "")
+        warning = f"Audit warning: {message}"
+        if current.startswith("Audit warning") and message not in current:
+            self.audit_status = f"{current}; {message}"
+        else:
+            self.audit_status = warning
 
     def _auto_refresh(self) -> None:
         if self.closing:
