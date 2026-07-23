@@ -84,6 +84,10 @@ make money without being reckless, clumsy, or wasteful.
   feeds back into Timmy's local learning trail.
 - Fixed the Cash Account indicator so Account Check fetches the selected
   Webull account balance endpoint instead of only reading the account list.
+- Strengthened dual-lane automation by keeping the live lane on the same plan
+  pass after paper journaling, classifying rejected live responses as
+  below-expectation feedback, and deduping repeated feedback so the learning
+  trail is useful instead of noisy.
 
 ## Reliability, Health, And Adaptability
 

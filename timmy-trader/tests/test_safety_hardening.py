@@ -553,7 +553,7 @@ def test_dual_automation_lanes_run_paper_and_live(monkeypatch) -> None:
     app.config = load_config()
     app.paper_cash_snapshot = ("$10,000.00", "Paper cash")
     calls: list[str] = []
-    app.paper_trade = lambda refresh=False: calls.append(f"paper:{refresh}") or "paper ok"
+    app.paper_trade = lambda refresh=False, refresh_after=True: calls.append(f"paper:{refresh}:{refresh_after}") or "paper ok"
     app.live_preview_then_submit = lambda refresh=False: calls.append(f"live:{refresh}") or "live ok"
     app._load_journal = lambda: None
     app._paper_account_snapshot = lambda: ("$10,000.00", "paper ok")
@@ -565,7 +565,7 @@ def test_dual_automation_lanes_run_paper_and_live(monkeypatch) -> None:
     result = app._run_automation_lanes(paper_enabled=True, live_enabled=True)
 
     assert calls == [
-        "paper:False",
+        "paper:False:False",
         "feedback:paper:above-expectation",
         "live:False",
         "feedback:live:above-expectation",
@@ -573,6 +573,52 @@ def test_dual_automation_lanes_run_paper_and_live(monkeypatch) -> None:
     assert app.execution_target_var.get() == "Live"
     assert "Paper lane result" in result[0]
     assert "Live lane result" in result[1]
+
+
+def test_dual_automation_feedback_marks_live_rejection_below_expectation() -> None:
+    app = native_app_with_bars(datetime.now())
+    app.plans = [order_plan()]
+    app.execution_target_var = Var("Live")
+    app.paper_auto_var = Var(False)
+    app.plan_limit_value = 3
+    app.trade_cash_snapshot = ("$1,000.00", "test cash")
+    app.paper_cash_snapshot = ("$10,000.00", "Paper cash")
+    calls: list[tuple[str, str]] = []
+    app.live_preview_then_submit = lambda refresh=False: '{"status": "rejected", "error": "insufficient buying power"}'
+    app._paper_account_snapshot = lambda: ("$10,000.00", "paper ok")
+    app._render_status = lambda: None
+    app._render_broker_summary = lambda: None
+    app._render_setup_status = lambda: None
+    app._record_automation_feedback = lambda lane, expectation, detail: calls.append((lane, expectation))
+
+    result = app._run_automation_lanes(paper_enabled=False, live_enabled=True)
+
+    assert calls == [("live", "below-expectation")]
+    assert "Live lane result" in result[0]
+
+
+def test_automation_feedback_dedupes_repeated_lane_status() -> None:
+    app = native_app_with_bars(datetime.now())
+    app.execution_events = [
+        {
+            "event_type": "automation-feedback",
+            "lane": "live",
+            "status": "below-expectation",
+            "detail": "No executable plans at current controls.",
+            "recorded_at": datetime.now().isoformat(),
+        }
+    ]
+
+    assert app._should_record_automation_feedback(
+        "live",
+        "below-expectation",
+        "No executable plans at current controls.",
+    ) is False
+    assert app._should_record_automation_feedback(
+        "paper",
+        "below-expectation",
+        "No executable plans at current controls.",
+    ) is True
 
 
 def test_live_submit_rejects_expired_preview(monkeypatch) -> None:

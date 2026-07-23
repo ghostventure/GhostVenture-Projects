@@ -2000,7 +2000,7 @@ class TimmyNativeApp:
         }
         return json.dumps(results, indent=2, sort_keys=True)
 
-    def paper_trade(self, refresh: bool = True) -> str:
+    def paper_trade(self, refresh: bool = True, refresh_after: bool = True) -> str:
         if refresh:
             self._refresh_payload()
         plans = list(self.plans)
@@ -2013,7 +2013,8 @@ class TimmyNativeApp:
         ]
         for result in results:
             self._append_execution_event(result)
-        self._refresh_payload()
+        if refresh_after:
+            self._refresh_payload()
         return json.dumps(results, indent=2, sort_keys=True)
 
     def submit_live_interactive(self) -> None:
@@ -2120,10 +2121,11 @@ class TimmyNativeApp:
         if paper_enabled:
             self.execution_target_var.set("Paper")
             try:
-                paper_result = self.paper_trade(refresh=False)
+                paper_result = self.paper_trade(refresh=False, refresh_after=False)
                 self._load_journal()
                 self.paper_cash_snapshot = self._paper_account_snapshot()
-                self._record_automation_feedback("paper", "above-expectation", f"Paper lane journaled up to {self.plan_limit_value} plan(s).")
+                paper_expectation = self._feedback_expectation(paper_result)
+                self._record_automation_feedback("paper", paper_expectation, f"Paper lane journaled up to {self.plan_limit_value} plan(s).")
                 results.append("Paper lane result:\n" + paper_result)
             except Exception as exc:
                 self._record_automation_feedback("paper", "below-expectation", str(exc))
@@ -2132,7 +2134,8 @@ class TimmyNativeApp:
             self.execution_target_var.set("Live")
             try:
                 live_result = self.live_preview_then_submit(refresh=False)
-                self._record_automation_feedback("live", "above-expectation", "Live lane previewed and submitted guarded plans.")
+                live_expectation = self._feedback_expectation(live_result)
+                self._record_automation_feedback("live", live_expectation, "Live lane previewed and submitted guarded plans.")
                 results.append("Live lane result:\n" + live_result)
             except Exception as exc:
                 self._record_automation_feedback("live", "below-expectation", str(exc))
@@ -2144,13 +2147,16 @@ class TimmyNativeApp:
         return results or ["Automation lanes checked: no enabled lane."]
 
     def _record_automation_feedback(self, lane: str, expectation: str, detail: str) -> None:
+        detail = detail[:500]
+        if not self._should_record_automation_feedback(lane, expectation, detail):
+            return
         event = {
             "mode": lane,
             "robot": "Timmy",
             "event_type": "automation-feedback",
             "status": expectation,
             "lane": lane,
-            "detail": detail[:500],
+            "detail": detail,
             "plans_count": len(getattr(self, "plans", [])),
             "cash_account": self.trade_cash_snapshot[0],
             "paper_account": self._paper_account_snapshot()[0],
@@ -2160,6 +2166,33 @@ class TimmyNativeApp:
             self._append_execution_event(event)
         except Exception:
             pass
+
+    def _should_record_automation_feedback(self, lane: str, expectation: str, detail: str) -> bool:
+        now = datetime.now(ZoneInfo("America/New_York"))
+        for event in reversed(getattr(self, "execution_events", [])[-20:]):
+            if event.get("event_type") != "automation-feedback":
+                continue
+            if event.get("lane") != lane or event.get("status") != expectation or event.get("detail") != detail:
+                continue
+            timestamp = self._event_timestamp(event)
+            if timestamp and (now - timestamp).total_seconds() < 900:
+                return False
+        return True
+
+    @staticmethod
+    def _feedback_expectation(result_text: str) -> str:
+        lowered = str(result_text).lower()
+        weak_markers = (
+            "blocked",
+            "rejected",
+            "failed",
+            "error",
+            "insufficient",
+            "preview-required",
+            "no executable",
+            "nothing was journaled",
+        )
+        return "below-expectation" if any(marker in lowered for marker in weak_markers) else "above-expectation"
 
     def _refresh_payload(self) -> str:
         self._splash_step("Loading configuration")
