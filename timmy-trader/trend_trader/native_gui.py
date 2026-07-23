@@ -80,6 +80,7 @@ class TimmyNativeApp:
         self.nav_buttons: dict[str, tk.Button] = {}
         self.profile_field_status_labels: dict[str, tk.Label] = {}
         self.setup_readiness_labels: dict[str, tk.Label] = {}
+        self.overview_summary_labels: dict[str, tk.Label] = {}
         self.scanner_summary_labels: dict[str, tk.Label] = {}
         self.strategy_summary_labels: dict[str, tk.Label] = {}
         self.execution_summary_labels: dict[str, tk.Label] = {}
@@ -675,6 +676,19 @@ class TimmyNativeApp:
         body.columnconfigure(1, weight=2)
         body.rowconfigure(0, weight=1)
 
+        overview_panel = self._panel(body)
+        self.overview_panel = overview_panel
+        overview_panel.columnconfigure(0, weight=1)
+        overview_panel.columnconfigure(1, weight=1)
+        overview_panel.rowconfigure(2, weight=1)
+        self._section_header(overview_panel, "OVERVIEW", "Workflow Snapshot", "Scan Now", self.refresh_data, compact=True)
+        overview_summary = tk.Frame(overview_panel, bg=self.colors["panel"])
+        overview_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        overview_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        self.overview_summary_labels = {}
+        for idx, title in enumerate(("Scanner", "Strategy", "Execution", "Broker")):
+            self.overview_summary_labels[title] = self._mini_stat(overview_summary, idx, title)
+
         signals_panel = self._panel(body)
         self.signals_panel = signals_panel
         signals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
@@ -1005,34 +1019,46 @@ class TimmyNativeApp:
         broker_panel = self._panel(right)
         self.broker_panel = broker_panel
         broker_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 18))
+        broker_panel.columnconfigure(0, weight=1)
+        broker_panel.columnconfigure(1, weight=1)
         broker_panel.rowconfigure(2, weight=1)
         self._section_header(broker_panel, "WEBULL ROUTE", "Broker Response", None, None, compact=True)
         broker_summary = tk.Frame(broker_panel, bg=self.colors["panel"])
-        broker_summary.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
+        broker_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         broker_summary.columnconfigure((0, 1, 2, 3), weight=1)
         self.broker_summary_labels = {}
         for idx, title in enumerate(("Account", "Cash", "Live", "Preview")):
             self.broker_summary_labels[title] = self._mini_stat(broker_summary, idx, title)
+        self.broker_readiness_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["text"],
+                                             insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
+                                             font=("Monospace", 10), wrap="word")
+        self.broker_readiness_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.broker_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["broker_text"],
                                    insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                    font=("Monospace", 10), wrap="word")
-        self.broker_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.broker_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
         journal_panel = self._panel(right)
         self.journal_panel = journal_panel
         journal_panel.grid(row=3, column=0, sticky="nsew")
+        journal_panel.columnconfigure(0, weight=1)
+        journal_panel.columnconfigure(1, weight=2)
         journal_panel.rowconfigure(2, weight=1)
         self._section_header(journal_panel, "AUDIT TRAIL", "Execution Events", None, None, compact=True)
         audit_summary = tk.Frame(journal_panel, bg=self.colors["panel"])
-        audit_summary.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
+        audit_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         audit_summary.columnconfigure((0, 1, 2, 3), weight=1)
         self.audit_summary_labels = {}
         for idx, title in enumerate(("Integrity", "Events", "Live", "Rejected")):
             self.audit_summary_labels[title] = self._mini_stat(audit_summary, idx, title)
+        self.audit_integrity_text = tk.Text(journal_panel, height=8, bg=self.colors["panel_2"], fg=self.colors["text"],
+                                            insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
+                                            font=("Monospace", 10), wrap="word")
+        self.audit_integrity_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.journal_text = tk.Text(journal_panel, height=8, bg=self.colors["panel_2"], fg=self.colors["muted"],
                                     insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                     font=("Monospace", 10), wrap="word")
-        self.journal_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.journal_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
         self.status_bar = tk.Label(main, text="Ready", bg=self.colors["panel_3"], fg=self.colors["muted"],
                                    anchor="center", justify="center", padx=12, pady=8)
@@ -1083,6 +1109,7 @@ class TimmyNativeApp:
             self.metrics.grid_remove()
             self.controls.grid_remove()
             self.body.grid_configure(pady=(24, 24))
+        self.overview_panel.grid_remove()
         self.signals_panel.grid_remove()
         self.universe_panel.grid_remove()
         self.setup_panel.grid_remove()
@@ -1096,15 +1123,10 @@ class TimmyNativeApp:
         self.body.columnconfigure(1, weight=1)
 
         if overview_active:
-            for row, weight in ((0, 0), (1, 1), (2, 1), (3, 0)):
-                self.right_panel.rowconfigure(row, weight=weight)
-            self.body.columnconfigure(0, weight=3)
-            self.body.columnconfigure(1, weight=2)
-            self.signals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
-            self.right_panel.grid(row=0, column=1, sticky="nsew")
-            self.decision_panel.grid(row=0, column=0, sticky="ew", pady=(0, 18))
-            self.broker_panel.grid(row=1, column=0, sticky="nsew", pady=(0, 18))
-            self.journal_panel.grid(row=2, column=0, sticky="nsew")
+            self.body.columnconfigure(0, weight=1)
+            self.body.columnconfigure(1, weight=1)
+            self._render_overview_summary()
+            self.overview_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         elif tab == "Setup":
             self.body.columnconfigure(0, weight=1)
             self._sync_profile_form(self.config or self._load_config_safe())
@@ -1981,6 +2003,7 @@ class TimmyNativeApp:
         self.plans = self._load_plans(self.config)
         self._splash_step("Rendering dashboard")
         self._render_status()
+        self._render_overview_summary()
         self._render_universe()
         self._render_signals()
         self._render_plans()
@@ -2318,6 +2341,25 @@ class TimmyNativeApp:
         self.runtime_label.configure(text="Ready" if not self.config_error else "Safe fallback")
         self.last_update_label.configure(text=self._data_freshness_line())
         self._sync_webull_account_toggle(execution_config)
+
+    def _render_overview_summary(self) -> None:
+        if not getattr(self, "overview_summary_labels", None):
+            return
+        config = self.config or self._load_config_safe()
+        execution_config = self._execution_config(config)
+        signal_mix = self._strategy_signal_mix(config)
+        live_ready = self._live_ready(execution_config)
+        broker_current = not self._broker_check_required(execution_config)
+        broker_label = "Ready" if live_ready and broker_current else "Guarded"
+        self._update_label_map(
+            getattr(self, "overview_summary_labels", {}),
+            {
+                "Scanner": f"{len(self.signals):,} scanned",
+                "Strategy": f"{signal_mix['sensible_ready']:,} trade",
+                "Execution": f"{len(self.plans):,} queued",
+                "Broker": broker_label,
+            },
+        )
 
     def _pipeline_universe_count(self, config: BotConfig) -> int:
         if config.watchlist_universe == "all-us":
@@ -2672,9 +2714,6 @@ class TimmyNativeApp:
                 widget.configure(text=value)
 
     def _render_broker_summary(self, force: bool = False) -> None:
-        current = self._text_value(self.broker_text).strip()
-        if current and not force and not current.startswith("Broker route ready"):
-            return
         config = self.config or self._load_config_safe()
         execution_config = self._execution_config(config)
         account_value = self._webull_account_card_value(execution_config)
@@ -2690,8 +2729,8 @@ class TimmyNativeApp:
                 "Preview": preview_value,
             },
         )
-        lines = [
-            "Broker route ready",
+        readiness_lines = [
+            "Route readiness",
             f"- Account lane: {self._account_lane()}",
             f"- Account target: {account_value}",
             f"- Account detail: {self._webull_account_card_detail(execution_config)}",
@@ -2702,25 +2741,39 @@ class TimmyNativeApp:
             f"- Watchlist sync: {'on' if config.webull_sync_watchlists else 'off'}",
             f"- Broker check: {'required' if self._broker_check_required(execution_config) else 'current'}",
             "",
-            "Controls",
-            "- Broker Check refreshes account/buying-power state.",
-            "- Preview Route validates the exact current order payload.",
-            "- Live / Auto previews the exact current plan before submit.",
+            "Order path",
+            f"- Current queue: {len(self.plans):,}",
+            f"- Target / mode: {self.execution_target_var.get()} / {self.execution_mode_var.get()}",
+            f"- Fresh previews: {self._fresh_preview_count(execution_config):,}",
         ]
-        self._set_text(self.broker_text, "\n".join(lines))
+        self._set_text(self.broker_readiness_text, "\n".join(readiness_lines))
+        current = self._text_value(self.broker_text).strip()
+        if current and not force and not current.startswith("Broker route"):
+            return
+        response_lines = [
+            "Broker route response",
+            "- No broker response loaded in this pane yet.",
+            "- Broker Check, Preview Route, paper submit, and live submit results appear here.",
+            "",
+            "Current route",
+            f"- Account: {account_value}",
+            f"- Cash: {cash_value}",
+            f"- Live: {live_value}",
+            f"- Preview: {preview_value}",
+        ]
+        self._set_text(self.broker_text, "\n".join(response_lines))
 
     def _load_journal(self) -> None:
         events = self.execution_events
         self._render_audit_summary(events)
+        self._render_audit_integrity(events)
         if not events:
-            self._set_text(self.journal_text, f"{self.audit_status}\n\nNo buy/sell events recorded.")
+            self._set_text(self.journal_text, "Recent events\n\nNo buy/sell events recorded.")
             return
         live_count = sum(1 for event in events if event.get("mode") == "live")
         paper_count = sum(1 for event in events if event.get("mode") == "paper")
         rejected_count = sum(1 for event in events if str(event.get("status", "")).lower() == "rejected")
         lines = [
-            self.audit_status,
-            "",
             "Event summary",
             f"- Total loaded: {len(events)}",
             f"- Live: {live_count}",
@@ -2759,6 +2812,34 @@ class TimmyNativeApp:
                 "Rejected": f"{rejected_count:,}",
             },
         )
+
+    def _render_audit_integrity(self, events: list[dict]) -> None:
+        if not hasattr(self, "audit_integrity_text"):
+            return
+        latest = "-"
+        timestamps = [self._event_timestamp(event) for event in events]
+        timestamps = [timestamp for timestamp in timestamps if timestamp is not None]
+        if timestamps:
+            latest = max(timestamps).isoformat(timespec="seconds")
+        signed_count = sum(1 for event in events if event.get("event_hash"))
+        manifest_label = self._runtime_file_mode_label(self.integrity_manifest_path)
+        event_log_label = self._runtime_file_mode_label(self.event_log_path)
+        journal_label = self._runtime_file_mode_label(self.journal_path)
+        lines = [
+            "Integrity state",
+            f"- Status: {self.audit_status}",
+            f"- Signed events: {signed_count:,} / {len(events):,}",
+            f"- Latest event: {latest}",
+            "",
+            "Protected files",
+            f"- Integrity manifest: {manifest_label}",
+            f"- Execution events: {event_log_label}",
+            f"- Paper journal: {journal_label}",
+            "",
+            "Local boundary",
+            "- Broker secrets and account IDs stay out of logs, commits, and screenshots.",
+        ]
+        self._set_text(self.audit_integrity_text, "\n".join(lines))
 
     def _paper_context_for_plan(self, plan) -> dict:
         signal = self.signal_by_symbol.get(plan.symbol)
@@ -3448,6 +3529,9 @@ class TimmyNativeApp:
         if (datetime.now() - previewed_at).total_seconds() > LIVE_PREVIEW_TTL_SECONDS:
             return False
         return preview.get("account_id") == config.webull_account_id
+
+    def _fresh_preview_count(self, config: BotConfig) -> int:
+        return sum(1 for plan in self.plans if self._has_fresh_preview(plan, config))
 
     def _execution_config(self, config: BotConfig) -> BotConfig:
         account_id = self._selected_account_id(config)

@@ -38,7 +38,43 @@ pgrep -af 'timmy|Timmy'
 
 6. Inspect `/tmp/timmy-launch.log` and `timmy-crash.log` if the process does not stay up.
 
-## 2. Live Brokerage Workflow
+## 2. Native GUI Workflow
+
+Use this layout contract when adding or moving Timmy controls.
+
+1. Keep `Overview` as a high-level workflow snapshot only: pipeline counts, current target/mode, buying power, broker guard state, audit status, and watchlist focus.
+
+2. Keep detailed scanner tables and selected-symbol output in `Scanner`.
+
+3. Keep model controls, signal mix, readiness gates, and eligible-symbol detail in `Strategy`.
+
+4. Keep order controls, executable queue, fractional state, broker/risk gates, and live/paper actions in `Execution`.
+
+5. Keep account route status, buying-power source, live switches, preview freshness, and raw broker responses in `Broker`.
+
+6. Keep event counts, signed-event coverage, protected runtime-file status, and recent execution history in `Audit`.
+
+7. Do not duplicate full tables, broker logs, audit trails, or execution controls on `Overview`; surface only the summary values needed to see whether the workflow is moving.
+
+## 3. Runtime Reliability Workflow
+
+Use this standard when changing Timmy's launch, automation, broker, scanner, or GUI behavior.
+
+1. Timmy should have one active process per `TIMMY_HOME`. Power-cycle or terminal restarts must replace the old process before launching a new one.
+
+2. Startup should tolerate missing runtime files by recreating safe defaults, then logging recoverable state in the GUI instead of crashing.
+
+3. Runtime state belongs in local files with hardened permissions. Credentials, profile data, audit keys, journals, generated watchlists, package output, and caches must stay out of the public source mirror.
+
+4. Broker-dependent actions must degrade to a guarded state when account data, buying power, market session, quote freshness, preview freshness, or live switches are not current.
+
+5. Scanner, strategy, execution, broker, and audit views should render from shared runtime state instead of each tab maintaining separate copies of the same logic.
+
+6. Any GUI or trading-flow change must pass compile, pytest, smoke test, ELF rebuild, process restart, and a visual check of the changed tabs before it is treated as ready.
+
+7. Failures that Timmy can control should become blocked/guarded UI states with journaled evidence. Uncontrolled failures include power loss, network outage, broker outage, OS kill, corrupted disk, and revoked credentials.
+
+## 4. Live Brokerage Workflow
 
 Use this before relying on unattended live brokerage.
 
@@ -77,7 +113,7 @@ MAX_ENTRY_CASH_PCT
 
 8. Confirm broker rejections are logged and reviewed before loosening any thresholds.
 
-## 3. Actual Trade Placement Workflow
+## 5. Actual Trade Placement Workflow
 
 Use this for the real order lifecycle. This workflow is local-only and must not be moved into GitHub Actions.
 
@@ -135,7 +171,7 @@ Webull submit rejected
 
 11. Webull Desktop is not part of the placement path. It is only a viewer for account, order, position, and watchlist state that came from Webull.
 
-## 4. Fractional-First Trading Workflow
+## 6. Fractional-First Trading Workflow
 
 Use this when a symbol is too expensive for a whole-share order or when buying power is limited.
 
@@ -153,7 +189,7 @@ WEBULL_EQUITY_FRACTIONAL_QUANTITY_DECIMALS=5
 
 4. Treat repeated fractional-order broker rejections as a configuration issue, not a signal issue.
 
-## 5. All-Market Scanning Workflow
+## 7. All-Market Scanning Workflow
 
 Use this to keep Timmy looking across the U.S. listed universe instead of a fixed watchlist.
 
@@ -182,7 +218,7 @@ WATCHLIST_UNIVERSE_REFRESH_HOURS=24
 
 9. If Timmy scans but does not trade, check `trade-ready-watchlist.txt`, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
 
-## 6. Webull Watchlist Sync Workflow
+## 8. Webull Watchlist Sync Workflow
 
 Use this to reflect Timmy's generated lists in Webull account-side watchlists. Webull Desktop is only the viewer.
 
@@ -204,7 +240,7 @@ WEBULL_QUIET_WATCHLIST_NAME=Timmy Quiet Removed
 
 5. If Webull Desktop does not immediately show the changes, refresh or restart Webull Desktop. The account-side API read-back is the source of truth.
 
-## 7. Publication Workflow
+## 9. Publication Workflow
 
 Use this when updating the public mirror.
 
