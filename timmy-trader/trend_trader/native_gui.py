@@ -26,10 +26,13 @@ from .market_calendar import market_session, seconds_until_next_open
 from .market_data import fetch_daily_bars
 from .market_universe import fetch_us_listed_symbols, load_bundled_us_listed_instruments, load_bundled_us_listed_symbols
 from .models import OrderPlan
+from .diagnostics import inspect_trade_ready, why_no_trade
 from .readiness import readiness_flags
 from .risk import create_order_plan
+from .runtime_health import build_runtime_health, pre_market_system_check
 from .sample_data import write_sample_bars
 from .strategy import rank_signals
+from .strategy_presets import list_strategy_presets
 from .watchlist import DEFAULT_ROTATION_CANDIDATES, load_watchlist, rotate_watchlist, write_watchlist, write_watchlist_template
 from .webull_watchlists import sync_generated_watchlists
 
@@ -333,7 +336,7 @@ class TimmyNativeApp:
                              justify="left", anchor="w", font=("Sans", 8, "bold"))
         brand_sub.pack(anchor="w", pady=(1, 0))
 
-        nav_items = ["Overview", "Setup", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit"]
+        nav_items = ["Overview", "Setup", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit", "Health"]
         nav = tk.Frame(rail, bg=self.colors["rail"])
         nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(18, 0))
         for item in nav_items:
@@ -362,7 +365,7 @@ class TimmyNativeApp:
         runtime.grid(row=3, column=0, columnspan=2, sticky="ew", padx=20, pady=22)
         runtime_top = tk.Frame(runtime, bg=self.colors["cyan"], height=4)
         runtime_top.pack(fill="x")
-        runtime_title = tk.Label(runtime, text="Runtime", bg=self.colors["runtime"], fg=self.colors["rail_muted"], anchor="center", justify="center")
+        runtime_title = tk.Label(runtime, text="Desk Status", bg=self.colors["runtime"], fg=self.colors["rail_muted"], anchor="center", justify="center")
         self._fit_text(runtime_title, min_size=8, max_size=10, padding=20, wrap=True)
         runtime_title.pack(fill="x", padx=14, pady=(12, 2))
         self.runtime_label = tk.Label(runtime, text="Checking", bg=self.colors["runtime"], fg=self.colors["teal"],
@@ -437,17 +440,17 @@ class TimmyNativeApp:
         self.active_card = self._metric(metrics, 0, 1, "Active List")
         self.movement_card = self._metric(metrics, 0, 2, "Movement")
         self.trade_ready_card = self._metric(metrics, 1, 0, "Trade Ready")
-        self.plan_card = self._metric(metrics, 1, 1, "Executable Plans")
+        self.plan_card = self._metric(metrics, 1, 1, "Orders Ready")
         self.cash_card = self._metric(metrics, 1, 2, "Buying Power", highlight=True)
 
         controls = self._panel(main)
         self.controls = controls
         for idx in range(6):
             controls.columnconfigure(idx, weight=1, minsize=118)
-        controls_title = tk.Label(controls, text="Execution Controls", bg=self.colors["panel"], fg=self.colors["text"],
+        controls_title = tk.Label(controls, text="Trade Controls", bg=self.colors["panel"], fg=self.colors["text"],
                                   font=("Sans", 13, "bold"), anchor="w", justify="left")
         controls_title.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 0))
-        controls_status = tk.Label(controls, text="Execution tab controls target, automation, broker lane, style, and pattern gates.",
+        controls_status = tk.Label(controls, text="Execution keeps the account lane, auto mode, style, and setup filters in one place.",
                                    bg=self.colors["panel"], fg=self.colors["muted"], font=("Sans", 9),
                                    anchor="e", justify="right")
         controls_status.grid(row=0, column=2, columnspan=4, sticky="ew", padx=18, pady=(14, 0))
@@ -681,12 +684,12 @@ class TimmyNativeApp:
         overview_panel.columnconfigure(0, weight=1)
         overview_panel.columnconfigure(1, weight=1)
         overview_panel.rowconfigure(2, weight=1)
-        self._section_header(overview_panel, "OVERVIEW", "Workflow Snapshot", "Scan Now", self.refresh_data, compact=True)
+        self._section_header(overview_panel, "TODAY'S DESK", "Market Snapshot", "Scan Now", self.refresh_data, compact=True)
         overview_summary = tk.Frame(overview_panel, bg=self.colors["panel"])
         overview_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         overview_summary.columnconfigure((0, 1, 2, 3), weight=1)
         self.overview_summary_labels = {}
-        for idx, title in enumerate(("Scanner", "Strategy", "Execution", "Broker")):
+        for idx, title in enumerate(("Market Pulse", "Setup Edge", "Orders Ready", "Broker Desk")):
             self.overview_summary_labels[title] = self._mini_stat(overview_summary, idx, title)
 
         signals_panel = self._panel(body)
@@ -985,6 +988,45 @@ class TimmyNativeApp:
         )
         self.execution_gate_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
+        health_panel = self._panel(body)
+        self.health_panel = health_panel
+        health_panel.columnconfigure(0, weight=1)
+        health_panel.columnconfigure(1, weight=1)
+        health_panel.rowconfigure(2, weight=1)
+        self._section_header(health_panel, "DESK HEALTH", "Today's Guardrails", "Run Check", self.run_system_check)
+        health_summary = tk.Frame(health_panel, bg=self.colors["panel"])
+        health_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        health_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        self.health_summary_labels = {}
+        for idx, title in enumerate(("Desk", "Market", "Account", "Watchdog")):
+            self.health_summary_labels[title] = self._mini_stat(health_summary, idx, title)
+        self.health_text = tk.Text(
+            health_panel,
+            height=16,
+            bg=self.colors["panel_2"],
+            fg=self.colors["text"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            padx=14,
+            pady=12,
+            font=("Monospace", 10),
+            wrap="word",
+        )
+        self.health_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.diagnostics_text = tk.Text(
+            health_panel,
+            height=16,
+            bg=self.colors["panel_2"],
+            fg=self.colors["muted"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            padx=14,
+            pady=12,
+            font=("Monospace", 10),
+            wrap="word",
+        )
+        self.diagnostics_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+
         right = tk.Frame(body, bg=self.colors["bg"])
         self.right_panel = right
         right.grid(row=0, column=1, sticky="nsew")
@@ -1022,12 +1064,12 @@ class TimmyNativeApp:
         broker_panel.columnconfigure(0, weight=1)
         broker_panel.columnconfigure(1, weight=1)
         broker_panel.rowconfigure(2, weight=1)
-        self._section_header(broker_panel, "WEBULL ROUTE", "Broker Response", None, None, compact=True)
+        self._section_header(broker_panel, "BROKER DESK", "Account And Orders", None, None, compact=True)
         broker_summary = tk.Frame(broker_panel, bg=self.colors["panel"])
         broker_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         broker_summary.columnconfigure((0, 1, 2, 3), weight=1)
         self.broker_summary_labels = {}
-        for idx, title in enumerate(("Account", "Cash", "Live", "Preview")):
+        for idx, title in enumerate(("Account", "Buying Power", "Live", "Dry Run")):
             self.broker_summary_labels[title] = self._mini_stat(broker_summary, idx, title)
         self.broker_readiness_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["text"],
                                              insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
@@ -1044,12 +1086,12 @@ class TimmyNativeApp:
         journal_panel.columnconfigure(0, weight=1)
         journal_panel.columnconfigure(1, weight=2)
         journal_panel.rowconfigure(2, weight=1)
-        self._section_header(journal_panel, "AUDIT TRAIL", "Execution Events", None, None, compact=True)
+        self._section_header(journal_panel, "TRADE LOG", "Fills And Guardrails", None, None, compact=True)
         audit_summary = tk.Frame(journal_panel, bg=self.colors["panel"])
         audit_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         audit_summary.columnconfigure((0, 1, 2, 3), weight=1)
         self.audit_summary_labels = {}
-        for idx, title in enumerate(("Integrity", "Events", "Live", "Rejected")):
+        for idx, title in enumerate(("Guardrails", "Events", "Live", "Rejected")):
             self.audit_summary_labels[title] = self._mini_stat(audit_summary, idx, title)
         self.audit_integrity_text = tk.Text(journal_panel, height=8, bg=self.colors["panel_2"], fg=self.colors["text"],
                                             insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
@@ -1115,6 +1157,7 @@ class TimmyNativeApp:
         self.setup_panel.grid_remove()
         self.strategy_tab_panel.grid_remove()
         self.execution_tab_panel.grid_remove()
+        self.health_panel.grid_remove()
         self.right_panel.grid_remove()
         for panel in (self.decision_panel, self.order_panel, self.broker_panel, self.journal_panel):
             panel.grid_remove()
@@ -1147,6 +1190,10 @@ class TimmyNativeApp:
             self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
             self._render_execution_tab()
             self.execution_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Health":
+            self.body.columnconfigure(0, weight=1)
+            self._render_health_tab()
+            self.health_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         else:
             for row in range(4):
                 self.right_panel.rowconfigure(row, weight=1 if row == 0 else 0)
@@ -2009,6 +2056,7 @@ class TimmyNativeApp:
         self._render_plans()
         self._render_broker_summary()
         self._load_journal()
+        self._render_health_tab()
         self._write_paper_training_summary()
         return "Dashboard refreshed."
 
@@ -2354,10 +2402,10 @@ class TimmyNativeApp:
         self._update_label_map(
             getattr(self, "overview_summary_labels", {}),
             {
-                "Scanner": f"{len(self.signals):,} scanned",
-                "Strategy": f"{signal_mix['sensible_ready']:,} trade",
-                "Execution": f"{len(self.plans):,} queued",
-                "Broker": broker_label,
+                "Market Pulse": f"{len(self.signals):,} scanned",
+                "Setup Edge": f"{signal_mix['sensible_ready']:,} trade",
+                "Orders Ready": f"{len(self.plans):,} queued",
+                "Broker Desk": broker_label,
             },
         )
 
@@ -2510,7 +2558,7 @@ class TimmyNativeApp:
             lines.append(f"Config fallback active:\n{self.config_error}")
         config = self.config or self._load_config_safe()
         lines.extend([
-            "Execution gates",
+            "Trade guardrails",
             f"- Target / mode: {self.execution_target_var.get()} / {self.execution_mode_var.get()}",
             f"- Live guard: {'enabled' if self._live_ready(self._execution_config(config)) else 'locked'}",
             f"- Fractional priority: {'on' if config.enable_equity_fractional_trading else 'off'}",
@@ -2651,11 +2699,111 @@ class TimmyNativeApp:
         self._set_text(self.execution_queue_text, self._execution_queue_detail(config))
         self._set_text(self.execution_gate_text, self._execution_gate_detail(config, execution_config))
 
+    def run_system_check(self) -> None:
+        try:
+            self.status_bar.configure(text="Running desk check...")
+            self._refresh_payload()
+            self._render_health_tab(force_check=True)
+            self.status_bar.configure(text="Desk check complete.")
+        except Exception as exc:
+            self.status_bar.configure(text=f"Desk check failed: {exc}")
+            if hasattr(self, "health_text"):
+                self._set_text(self.health_text, str(exc))
+
+    def _render_health_tab(self, force_check: bool = False) -> None:
+        if not hasattr(self, "health_text"):
+            return
+        config = self.config or self._load_config_safe()
+        health = build_runtime_health(
+            home=self.home,
+            config=self._execution_config(config),
+            plans_count=len(self.plans),
+            events_count=len(self.execution_events),
+        )
+        system_check = pre_market_system_check(
+            home=self.home,
+            config=self._execution_config(config),
+            plans_count=len(self.plans),
+            events_count=len(self.execution_events),
+        ) if force_check else None
+        market = health.market_session or {}
+        process = health.single_process
+        watchdog_value = "Running" if process and process.is_running else "Check"
+        account_value = "Fresh" if not self._broker_check_required(self._execution_config(config)) else "Needed"
+        self._update_label_map(
+            getattr(self, "health_summary_labels", {}),
+            {
+                "Desk": health.overall.title(),
+                "Market": "Open" if market.get("is_open") else "Closed",
+                "Account": account_value,
+                "Watchdog": watchdog_value,
+            },
+        )
+        signal_lines = [
+            "Desk health",
+            f"- Overall: {health.overall}",
+            f"- Safe mode: {'on' if health.safe_mode else 'off'}",
+            f"- Account check: {'needed' if account_value == 'Needed' else 'fresh'}",
+            f"- Buying power: {self.trade_cash_snapshot[0]} ({self.trade_cash_snapshot[1]})",
+            f"- Market: {'open' if market.get('is_open') else market.get('reason', 'closed')}",
+            f"- Watchdog: {watchdog_value.lower()}",
+        ]
+        if system_check is not None:
+            signal_lines.extend([
+                "",
+                "One-click check",
+                f"- Status: {'passed' if system_check.passed else 'blocked'}",
+                f"- Blockers: {len(system_check.blockers):,}",
+                f"- Warnings: {len(system_check.warnings):,}",
+            ])
+        signal_lines.extend(["", "Guardrail notes"])
+        for signal in health.signals[:10]:
+            detail = f" | {signal.detail}" if signal.detail else ""
+            signal_lines.append(f"- {signal.level}: {signal.summary}{detail}")
+        self._set_text(self.health_text, "\n".join(signal_lines))
+        self._set_text(self.diagnostics_text, self._health_diagnostics_detail(config))
+
+    def _health_diagnostics_detail(self, config: BotConfig) -> str:
+        plan_by_symbol = {plan.symbol.upper(): plan for plan in self.plans}
+        reports = [
+            inspect_trade_ready(
+                signal,
+                plan_by_symbol.get(signal.symbol.upper()),
+                min_score_to_trade=self._min_score(config),
+                min_reward_risk=config.min_reward_risk_to_trade,
+                max_signal_volatility_pct=config.max_signal_volatility_pct,
+            )
+            for signal in self.signals[:12]
+        ]
+        rollup = why_no_trade(reports)
+        presets = ", ".join(preset.name for preset in list_strategy_presets())
+        lines = [
+            "Why no trade",
+            f"- Ready: {rollup['ready']:,}",
+            f"- Blocked: {rollup['blocked']:,}",
+            f"- Top reason: {rollup['top_reason'] or '-'}",
+            f"- Ready tickers: {self._preview_symbols(list(rollup['ready_symbols']), limit=10)}",
+            "",
+            "Strategy playbook",
+            f"- Current style: {config.trading_style.title()}",
+            f"- Available presets: {presets}",
+            "",
+            "Blocked tickers",
+        ]
+        for report in reports[:8]:
+            if report.trade_ready:
+                continue
+            issue = report.issues[0].message if report.issues else "waiting on cleaner setup"
+            lines.append(f"- {report.symbol}: {issue}")
+        if len(lines) <= 10:
+            lines.append("- No blocked tickers in the current desk sample.")
+        return "\n".join(lines)
+
     def _execution_queue_detail(self, config: BotConfig) -> str:
         lines = [
             "Executable queue",
             f"- Plan limit this pass: {self._plan_limit(config)}",
-            f"- Current queue: {len(self.plans):,}",
+            f"- Orders ready: {len(self.plans):,}",
             "",
         ]
         if not self.plans:
@@ -2688,8 +2836,8 @@ class TimmyNativeApp:
             f"- Account: {self._webull_account_card_value(execution_config)}",
             f"- Buying power: {self.trade_cash_snapshot[0]} ({self.trade_cash_snapshot[1]})",
             f"- Live switches: {'enabled' if self._live_ready(execution_config) else 'locked'}",
-            f"- Broker check: {'required' if self._broker_check_required(execution_config) else 'current'}",
-            f"- Preview required: {'yes' if config.webull_require_preview else 'no'}",
+            f"- Account check: {'needed' if self._broker_check_required(execution_config) else 'fresh'}",
+            f"- Dry run required: {'yes' if config.webull_require_preview else 'no'}",
             "",
             "Risk controls",
             f"- Max notional: {money(config.max_order_notional_usd)}",
@@ -2724,42 +2872,42 @@ class TimmyNativeApp:
             getattr(self, "broker_summary_labels", {}),
             {
                 "Account": account_value,
-                "Cash": cash_value,
+                "Buying Power": cash_value,
                 "Live": live_value,
-                "Preview": preview_value,
+                "Dry Run": preview_value,
             },
         )
         readiness_lines = [
-            "Route readiness",
+            "Account readiness",
             f"- Account lane: {self._account_lane()}",
             f"- Account target: {account_value}",
             f"- Account detail: {self._webull_account_card_detail(execution_config)}",
             f"- Buying power: {cash_value} ({self.trade_cash_snapshot[1]})",
             f"- Live switches: {'enabled' if live_value == 'On' else 'locked'}",
-            f"- Require broker preview flag: {'on' if config.webull_require_preview else 'off'}",
+            f"- Dry run required: {'yes' if config.webull_require_preview else 'no'}",
             f"- OpenAPI live submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
             f"- Watchlist sync: {'on' if config.webull_sync_watchlists else 'off'}",
-            f"- Broker check: {'required' if self._broker_check_required(execution_config) else 'current'}",
+            f"- Account check: {'needed' if self._broker_check_required(execution_config) else 'fresh'}",
             "",
-            "Order path",
-            f"- Current queue: {len(self.plans):,}",
+            "Order desk",
+            f"- Orders ready: {len(self.plans):,}",
             f"- Target / mode: {self.execution_target_var.get()} / {self.execution_mode_var.get()}",
-            f"- Fresh previews: {self._fresh_preview_count(execution_config):,}",
+            f"- Fresh dry runs: {self._fresh_preview_count(execution_config):,}",
         ]
         self._set_text(self.broker_readiness_text, "\n".join(readiness_lines))
         current = self._text_value(self.broker_text).strip()
-        if current and not force and not current.startswith("Broker route"):
+        if current and not force and not current.startswith("Broker desk"):
             return
         response_lines = [
-            "Broker route response",
-            "- No broker response loaded in this pane yet.",
-            "- Broker Check, Preview Route, paper submit, and live submit results appear here.",
+            "Broker desk notes",
+            "- No broker note loaded in this pane yet.",
+            "- Account Check, Preview Route, paper orders, and live orders show here.",
             "",
-            "Current route",
+            "Current account lane",
             f"- Account: {account_value}",
-            f"- Cash: {cash_value}",
+            f"- Buying power: {cash_value}",
             f"- Live: {live_value}",
-            f"- Preview: {preview_value}",
+            f"- Dry run: {preview_value}",
         ]
         self._set_text(self.broker_text, "\n".join(response_lines))
 
@@ -2768,19 +2916,19 @@ class TimmyNativeApp:
         self._render_audit_summary(events)
         self._render_audit_integrity(events)
         if not events:
-            self._set_text(self.journal_text, "Recent events\n\nNo buy/sell events recorded.")
+            self._set_text(self.journal_text, "Recent trade notes\n\nNo buy/sell events recorded.")
             return
         live_count = sum(1 for event in events if event.get("mode") == "live")
         paper_count = sum(1 for event in events if event.get("mode") == "paper")
         rejected_count = sum(1 for event in events if str(event.get("status", "")).lower() == "rejected")
         lines = [
-            "Event summary",
+            "Trade log summary",
             f"- Total loaded: {len(events)}",
             f"- Live: {live_count}",
             f"- Paper: {paper_count}",
             f"- Rejected: {rejected_count}",
             "",
-            "Recent events",
+            "Recent trade notes",
         ]
         for event in reversed(events[-14:]):
             symbol = event.get("symbol") or event.get("order", {}).get("symbol") or "-"
@@ -2807,6 +2955,7 @@ class TimmyNativeApp:
             getattr(self, "audit_summary_labels", {}),
             {
                 "Integrity": integrity,
+                "Guardrails": integrity,
                 "Events": f"{len(events):,}",
                 "Live": f"{live_count:,}",
                 "Rejected": f"{rejected_count:,}",
@@ -2826,17 +2975,17 @@ class TimmyNativeApp:
         event_log_label = self._runtime_file_mode_label(self.event_log_path)
         journal_label = self._runtime_file_mode_label(self.journal_path)
         lines = [
-            "Integrity state",
+            "Guardrail check",
             f"- Status: {self.audit_status}",
             f"- Signed events: {signed_count:,} / {len(events):,}",
-            f"- Latest event: {latest}",
+            f"- Latest trade note: {latest}",
             "",
-            "Protected files",
+            "Protected local files",
             f"- Integrity manifest: {manifest_label}",
-            f"- Execution events: {event_log_label}",
+            f"- Trade events: {event_log_label}",
             f"- Paper journal: {journal_label}",
             "",
-            "Local boundary",
+            "Privacy line",
             "- Broker secrets and account IDs stay out of logs, commits, and screenshots.",
         ]
         self._set_text(self.audit_integrity_text, "\n".join(lines))

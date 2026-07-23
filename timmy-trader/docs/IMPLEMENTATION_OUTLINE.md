@@ -37,6 +37,56 @@
 - Suppress setups that repeatedly fail under similar conditions.
 - Prefer symbols with stronger historical follow-through and cleaner liquidity.
 
+## Phase 6 - Trading Desk Workflow Standard
+
+- Keep `Overview` as a compact model snapshot, not a duplicate workspace.
+- Assign every widget, action, report, and raw response to one owner tab.
+- Add Account Readiness panel hooks for process, data, broker, cash/buying
+  power, watchlist, orders ready, trade log, scan, broker-response, and
+  watchdog evidence.
+- Add desktop notification hooks for critical, warning, and info event classes.
+- Add a one-click Account Check contract that is read-only by default and
+  reports readiness without placing orders or mutating broker state.
+- Add Paper vs Live Scorecard hooks that summarize plan, preview, submit, fill,
+  reject, skip, and P/L evidence from existing journals.
+- Add Trading Scoreboard hooks that summarize outcomes by symbol, session,
+  strategy profile, time of day, and volatility regime.
+- Keep `docs/WORKFLOWS.md`, `docs/OPERATOR_CHECKLIST.md`, and
+  `docs/UPGRADE_MANIFEST.md` synchronized when new GUI surfaces are added.
+
+## Tab Ownership Contract
+
+- Account Setup owns profile fields, credential verification, account selection,
+  local profile files, and setup readiness.
+- Market Pulse owns symbol universe state, generated watchlists, rotation,
+  Webull watchlist sync, scanned ticker tables, and movement ranking.
+- Today's Guardrails owns strategy settings, signal mix, readiness gates,
+  pattern/style controls, and eligibility explanations.
+- Orders Ready owns executable queue, paper/live controls, fractional routing,
+  risk gates, and order actions.
+- Broker Desk owns account route state, cash/buying power, preview/submit
+  responses, account checks, and broker rejection detail.
+- Trade Log owns integrity chain, protected-file state, execution events,
+  signed-event coverage, and recent history.
+- Account Readiness owns system status summaries, one-click Account Check
+  results, watchdog status, and notification readiness.
+- Trading Scoreboard owns Paper vs Live Scorecard, performance analytics, and
+  strategy outcome summaries.
+
+## Upgrade Hook Contracts
+
+- Account Readiness hooks must read shared runtime state and report `Ready`,
+  `Guarded`, `Blocked`, `Unknown`, or `Stale`.
+- Notification hooks must be journal-backed and classified as `critical`, `warning`, or `info`.
+- One-click Account Check must avoid submit, sync, account switching, journal
+  clearing, or live-state mutation unless a separate repair action is
+  explicitly selected.
+- Paper vs Live Scorecard hooks must compare paper and live outcomes without
+  mixing asset classes or strategy profiles.
+- Trading Scoreboard hooks must be derived from `trade-journal.jsonl`,
+  `execution-events.jsonl`, and paper summary outputs.
+- Redundant widgets should be removed, demoted to summaries, or moved to their owner tab before new UI is added.
+
 ## Non-Negotiable Controls
 
 - Never trade outside whitelist without explicit config change.

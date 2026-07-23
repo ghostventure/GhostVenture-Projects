@@ -10,6 +10,14 @@ Timmy is a decision and order-planning tool. It does not guarantee profits, and 
 
 - Confirm only one Timmy instance is running for the active runtime home.
 - Confirm the `.env` file belongs to this machine and account; do not paste broker credentials, secrets, tokens, MFA codes, or screenshots into chat.
+- Confirm the GUI is using the standardized workflow layout:
+  - `Overview` shows summary only.
+  - Market Pulse, Today's Guardrails, Orders Ready, Broker Desk, and Trade Log
+    own their detailed views.
+  - Broker actions are not duplicated outside Broker Desk or Orders Ready.
+  - Trade Log history is not duplicated outside Trade Log.
+- Run the one-click Account Check when available. Treat it as read-only unless a
+  repair action is explicitly selected.
 - Confirm the intended execution target before loading plans:
   - `Paper` for normal testing, scouting, and training-data collection.
   - `Live` only after paper evidence, account checks, Webull preview, and live switches are intentionally enabled.
@@ -72,6 +80,17 @@ timmy webull-check
 - Wait for opening volatility to settle unless the strategy and limits were explicitly tuned for the first minutes.
 - Refresh data after the open; do not use a stale pre-market dashboard snapshot.
 - Confirm Timmy's market-session gate agrees with the intended workflow.
+- Confirm the Account Readiness surface shows current evidence for:
+  - Timmy process state.
+  - Market data freshness.
+  - Broker authentication.
+  - Cash/buying power.
+  - Watchlist sync.
+  - Orders ready.
+  - Trade Log chain.
+  - Last scan.
+  - Last broker response.
+  - Watchdog state.
 - Confirm there are no duplicate Timmy processes, background services, or stale locks controlling the same runtime home.
 - Confirm broker state is known before any live path:
   - Account selected.
@@ -294,8 +313,27 @@ Red flags:
 Do this after paper cycles and any live attempt.
 
 - Review `execution-events.jsonl` for every paper, preview, block, submit attempt, fill, cancel, failure, and reconciliation event.
+- Review desktop notifications, when enabled, for critical and warning-class
+  events. Notification history should support the Trade Log; it should not
+  replace the event journal.
 - Check whether the audit chain shows a warning. If it does, stop automation and inspect the journal before continuing.
 - Review `trade-journal.jsonl` and `paper-training-summary.json` after paper sessions.
+- Review the Paper vs Live Scorecard when available:
+  - Paper plans versus live previews.
+  - Paper fills versus live submits.
+  - Rejections and skip reasons.
+  - P/L fields when available.
+  - Differences by symbol, session, and strategy profile.
+- Review the Trading Scoreboard when available:
+  - Win rate.
+  - Expectancy.
+  - Drawdown.
+  - Average reward/risk.
+  - Symbol follow-through.
+  - Time-of-day behavior.
+  - Volatility regime.
+  - Rejection rate.
+  - Strategy profile results.
 - Record whether each outcome was:
   - Target hit.
   - Stopped.
@@ -328,3 +366,18 @@ Stop Timmy automation and return to `User` plus `Paper` when any of these happen
 - A trade is placed, rejected, or cancelled for an unknown reason.
 - Market conditions change faster than the configured risk model can handle.
 - You cannot explain why Timmy wants to trade the top-ranked plan.
+
+## 14. Operator Workflow Standard
+
+Use this checklist before deciding that a workflow or GUI upgrade is complete.
+
+- Every new control has exactly one owner tab.
+- `Overview` shows only summaries, counters, guard state, and routing signals.
+- The owner tab contains the detail, action button, raw response, report body, or editable setting.
+- The same status words are used everywhere: `Ready`, `Guarded`, `Blocked`, `Unknown`, and `Stale`.
+- The same trader-facing action words are used everywhere: `Account Check`, `Verify`, `Preview`, `Submit`, `Sync`, and `Power Cycle`.
+- One-click Account Check results are read-only by default.
+- Desktop notifications mirror journaled events and do not introduce an unlogged side channel.
+- Paper vs Live Scorecard and Trading Scoreboard surfaces summarize journals and execution events instead of creating duplicate records.
+- Broker Desk and Trade Log detail stays in their focused tabs unless a compact summary is needed on `Overview`.
+- Redundant widgets are removed or demoted to read-only summaries before adding new panels.

@@ -56,7 +56,85 @@ Use this layout contract when adding or moving Timmy controls.
 
 7. Do not duplicate full tables, broker logs, audit trails, or execution controls on `Overview`; surface only the summary values needed to see whether the workflow is moving.
 
-## 3. Runtime Reliability Workflow
+## 3. Trading Desk Workflow Standard
+
+Use this standard before adding new widgets, reports, or automation controls.
+
+1. Every widget must have one owner tab. Summary values may appear on
+   `Overview`, but full controls, detailed tables, logs, and report bodies
+   belong only to their owner tab.
+
+2. The owner tabs are:
+
+```text
+Account Setup -> profile, credentials, account selection, local profile files
+Market Pulse -> symbol universe, scans, movement ranking, watchlist sync
+Today's Guardrails -> strategy style, signal mix, readiness gates, patterns
+Orders Ready -> queue, paper/live controls, fractional routing, order actions
+Broker Desk -> account route, cash/buying power, preview and submit responses
+Trade Log -> integrity chain, protected-file state, execution event history
+Account Readiness -> Account Check, status hooks, restart/watchdog readiness
+Trading Scoreboard -> Paper vs Live Scorecard and trading performance
+```
+
+3. When a tab needs data owned by another tab, show a compact read-only
+   summary and point the operator to the owner tab through the workflow state,
+   not by copying the original widget.
+
+4. Standardize status language across the GUI:
+
+```text
+Ready -> the gate is current and usable
+Guarded -> Timmy can run, but a live or automated path is blocked
+Blocked -> Timmy must not proceed until the issue is fixed
+Unknown -> Timmy has not collected enough evidence to classify the state
+Stale -> the last evidence exists but is too old for the current decision
+```
+
+5. Standardize action language:
+
+```text
+Account Check -> read current account state without changing broker state
+Verify -> validate profile, credential, or configuration correctness
+Preview -> broker rehearsal for the exact current order payload
+Submit -> broker order placement
+Sync -> update a Timmy-owned external watchlist or cache
+Power Cycle -> restart Timmy through the normal launcher
+```
+
+6. Account Readiness hooks should collect data from the existing runtime state
+   and expose only gate summaries: Timmy process, market data, broker auth,
+   cash/buying power, watchlist sync, orders ready, trade log state, last scan,
+   last broker response, and watchdog status.
+
+7. Desktop notification hooks should use standardized event classes:
+
+```text
+critical -> live submit, broker rejection, trade log warning, duplicate process
+warning -> stale data, cash/buying power unavailable, preview rejected
+info -> paper fill, scan complete, account check passed, power cycle complete
+```
+
+8. The one-click Account Check contract should run read-only checks by default:
+   duplicate process, profile presence, broker credential verification state,
+   data freshness, market session, generated watchlists, orders ready, trade
+   log chain, protected-file integrity, and publication boundary. It must not
+   place orders, clear journals, rotate account targets, or mutate watchlists
+   unless the operator explicitly chooses a repair action.
+
+9. The Paper vs Live Scorecard hook should compare plan count, paper fills,
+   live previews, live submits, rejects, skipped trades, P/L fields when
+   available, and blocker categories by symbol, session, and strategy profile.
+
+10. The Trading Scoreboard hook should summarize win rate, expectancy, average
+   risk/reward, drawdown, symbol follow-through, time-of-day behavior,
+   volatility regime, rejection rate, and strategy profile results. It should
+   read from journals and execution events instead of creating a second source
+   of truth.
+
+11. Maintain `docs/UPGRADE_MANIFEST.md` as the registry that maps planned upgrades to their owner module, owner tab, status, and verification contract.
+
+## 4. Runtime Reliability Workflow
 
 Use this standard when changing Timmy's launch, automation, broker, scanner, or GUI behavior.
 
@@ -74,7 +152,67 @@ Use this standard when changing Timmy's launch, automation, broker, scanner, or 
 
 7. Failures that Timmy can control should become blocked/guarded UI states with journaled evidence. Uncontrolled failures include power loss, network outage, broker outage, OS kill, corrupted disk, and revoked credentials.
 
-## 4. Live Brokerage Workflow
+8. Account Readiness belongs in `trend_trader.runtime_health`. It is the
+   shared contract for single-process visibility, safe-mode state,
+   credential-expiry warnings, readiness blockers, crash recovery, and
+   pre-market Account Checks.
+
+9. Settings import, export, versioning, and rollback belong in `trend_trader.settings_profile`. Exports skip sensitive keys by default; private local snapshots use `0600` file permissions and `.timmy-config-versions` uses `0700`.
+
+10. Use the watchdog when Timmy should be kept alive outside a terminal session:
+
+```bash
+.venv/bin/python scripts/timmy_watchdog.py --home /path/to/timmy-home
+```
+
+11. Use safe mode when Timmy must boot for inspection but live automation must be forced off:
+
+```bash
+TIMMY_SAFE_MODE=1 .venv/bin/python scripts/timmy_watchdog.py --safe-mode --home /path/to/timmy-home
+```
+
+Safe mode forces:
+
+```text
+TRADER_MODE=paper
+TRADER_LIVE=0
+WEBULL_ENABLE_LIVE_ORDERS=0
+AUTO_START_LIVE_ON_MARKET_OPEN=0
+```
+
+12. Use the check-only watchdog path before unattended operation. It writes a
+    private watchdog event and returns non-zero when Account Readiness has
+    blockers:
+
+```bash
+.venv/bin/python scripts/timmy_watchdog.py --check-only --home /path/to/timmy-home
+```
+
+13. Do not display raw secrets, usernames, passwords, tokens, API keys, account
+    IDs, or unmasked crash excerpts in Account Readiness, watchdog logs,
+    exported settings, docs, tests, or GUI surfaces.
+
+## 5. Strategy/Risk Intelligence Workflow
+
+Use this before changing thresholds or allowing a new automation path to influence live orders.
+
+1. Strategy presets belong in `trend_trader.strategy_presets`. Each preset should describe the profile, config overrides, enabled patterns, and risk notes so Timmy can apply a coherent trading style instead of scattered one-off settings.
+
+2. Failure classification, trade-ready reason inspection, why-no-trade rollups, and backtest/replay summaries belong in `trend_trader.diagnostics`.
+
+3. Circuit breakers, per-symbol exposure, sector/industry exposure, liquidity, spread/slippage, volatility regime, market trend, and event/earnings risk checks belong in `trend_trader.market_guards`.
+
+4. Run the trade-ready inspector against each candidate before loosening thresholds. It should identify whether the candidate is ready, blocked by strategy, blocked by order planning, blocked by account/risk state, or waiting on an unknown guard.
+
+5. Treat daily loss and max drawdown circuit breakers as account-level hard stops.
+
+6. Treat per-symbol, sector, and industry exposure as portfolio-level concentration guards.
+
+7. Treat liquidity, spread/slippage, volatility regime, market trend, and known news/event/earnings risk as market-quality guards before trusting a signal.
+
+8. Backtest/replay output should be summarized into a small readiness record before any GUI or automation flow uses it.
+
+## 6. Live Brokerage Workflow
 
 Use this before relying on unattended live brokerage.
 
@@ -88,9 +226,14 @@ AUTO_START_LIVE_ON_MARKET_OPEN=1
 ENABLE_EQUITY_FRACTIONAL_TRADING=1
 ```
 
-2. Confirm the account/buying-power check succeeds from Timmy. If buying power is unavailable, live submission should be treated as blocked.
+2. Confirm the cash/buying-power Account Check succeeds from Timmy. If buying
+   power is unavailable, live submission should be treated as blocked.
 
-3. To configure or change accounts, use the native GUI `Setup` tab. Enter the Webull OpenAPI App Key, App Secret, default account ID, region, endpoint, and live switches, run `Verify Profile`, save only after verification passes, run `Broker Check`, choose the desired masked account label, then run `Broker Check` again before switching target back to `Live`.
+3. To configure or change accounts, use the native GUI `Setup` tab. Enter the
+   Webull OpenAPI App Key, App Secret, default account ID, region, endpoint,
+   and live switches, run `Verify Profile`, save only after verification
+   passes, run `Account Check`, choose the desired masked account label, then
+   run `Account Check` again before switching target back to `Live`.
 
 4. Confirm Timmy has exactly one running process for the active `TIMMY_HOME`.
 
@@ -113,7 +256,7 @@ MAX_ENTRY_CASH_PCT
 
 8. Confirm broker rejections are logged and reviewed before loosening any thresholds.
 
-## 5. Actual Trade Placement Workflow
+## 7. Actual Trade Placement Workflow
 
 Use this for the real order lifecycle. This workflow is local-only and must not be moved into GitHub Actions.
 
@@ -171,7 +314,31 @@ Webull submit rejected
 
 11. Webull Desktop is not part of the placement path. It is only a viewer for account, order, position, and watchlist state that came from Webull.
 
-## 6. Fractional-First Trading Workflow
+## 8. Broker Operations Workflow
+
+Use this for account-side state that happens after Timmy previews or submits an order.
+
+1. Reconcile Timmy's local execution events against broker read-back before trusting the next unattended live cycle.
+
+2. Track fills from broker order state, including partial fills, so position size and average entry can be rebuilt from broker truth.
+
+3. Monitor open broker orders separately from executable plans. An open order for a symbol should block duplicate same-symbol entries until it is filled, canceled, rejected, or expired.
+
+4. Compare broker positions against Timmy's position book. Open positions should block duplicate entries unless a future strategy explicitly supports adding to a position.
+
+5. Keep cancel/replace as a guarded scaffold by default. Generated cancel/replace payloads must remain dry-run unless a future reviewed broker adapter explicitly enables live cancel/replace.
+
+6. Keep trailing-stop and partial-profit behavior as risk metadata until a live broker implementation is deliberately added. Metadata is allowed to describe the intended risk model; it must not silently create extra live orders.
+
+7. Refresh the broker session when it is disconnected, unauthenticated, stale, nearing token expiry, or carrying a recent broker error.
+
+8. After every Webull watchlist sync, perform a read-back verification by list name and symbol set. Report only names, counts, missing symbols, and extra symbols.
+
+9. Treat unmatched active broker orders as warnings. They may be manual Webull orders or stale Timmy state, and they should be reviewed before relaxing duplicate-trade guards.
+
+10. Treat missing broker read-back for a submitted local event as a warning unless the local event is a block, preview, preview-required, or rejection.
+
+## 9. Fractional-First Trading Workflow
 
 Use this when a symbol is too expensive for a whole-share order or when buying power is limited.
 
@@ -189,7 +356,7 @@ WEBULL_EQUITY_FRACTIONAL_QUANTITY_DECIMALS=5
 
 4. Treat repeated fractional-order broker rejections as a configuration issue, not a signal issue.
 
-## 7. All-Market Scanning Workflow
+## 10. All-Market Scanning Workflow
 
 Use this to keep Timmy looking across the U.S. listed universe instead of a fixed watchlist.
 
@@ -218,7 +385,7 @@ WATCHLIST_UNIVERSE_REFRESH_HOURS=24
 
 9. If Timmy scans but does not trade, check `trade-ready-watchlist.txt`, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
 
-## 8. Webull Watchlist Sync Workflow
+## 11. Webull Watchlist Sync Workflow
 
 Use this to reflect Timmy's generated lists in Webull account-side watchlists. Webull Desktop is only the viewer.
 
@@ -240,7 +407,7 @@ WEBULL_QUIET_WATCHLIST_NAME=Timmy Quiet Removed
 
 5. If Webull Desktop does not immediately show the changes, refresh or restart Webull Desktop. The account-side API read-back is the source of truth.
 
-## 9. Publication Workflow
+## 12. Publication Workflow
 
 Use this when updating the public mirror.
 
@@ -270,7 +437,7 @@ git push origin HEAD
 git ls-remote origin HEAD
 ```
 
-## 8. GitHub CI Workflow
+## 13. GitHub CI Workflow
 
 The repository includes `.github/workflows/ci.yml` for source validation on pushes, pull requests, and manual dispatch.
 
@@ -284,7 +451,7 @@ CI performs:
 
 CI intentionally does not call live Webull endpoints, inspect account state, submit orders, or mutate watchlists. Those checks must run locally on the authorized machine.
 
-## 9. Native GUI Model
+## 14. Native GUI Model
 
 The native GUI is organized around Timmy's model:
 
@@ -292,7 +459,7 @@ The native GUI is organized around Timmy's model:
 Setup -> Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
 ```
 
-- `Setup` is the Webull profile form, account picker, broker check, and setup status.
+- `Setup` is the Webull profile form, account picker, Account Check, and setup status.
 - `Universe` is the known stock/ETF ticker pool and rotating market batch.
 - `Scanner` is the ranked activity board.
 - `Strategy` is the decision brief and eligibility explanation.
@@ -302,20 +469,73 @@ Setup -> Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
 
 The top metric band should show the model state first: universe size, active list count, movement count, trade-ready count, executable plan count, and buying power.
 
-Overview-only widgets such as the hero and pipeline metric band should stay concise. Execution controls and duplicated order-desk detail belong on `Execution`; `Setup`, `Universe`, `Scanner`, `Strategy`, `Execution`, `Broker`, and `Audit` should use the main content area for the selected workflow surface.
+Overview-only widgets such as the hero and pipeline metric band should stay
+concise. Order controls and duplicated order-desk detail belong in `Execution`
+as the Orders Ready surface; `Setup`, `Universe`, `Scanner`, `Strategy`,
+`Execution`, `Broker`, and `Audit` should use the main content area for the
+selected workflow surface.
 
 Focused tabs should carry their own operational context:
 
-- `Setup`: Webull OpenAPI key fields, masked account ID entry, region/endpoint, live switches, verification gate, account picker, save profile, broker check, setup readiness status, and local profile/integrity file status.
-- `Universe`: universe source, bundled snapshot counts, runtime cache, generated watchlists, and Webull watchlist-sync names.
-- `Scanner`: scanned ticker table with summary counts for scanned, moving, tradeable, and blocked symbols plus selected-symbol scout, price, and operational gate details.
-- `Strategy`: full decision surface with style/pattern/readiness summary, signal mix, decision brief, eligible symbols, watch focus, and model gate explanations.
-- `Execution`: full order desk with the moved execution controls, target/queue/fractional/broker summary, run/preview/paper/live actions, executable queue details, preview freshness, broker gates, and risk blockers.
-- `Broker`: account/cash/live/preview summary, current account lane, buying-power snapshot, live switches, preview state, broker-check state, and Webull route controls until a real broker response replaces it.
-- `Audit`: integrity/event/live/rejected summary, audit-chain state, protected-file integrity status, event totals, live/paper/rejected counts, and recent execution events.
+- `Setup`: Account Setup for Webull keys, masked account ID, region/endpoint,
+  live switches, verification, account picker, save profile, account check,
+  setup readiness, and local profile/integrity file status.
+- `Universe`: Market Pulse source, bundled snapshot counts, runtime cache,
+  generated watchlists, and Webull watchlist-sync names.
+- `Scanner`: Market Pulse ticker table with scanned, moving, tradeable, and
+  blocked counts plus selected-symbol scout, price, and gate details.
+- `Strategy`: Today's Guardrails for style/pattern/readiness summary, signal
+  mix, decision brief, eligible symbols, watch focus, and model gates.
+- `Execution`: Orders Ready desk with execution controls, target/queue/
+  fractional/broker summary, run/preview/paper/live actions, executable queue
+  details, preview freshness, broker gates, and risk blockers.
+- `Broker`: Broker Desk for account/cash/live/preview summary, current account
+  lane, cash/buying-power snapshot, live switches, preview state, account
+  check state, and Webull route controls.
+- `Audit`: Trade Log for integrity/event/live/rejected summary, audit-chain
+  state, protected-file integrity, event totals, live/paper/rejected counts,
+  and recent execution events.
 
-Use icons only where the command is obvious: run, live submit, stop, and power cycle. Keep text on higher-context actions such as scan, broker check, and route preview.
+Use icons only where the command is obvious: run, live submit, stop, and power
+cycle. Keep text on higher-context actions such as scan, Account Check, and
+route preview.
 
-Account setup and switching are GUI workflows. The Setup tab should verify the Webull profile before saving anything, save the verified profile locally, show masked account labels discovered from verification or `Broker Check`, save the selected account locally, clear stale live previews, return execution to `Paper`, and require a fresh broker check before the user enables `Live` for the newly selected account.
+Account setup and switching are GUI workflows. The Account Setup surface should
+verify the Webull profile before saving anything, save the verified profile
+locally, show masked account labels discovered from verification or `Account
+Check`, save the selected account locally, clear stale live previews, return
+execution to `Paper`, and require a fresh account check before the user enables
+`Live` for the newly selected account.
 
-Tamper-resistance is also a GUI-visible workflow. Timmy signs execution events into a local hash chain and keeps `.timmy-integrity.json` as a signed baseline for protected runtime files. Timmy updates that baseline after its own profile, settings, watchlist, journal, and event-log writes. If those files are edited outside Timmy, the Audit tab should show an audit warning before the operator trusts recent activity.
+Tamper-resistance is also a GUI-visible workflow. Timmy signs execution events
+into a local hash chain and keeps `.timmy-integrity.json` as a signed baseline
+for protected runtime files. Timmy updates that baseline after its own profile,
+settings, watchlist, journal, and event-log writes. If those files are edited
+outside Timmy, the Trade Log should show a warning before the operator trusts
+recent activity.
+
+## 15. Redundant Widget Audit
+
+Use this audit when the GUI starts to feel crowded or repetitive.
+
+1. If a widget can mutate live, broker, account, order, or profile state, keep it on its owner tab only.
+
+2. If a widget only explains current state, decide whether it is a summary or detail. Summaries may appear on `Overview`; details stay on the owner tab.
+
+3. If two tabs show the same value, they must read from the same runtime source and use the same status vocabulary.
+
+4. Remove duplicated action buttons before adding new shortcuts. Prefer one owner action plus a visible status summary elsewhere.
+
+5. Audit these redundancy risks after each GUI upgrade:
+
+```text
+Overview copying Market Pulse tables
+Overview copying Today's Guardrails decision logs
+Overview copying Orders Ready controls
+Overview copying Broker Desk raw responses
+Overview copying Trade Log event history
+Account Setup duplicating Broker Desk account route controls
+Orders Ready duplicating Broker Desk credential verification
+Trade Log duplicating Account Readiness one-click check output
+Trading Scoreboard duplicating raw journals instead of summarizing them
+```
