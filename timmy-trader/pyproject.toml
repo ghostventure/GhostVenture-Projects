@@ -28,4 +28,4 @@ testpaths = ["tests"]
 include = ["trend_trader*"]
 
 [tool.setuptools.package-data]
-trend_trader = ["static/*"]
+trend_trader = ["static/*", "resources/*.csv"]

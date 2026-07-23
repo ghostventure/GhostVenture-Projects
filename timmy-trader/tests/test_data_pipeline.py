@@ -6,7 +6,12 @@ from trend_trader.backtest import run_backtest
 from trend_trader.config import load_config
 from trend_trader.data import load_csv_bars, write_csv_bars
 from trend_trader.market_data import _stooq_symbol, _yahoo_symbol
-from trend_trader.market_universe import _parse_nasdaq_listed, _parse_other_listed
+from trend_trader.market_universe import (
+    _parse_nasdaq_listed,
+    _parse_nasdaq_listed_instruments,
+    _parse_other_listed,
+    load_bundled_us_listed_instruments,
+)
 from trend_trader.models import Candle
 from trend_trader.watchlist import load_watchlist, rotate_watchlist, write_watchlist_template
 from trend_trader.webull_watchlists import _instrument_items
@@ -66,6 +71,30 @@ def test_market_universe_parsers_skip_test_and_non_common_symbols() -> None:
 
     assert _parse_nasdaq_listed(nasdaq_payload) == ["AAPL"]
     assert _parse_other_listed(other_payload) == ["IBM"]
+
+
+def test_market_universe_parser_classifies_etfs() -> None:
+    nasdaq_payload = "\n".join([
+        "Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares",
+        "AAPL|Apple Inc. - Common Stock|Q|N|N|100|N|N",
+        "AAAU|Goldman Sachs Physical Gold ETF|G|N|N|100|Y|N",
+    ])
+
+    instruments = _parse_nasdaq_listed_instruments(nasdaq_payload)
+
+    assert [(item.symbol, item.asset_type) for item in instruments] == [("AAPL", "stock"), ("AAAU", "etf")]
+
+
+def test_bundled_us_listed_symbols_snapshot_is_ready_for_rotation() -> None:
+    instruments = load_bundled_us_listed_instruments()
+    symbols = [item.symbol for item in instruments]
+    asset_types = {item.asset_type for item in instruments}
+
+    assert len(symbols) >= 10_000
+    assert symbols == sorted(set(symbols))
+    assert {"stock", "etf"} <= asset_types
+    assert sum(1 for item in instruments if item.asset_type == "etf") >= 5_000
+    assert sum(1 for item in instruments if item.asset_type == "stock") >= 5_000
 
 
 def test_rotate_watchlist_replaces_quiet_symbols_with_movers() -> None:

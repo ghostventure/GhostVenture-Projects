@@ -24,7 +24,7 @@ from .config import BotConfig, load_config
 from .data import load_csv_bars, write_csv_bars
 from .market_calendar import market_session, seconds_until_next_open
 from .market_data import fetch_daily_bars
-from .market_universe import fetch_us_listed_symbols
+from .market_universe import fetch_us_listed_symbols, load_bundled_us_listed_symbols
 from .models import OrderPlan
 from .readiness import readiness_flags
 from .risk import create_order_plan
@@ -1177,6 +1177,9 @@ class TimmyNativeApp:
                 self.status_bar.configure(text=f"Universe refresh skipped: {exc}")
         if self.universe_path.exists():
             return load_watchlist(self.universe_path, None)
+        bundled = load_bundled_us_listed_symbols()
+        if bundled:
+            return bundled
         return sorted(DEFAULT_ROTATION_CANDIDATES)
 
     def _next_universe_batch(self, universe: list[str], batch_size: int) -> list[str]:

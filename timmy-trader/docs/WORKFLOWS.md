@@ -166,15 +166,19 @@ WATCHLIST_UNIVERSE_REFRESH_HOURS=24
 
 2. Timmy refreshes the listed-symbol universe, scans a rotating batch, scores movement, and writes generated watchlists.
 
-3. `active-watchlist.txt` is the custom list Timmy trades from.
+3. Timmy ships `trend_trader/resources/us-listed-symbols.csv` as a warm-start snapshot. Use it when the runtime cache is missing so discovery does not start from the small default list.
 
-4. `movement-watchlist.txt` tracks symbols with enough activity to monitor.
+4. The mutable runtime cache remains `timmy-watchlist-universe.txt`; it is refreshed from Nasdaq Trader when reachable and kept out of source control.
 
-5. `trade-ready-watchlist.txt` tracks active symbols whose strategy signal is eligible before broker/risk submission checks.
+5. `active-watchlist.txt` is the custom list Timmy trades from.
 
-6. `quiet-watchlist.txt` tracks symbols removed because activity fell below the quiet threshold.
+6. `movement-watchlist.txt` tracks symbols with enough activity to monitor.
 
-7. If Timmy scans but does not trade, check `trade-ready-watchlist.txt`, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
+7. `trade-ready-watchlist.txt` tracks active symbols whose strategy signal is eligible before broker/risk submission checks.
+
+8. `quiet-watchlist.txt` tracks symbols removed because activity fell below the quiet threshold.
+
+9. If Timmy scans but does not trade, check `trade-ready-watchlist.txt`, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
 
 ## 6. Webull Watchlist Sync Workflow
 

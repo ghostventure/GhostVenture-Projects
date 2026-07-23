@@ -10,6 +10,7 @@ pyinstaller \
   --clean \
   --noconfirm \
   --name Timmy \
+  --collect-data trend_trader \
   --collect-data webull \
   trend_trader/desktop.py
 

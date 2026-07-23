@@ -46,6 +46,7 @@ docs/WORKFLOWS.md
 - Remembers the last UI runtime settings on the next launch, including target, mode, account lane, score, plan limit, auto interval, trading style, and enabled patterns.
 - Adds a native `Power Cycle` control to save settings, relaunch Timmy, and replace the old process cleanly.
 - Adds adaptable trading style presets and pattern toggles for breakout, momentum, pullback, and volume-expansion setups.
+- Bundles a current U.S. listed stock/ETF universe snapshot so all-market rotation can start from known tickers before the live universe refresh completes.
 - Documents practical guardrails for asset-class expansion beyond stocks/ETFs, including crypto, commodity exposure, forex/currencies, index proxies, and unsupported instruments.
 
 ## What It Does Not Do Yet
@@ -229,6 +230,8 @@ QUIET_WATCHLIST_SCOUT_SCORE=30
 ```
 
 When enabled with a live market-data provider, Timmy fetches the current custom active list plus the candidate pool, scores every loaded symbol, keeps names showing movement, removes quiet low-ranked names, and writes the rotated active list to `ACTIVE_WATCHLIST_PATH`. Timmy then writes market data for that active custom list, and that is the list the strategy can trade from. `watchlist.txt` remains the seed list. Set `WATCHLIST_UNIVERSE=all-us` to refresh the current U.S. listed-symbol universe from Nasdaq Trader and scan it in rotating batches. The active list stays capped by `MAX_WATCHLIST_SYMBOLS`, while `WATCHLIST_UNIVERSE_BATCH_SIZE` controls how many new market symbols are inspected per refresh cycle. Any symbol that may become tradable must also be permitted by `WEBULL_SYMBOL_WHITELIST`; leaving that whitelist blank allows the rotated universe to create order plans when all other risk gates pass.
+
+Timmy also ships a source-controlled snapshot at `trend_trader/resources/us-listed-symbols.csv`. That file currently contains 11,466 U.S. listed symbols: 5,910 stocks/non-ETFs and 5,556 ETFs/ETPs. Timmy uses it as a warm-start fallback when `WATCHLIST_UNIVERSE=all-us` and the mutable runtime cache `timmy-watchlist-universe.txt` has not been created yet. The live Nasdaq Trader refresh remains the preferred source when reachable.
 
 Generated watchlists are updated together on every rotation cycle:
 
