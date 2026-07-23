@@ -1959,7 +1959,7 @@ class TimmyNativeApp:
     def webull_check(self) -> str:
         config = self._execution_config(self._load_config_safe())
         broker = WebullOpenApiBroker(config)
-        result = broker.account_list()
+        result = broker.account_snapshot()
         self.webull_account_choices = self._extract_webull_account_choices(result)
         self._refresh_webull_account_menu(config)
         self.trade_cash_snapshot = self._extract_trade_cash(result, config.webull_account_id)
@@ -4798,7 +4798,10 @@ class TimmyNativeApp:
     def _extract_trade_cash(self, result: dict, account_id: str | None) -> tuple[str, str]:
         body = result.get("body")
         account = self._select_account_payload(body, account_id)
-        candidates = self._flatten_money_fields(account if account is not None else body)
+        candidates = []
+        if isinstance(body, dict) and body.get("balance") is not None:
+            candidates.extend(self._flatten_money_fields(body.get("balance")))
+        candidates.extend(self._flatten_money_fields(account if account is not None else body))
         priorities = (
             "cash_available_for_trade",
             "available_cash",
@@ -4822,6 +4825,10 @@ class TimmyNativeApp:
         return "-", "Cash not found"
 
     def _select_account_payload(self, body, account_id: str | None):
+        if isinstance(body, dict) and isinstance(body.get("accounts"), list):
+            selected = self._select_account_payload(body.get("accounts"), account_id)
+            if isinstance(selected, dict):
+                return selected
         if not isinstance(body, list) or not account_id:
             return body
         normalized_id = str(account_id)
@@ -4903,11 +4910,18 @@ class TimmyNativeApp:
             "cashavailable": "Available cash",
             "cash_balance": "Cash balance",
             "cashbalance": "Cash balance",
+            "account_currency_assets_cash_balance": "Cash balance",
+            "total_cash_balance": "Cash balance",
             "buying_power": "Buying power",
             "buyingpower": "Buying power",
+            "account_currency_assets_buying_power": "Buying power",
             "day_trading_buying_power": "Day-trade buying power",
             "overnight_buying_power": "Overnight buying power",
+            "account_currency_assets_night_trading_buying_power": "Night trading buying power",
+            "account_currency_assets_option_buying_power": "Option buying power",
             "settled_cash": "Settled cash",
+            "account_currency_assets_settled_cash": "Settled cash",
+            "account_currency_assets_unsettled_cash": "Unsettled cash",
         }
         return labels.get(key, key.replace("_", " ").title())
 

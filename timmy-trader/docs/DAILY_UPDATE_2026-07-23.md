@@ -82,6 +82,8 @@ make money without being reckless, clumsy, or wasteful.
 - Added automation feedback events for above-expectation and below-expectation
   lane results so useful paper, live, blocked, rejected, and no-plan evidence
   feeds back into Timmy's local learning trail.
+- Fixed the Cash Account indicator so Account Check fetches the selected
+  Webull account balance endpoint instead of only reading the account list.
 
 ## Reliability, Health, And Adaptability
 

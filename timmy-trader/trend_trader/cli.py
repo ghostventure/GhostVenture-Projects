@@ -91,7 +91,7 @@ def main() -> int:
 
     if args.command == "webull-check":
         broker = WebullOpenApiBroker(config)
-        return _print_broker_result(lambda: broker.account_list())
+        return _print_broker_result(lambda: broker.account_snapshot())
 
     if args.command == "webull-sync":
         broker = WebullOpenApiBroker(config)

@@ -59,7 +59,21 @@ class WebullOpenApiBroker:
 
     def account_snapshot(self) -> dict:
         self._ensure_connected()
-        snapshot = {"accounts": self.account_list(), "positions": None, "open_orders": None}
+        accounts = self.account_list()
+        balance = None
+        if self.config.webull_account_id:
+            balance = self._try_sdk_call(("account_v2", "get_account_balance"))
+        snapshot = {
+            "status_code": accounts.get("status_code", 0),
+            "body": {
+                "accounts": accounts.get("body"),
+                "balance": balance.get("body") if isinstance(balance, dict) else balance,
+            },
+            "accounts": accounts,
+            "balance": balance,
+            "positions": None,
+            "open_orders": None,
+        }
         snapshot["positions"] = self._try_sdk_call(
             ("account_v2", "get_positions"),
             ("account_v2", "get_account_positions"),

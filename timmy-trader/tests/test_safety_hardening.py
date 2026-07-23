@@ -260,6 +260,46 @@ def test_native_profile_verification_allows_matching_account(monkeypatch, tmp_pa
     assert app.trade_cash_snapshot == ("$250.00", "Available to trade")
 
 
+def test_webull_check_uses_balance_snapshot_for_cash_account(monkeypatch, tmp_path) -> None:
+    app = profile_app(tmp_path)
+    app._load_config_safe = load_config
+    app.config = load_config()
+    app._render_status = lambda: None
+    app._render_broker_summary = lambda: None
+    app._render_setup_status = lambda: None
+
+    class BrokerStub:
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def account_snapshot(self):
+            return {
+                "status_code": 200,
+                "body": {
+                    "accounts": [
+                        {
+                            "account_id": "account-1234",
+                            "account_label": "Individual Cash",
+                            "account_type": "CASH",
+                        }
+                    ],
+                    "balance": {
+                        "cash_available_for_trade": 321.45,
+                    },
+                },
+            }
+
+    monkeypatch.setenv("WEBULL_ACCOUNT_ID", "account-1234")
+    monkeypatch.setattr("trend_trader.native_gui.WebullOpenApiBroker", BrokerStub)
+
+    result = app.webull_check()
+
+    assert app.trade_cash_snapshot == ("$321.45", "Available to trade")
+    assert app.account_snapshot == ("Individual Cash", "CASH")
+    assert app.webull_account_choices == [{"id": "account-1234", "label": "Individual Cash", "detail": "CASH"}]
+    assert "cash_available_for_trade" in result
+
+
 def test_futures_enable_switch_requires_configured_symbol(monkeypatch) -> None:
     monkeypatch.setenv("WEBULL_SYMBOL_WHITELIST", "ES")
     monkeypatch.setenv("WEBULL_FUTURES_SYMBOLS", "")
