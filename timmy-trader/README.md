@@ -8,6 +8,12 @@ Start with the full operator documentation here:
 docs/TIMMY_MASTER_DOCUMENTATION.md
 ```
 
+Operational workflows for validation, live brokerage, fractional trading, all-market scanning, Webull watchlist sync, and source publication live here:
+
+```text
+docs/WORKFLOWS.md
+```
+
 ## Current Scope
 
 - Scouts stocks, ETFs, and index proxies from OHLCV bars for above-average change.

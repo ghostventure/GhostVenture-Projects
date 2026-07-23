@@ -2,6 +2,8 @@
 
 Use this checklist before, during, and after Timmy decision cycles. It is written for cautious operation across the current equity path, paper/live mode, crypto scouting, commodity ETF exposure, and future crypto/futures enablement.
 
+For the end-to-end validation, live brokerage, all-market scanning, Webull watchlist sync, and publication workflows, use `docs/WORKFLOWS.md`.
+
 Timmy is a decision and order-planning tool. It does not guarantee profits, and live automation should stay off unless the broker account, market data, preview path, and risk limits are known-good for the exact asset class being traded.
 
 ## 1. Daily Setup
