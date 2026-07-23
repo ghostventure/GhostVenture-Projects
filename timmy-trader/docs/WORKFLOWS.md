@@ -262,3 +262,5 @@ Universe -> Scanner -> Strategy -> Execution -> Broker -> Audit
 - `Audit` is the local event trail for submitted, rejected, and paper events.
 
 The top metric band should show the model state first: universe size, active list count, movement count, trade-ready count, executable plan count, and buying power.
+
+Overview-only widgets such as the hero, pipeline metric band, and execution controls should not stay pinned across focused tabs. `Universe`, `Scanner`, `Strategy`, `Execution`, `Broker`, and `Audit` should use the main content area for the selected workflow surface.

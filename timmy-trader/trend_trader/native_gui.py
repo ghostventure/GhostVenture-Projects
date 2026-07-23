@@ -307,7 +307,7 @@ class TimmyNativeApp:
                              justify="left", anchor="w", font=("Sans", 8, "bold"))
         brand_sub.pack(anchor="w", pady=(1, 0))
 
-        nav_items = ["Pipeline", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit"]
+        nav_items = ["Overview", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit"]
         nav = tk.Frame(rail, bg=self.colors["rail"])
         nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(18, 0))
         for item in nav_items:
@@ -315,8 +315,8 @@ class TimmyNativeApp:
                 nav,
                 text=item,
                 command=lambda target=item: self._show_tab(target),
-                bg=self.colors["selected"] if item == "Pipeline" else self.colors["rail"],
-                fg=self.colors["selected_text"] if item == "Pipeline" else self.colors["rail_muted"],
+                bg=self.colors["selected"] if item == "Overview" else self.colors["rail"],
+                fg=self.colors["selected_text"] if item == "Overview" else self.colors["rail_muted"],
                 activebackground=self.colors["selected"],
                 activeforeground=self.colors["selected_text"],
                 relief="flat",
@@ -354,6 +354,7 @@ class TimmyNativeApp:
         main.rowconfigure(3, weight=1)
 
         hero = tk.Frame(main, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
+        self.hero = hero
         hero.grid(row=0, column=0, sticky="ew", padx=24, pady=(24, 14))
         hero.columnconfigure(0, weight=1)
         hero.columnconfigure(1, weight=0)
@@ -398,6 +399,7 @@ class TimmyNativeApp:
         self.busy_controls.extend([self.refresh_button, self.webull_check_button, self.preview_button])
 
         metrics = tk.Frame(main, bg=self.colors["bg"])
+        self.metrics = metrics
         metrics.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
         for idx in range(3):
             metrics.columnconfigure(idx, weight=1)
@@ -409,6 +411,7 @@ class TimmyNativeApp:
         self.cash_card = self._metric(metrics, 1, 2, "Buying Power", highlight=True)
 
         controls = self._panel(main)
+        self.controls = controls
         controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
         for idx in range(6):
             controls.columnconfigure(idx, weight=1, minsize=118)
@@ -668,12 +671,24 @@ class TimmyNativeApp:
         self._fit_text(self.status_bar, min_size=8, max_size=10, padding=56, wrap=True)
         self.status_bar.grid(row=4, column=0, sticky="ew", padx=24, pady=(0, 8))
         self._sync_manual_controls()
+        self._show_tab("Overview")
 
     def _panel(self, parent: tk.Widget) -> tk.Frame:
         return tk.Frame(parent, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
 
     def _show_tab(self, tab: str) -> None:
         self._set_nav_active(tab)
+        overview_active = tab == "Overview"
+        if overview_active:
+            self.hero.grid(row=0, column=0, sticky="ew", padx=24, pady=(24, 14))
+            self.metrics.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
+            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
+            self.body.grid_configure(pady=(0, 24))
+        else:
+            self.hero.grid_remove()
+            self.metrics.grid_remove()
+            self.controls.grid_remove()
+            self.body.grid_configure(pady=(24, 24))
         self.signals_panel.grid_remove()
         self.right_panel.grid_remove()
         for panel in (self.decision_panel, self.order_panel, self.broker_panel, self.journal_panel):
@@ -682,7 +697,7 @@ class TimmyNativeApp:
         self.body.columnconfigure(0, weight=1)
         self.body.columnconfigure(1, weight=1)
 
-        if tab == "Pipeline":
+        if overview_active:
             for row, weight in ((0, 0), (1, 0), (2, 1), (3, 1)):
                 self.right_panel.rowconfigure(row, weight=weight)
             self.body.columnconfigure(0, weight=3)
