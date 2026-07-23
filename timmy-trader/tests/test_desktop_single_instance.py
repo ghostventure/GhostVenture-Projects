@@ -4,6 +4,7 @@ import signal
 from pathlib import Path
 
 from trend_trader import desktop
+from trend_trader.native_gui import _restart_command
 
 
 def test_replace_existing_instance_terminates_discovered_and_locked_pids(monkeypatch, tmp_path) -> None:
@@ -105,3 +106,17 @@ def test_write_crash_log_is_private_and_contains_details(tmp_path) -> None:
     log_path = tmp_path / "timmy-crash.log"
     assert "boom traceback" in log_path.read_text(encoding="utf-8")
     assert oct(log_path.stat().st_mode & 0o777) == "0o600"
+
+
+def test_restart_command_prefers_project_launcher(tmp_path) -> None:
+    launcher = tmp_path / "scripts" / "launch_timmy.sh"
+    launcher.parent.mkdir()
+    launcher.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+
+    assert _restart_command(tmp_path) == [str(launcher)]
+
+
+def test_restart_command_falls_back_to_desktop_module(tmp_path) -> None:
+    command = _restart_command(tmp_path)
+
+    assert command[-2:] == ["-m", "trend_trader.desktop"]

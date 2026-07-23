@@ -34,7 +34,9 @@ setsid scripts/launch_timmy.sh >/tmp/timmy-launch.log 2>&1 &
 pgrep -af 'timmy|Timmy'
 ```
 
-5. Inspect `/tmp/timmy-launch.log` and `timmy-crash.log` if the process does not stay up.
+5. From the native GUI, use `Power Cycle` when Timmy should save settings, relaunch through the normal launcher, and replace the old process without using a terminal.
+
+6. Inspect `/tmp/timmy-launch.log` and `timmy-crash.log` if the process does not stay up.
 
 ## 2. Live Brokerage Workflow
 

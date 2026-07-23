@@ -5,6 +5,8 @@ import hmac
 import json
 import os
 import secrets
+import subprocess
+import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
@@ -530,15 +532,17 @@ class TimmyNativeApp:
         self.webull_account_toggle.pack(fill="x", pady=(4, 0))
         button_box = tk.Frame(controls, bg=self.colors["panel"])
         button_box.grid(row=2, column=3, columnspan=3, sticky="ew", padx=10, pady=(0, 14))
-        button_box.columnconfigure((0, 1, 2), weight=1)
+        button_box.columnconfigure((0, 1, 2, 3), weight=1)
         self.run_button = self._button(button_box, "Run", self.run_decision_cycle, accent="teal")
         self.run_button.grid(row=0, column=0, sticky="ew", padx=(0, 7))
         self.live_button = self._button(button_box, "Live", self.submit_live_interactive, accent="gold")
         self.live_button.grid(row=0, column=1, sticky="ew", padx=7)
         self.stop_button = self._button(button_box, "Stop", self.stop_automation)
-        self.stop_button.grid(row=0, column=2, sticky="ew", padx=(7, 0))
+        self.stop_button.grid(row=0, column=2, sticky="ew", padx=7)
+        self.power_cycle_button = self._button(button_box, "Power Cycle", self.power_cycle)
+        self.power_cycle_button.grid(row=0, column=3, sticky="ew", padx=(7, 0))
         self.manual_controls.extend([self.run_button, self.live_button])
-        self.busy_controls.extend([self.run_button, self.live_button])
+        self.busy_controls.extend([self.run_button, self.live_button, self.power_cycle_button])
 
         style_box = tk.Frame(controls, bg=self.colors["panel"])
         style_box.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 14))
@@ -905,6 +909,33 @@ class TimmyNativeApp:
             self.status_bar.configure(text="Live submission cancelled.")
             return
         self._run_action("Submitting live order", self.live_submit, threaded=False)
+
+    def power_cycle(self) -> None:
+        if not messagebox.askyesno("Power cycle Timmy", "Restart Timmy now?"):
+            self.status_bar.configure(text="Power cycle cancelled.")
+            return
+        self._save_runtime_settings()
+        env = os.environ.copy()
+        env["TIMMY_HOME"] = str(self.home)
+        try:
+            with Path("/tmp/timmy-launch.log").open("ab") as log:
+                subprocess.Popen(
+                    _restart_command(self.home),
+                    cwd=str(self.home),
+                    env=env,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+        except Exception as exc:
+            self._write_crash_log(
+                f"Power cycle failed\n{''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))}"
+            )
+            self.status_bar.configure(text=f"Power cycle failed: {exc}")
+            return
+        self.status_bar.configure(text="Power cycling Timmy...")
+        self.root.after(250, self.close)
 
     def live_preview_then_submit(self) -> str:
         self._refresh_payload()
@@ -2779,3 +2810,10 @@ def _format_quantity(value: float) -> str:
     if float(value).is_integer():
         return str(int(value))
     return f"{value:.8f}".rstrip("0").rstrip(".")
+
+
+def _restart_command(home: Path) -> list[str]:
+    launcher = home / "scripts" / "launch_timmy.sh"
+    if launcher.exists():
+        return [str(launcher)]
+    return [sys.executable, "-m", "trend_trader.desktop"]
