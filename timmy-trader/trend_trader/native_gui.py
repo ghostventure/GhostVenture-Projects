@@ -470,7 +470,7 @@ class TimmyNativeApp:
                                        font=("Sans", 10, "bold"), anchor="center", justify="center")
         self._fit_text(self.eligible_label, min_size=8, max_size=10, padding=18, wrap=True)
         self.eligible_label.grid(row=1, column=4, sticky="ew", padx=10, pady=14)
-        paper_auto = tk.Checkbutton(controls, text="Paper auto", variable=self.paper_auto_var, command=self._sync_automation,
+        paper_auto = tk.Checkbutton(controls, text="Paper lane", variable=self.paper_auto_var, command=self._sync_automation,
                                     bg=self.colors["panel"], fg=self.colors["text"], selectcolor=self.colors["panel_2"],
                                     activebackground=self.colors["panel"], activeforeground=self.colors["text"],
                                     disabledforeground=self.colors["disabled"],
@@ -2056,8 +2056,9 @@ class TimmyNativeApp:
         self.status_bar.configure(text="Power cycling Timmy...")
         self.root.after(250, self.close)
 
-    def live_preview_then_submit(self) -> str:
-        self._refresh_payload()
+    def live_preview_then_submit(self, refresh: bool = True) -> str:
+        if refresh:
+            self._refresh_payload()
         config = self._load_config_safe()
         preview_result = self._preview_current_plans(config)
         submit_result = self.live_submit(refresh=False)
@@ -2097,18 +2098,68 @@ class TimmyNativeApp:
             self._set_text(self.decision_text, summary)
             target = self.execution_target_var.get()
             mode = self.execution_mode_var.get()
-            self._set_text(self.broker_text, f"Decision cycle completed for {target}. Use Preview Order to validate with Webull before any live workflow.")
-            if target == "Live" and mode == "Auto" and self.plans:
-                self.status_bar.configure(text="Decision cycle complete. Previewing exact live order in Auto mode...")
-                self._run_action("Previewing and submitting live order", self.live_preview_then_submit, threaded=False)
+            paper_enabled = self.paper_auto_var.get()
+            live_enabled = target == "Live" and mode == "Auto"
+            if paper_enabled or live_enabled:
+                lane_results = self._run_automation_lanes(paper_enabled=paper_enabled, live_enabled=live_enabled)
+                self._set_text(self.broker_text, "\n\n".join(lane_results))
+                self.status_bar.configure(text="Decision cycle complete. Automation lanes checked.")
                 return
-            if target == "Paper" and (self.paper_auto_var.get() or mode == "Auto") and self.plans:
-                self._set_text(self.broker_text, self.paper_trade(refresh=False))
-                self._load_journal()
+            self._set_text(self.broker_text, f"Decision cycle completed for {target}. Use Preview Order to validate with Webull before any live workflow.")
             self.status_bar.configure(text="Decision cycle complete.")
         except Exception as exc:
             self.status_bar.configure(text=f"Decision cycle failed: {exc}")
             self._set_text(self.broker_text, str(exc))
+
+    def _run_automation_lanes(self, paper_enabled: bool, live_enabled: bool) -> list[str]:
+        previous_target = self.execution_target_var.get()
+        results: list[str] = []
+        if not self.plans:
+            self._record_automation_feedback("combined", "below-expectation", "No executable plans at current controls.")
+            return ["Automation lanes checked: no executable plans at current controls."]
+        if paper_enabled:
+            self.execution_target_var.set("Paper")
+            try:
+                paper_result = self.paper_trade(refresh=False)
+                self._load_journal()
+                self.paper_cash_snapshot = self._paper_account_snapshot()
+                self._record_automation_feedback("paper", "above-expectation", f"Paper lane journaled up to {self.plan_limit_value} plan(s).")
+                results.append("Paper lane result:\n" + paper_result)
+            except Exception as exc:
+                self._record_automation_feedback("paper", "below-expectation", str(exc))
+                results.append(f"Paper lane blocked:\n{exc}")
+        if live_enabled:
+            self.execution_target_var.set("Live")
+            try:
+                live_result = self.live_preview_then_submit(refresh=False)
+                self._record_automation_feedback("live", "above-expectation", "Live lane previewed and submitted guarded plans.")
+                results.append("Live lane result:\n" + live_result)
+            except Exception as exc:
+                self._record_automation_feedback("live", "below-expectation", str(exc))
+                results.append(f"Live lane blocked:\n{exc}")
+        self.execution_target_var.set("Live" if live_enabled else previous_target)
+        self._render_status()
+        self._render_broker_summary()
+        self._render_setup_status()
+        return results or ["Automation lanes checked: no enabled lane."]
+
+    def _record_automation_feedback(self, lane: str, expectation: str, detail: str) -> None:
+        event = {
+            "mode": lane,
+            "robot": "Timmy",
+            "event_type": "automation-feedback",
+            "status": expectation,
+            "lane": lane,
+            "detail": detail[:500],
+            "plans_count": len(getattr(self, "plans", [])),
+            "cash_account": self.trade_cash_snapshot[0],
+            "paper_account": self._paper_account_snapshot()[0],
+            "principle": TRADING_PRINCIPLE,
+        }
+        try:
+            self._append_execution_event(event)
+        except Exception:
+            pass
 
     def _refresh_payload(self) -> str:
         self._splash_step("Loading configuration")
@@ -2456,7 +2507,7 @@ class TimmyNativeApp:
         self.trade_ready_card[0].configure(text=f"{trade_ready_count:,}")
         self.trade_ready_card[1].configure(text="before broker gates")
         self.plan_card[0].configure(text=f"{len(self.plans):,}")
-        self.plan_card[1].configure(text=f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}")
+        self.plan_card[1].configure(text=self._lane_mode_label())
         self.paper_cash_snapshot = self._paper_account_snapshot()
         self.cash_card[0].configure(text=self.trade_cash_snapshot[0])
         self.cash_card[1].configure(text=self.trade_cash_snapshot[1])
@@ -2470,6 +2521,16 @@ class TimmyNativeApp:
         self.runtime_label.configure(text="Ready" if not self.config_error else "Safe fallback")
         self.last_update_label.configure(text=self._data_freshness_line())
         self._sync_webull_account_toggle(execution_config)
+
+    def _lane_mode_label(self) -> str:
+        lanes = []
+        if self.paper_auto_var.get():
+            lanes.append("Paper")
+        if self.execution_target_var.get() == "Live" and self.execution_mode_var.get() == "Auto":
+            lanes.append("Live")
+        if len(lanes) > 1:
+            return " + ".join(lanes) + " / Auto"
+        return f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}"
 
     def _render_overview_summary(self) -> None:
         if not getattr(self, "overview_summary_labels", None):
@@ -2640,7 +2701,7 @@ class TimmyNativeApp:
         config = self.config or self._load_config_safe()
         lines.extend([
             "Trade guardrails",
-            f"- Target / mode: {self.execution_target_var.get()} / {self.execution_mode_var.get()}",
+            f"- Target / mode: {self._lane_mode_label()}",
             f"- Live guard: {'enabled' if self._live_ready(self._execution_config(config)) else 'locked'}",
             f"- Fractional priority: {'on' if config.enable_equity_fractional_trading else 'off'}",
             f"- Plan limit: {self._plan_limit(config)}",
@@ -2771,7 +2832,7 @@ class TimmyNativeApp:
         self._update_label_map(
             getattr(self, "execution_summary_labels", {}),
             {
-                "Target": f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}",
+                "Target": self._lane_mode_label(),
                 "Queue": f"{len(self.plans):,}",
                 "Fractional": "On" if config.enable_equity_fractional_trading else "Off",
                 "Broker": broker_label,
@@ -2978,7 +3039,7 @@ class TimmyNativeApp:
             "",
             "Order desk",
             f"- Orders ready: {len(self.plans):,}",
-            f"- Target / mode: {self.execution_target_var.get()} / {self.execution_mode_var.get()}",
+            f"- Target / mode: {self._lane_mode_label()}",
             f"- Fresh dry runs: {self._fresh_preview_count(execution_config):,}",
         ]
         self._set_text(self.broker_readiness_text, "\n".join(readiness_lines))
@@ -4171,18 +4232,17 @@ class TimmyNativeApp:
 
     def _run_market_open_cycle(self, paper_enabled: bool, live_enabled: bool) -> None:
         previous_target = self.execution_target_var.get()
-        if paper_enabled:
-            self.execution_target_var.set("Paper")
+        if paper_enabled or live_enabled:
+            if live_enabled:
+                self.execution_target_var.set("Live")
+                self.execution_mode_var.set("Auto")
+            elif paper_enabled:
+                self.execution_target_var.set("Paper")
             self._refresh_payload()
-            if self.plans:
-                self._set_text(self.broker_text, self.paper_trade(refresh=False))
-                self._load_journal()
-        if live_enabled:
-            self.execution_target_var.set("Live")
-            self._refresh_payload()
-            if self.plans:
-                self._run_action("Previewing and submitting live order", self.live_preview_then_submit, threaded=False)
-                return
+            self._set_text(
+                self.broker_text,
+                "\n\n".join(self._run_automation_lanes(paper_enabled=paper_enabled, live_enabled=live_enabled)),
+            )
         self.execution_target_var.set(previous_target if not live_enabled else "Live")
         self.status_bar.configure(text="Market-open automation cycle complete.")
 

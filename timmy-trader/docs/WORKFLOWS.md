@@ -293,11 +293,22 @@ WEBULL_ACCOUNT_ID configured locally
 
 7. The native app still performs the exact-current-plan preview immediately before submit in `Live / Auto`. This is part of the unattended workflow and does not require a Webull Desktop click.
 
-8. Every live broker result is appended to `execution-events.jsonl` with the submitted plan context. Use the event log to confirm whether an order was submitted, rejected, or blocked.
+8. Timmy can run separate paper and live automation lanes. `Paper lane`
+   journals simulated trades for learning while `Live / Auto` uses the guarded
+   Webull preview/submit path. A blocked or rejected live lane should not stop
+   paper evidence collection, and paper activity must not bypass live broker
+   checks.
 
-9. After a submitted or rejected order, Timmy should refresh buying power/account state before the next cycle. If account refresh fails, treat the next live cycle as blocked until the broker state is readable again.
+9. Every live broker result is appended to `execution-events.jsonl` with the submitted plan context. Use the event log to confirm whether an order was submitted, rejected, or blocked.
 
-10. If no live trade occurs, classify the miss before changing settings:
+10. Automation lane results are feedback data. Above-expectation outcomes,
+    below-expectation outcomes, rejected live attempts, blocked lanes, no-plan
+    cycles, paper P/L, and open paper notional should remain available in the
+    local audit/training trail for future market adaptation.
+
+11. After a submitted or rejected order, Timmy should refresh buying power/account state before the next cycle. If account refresh fails, treat the next live cycle as blocked until the broker state is readable again.
+
+12. If no live trade occurs, classify the miss before changing settings:
 
 ```text
 no executable plan
@@ -312,7 +323,7 @@ Webull preview rejected
 Webull submit rejected
 ```
 
-11. Webull Desktop is not part of the placement path. It is only a viewer for account, order, position, and watchlist state that came from Webull.
+13. Webull Desktop is not part of the placement path. It is only a viewer for account, order, position, and watchlist state that came from Webull.
 
 ## 8. Broker Operations Workflow
 

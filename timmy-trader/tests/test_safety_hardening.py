@@ -502,6 +502,39 @@ def test_live_preview_then_submit_previews_exact_plan_before_submit(monkeypatch)
     assert "Exact Webull preview completed" in result
 
 
+def test_dual_automation_lanes_run_paper_and_live(monkeypatch) -> None:
+    app = native_app_with_bars(datetime.now())
+    app.plans = [order_plan()]
+    app.execution_target_var = Var("Live")
+    app.execution_mode_var = Var("Auto")
+    app.paper_auto_var = Var(True)
+    app.plan_limit_value = 3
+    app.trade_cash_snapshot = ("$1,000.00", "test cash")
+    app.config = load_config()
+    app.paper_cash_snapshot = ("$10,000.00", "Paper cash")
+    calls: list[str] = []
+    app.paper_trade = lambda refresh=False: calls.append(f"paper:{refresh}") or "paper ok"
+    app.live_preview_then_submit = lambda refresh=False: calls.append(f"live:{refresh}") or "live ok"
+    app._load_journal = lambda: None
+    app._paper_account_snapshot = lambda: ("$10,000.00", "paper ok")
+    app._render_status = lambda: None
+    app._render_broker_summary = lambda: None
+    app._render_setup_status = lambda: None
+    app._record_automation_feedback = lambda lane, expectation, detail: calls.append(f"feedback:{lane}:{expectation}")
+
+    result = app._run_automation_lanes(paper_enabled=True, live_enabled=True)
+
+    assert calls == [
+        "paper:False",
+        "feedback:paper:above-expectation",
+        "live:False",
+        "feedback:live:above-expectation",
+    ]
+    assert app.execution_target_var.get() == "Live"
+    assert "Paper lane result" in result[0]
+    assert "Live lane result" in result[1]
+
+
 def test_live_submit_rejects_expired_preview(monkeypatch) -> None:
     monkeypatch.setenv("REQUIRE_MARKET_HOURS", "0")
     monkeypatch.setenv("TRADER_MODE", "live")

@@ -76,6 +76,12 @@ make money without being reckless, clumsy, or wasteful.
   is derived from Timmy's paper journal.
 - Whispered the trading principle into the program as a quiet Health tab rule:
   make money, but never be reckless, clumsy, or wasteful.
+- Split automation into paper and live lanes so Timmy can keep paper learning
+  while the guarded live lane previews/submits through Webull when live checks
+  pass.
+- Added automation feedback events for above-expectation and below-expectation
+  lane results so useful paper, live, blocked, rejected, and no-plan evidence
+  feeds back into Timmy's local learning trail.
 
 ## Reliability, Health, And Adaptability
 
