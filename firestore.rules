@@ -1,0 +1,163 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function selfProfile() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid));
+    }
+
+    function hasRole(workspaceId, roles) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && selfProfile().data.workspace_id == workspaceId
+        && selfProfile().data.status == 'Active'
+        && selfProfile().data.role in roles;
+    }
+
+    function isAdministrator(workspaceId) {
+      return hasRole(workspaceId, ['Administrator']);
+    }
+
+    function isManager(workspaceId) {
+      return hasRole(workspaceId, ['Administrator', 'Manager']);
+    }
+
+    function isMember(workspaceId) {
+      return hasRole(workspaceId, ['Administrator', 'Manager', 'Staff']);
+    }
+
+    function inviteFor(workspaceId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)/invites/$(request.auth.token.email));
+    }
+
+    function createsWorkspaceAdministrator(userId) {
+      return request.auth.uid == userId
+        && request.resource.data.workspace_id == request.auth.uid
+        && request.resource.data.role == 'Administrator'
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'Active'
+        && request.resource.data.owner_name is string
+        && request.resource.data.business_name is string;
+    }
+
+    function createsInvitedMember(userId) {
+      return request.auth.uid == userId
+        && exists(/databases/$(database)/documents/workspaces/$(request.resource.data.workspace_id)/invites/$(request.auth.token.email))
+        && inviteFor(request.resource.data.workspace_id).data.email == request.auth.token.email
+        && inviteFor(request.resource.data.workspace_id).data.role == request.resource.data.role
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'Active'
+        && request.resource.data.owner_name is string
+        && request.resource.data.business_name is string;
+    }
+
+    match /profiles/{userId} {
+      allow get: if signedIn() && (request.auth.uid == userId || isManager(resource.data.workspace_id));
+      allow list: if signedIn() && isManager(resource.data.workspace_id);
+      allow create: if createsWorkspaceAdministrator(userId) || createsInvitedMember(userId);
+      allow update: if (isAdministrator(resource.data.workspace_id)
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['owner_name', 'business_name', 'role', 'status', 'updated_at']))
+        || (request.auth.uid == userId
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['owner_name', 'business_name', 'updated_at']));
+      allow delete: if false;
+    }
+
+    match /workspaces/{workspaceId} {
+      allow create: if signedIn()
+        && workspaceId == request.auth.uid
+        && request.resource.data.owner_uid == request.auth.uid;
+      allow get: if isMember(workspaceId);
+      allow update: if isAdministrator(workspaceId)
+        && request.resource.data.owner_uid == resource.data.owner_uid;
+      allow delete: if false;
+
+      match /invites/{email} {
+        allow get: if signedIn() && request.auth.token.email == email;
+        allow list: if isAdministrator(workspaceId);
+        allow create, update, delete: if isAdministrator(workspaceId)
+          && (request.method == 'delete' || request.resource.data.email == email);
+      }
+
+      match /tasks/{taskId} {
+        allow get, list: if isMember(workspaceId);
+        allow create: if isMember(workspaceId)
+          && request.resource.data.workspace_id == workspaceId
+          && request.resource.data.created_by == request.auth.uid;
+        allow update: if isMember(workspaceId)
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.created_by == resource.data.created_by
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['title', 'done', 'updated_at']);
+        allow delete: if isManager(workspaceId);
+      }
+
+      match /customers/{customerId} {
+        allow get, list: if isMember(workspaceId);
+        allow create: if isMember(workspaceId)
+          && request.resource.data.workspace_id == workspaceId
+          && request.resource.data.created_by == request.auth.uid;
+        allow update: if isMember(workspaceId)
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.created_by == resource.data.created_by;
+        allow delete: if isManager(workspaceId);
+      }
+
+      match /approvals/{approvalId} {
+        allow get, list: if isMember(workspaceId);
+        allow create: if isMember(workspaceId)
+          && request.resource.data.workspace_id == workspaceId
+          && request.resource.data.created_by == request.auth.uid
+          && request.resource.data.status == 'Pending';
+        allow update: if isManager(workspaceId)
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.created_by == resource.data.created_by
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'decision_note', 'decided_by', 'decided_at', 'updated_at']);
+        allow delete: if false;
+      }
+
+      match /billing/{billingId} {
+        allow get: if isMember(workspaceId) && billingId == 'current';
+        allow list, create, update, delete: if false;
+      }
+
+      match /licenses/{licenseId} {
+        allow get: if isMember(workspaceId) && request.auth.uid == licenseId;
+        allow list: if isAdministrator(workspaceId);
+        allow create, update, delete: if false;
+      }
+
+      match /audit_events/{eventId} {
+        allow get, list: if isManager(workspaceId);
+        allow create: if isMember(workspaceId)
+          && request.resource.data.workspace_id == workspaceId
+          && request.resource.data.actor_uid == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      match /support_tickets/{ticketId} {
+        allow get, list: if isMember(workspaceId)
+          || (hasRole(workspaceId, ['Customer']) && resource.data.created_by == request.auth.uid);
+        allow create: if (isMember(workspaceId) || hasRole(workspaceId, ['Customer']))
+          && request.resource.data.workspace_id == workspaceId
+          && request.resource.data.created_by == request.auth.uid;
+        allow update: if isMember(workspaceId)
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.created_by == resource.data.created_by;
+        allow delete: if false;
+      }
+    }
+  }
+}

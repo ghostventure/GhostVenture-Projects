@@ -1,0 +1,231 @@
+import {
+  ArchiveRestore,
+  BadgeDollarSign,
+  BellRing,
+  BookOpenCheck,
+  CalendarClock,
+  ClipboardList,
+  CloudOff,
+  DatabaseBackup,
+  FileArchive,
+  FileSignature,
+  FileStack,
+  Filter,
+  Gauge,
+  History,
+  Inbox,
+  KanbanSquare,
+  KeyRound,
+  LifeBuoy,
+  Lock,
+  MailPlus,
+  MessageSquare,
+  PackageCheck,
+  Receipt,
+  RefreshCw,
+  SearchCheck,
+  Settings2,
+  ShieldAlert,
+  ShieldCheck,
+  SquareUserRound,
+  UsersRound,
+  Workflow,
+} from 'lucide-react'
+import { legalBoilerplates } from './boilerplates'
+
+export const marketableFeatures = [
+  { label: 'Free Gold Trial', detail: 'One 30-day, no-card Gold-equivalent trial per workspace.' },
+  { name: 'Guided sign-in', category: 'Access', icon: KeyRound, detail: 'Owner identity, business profile, recovery phrase, and terms acknowledgement.' },
+  { name: 'Role profiles', category: 'Access', icon: UsersRound, detail: 'Owner, front desk, bookkeeper, and support roles with clear access boundaries.' },
+  { name: 'Customer database', category: 'Data', icon: SquareUserRound, detail: 'Stores customer profiles, workflow rules, admin state, compliance, and audit history.' },
+  { name: 'Workflow builder', category: 'Operations', icon: Workflow, detail: 'Capture, decide, act workflow templates for common admin overload.' },
+  { name: 'Scheduling rules', category: 'Operations', icon: CalendarClock, detail: 'Availability, deposits, reschedules, reminders, and appointment guardrails.' },
+  { name: 'Answer library', category: 'Operations', icon: MessageSquare, detail: 'Approved responses for FAQs, service rules, pricing limits, and handoffs.' },
+  { name: 'Quote builder', category: 'Revenue', icon: FileStack, detail: 'Structured estimate flow with add-ons, owner approval, and expiration timing.' },
+  { name: 'Invoice queue', category: 'Revenue', icon: Receipt, detail: 'Tracks unpaid invoices, due dates, status, and reminder rules.' },
+  { name: 'Payment reminders', category: 'Revenue', icon: BadgeDollarSign, detail: 'Polite follow-up sequences with escalation timing and owner override.' },
+  { name: 'Duplicate-charge protection', category: 'Revenue', icon: ShieldCheck, detail: 'Checks the active tier and blocks overlapping checkout attempts before a new subscription charge is created.' },
+  { name: 'Full receipt PDF', category: 'Revenue', icon: Receipt, detail: 'Creates a printable letter-size subscription, payment-reference, and license summary on request without opening checkout again.' },
+  { name: 'Customer follow-up', category: 'Revenue', icon: MailPlus, detail: 'Quote nudges, review requests, retention notes, and comeback reminders.' },
+  { name: 'Owner daily view', category: 'Dashboard', icon: Gauge, detail: 'Shows what needs attention today, what is blocked, and what is overdue.' },
+  { name: 'Smart inbox triage', category: 'Dashboard', icon: Inbox, detail: 'Separates requests, approvals, invoices, support, and low-priority messages.' },
+  { name: 'Task board', category: 'Dashboard', icon: KanbanSquare, detail: 'Tracks jobs, owner approvals, follow-ups, invoices, and unresolved exceptions.' },
+  { name: 'Template vault', category: 'Documents', icon: BookOpenCheck, detail: 'Stores approved templates for quotes, answers, terms, policies, and support replies.' },
+  { name: 'Legal center', category: 'Legal', icon: FileSignature, detail: 'Terms, privacy, acceptable use, AI disclosure, data retention, and refund language.' },
+  { name: 'Support center', category: 'Support', icon: LifeBuoy, detail: 'Support tickets, contact card, diagnostics, export bundle, and service-level notes.' },
+  { name: 'Audit trail', category: 'Security', icon: History, detail: 'Records key actions, acknowledgement events, exports, and configuration changes.' },
+  { name: 'Tamper checks', category: 'Security', icon: ShieldCheck, detail: 'Checksum-style status for settings, templates, legal acknowledgements, and exports.' },
+  { name: 'Runtime integrity manifest', category: 'Security', icon: ShieldAlert, detail: 'Hashes watched app files and reports missing or unreadable files.' },
+  { name: 'Tamper event ledger', category: 'Security', icon: History, detail: 'Database contract for observed hash changes, missing files, and suspicious access events.' },
+  { name: 'Session lock', category: 'Security', icon: Lock, detail: 'Local lock state and role-specific access prompts.' },
+  { name: 'Privacy mode', category: 'Security', icon: ShieldAlert, detail: 'Masks sensitive customer records, workflow evidence, profile data, and audit entries.' },
+  { name: 'Screenshot deterrence', category: 'Security', icon: ShieldCheck, detail: 'Uses desktop content protection where the operating system supports it.' },
+  { name: 'Inactivity lock', category: 'Security', icon: Lock, detail: 'Locks sensitive views after the app loses focus for a defined timeout.' },
+  { name: 'Offline queue', category: 'Reliability', icon: CloudOff, detail: 'Work can be queued locally and retried when providers are unavailable.' },
+  { name: 'Backup manager', category: 'Reliability', icon: DatabaseBackup, detail: 'Local backup status, restore points, and exportable recovery package.' },
+  { name: 'Restore workflow', category: 'Reliability', icon: ArchiveRestore, detail: 'Recovery checklist for restoring profiles, customer data, and templates.' },
+  { name: 'Health monitor', category: 'Reliability', icon: ShieldAlert, detail: 'Highlights failed jobs, missing settings, expired acknowledgements, and data risk.' },
+  { name: 'Search and filters', category: 'Productivity', icon: SearchCheck, detail: 'Find customers, invoices, tasks, workflow rules, and legal acknowledgements.' },
+  { name: 'Bulk actions', category: 'Productivity', icon: Filter, detail: 'Batch close tasks, export customer records, and apply template changes.' },
+  { name: 'Import/export', category: 'Data', icon: FileArchive, detail: 'Portable data packages for backup, migration, support, and GeneBox handoff.' },
+  { name: 'GeneBox bridge', category: 'Integration', icon: PackageCheck, detail: 'Recognizes GeneBox bridge manifests and aligns OverHead admin records.' },
+  { name: 'Provider adapters', category: 'Integration', icon: RefreshCw, detail: 'Prepared connection boundaries for email, calendar, payments, and accounting tools.' },
+  { name: 'Notification rules', category: 'Operations', icon: BellRing, detail: 'Controls reminder timing, digest frequency, and owner escalation.' },
+  { name: 'Settings guardrails', category: 'Admin', icon: Settings2, detail: 'Protects risky settings behind confirmation, support export, and audit notes.' },
+  { name: 'Launch checklist', category: 'Admin', icon: ClipboardList, detail: 'Market-ready checklist for profiles, legal, support, backups, and first workflow.' },
+  { name: 'Data retention policy', category: 'Legal', icon: ArchiveRestore, detail: 'Defines retention windows, export rights, and deletion workflow.' },
+]
+
+export const legalDocuments = [
+  {
+    title: 'Terms of Use',
+    status: 'Draft included',
+    body: legalBoilerplates.terms,
+  },
+  {
+    title: 'Privacy Notice',
+    status: 'Draft included',
+    body: legalBoilerplates.privacy,
+  },
+  {
+    title: 'Acceptable Use Policy',
+    status: 'Draft included',
+    body: 'Users may not use OverHead for fraud, unlawful messaging, credential sharing, deceptive billing, regulated decisions without qualified review, or unauthorized data access.',
+  },
+  {
+    title: 'AI Use Disclosure',
+    status: 'Draft included',
+    body: 'AI-assisted drafts should be treated as reviewable suggestions. The business owner controls final approval, sending, pricing, legal language, and customer-facing decisions.',
+  },
+  {
+    title: 'Data Retention Policy',
+    status: 'Draft included',
+    body: 'Customer records should be retained only as long as needed for active service, legal obligations, support, and business records. Export and deletion workflows are part of the product plan.',
+  },
+  {
+    title: 'Data Responsibility Disclaimer',
+    status: 'Draft included',
+    body: 'OverHead provides product controls, exports, backups, and recovery guidance as available in the installed version. Customers remain responsible for device security, backup verification, user-entered records, staff actions, lawful data handling, and records created or changed by authorized users or outside parties.',
+  },
+  {
+    title: 'Support Policy',
+    status: 'Draft included',
+    body: legalBoilerplates.support,
+  },
+  {
+    title: 'Subscription Billing & Authorization Policy',
+    status: 'Draft - legal review required',
+    body: 'When production billing is enabled, paid plans renew on the billing interval displayed at checkout unless canceled. Before a charge is submitted, the account owner must review the selected tier, price, billing interval, and recurring-billing authorization. OverHead is designed to block a second checkout for the same active tier and keep a short checkout lock to reduce accidental duplicate charges. Stripe processes card payments and is the authoritative payment record. Applicable taxes, provider processing times, and statement descriptions may vary by location and payment method.',
+  },
+  {
+    title: 'Free Trial Policy',
+    status: 'Draft - legal review required',
+    body: 'A free trial provides Gold-equivalent OverHead access for 30 consecutive days, requires no card, and does not create a charge. Each workspace may use one free trial. The trial ends automatically at its recorded end time; access and trial licenses are then suspended unless a paid plan is activated. Free trials are not transferable, redeemable for cash, extendable, or refundable. Creating multiple workspaces or accounts to obtain additional trials is prohibited.',
+  },
+  {
+    title: 'Cancellation & Prorated Refund Policy',
+    status: 'Draft - legal review required',
+    body: 'An authorized workspace administrator may cancel an eligible paid subscription from OverHead. Cancellation ends subscription access immediately. For an eligible current paid period, OverHead calculates unused time from the paid billing-period start and end timestamps and requests a proportional refund to the original payment method. No refund is due for a free trial, a fully used period, unpaid amounts, failed payments, or time outside the current paid period. Stripe and the card issuer control refund settlement timing. Duplicate, completed, or ineligible refund requests are blocked and recorded for review.',
+  },
+  {
+    title: 'Workspace License & Access Policy',
+    status: 'Draft - legal review required',
+    body: 'OverHead assigns licenses automatically to active members of a workspace according to its current plan. License numbers are internal account identifiers and do not transfer ownership, resale rights, or access between workspaces. Administrators are responsible for removing inactive staff and protecting account credentials. OverHead may suspend licenses when a trial expires, a subscription is canceled, payment is past due, or misuse is identified under the Acceptable Use Policy.',
+  },
+]
+
+export const supportChannels = [
+  { label: 'Product support', value: 'solidartentertainment@gmail.com', note: 'Use for installation, account, workflow, or support-bundle questions.' },
+  { label: 'Recovery escalation', value: 'solidartentertainment@gmail.com', note: 'Use after recovery retries fail or the app cannot stay responsive.' },
+  { label: 'Emergency export', value: 'Create support bundle', note: 'Packages diagnostics, app version, profile status, and recent audit entries.' },
+  { label: 'Knowledge base', value: 'Offline help center', note: 'Terms, onboarding, workflow setup, provider adapters, and restore steps.' },
+  { label: 'Contact card', value: 'Business owner editable', note: 'Lets resellers or support providers brand the support path.' },
+]
+
+export const helpArticles = [
+  {
+    title: 'Getting started',
+    category: 'Setup',
+    body: 'Create a local owner account, choose a tier, accept the local terms, then add the first customer record.',
+  },
+  {
+    title: 'Choosing a plan',
+    category: 'Billing',
+    body: 'Silver is basic, Gold adds workflow and role depth, and Black unlocks premium security, Stripe, export, and restore validation.',
+  },
+  {
+    title: 'Free trial, cancellation, and refunds',
+    category: 'Billing',
+    body: 'Each workspace may start one card-free, 30-day Gold trial. Paid subscriptions can be canceled by an administrator; eligible unused time in the current paid period is refunded proportionally to the original payment method. Trial access ends automatically and has no payment to refund.',
+  },
+  {
+    title: 'Password recovery',
+    category: 'Security',
+    body: 'Use the recovery phrase created during registration. New passwords must be at least 12 characters.',
+  },
+  {
+    title: 'When the app has trouble',
+    category: 'Support',
+    body: 'OverHead attempts recovery up to three times. If the app still cannot stay responsive, email solidartentertainment@gmail.com.',
+  },
+  {
+    title: 'Privacy and confidentiality',
+    category: 'Policy',
+    body: 'No workspace data can be viewed before sign-in. Sensitive records stay masked until an authorized local session opens.',
+  },
+  {
+    title: 'Data responsibility',
+    category: 'Legal',
+    body: 'OverHead supports program functionality, backups, exports, and recovery tools, but customers remain responsible for their own data, staff actions, and record changes.',
+  },
+]
+
+export const complianceBadges = [
+  { label: 'Privacy Controls', detail: 'Sign-in required before viewing office data.' },
+  { label: 'Role Access', detail: 'Owner, staff, bookkeeper, and support roles are separated.' },
+  { label: 'Audit Trail', detail: 'Important changes, exports, and approvals are recorded.' },
+  { label: 'Data Review', detail: 'Exports, deletion requests, and retention checks are tracked.' },
+  { label: 'Payment Handoff', detail: 'Stripe and Square verification happen in the provider browser.' },
+  { label: 'Legal Review Ready', detail: 'Terms, privacy, support, and data responsibility drafts are included.' },
+]
+
+export const planTiers = [
+  {
+    id: 'silver',
+    name: 'Silver',
+    level: 'Basic',
+    audience: 'Solo owner or lean front desk',
+    price: '$59/mo',
+    summary: 'Basic office control priced for one small shop that needs order without adding five subscriptions.',
+    features: ['1 owner profile', '250 customer records', 'Task queue', 'Basic backups', 'Support bundle'],
+  },
+  {
+    id: 'gold',
+    name: 'Gold',
+    level: 'Advanced',
+    audience: 'Busy local service office',
+    price: '$129/mo',
+    summary: 'Advanced workflow support for offices that would otherwise stack scheduling, CRM, and helpdesk tools.',
+    features: ['3 staff profiles', '1,500 customer records', 'Workflow automation', 'Legal center', 'Priority support'],
+  },
+  {
+    id: 'black',
+    name: 'Black',
+    level: 'Premium',
+    audience: 'High-touch business with sensitive records',
+    price: '$299/mo',
+    summary: 'Premium protection and recovery for sensitive records, higher-volume offices, and white-glove setup.',
+    features: ['10 staff profiles', '10,000 customer records', 'Encrypted local store', 'Audit ledger', 'Concierge setup'],
+  },
+]
+
+export const signInWorkflow = [
+  'Create owner profile',
+  'Enter business identity',
+  'Accept Terms of Use and Privacy Notice',
+  'Create recovery phrase',
+  'Choose role profile',
+  'Create first customer record',
+  'Enable first workflow module',
+  'Run launch checklist',
+]

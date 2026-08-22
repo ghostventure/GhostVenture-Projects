@@ -1,0 +1,42 @@
+{
+  "schema": "overhead-app-manifest-v1",
+  "name": "OverHead",
+  "purpose": "Admin cleanup desktop software for small businesses",
+  "geneBoxBridge": {
+    "acceptedSchema": "overhead-genebox-bridge-v1",
+    "expectedFile": "overhead-bridge.json",
+    "supportedImports": [
+      "client profile",
+      "workflow modules",
+      "tasks",
+      "followups",
+      "payments",
+      "audit events"
+    ]
+  },
+  "modules": [
+    "Scheduling",
+    "Customer Answers",
+    "Quotes",
+    "Invoices",
+    "Follow-up"
+  ],
+  "customerDatabase": "overhead-customers-v1",
+  "desktopCapabilities": [
+    "single-instance lock",
+    "local sign-in workflow",
+    "terms acknowledgement",
+    "privacy acknowledgement",
+    "support center",
+    "legal center",
+    "feature catalog",
+    "session lock",
+    "privacy mode masking",
+    "screenshot deterrence",
+    "inactivity lock",
+    "protected evidence schema",
+    "runtime integrity manifest",
+    "tamper event ledger",
+    "GeneBox bridge"
+  ]
+}

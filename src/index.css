@@ -1,0 +1,118 @@
+:root {
+  font-family: "Segoe UI", Inter, system-ui, sans-serif;
+  color: #2f3845;
+  background: #edf1f4;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --app-bg: #edf1f4;
+  --panel-bg: rgba(255, 255, 255, 0.92);
+  --soft-bg: #f5f7f8;
+  --line: #dce2e7;
+  --heading: #111827;
+  --text: #2f3845;
+  --muted: #667085;
+  --accent: #255f5a;
+  --shadow: 0 10px 24px rgba(16, 24, 40, 0.05);
+}
+
+html[data-theme="dark"] {
+  color: #d6dce5;
+  background: #0b1117;
+  --app-bg: #0b1117;
+  --panel-bg: rgba(18, 25, 34, 0.96);
+  --soft-bg: #18212d;
+  --line: #2b3543;
+  --heading: #f5f7fa;
+  --text: #d6dce5;
+  --muted: #93a4b8;
+  --accent: #6cc7b6;
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+html[data-theme="green"] {
+  color: #30433c;
+  background: #e9f1ed;
+  --app-bg: #e9f1ed;
+  --panel-bg: rgba(253, 255, 252, 0.94);
+  --soft-bg: #f0f6f2;
+  --line: #cfddd5;
+  --heading: #10231d;
+  --text: #30433c;
+  --muted: #667a72;
+  --accent: #1f6b55;
+  --shadow: 0 10px 24px rgba(16, 55, 43, 0.08);
+}
+
+html[data-theme="graphite"] {
+  color: #343a43;
+  background: #e8eaed;
+  --app-bg: #e8eaed;
+  --panel-bg: rgba(250, 250, 250, 0.94);
+  --soft-bg: #f1f2f4;
+  --line: #d0d5dc;
+  --heading: #171a1f;
+  --text: #343a43;
+  --muted: #68707d;
+  --accent: #374151;
+  --shadow: 0 10px 24px rgba(17, 24, 39, 0.07);
+}
+
+html[data-theme="contrast"] {
+  color: #111827;
+  background: #ffffff;
+  --app-bg: #ffffff;
+  --panel-bg: #ffffff;
+  --soft-bg: #f7f7f7;
+  --line: #111827;
+  --heading: #000000;
+  --text: #111827;
+  --muted: #374151;
+  --accent: #004c45;
+  --shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] {
+    color: #d6dce5;
+    background: #0b1117;
+    --app-bg: #0b1117;
+    --panel-bg: rgba(18, 25, 34, 0.96);
+    --soft-bg: #18212d;
+    --line: #2b3543;
+    --heading: #f5f7fa;
+    --text: #d6dce5;
+    --muted: #93a4b8;
+    --accent: #6cc7b6;
+    --shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(37, 95, 90, 0.28);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(37, 95, 90, 0.2);
+}

@@ -1,0 +1,87 @@
+{
+  "name": "overhead",
+  "private": true,
+  "version": "0.3.5",
+  "description": "Installed desktop console for reducing small-business admin overload.",
+  "author": "Black Lion Media Studio",
+  "main": "electron-main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "desktop": "cmd /c npm run build && electron .",
+    "dist:win": "cmd /c npm run build && electron-builder --win nsis --x64",
+    "dist:cylinder": "cmd /c npm run build && electron-builder --win nsis --x64 --config.extraMetadata.main=electron-server-main.cjs --config.productName=OverHead-Cylinder --config.appId=com.blacklion.overhead.cylinder --config.win.artifactName=OverHead-Cylinder-Setup-${version}-win-x64.${ext} --config.nsis.shortcutName=OverHead-Cylinder",
+    "release:checksums": "powershell -ExecutionPolicy Bypass -File scripts/write-release-checksums.ps1",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.blacklion.overhead",
+    "productName": "OverHead",
+    "asar": true,
+    "compression": "maximum",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "public/overhead.ico",
+      "electron-main.cjs",
+      "electron-server-main.cjs",
+      "electron-backend.cjs",
+      "electron-preload.cjs",
+      "package.json",
+      "!**/node_modules/**/{test,tests,__tests__,docs,doc,examples,example}/**",
+      "!**/node_modules/**/{README*,CHANGELOG*,HISTORY*,CONTRIBUTING*,AUTHORS*,LICENSE*,NOTICE*}",
+      "!**/node_modules/**/{.github,.git,.svn,.hg}/**",
+      "!**/node_modules/**/{*.map,*.ts,*.md,*.d.ts}"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "icon": "public/overhead.ico",
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "OverHead-Setup-${version}-win-x64.${ext}"
+    },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "perMachine": true,
+    "allowElevation": true,
+    "deleteAppDataOnUninstall": false,
+    "runAfterFinish": true,
+      "include": "build/installer-preflight.nsh",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OverHead"
+    }
+  },
+  "dependencies": {
+    "@azure/msal-node": "^5.6.0",
+    "adm-zip": "^0.6.0",
+    "bcryptjs": "^3.0.3",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^1.25.0",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^9.0.3",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "square": "^45.0.1",
+    "stripe": "^22.3.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "oxlint": "^1.71.0",
+    "playwright": "^1.61.1",
+    "vite": "^8.1.1"
+  }
+}
