@@ -101,6 +101,7 @@ const defaultSession = {
 const emptyBackendState = {
   health: null,
   customers: [],
+  customerSync: { status: 'Not synchronized', last_synced_at: '', message: '' },
   tasks: [],
   supportTickets: [],
   legalDocuments: [],
@@ -263,6 +264,16 @@ function App() {
     return window.overheadDesktop.onSecurityLock(() => lockSession())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
+
+  useEffect(() => {
+    function handleEscape(event) {
+      if (event.key !== 'Escape') return
+      if (commandOpen) setCommandOpen(false)
+      if (opsDrawerOpen) setOpsDrawerOpen(false)
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [commandOpen, opsDrawerOpen])
 
   useEffect(() => {
     if (!window.overheadDesktop?.integrityReport) return
@@ -486,7 +497,7 @@ function App() {
             <div className="top-actions">
               <label className="searchbox">
                 <Search size={17} />
-                <input aria-label="Search OverHead" placeholder="Search records, workflows, support" onFocus={() => setCommandOpen(true)} />
+                <input aria-label="Open OverHead commands" aria-haspopup="dialog" readOnly placeholder="Search records, workflows, support" onFocus={() => setCommandOpen(true)} onClick={() => setCommandOpen(true)} />
               </label>
               <button className="ghost-button" type="button" onClick={() => setCommandOpen(true)}>
                 <Search size={17} />
@@ -736,7 +747,7 @@ function OperationsDrawer({ backendState, integrity, operationNotice, onClose, s
       </div>
       <div className="drawer-note">
         <strong>{integrity?.status === 'clean' ? 'Runtime clean' : 'Runtime checking'}</strong>
-        <span>{operationNotice || 'No recent operation notice.'}</span>
+        <span role="status" aria-live="polite">{operationNotice || 'No recent operation notice.'}</span>
       </div>
     </aside>
   )
@@ -860,6 +871,7 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
             setVerification={setVerification}
             verifyEmail={verifyEmail}
             backendError={backendError}
+            returnToSignIn={() => { setVerification({ email: '', code: '', delivery: null }); setAuthMode('team') }}
           />
         ) : isHelp ? (
           <PublicHelp />
@@ -900,7 +912,7 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
         <button className="primary-action full" type="button" onClick={signIn}>{isCreate ? 'Create Workspace' : isCustomerEnroll ? 'Create Customer Account' : isCustomer ? 'Open Customer Support' : 'Open Team Workspace'}</button>
         {authMode === 'customer' && <button className="ghost-button full" type="button" onClick={() => setAuthMode('customer-enroll')}>Create customer account from invitation</button>}
         {isCustomerEnroll && <button className="ghost-button full" type="button" onClick={() => setAuthMode('customer')}>I already have a customer account</button>}
-        {backendError && <p className="form-error">{backendError}</p>}
+        {backendError && <p className="form-error" role="alert">{backendError}</p>}
         <label className="theme-picker wide">
           Theme
           <select value={theme} onChange={(event) => setTheme(event.target.value)}>
@@ -915,17 +927,18 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
   )
 }
 
-function VerificationPanel({ verification, setVerification, verifyEmail, backendError }) {
+function VerificationPanel({ verification, setVerification, verifyEmail, backendError, returnToSignIn }) {
+  const sharedVerification = verification.delivery?.channel === 'firebase-link'
   return (
     <>
       <h2>Check your email</h2>
-      <p>Enter the 6-digit code sent to {verification.email || 'your email'} before the desk opens.</p>
+      <p>{sharedVerification ? `We sent a verification link to ${verification.email || 'your email'}. Open it in your default browser, then return and sign in again.` : `Enter the 6-digit code sent to ${verification.email || 'your email'} before the desk opens.`}</p>
       {verification.delivery?.channel === 'local-outbox' && (
         <p className="form-error">Email is queued locally because SMTP is not connected: {verification.delivery.outboxPath}</p>
       )}
-      <FormField label="Verification code" value={verification.code} onChange={(value) => setVerification((current) => ({ ...current, code: value }))} placeholder="6-digit code" />
-      <button className="primary-action full" type="button" onClick={verifyEmail}>Verify And Open</button>
-      {backendError && <p className="form-error">{backendError}</p>}
+      {!sharedVerification && <><FormField label="Verification code" value={verification.code} onChange={(value) => setVerification((current) => ({ ...current, code: value }))} placeholder="6-digit code" /><button className="primary-action full" type="button" onClick={verifyEmail}>Verify And Open</button></>}
+      {sharedVerification && <button className="primary-action full" type="button" onClick={returnToSignIn}>Return To Sign In</button>}
+      {backendError && <p className="form-error" role="alert">{backendError}</p>}
     </>
   )
 }
@@ -1457,6 +1470,16 @@ function AutomationsSection({ backendState, refreshBackend, setOperationNotice }
     } catch (error) { setAutomationError(userFacingError(error, 'The first-day setup plan could not be prepared.')) }
   }
 
+  async function retryJob(jobId) {
+    try {
+      if (!window.overheadBackend?.retryWorkflowJob) throw new Error('The workflow retry service is not available.')
+      await window.overheadBackend.retryWorkflowJob({ jobId })
+      setAutomationError('')
+      setOperationNotice('Dead-letter job returned to the queue for a fresh retry.')
+      await refreshBackend()
+    } catch (error) { setAutomationError(userFacingError(error, 'The workflow job could not be retried.')) }
+  }
+
   return (
     <section className="panel page-panel">
       <div className="section-head">
@@ -1471,7 +1494,7 @@ function AutomationsSection({ backendState, refreshBackend, setOperationNotice }
       </div>
       <div className="queue-controls automation-controls">
         <div className="queue-filters" role="group" aria-label="Filter workflow jobs">
-          {['Queued', 'Complete', 'All'].map((filter) => <button className={jobFilter === filter ? 'active' : ''} type="button" key={filter} onClick={() => setJobFilter(filter)}>{filter}{filter !== 'All' && ` (${jobCounts[filter] || 0})`}</button>)}
+          {['Queued', 'Complete', 'Dead Letter', 'All'].map((filter) => <button className={jobFilter === filter ? 'active' : ''} type="button" key={filter} onClick={() => setJobFilter(filter)}>{filter}{filter !== 'All' && ` (${jobCounts[filter] || 0})`}</button>)}
         </div>
         <input value={jobQuery} onChange={(event) => setJobQuery(event.target.value)} placeholder="Search automations" />
       </div>
@@ -1508,6 +1531,13 @@ function AutomationsSection({ backendState, refreshBackend, setOperationNotice }
         {!displayedJobs.length && <span>No automation jobs match that filter.</span>}
       </div>
       <div className="feature-list">
+        {displayedJobs.filter((job) => job.status === 'Dead Letter').map((job) => (
+          <div className="backend-health" key={`retry-${job.id}`}>
+            <strong>{job.title}</strong>
+            <span>{job.last_error || 'This workflow job needs a manual retry.'}</span>
+            <button className="ghost-button" type="button" onClick={() => retryJob(job.id)}>Retry Job</button>
+          </div>
+        ))}
         {marketableFeatures.filter((feature) => ['Operations', 'Revenue', 'Productivity', 'Integration'].includes(feature.category)).slice(0, 12).map((feature) => (
           <FeatureItem feature={feature} key={feature.name} />
         ))}
@@ -2039,17 +2069,29 @@ function PlansSection({ backendState, activePlan, setActivePlan, draftSession, r
   const [billingBusy, setBillingBusy] = useState(false)
   const [billingActivity, setBillingActivity] = useState([])
 
-  async function saveBillingAndTier() {
+  async function persistBillingProfile() {
     if (!window.overheadBackend?.saveBillingProfile) return
     await window.overheadBackend.saveBillingProfile({ ...billing, managerEmail: draftSession.email || 'owner@overhead.local' })
-    setOperationNotice('Billing profile saved. Complete secure checkout to activate a paid tier.')
-    await refreshBackend()
+  }
+
+  async function saveBillingAndTier() {
+    if (billingBusy) return
+    try {
+      setBillingError('')
+      setBillingBusy(true)
+      await persistBillingProfile()
+      setOperationNotice('Billing profile saved. Complete secure checkout to activate a paid tier.')
+      await refreshBackend()
+    } catch (error) { setBillingError(userFacingError(error, 'The billing profile could not be saved.')) }
+    finally { setBillingBusy(false) }
   }
 
   async function openEmbeddedCheckout() {
+    if (billingBusy) return
     try {
       setBillingError('')
-      await saveBillingAndTier()
+      setBillingBusy(true)
+      await persistBillingProfile()
       if (!window.overheadBackend?.createEmbeddedCheckout) throw new Error('The secure billing service is not available in this build yet.')
       const result = await window.overheadBackend.createEmbeddedCheckout({ tier: activePlan, acceptBillingPolicy: billing.billingPolicyAcknowledged })
       if (result.alreadySubscribed) {
@@ -2058,6 +2100,7 @@ function PlansSection({ backendState, activePlan, setActivePlan, draftSession, r
       }
       setCheckout(result)
     } catch (error) { setBillingError(userFacingError(error, 'Secure checkout could not be opened.')) }
+    finally { setBillingBusy(false) }
   }
 
   async function startFreeGoldTrial() {
@@ -2178,17 +2221,17 @@ function PlansSection({ backendState, activePlan, setActivePlan, draftSession, r
           <input type="checkbox" checked={billing.freeTrialPolicyAcknowledged} onChange={(event) => updateBilling('freeTrialPolicyAcknowledged', event.target.checked)} />
           I have reviewed and accept the Free Trial Policy before starting a free trial.
         </label>
-        <button className="ghost-button" type="button" onClick={saveBillingAndTier}>Save Billing Profile</button>
+        <button className="ghost-button" type="button" disabled={billingBusy} onClick={saveBillingAndTier}>{billingBusy ? 'Saving billing profile…' : 'Save Billing Profile'}</button>
         <button className="ghost-button" type="button" disabled={billingBusy} onClick={startFreeGoldTrial}>{billingBusy ? 'Starting trial…' : 'Start Free 30-Day Gold Trial'}</button>
-        <button className="primary-action" type="button" onClick={openEmbeddedCheckout}>Continue To Secure Checkout</button>
-        <button className="ghost-button" type="button" onClick={createReceipt}>Create Full Receipt PDF</button>
-        <button className="ghost-button" type="button" onClick={refreshBillingActivity}>Refresh Billing Activity</button>
+        <button className="primary-action" type="button" disabled={billingBusy || !billing.billingPolicyAcknowledged} onClick={openEmbeddedCheckout}>{billingBusy ? 'Preparing secure checkout…' : 'Continue To Secure Checkout'}</button>
+        <button className="ghost-button" type="button" disabled={billingBusy} onClick={createReceipt}>Create Full Receipt PDF</button>
+        <button className="ghost-button" type="button" disabled={billingBusy} onClick={refreshBillingActivity}>Refresh Billing Activity</button>
         <button className="ghost-button" type="button" disabled={billingBusy} onClick={cancelWithUnusedTimeRefund}>{billingBusy ? 'Processing cancellation…' : 'Cancel Now & Refund Unused Time'}</button>
       </div>
-      <p className="form-hint">Free trial: one no-card, 30-day Gold-equivalent trial per workspace when secure billing services are enabled. Canceling a paid plan ends access immediately; the intended live flow calculates eligible unused time for a refund to the original payment method. Trial periods have no payment to refund.</p>
+      <p className="form-hint">Free trial: one no-card, 30-day Gold-equivalent trial per workspace when secure billing services are enabled. Accept the billing policy above to enable secure checkout. Canceling a paid plan ends access immediately; the intended live flow calculates eligible unused time for a refund to the original payment method. Trial periods have no payment to refund.</p>
       {billingActivity.length > 0 && <div className="backend-health"><strong>Billing activity</strong>{billingActivity.map(([title, at, detail]) => <span key={`${title}-${at}`}>{title}: {new Date(at).toLocaleString()} {detail ? `— ${detail}` : ''}</span>)}</div>}
       <p className="plan-note">Active: {backendState.entitlements?.activePlan?.name || 'Silver'} / {backendState.entitlements?.activePlan?.level || 'Basic'}</p>
-      {billingError && <p className="form-error">{billingError}</p>}
+      {billingError && <p className="form-error" role="alert">{billingError}</p>}
       {checkout && <EmbeddedBillingCheckout checkout={checkout} onClose={() => setCheckout(null)} onComplete={async () => { setCheckout(null); await window.overheadBackend?.getRemoteEntitlements?.(); await refreshBackend(); setOperationNotice('Payment submitted. Your plan will update after Stripe confirms it.') }} />}
     </section>
   )
@@ -2225,6 +2268,21 @@ function EmbeddedBillingCheckout({ checkout, onClose, onComplete }) {
 }
 
 function PaymentsSection({ backendState, refreshBackend, setOperationNotice }) {
+  const [stripeBusy, setStripeBusy] = useState(false)
+  const [stripeError, setStripeError] = useState('')
+  const connector = backendState.stripeConnector || {}
+  async function runStripeAction(action) {
+    if (stripeBusy) return
+    setStripeBusy(true)
+    setStripeError('')
+    try { await action() }
+    catch (error) { setStripeError(userFacingError(error, 'Stripe could not complete this action.')) }
+    finally { setStripeBusy(false); await refreshBackend() }
+  }
+  async function syncBilling() {
+    const result = await window.overheadBackend.syncStripeBilling()
+    setOperationNotice(result.message)
+  }
   const [stripeDraft, setStripeDraft] = useState({ mode: 'test', clientId: '', accountId: '', publishableKey: '' })
   const [importDraft, setImportDraft] = useState({ accountId: '', businessName: '', managerEmail: '', purchasedTier: 'silver', paymentStatus: 'paid', externalCustomerId: '', externalSubscriptionId: '', customerCount: 0, subscriptionCount: 0, invoiceCount: 0, paymentCount: 0 })
 
@@ -2243,7 +2301,7 @@ function PaymentsSection({ backendState, refreshBackend, setOperationNotice }) {
 
   async function saveStripe() {
     await window.overheadBackend.saveStripeConnection(stripeDraft)
-    setOperationNotice('Stripe connection saved.')
+    setOperationNotice('Test details saved. Account authorization has not been verified.')
     await refreshBackend()
   }
 
@@ -2262,11 +2320,21 @@ function PaymentsSection({ backendState, refreshBackend, setOperationNotice }) {
         </div>
         <ReceiptText size={20} />
       </div>
+      {stripeError && <p className="form-error" role="alert">{stripeError}</p>}
+      <div className="backend-health" aria-live="polite">
+        <strong>Shared billing: {connector.status || 'Not checked'}</strong>
+        <span>{connector.sharedSignIn ? 'Shared account signed in' : 'Shared account sign-in required'}</span>
+        <span>{connector.tier ? `${connector.tier.toUpperCase()} — ${String(connector.billing_status || '').replaceAll('_', ' ')}` : 'Sync to check the plan shown on your website account.'}</span>
+        <span>{connector.message}</span>
+        <small>Last successful sync: {connector.last_synced_at ? new Date(connector.last_synced_at).toLocaleString() : 'Never'}. Refreshes every five minutes while signed in.</small>
+        <button className="primary-action" type="button" disabled={stripeBusy || !connector.sharedSignIn} onClick={() => runStripeAction(syncBilling)}>{stripeBusy ? 'Working…' : 'Sync Shared Plan and License'}</button>
+        <small>This checks OverHead’s shared billing records. It does not authorize a Stripe merchant account or charge a card.</small>
+      </div>
       <div className="tool-grid">
         <div className="backend-health">
           <strong>Step 1: Prepare test mode in browser</strong>
           <span>OverHead opens Stripe’s test dashboard. Live checkout, webhooks, and payment confirmation stay disabled until the secure server is deployed.</span>
-          <button className="primary-action" type="button" onClick={openStripe}>Open Stripe Test Dashboard</button>
+          <button className="primary-action" type="button" disabled={stripeBusy} onClick={() => runStripeAction(openStripe)}>Open Stripe Test Dashboard</button>
         </div>
         <div className="backend-health">
           <strong>Step 2: Save non-secret test details</strong>
@@ -2278,7 +2346,7 @@ function PaymentsSection({ backendState, refreshBackend, setOperationNotice }) {
           <FormField label="Account ID" value={stripeDraft.accountId} onChange={(value) => updateStripeDraft('accountId', value)} placeholder="acct_..." />
           <FormField label="Publishable key" value={stripeDraft.publishableKey} onChange={(value) => updateStripeDraft('publishableKey', value)} placeholder="pk_test_..." />
           <p className="form-hint">Never enter secret keys or webhook signing secrets in OverHead. Those belong only in the future server environment.</p>
-          <button className="ghost-button" type="button" onClick={saveStripe}>Save Stripe</button>
+          <button className="ghost-button" type="button" disabled={stripeBusy} onClick={() => runStripeAction(saveStripe)}>Save Test Details</button>
         </div>
         <div className="backend-health">
           <strong>Step 3: Record test-only reference data</strong>
@@ -2308,7 +2376,7 @@ function PaymentsSection({ backendState, refreshBackend, setOperationNotice }) {
           <FormField label="Subscriptions" value={String(importDraft.subscriptionCount)} onChange={(value) => updateImportDraft('subscriptionCount', value)} placeholder="0" />
           <FormField label="Invoices" value={String(importDraft.invoiceCount)} onChange={(value) => updateImportDraft('invoiceCount', value)} placeholder="0" />
           <FormField label="Payments" value={String(importDraft.paymentCount)} onChange={(value) => updateImportDraft('paymentCount', value)} placeholder="0" />
-          <button className="ghost-button" type="button" onClick={importStripe}>Save Test Reference</button>
+          <button className="ghost-button" type="button" disabled={stripeBusy} onClick={() => runStripeAction(importStripe)}>Save Test Reference</button>
           <p className="form-hint">Saving reference data never changes a subscription or grants paid access. Only a verified server webhook will do that.</p>
         </div>
         <div className="backend-health">
@@ -2544,6 +2612,7 @@ function SquareSection({ backendState, refreshBackend, setOperationNotice }) {
 function SecuritySection({ backendState, refreshBackend, setOperationNotice }) {
   const [reset, setReset] = useState({ email: 'owner@overhead.local', recoveryPhrase: '', newPassword: '' })
   const [dataRequest, setDataRequest] = useState({ requestType: 'export', subjectEmail: 'owner@overhead.local', notes: '' })
+  const [deletionConfirmation, setDeletionConfirmation] = useState('')
 
   async function resetPassword() {
     if (!window.overheadBackend?.resetPassword) return
@@ -2556,6 +2625,15 @@ function SecuritySection({ backendState, refreshBackend, setOperationNotice }) {
     if (!window.overheadBackend?.createDataRequest) return
     await window.overheadBackend.createDataRequest(dataRequest)
     setOperationNotice('Privacy data request created.')
+    await refreshBackend()
+  }
+
+  async function completeDeletion(requestId) {
+    if (deletionConfirmation !== 'DELETE') return setOperationNotice('Type DELETE before completing local data deletion.')
+    if (!window.overheadBackend?.completeDataDeletion) return
+    const result = await window.overheadBackend.completeDataDeletion({ requestId, confirmation: deletionConfirmation })
+    setDeletionConfirmation('')
+    setOperationNotice(`Local deletion completed. Safety backup: ${result.safetyBackupPath}`)
     await refreshBackend()
   }
 
@@ -2619,6 +2697,14 @@ function SecuritySection({ backendState, refreshBackend, setOperationNotice }) {
             <FormField label="Notes" value={dataRequest.notes} onChange={(value) => updateDataRequest('notes', value)} placeholder="Request notes" />
             <button className="ghost-button" type="button" onClick={createDataRequest}>Create Request</button>
             <small>Confirm the requester, applicable retention duties, and the exact records in scope before acting on a request.</small>
+            {(backendState.dataRequests || []).filter((request) => request.request_type === 'delete' && request.status === 'Open').map((request) => (
+              <div className="backend-health" key={request.id}>
+                <strong>Open local deletion: {request.subject_email}</strong>
+                <span>{request.notes || 'No notes supplied.'}</span>
+                <input value={deletionConfirmation} onChange={(event) => setDeletionConfirmation(event.target.value)} placeholder="Type DELETE to confirm" />
+                <button className="ghost-button" type="button" onClick={() => completeDeletion(request.id)}>Complete Local Deletion</button>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -2626,8 +2712,32 @@ function SecuritySection({ backendState, refreshBackend, setOperationNotice }) {
   )
 }
 
-function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, draftSession, updateDraft, signIn, backendState, refreshBackend, operationNotice, setOperationNotice }) {
+function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session, draftSession, updateDraft, signIn, backendState, refreshBackend, operationNotice, setOperationNotice }) {
   const [restorePath, setRestorePath] = useState('')
+  const [restoreConfirmation, setRestoreConfirmation] = useState('')
+  const [updater, setUpdater] = useState({ status: 'not-checked', autoCheck: true, message: 'Update status is loading.' })
+  const [developerTools, setDeveloperTools] = useState({ configured: false, workspacePath: '', preferredEditor: 'auto', editors: [] })
+
+  useEffect(() => {
+    let active = true
+    if (window.overheadBackend?.updaterStatus) {
+      window.overheadBackend.updaterStatus().then((status) => {
+        if (active) setUpdater(status)
+      }).catch((error) => {
+        if (active) setUpdater({ status: 'unavailable', autoCheck: true, message: userFacingError(error, 'Update status is unavailable.') })
+      })
+    }
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (session.role !== 'Owner' || !window.overheadBackend?.developerWorkspace) return
+    let active = true
+    Promise.all([window.overheadBackend.developerWorkspace(), window.overheadBackend.developerEditors?.() || []])
+      .then(([workspace, editors]) => { if (active) setDeveloperTools({ ...workspace, editors }) })
+      .catch((error) => { if (active) setOperationNotice(userFacingError(error, 'Developer tools are unavailable.')) })
+    return () => { active = false }
+  }, [session.role, setOperationNotice])
 
   async function createBackup() {
     if (window.overheadBackend?.createBackup) {
@@ -2661,11 +2771,70 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, draftSe
     }
   }
 
+  async function restoreWorkspace() {
+    if (restoreConfirmation !== 'RESTORE') return setOperationNotice('Type RESTORE before replacing the local workspace.')
+    if (!window.overheadBackend?.restoreFromPackage || !restorePath) return
+    const result = await window.overheadBackend.restoreFromPackage({ filePath: restorePath, confirmation: restoreConfirmation })
+    setOperationNotice(`Workspace restored. Safety backup: ${result.safetyBackupPath}. Sign in again to continue.`)
+    window.setTimeout(() => window.location.reload(), 800)
+  }
+
   async function updateToggle(key, value) {
     if (!window.overheadBackend?.updateToggle) return
     await window.overheadBackend.updateToggle({ key, value })
     setOperationNotice(`${formatToggleName(key)} ${value ? 'enabled' : 'disabled'}.`)
     await refreshBackend()
+  }
+
+  async function checkForUpdates() {
+    if (!window.overheadBackend?.checkForUpdates) return
+    const status = await window.overheadBackend.checkForUpdates()
+    setUpdater(status)
+    setOperationNotice(status.message || 'Update check started.')
+  }
+
+  async function setAutoCheck(enabled) {
+    if (!window.overheadBackend?.setAutoCheck) return
+    const status = await window.overheadBackend.setAutoCheck({ enabled })
+    setUpdater(status)
+    setOperationNotice(status.message || `Auto-Check ${enabled ? 'enabled' : 'disabled'}.`)
+  }
+
+  async function installUpdate() {
+    if (!window.overheadBackend?.installDownloadedUpdate) return
+    const result = await window.overheadBackend.installDownloadedUpdate()
+    setOperationNotice(result.message || (result.installing ? 'Installing downloaded update.' : 'No downloaded update is ready.'))
+  }
+
+  async function syncCustomers() {
+    if (!window.overheadBackend?.syncCustomers) return
+    const status = await window.overheadBackend.syncCustomers()
+    setOperationNotice(status.message || 'Customer synchronization completed.')
+    await refreshBackend()
+  }
+
+  async function chooseDeveloperWorkspace() {
+    try {
+      const workspace = await window.overheadBackend?.chooseDeveloperWorkspace?.()
+      if (!workspace) return
+      setDeveloperTools((current) => ({ ...current, ...workspace }))
+      setOperationNotice(workspace.configured ? 'Developer source workspace saved.' : 'Developer source folder was not changed.')
+    } catch (error) { setOperationNotice(userFacingError(error, 'The selected folder is not an OverHead source workspace.')) }
+  }
+
+  async function setDeveloperEditor(preferredEditor) {
+    try {
+      const workspace = await window.overheadBackend?.setDeveloperEditor?.({ preferredEditor })
+      setDeveloperTools((current) => ({ ...current, ...workspace }))
+      setOperationNotice('Preferred code editor saved.')
+    } catch (error) { setOperationNotice(userFacingError(error, 'Could not save the preferred code editor.')) }
+  }
+
+  async function openDeveloperWorkspace() {
+    try {
+      const result = await window.overheadBackend?.openDeveloperWorkspace?.()
+      setOperationNotice(`${result.editor} opened the OverHead source workspace.`)
+    } catch (error) { setOperationNotice(userFacingError(error, 'Could not open the source workspace.')) }
   }
 
   return (
@@ -2708,11 +2877,49 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, draftSe
             {operationNotice && <small>{operationNotice}</small>}
           </div>
           <div className="backend-health">
-            <strong>Restore validation</strong>
-            <span>Checks an OverHead store file before any replacement is allowed. Validation does not replace a tested recovery plan.</span>
+            <strong>Restore workspace</strong>
+            <span>Validate first. Restoring replaces the local workspace, creates a safety backup, and signs you out.</span>
             <input value={restorePath} onChange={(event) => setRestorePath(event.target.value)} placeholder="Path to .secure or .json store file" />
-            <button className="ghost-button" type="button" onClick={validateRestore}>Validate Restore</button>
+            <div className="button-row"><button className="ghost-button" type="button" onClick={validateRestore}>Validate Restore</button></div>
+            <input value={restoreConfirmation} onChange={(event) => setRestoreConfirmation(event.target.value)} placeholder="Type RESTORE to replace local workspace" />
+            <button className="ghost-button" type="button" onClick={restoreWorkspace}>Restore Local Workspace</button>
           </div>
+          <div className="backend-health update-check-panel">
+            <strong>Updates</strong>
+            <span>{updater.message || 'Choose Check to look for an update.'}</span>
+            <small>{updater.configured ? `Installed: ${updater.currentVersion || 'unknown'} - Available: ${updater.version || 'not checked'} - Channel: ${updater.channel || 'latest'}${updater.checkedAt ? ` - last checked ${new Date(updater.checkedAt).toLocaleString()}` : ''}` : 'Install a packaged release to use the live update service.'}</small>
+            <div className="button-row">
+              <button className="primary-action" type="button" onClick={checkForUpdates}>Check</button>
+              <label className="checkbox-line update-auto-check">
+                <input type="checkbox" checked={updater.autoCheck !== false} onChange={(event) => setAutoCheck(event.target.checked)} />
+                Auto-Check
+              </label>
+              {updater.status === 'downloaded' && <button className="ghost-button" type="button" onClick={installUpdate}>Install Update</button>}
+            </div>
+          </div>
+          <div className="backend-health">
+            <strong>Customer synchronization</strong>
+            <span>{backendState.customerSync?.message || 'Automatic customer sync is waiting for a shared sign-in.'}</span>
+            <small>Status: {backendState.customerSync?.status || 'Not synchronized'}{backendState.customerSync?.last_synced_at ? ` - ${new Date(backendState.customerSync.last_synced_at).toLocaleString()}` : ''}</small>
+            <div className="button-row"><button className="ghost-button" type="button" onClick={syncCustomers}>Sync Now</button></div>
+          </div>
+          {session.role === 'Owner' && <div className="backend-health">
+            <strong>Developer hot-fix workspace</strong>
+            <span>Open only the selected OverHead source folder in Visual Studio Code or Code - OSS. A fresh verified OverHead staff sign-in with an active Management or Administrator credential is required. Customer records, backups, exports, and support bundles are never opened by this tool.</span>
+            <small>{developerTools.configured ? developerTools.workspacePath : developerTools.message || 'Choose the local OverHead source folder before opening an editor.'}</small>
+            <label>
+              Preferred editor
+              <select value={developerTools.preferredEditor || 'auto'} onChange={(event) => setDeveloperEditor(event.target.value)}>
+                <option value="auto">Auto (prefer VS Code)</option>
+                {developerTools.editors.some((editor) => editor.id === 'vscode') && <option value="vscode">Visual Studio Code</option>}
+                {developerTools.editors.some((editor) => editor.id === 'oss') && <option value="oss">Code - OSS / VSCodium</option>}
+              </select>
+            </label>
+            <div className="button-row">
+              <button className="ghost-button" type="button" onClick={chooseDeveloperWorkspace}>Choose Source Folder</button>
+              <button className="primary-action" type="button" onClick={openDeveloperWorkspace} disabled={!developerTools.configured}>Open In Code Editor</button>
+            </div>
+          </div>}
           <div className="backend-health">
             <strong>Operational controls</strong>
             <span>Controls that change how the workspace behaves. Change one intentionally, then check the current work queue and audit record.</span>

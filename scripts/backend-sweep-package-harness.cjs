@@ -1,0 +1,5 @@
+const {app}=require('electron')
+const path=require('node:path')
+if(!process.env.OVERHEAD_SMOKE_DATA)throw new Error('Isolated smoke profile required')
+app.setPath('appData',process.env.OVERHEAD_SMOKE_DATA)
+require(path.resolve(__dirname,'../release-backend-sweep-ux-0.3.13/win-unpacked/resources/app.asar/electron-main.cjs'))

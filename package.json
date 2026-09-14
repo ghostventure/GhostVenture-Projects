@@ -1,7 +1,7 @@
 {
   "name": "overhead",
   "private": true,
-  "version": "0.3.5",
+  "version": "0.3.13",
   "description": "Installed desktop console for reducing small-business admin overload.",
   "author": "Black Lion Media Studio",
   "main": "electron-main.cjs",
@@ -13,6 +13,7 @@
     "dist:win": "cmd /c npm run build && electron-builder --win nsis --x64",
     "dist:cylinder": "cmd /c npm run build && electron-builder --win nsis --x64 --config.extraMetadata.main=electron-server-main.cjs --config.productName=OverHead-Cylinder --config.appId=com.blacklion.overhead.cylinder --config.win.artifactName=OverHead-Cylinder-Setup-${version}-win-x64.${ext} --config.nsis.shortcutName=OverHead-Cylinder",
     "release:checksums": "powershell -ExecutionPolicy Bypass -File scripts/write-release-checksums.ps1",
+    "release:cylinder-checksums": "powershell -ExecutionPolicy Bypass -File scripts/write-cylinder-release-checksums.ps1",
     "lint": "oxlint",
     "preview": "vite preview"
   },
@@ -30,6 +31,7 @@
       "electron-main.cjs",
       "electron-server-main.cjs",
       "electron-backend.cjs",
+      "stripe-connector.cjs",
       "electron-preload.cjs",
       "package.json",
       "!**/node_modules/**/{test,tests,__tests__,docs,doc,examples,example}/**",
@@ -45,13 +47,13 @@
       ],
       "artifactName": "OverHead-Setup-${version}-win-x64.${ext}"
     },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true,
-    "perMachine": true,
-    "allowElevation": true,
-    "deleteAppDataOnUninstall": false,
-    "runAfterFinish": true,
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": true,
+      "allowElevation": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
       "include": "build/installer-preflight.nsh",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

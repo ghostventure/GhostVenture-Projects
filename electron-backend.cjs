@@ -9,6 +9,9 @@ const nodemailer = require('nodemailer')
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib')
 const { z } = require('zod')
 const { PublicClientApplication } = require('@azure/msal-node')
+const { paymentStatusFor, connectionReadiness, billingErrorMessage } = require('./stripe-connector.cjs')
+let stripeSync = { status: 'Not checked', last_synced_at: '', message: '' }
+let stripeSyncPending = null
 
 const profileSchema = z.object({
   ownerName: z.string().trim().optional().default(''),
@@ -79,6 +82,14 @@ const dataRequestSchema = z.object({
   notes: z.string().trim().optional().default(''),
 })
 
+const developerWorkspaceSchema = z.object({
+  workspacePath: z.string().trim().min(1).max(500),
+})
+
+const developerEditorSchema = z.object({
+  preferredEditor: z.enum(['auto', 'vscode', 'oss']),
+})
+
 const taskStatusSchema = z.object({
   taskId: z.string().min(1),
   status: z.enum(['Open', 'Queued', 'Complete', 'Blocked']),
@@ -105,6 +116,20 @@ const jobSchema = z.object({
   runAt: z.string().optional().default(''),
 })
 
+const retryJobSchema = z.object({
+  jobId: z.string().trim().min(1),
+})
+
+const restoreSchema = z.object({
+  filePath: z.string().trim().min(1),
+  confirmation: z.literal('RESTORE'),
+})
+
+const dataDeletionSchema = z.object({
+  requestId: z.string().trim().min(1),
+  confirmation: z.literal('DELETE'),
+})
+
 const legalAckSchema = z.object({
   email: z.string().trim().email().or(z.literal('')),
   title: z.string().trim().min(1),
@@ -112,9 +137,9 @@ const legalAckSchema = z.object({
 
 const stripeConfigSchema = z.object({
   mode: z.literal('test').default('test'),
-  clientId: z.string().trim().optional().default(''),
-  accountId: z.string().trim().optional().default(''),
-  publishableKey: z.string().trim().optional().default(''),
+  clientId: z.string().trim().regex(/^(ca_[a-zA-Z0-9]+)?$/, 'Use a Stripe client ID beginning ca_.').optional().default(''),
+  accountId: z.string().trim().regex(/^(acct_[a-zA-Z0-9]+)?$/, 'Use a Stripe account ID beginning acct_.').optional().default(''),
+  publishableKey: z.string().trim().regex(/^(pk_test_[a-zA-Z0-9]+)?$/, 'Only a test publishable key is accepted. Never enter a secret key.').optional().default(''),
 })
 
 const stripeImportSchema = z.object({
@@ -336,7 +361,7 @@ function firebaseError(body, fallback) {
 }
 
 async function firebaseRequest(url, options = {}) {
-  const response = await fetch(url, options)
+  const response = await fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(20000) })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw firebaseError(body, `Firebase request failed (${response.status}).`)
   return body
@@ -348,12 +373,13 @@ async function billingApiRequest(action, payload = {}) {
     throw new Error('Sign out and sign back in with your shared OverHead account before opening billing.')
   }
   const response = await fetch(firebaseConfig.billingApiUrl, {
+    signal: AbortSignal.timeout(20000),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeSession.firebaseIdToken}` },
     body: JSON.stringify({ action, ...payload }),
   })
   const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(body.error || `Billing service failed (${response.status}).`)
+  if (!response.ok) throw new Error([401, 403, 404].includes(response.status) ? billingErrorMessage(response.status) : body.error || billingErrorMessage(response.status))
   return body
 }
 
@@ -372,12 +398,31 @@ async function cancelSubscriptionWithUnusedTimeRefund() {
 }
 
 async function getRemoteEntitlements() {
-  const remote = await billingApiRequest('entitlements')
+  requireSession('shared billing sync')
+  if (activeSession.role === 'Customer' || isCylinderDeployment()) throw new Error('Standard desktop billing sync is available to staff in a standard workspace.')
+  if (!activeSession.firebaseIdToken || !activeSession.firebaseUid) throw new Error('Sign in with your shared OverHead account to synchronize billing.')
+  const sessionId = activeSession.id
+  const workspaceId = activeWorkspaceId()
+  if (!workspaceId) throw new Error('Your shared workspace could not be found.')
+  const token = activeSession.firebaseIdToken
+  const read = async (suffix) => {
+    const response = await fetch(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/workspaces/${encodeURIComponent(workspaceId)}/${suffix}`, {
+      headers: firebaseHeaders(token), signal: AbortSignal.timeout(15000),
+    })
+    if (response.status === 404) return null
+    if (!response.ok) throw new Error(billingErrorMessage(response.status))
+    return firestoreDocument(await response.json())
+  }
+  const [sharedEntitlement, license] = await Promise.all([read('billing/current'), read(`licenses/${encodeURIComponent(activeSession.firebaseUid)}`)])
+  if (activeSession?.id !== sessionId) throw new Error('The account changed during billing sync. Retry from the current account.')
+  const remote = { entitlement: sharedEntitlement || {}, license }
   const entitlement = remote.entitlement || {}
+  if (!['silver', 'gold', 'black'].includes(entitlement.tier)) {
+    const existing = state.subscriptions.find((item) => item.manager_email === activeSession.email)
+    if (existing) { existing.payment_status = 'canceled'; syncEntitlements(existing); syncUserLicenses(activeSession.email); persist() }
+  }
   if (['silver', 'gold', 'black'].includes(entitlement.tier)) {
-    const paymentStatus = entitlement.status === 'active' ? 'paid'
-      : entitlement.status === 'past_due' ? 'past_due'
-        : entitlement.status === 'canceled' ? 'canceled' : 'trial'
+    const paymentStatus = paymentStatusFor(entitlement)
     applySubscription({
       managerEmail: activeSession.email,
       tier: entitlement.tier,
@@ -394,7 +439,7 @@ async function getRemoteEntitlements() {
     if (user && local) {
       local.license_number = remote.license.license_number || local.license_number
       local.tier = remote.license.tier || local.tier
-      local.status = remote.license.status || local.status
+      local.status = paymentStatusFor(entitlement) === 'canceled' ? 'Suspended' : remote.license.status || local.status
       local.updated_at = now()
       user.license_number = local.license_number
       state.savedFormMemory.license = { number: local.license_number, tier: local.tier, status: local.status }
@@ -402,6 +447,29 @@ async function getRemoteEntitlements() {
     }
   }
   return remote
+}
+
+async function syncStripeBilling() {
+  requireSession('Stripe billing sync')
+  if (stripeSyncPending) return stripeSyncPending
+  const sessionId = activeSession.id
+  stripeSyncPending = (async () => {
+    try {
+      const remote = await getRemoteEntitlements()
+      stripeSync = { sessionId, status: 'Synced', last_synced_at: now(), message: remote.entitlement.tier ? 'Shared plan and license refreshed from the same records used by the website.' : 'No shared billing record exists yet. No paid plan was activated.', tier: remote.entitlement.tier || '', billing_status: remote.entitlement.status || 'No shared plan' }
+    } catch (error) {
+      if (activeSession?.id === sessionId) stripeSync = { ...stripeSync, sessionId, status: 'Needs attention', message: error.name === 'TimeoutError' ? 'Billing sync timed out. Check your connection and retry.' : error.message }
+      throw error
+    } finally { stripeSyncPending = null }
+    return getStripeConnectorStatus()
+  })()
+  return stripeSyncPending
+}
+
+function getStripeConnectorStatus() {
+  requireSession('Stripe connection status')
+  const sync = stripeSync.sessionId === activeSession.id ? stripeSync : { status: 'Not checked', last_synced_at: '', message: '' }
+  return { ...sync, sharedSignIn: Boolean(activeSession.firebaseIdToken), connections: state.stripeConnections.map((item) => ({ id: item.id, ...connectionReadiness(item) })) }
 }
 
 async function getRemoteBillingActivity() {
@@ -453,8 +521,17 @@ async function readFirestoreDocument(pathName, idToken) {
 }
 
 async function listFirestoreDocuments(pathName, idToken) {
-  const data = await firebaseRequest(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/${pathName}`, { headers: firebaseHeaders(idToken) })
-  return (data.documents || []).map((document) => ({ id: String(document.name || '').split('/').pop(), ...firestoreDocument(document) }))
+  const documents = [], seenTokens = new Set()
+  let pageToken = ''
+  do {
+    const query = new URLSearchParams({ pageSize: '100', ...(pageToken ? { pageToken } : {}) })
+    const data = await firebaseRequest(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/${pathName}?${query}`, { headers: firebaseHeaders(idToken) })
+    documents.push(...(data.documents || []).map(document => ({ ...firestoreDocument(document), id: String(document.name || '').split('/').pop() })))
+    pageToken = data.nextPageToken || ''
+    if (pageToken && seenTokens.has(pageToken)) throw new Error('Cloud listing repeated a page. Retry synchronization.')
+    seenTokens.add(pageToken)
+  } while (pageToken)
+  return documents
 }
 
 function localRoleFor(sharedRole) {
@@ -465,7 +542,7 @@ function normalizeDesktopRole(role) {
   return ['Owner', 'Front Desk', 'Bookkeeper', 'Support'].includes(role) ? role : 'Owner'
 }
 
-function syncSharedProfile(profile, uid) {
+function syncSharedProfile(profile, uid, emailVerified = false) {
   const email = String(profile.email || '').toLowerCase()
   let user = state.userProfiles.find((item) => item.firebase_uid === uid || item.email === email)
   if (!user) {
@@ -482,8 +559,8 @@ function syncSharedProfile(profile, uid) {
     shared_role: profile.role,
     workspace_id: profile.workspace_id,
     status: profile.status,
-    email_verified: true,
-    email_verified_at: user.email_verified_at || now(),
+    email_verified: Boolean(emailVerified),
+    email_verified_at: emailVerified ? (user.email_verified_at || now()) : '',
     terms_accepted_at: user.terms_accepted_at || now(),
     last_sign_in: now(),
     updated_at: now(),
@@ -525,6 +602,13 @@ async function signInSharedProfile(payload) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: profile.desktopPassword, returnSecureToken: true }),
   })
+  const account = await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseConfig.apiKey}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: session.idToken }),
+  })
+  const emailVerified = Boolean(account.users?.[0]?.emailVerified)
+  if (!emailVerified) {
+    return { verificationRequired: true, email, delivery: { channel: 'firebase-link' } }
+  }
   const sharedProfile = await readFirestoreDocument(`profiles/${session.localId}`, session.idToken)
   if (!sharedProfile.uid || sharedProfile.status !== 'Active') throw new Error('This shared account is not active for an OverHead workspace.')
   const accessLane = String(payload?.accessLane || '')
@@ -537,9 +621,9 @@ async function signInSharedProfile(payload) {
     recordAudit('auth.access_lane_denied', 'Team account attempted customer access', { email, sharedRole, accessLane }, email)
     throw new Error('This is a staff or manager account. Use Team Access to sign in.')
   }
-  const user = syncSharedProfile(sharedProfile, session.localId)
+  const user = syncSharedProfile(sharedProfile, session.localId, emailVerified)
   recordAudit('auth.shared_sign_in', 'Shared Firebase desktop sign-in completed', { email, workspaceId: user.workspace_id, accessLane: accessLane || 'standard' }, email)
-  return startSession(user, { firebaseIdToken: session.idToken, firebaseUid: session.localId })
+  return synchronizeCustomersAfterSignIn(startSession(user, { firebaseIdToken: session.idToken, firebaseUid: session.localId }))
 }
 
 async function registerSharedProfile(payload) {
@@ -564,10 +648,9 @@ async function registerSharedProfile(payload) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ requestType: 'VERIFY_EMAIL', idToken: session.idToken }),
     }).catch(() => undefined)
-    const user = syncSharedProfile(sharedProfile, session.localId)
-    if (isCylinderDeployment()) ensureCylinderEvaluation(user.email)
+    if (isCylinderDeployment()) ensureCylinderEvaluation(email)
     recordAudit('profile.shared_created', 'Shared Firebase workspace created from desktop', { email, workspaceId: session.localId }, email)
-    return startSession(user, { firebaseIdToken: session.idToken, firebaseUid: session.localId })
+    return { verificationRequired: true, email, delivery: { channel: 'firebase-link' } }
   } catch (error) {
     throw new Error(`Workspace account was created but setup was incomplete: ${error.message}`)
   }
@@ -598,9 +681,11 @@ async function registerCustomerAccess(payload = {}) {
     if (invite.email !== email || invite.role !== 'Customer') throw new Error('This invitation is not valid for customer access.')
     const profile = { uid: session.localId, owner_name: invite.business_name || email, business_name: invite.business_name || 'Customer account', email, workspace_id: workspaceId, role: 'Customer', status: 'Active', email_verified: false, terms_accepted_at: now(), last_sign_in: now(), created_at: now(), updated_at: now() }
     await writeFirestoreDocument(`profiles/${session.localId}`, profile, session.idToken)
-    const user = syncSharedProfile(profile, session.localId)
+    await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestType: 'VERIFY_EMAIL', idToken: session.idToken }),
+    }).catch(() => undefined)
     recordAudit('customer.portal_registered', 'Customer portal account registered', { email, workspaceId, customerId: invite.customer_id || '' }, email)
-    return startSession(user, { firebaseIdToken: session.idToken, firebaseUid: session.localId })
+    return { verificationRequired: true, email, delivery: { channel: 'firebase-link' } }
   } catch (error) {
     throw new Error(`Customer account was created but portal setup was incomplete: ${error.message}`)
   }
@@ -652,11 +737,13 @@ function defaultState() {
       allowDataExport: true,
       desktopNotifications: true,
       autoProcessDueJobs: true,
+      autoSyncCustomers: true,
       stripeLiveMode: false,
       supportBundleIncludesStore: true,
       fillablePdfTools: true,
     },
     customers: [],
+    customerSync: { status: 'Not synchronized', last_synced_at: '', message: 'Automatic customer sync will begin after a shared sign-in.' },
     appointments: [],
     quotes: [],
     invoices: [],
@@ -850,6 +937,7 @@ function seed() {
   if (!Array.isArray(state.billingProfiles)) state.billingProfiles = []
   if (!Array.isArray(state.entitlements)) state.entitlements = []
   state.appToggles = { ...defaultState().appToggles, ...(state.appToggles || {}) }
+  state.customerSync = { ...defaultState().customerSync, ...(state.customerSync || {}) }
 }
 
 function startScheduler() {
@@ -859,6 +947,12 @@ function startScheduler() {
     try {
       if (!activeSession) return
       processDueJobs()
+      if (activeSession.firebaseIdToken && activeSession.role !== 'Customer' && !isCylinderDeployment()) syncStripeBilling().catch(() => {})
+      if (state.appToggles.autoSyncCustomers && activeSession.firebaseIdToken && activeSession.role !== 'Customer') {
+        syncCustomersWithWorkspace().catch((error) => {
+          recordAudit('customer.sync_failed', 'Automatic customer sync failed', { message: error.message || String(error) })
+        })
+      }
     } catch (error) {
       recordAudit('scheduler.failed', 'Workflow scheduler failed', error.message || String(error))
     }
@@ -1238,10 +1332,12 @@ function syncUserLicenses(managerEmail) {
 
 function currentSubscription() {
   const email = activeSession?.email
+  const user = state.userProfiles.find((item) => item.email === email)
+  const managerEmail = user?.manager_email || email
   const usable = (item) => ['paid', 'trial'].includes(item.payment_status)
     && !(item.payment_status === 'trial' && item.trial_ends_at && Date.parse(item.trial_ends_at) <= Date.now())
   return state.subscriptions.find((item) => item.manager_email === email && usable(item))
-    || state.subscriptions.find((item) => usable(item))
+    || state.subscriptions.find((item) => item.manager_email === managerEmail && usable(item))
     || null
 }
 
@@ -1290,6 +1386,79 @@ function requireSession(action = 'workspace access') {
   if (!activeSession) throw new Error(`Sign in is required for ${action}.`)
 }
 
+function requireDeveloperHotfixCredentials(action) {
+  requireRole(['Owner'], action)
+  if (!activeSession?.firebaseIdToken) {
+    throw new Error('Sign out and sign back in with your verified OverHead staff account before using developer hot-fix tools.')
+  }
+  const email = String(activeSession.email || '').trim().toLowerCase()
+  requireOfficialOverheadTeamEmail(email)
+  const currentTime = new Date()
+  const credential = state.employeeLicenses.find((license) => {
+    if (String(license.email || '').trim().toLowerCase() !== email) return false
+    if (license.status !== 'Active' || !['Management', 'Administrator'].includes(license.access_level)) return false
+    if (!license.expires_at) return true
+    const expiresAt = new Date(`${license.expires_at}T23:59:59.999`)
+    return !Number.isNaN(expiresAt.getTime()) && expiresAt >= currentTime
+  })
+  if (!credential) {
+    recordAudit('developer.credentials_denied', 'Developer hot-fix access denied because an active staff credential was not found.', { email }, email)
+    throw new Error('An active OverHead staff credential with Management or Administrator access is required before developer hot-fix tools can be used.')
+  }
+  return credential
+}
+
+function validateDeveloperWorkspace(workspacePath) {
+  const resolvedPath = fs.realpathSync(workspacePath)
+  const requiredPaths = ['package.json', 'electron-main.cjs', 'electron-backend.cjs', 'src']
+  if (!requiredPaths.every((entry) => fs.existsSync(path.join(resolvedPath, entry)))) {
+    throw new Error('Choose the OverHead source folder containing package.json, electron-main.cjs, electron-backend.cjs, and src.')
+  }
+  const relativeToData = path.relative(dataRoot, resolvedPath)
+  if (!relativeToData.startsWith('..') && !path.isAbsolute(relativeToData)) {
+    throw new Error('The local OverHead data folder cannot be opened in a code editor.')
+  }
+  return resolvedPath
+}
+
+function getDeveloperWorkspace() {
+  requireDeveloperHotfixCredentials('developer editor access')
+  const workspacePath = String(state.settings.developerWorkspacePath?.value || '')
+  const preferredEditor = String(state.settings.developerPreferredEditor?.value || 'auto')
+  if (!workspacePath) return { configured: false, workspacePath: '', preferredEditor }
+  try {
+    return { configured: true, workspacePath: validateDeveloperWorkspace(workspacePath), preferredEditor }
+  } catch (error) {
+    return { configured: false, workspacePath: '', preferredEditor, message: `Saved developer folder is unavailable: ${error.message}` }
+  }
+}
+
+function setDeveloperWorkspace(payload) {
+  requireDeveloperHotfixCredentials('developer editor configuration')
+  const input = developerWorkspaceSchema.parse(payload || {})
+  const workspacePath = validateDeveloperWorkspace(input.workspacePath)
+  state.settings.developerWorkspacePath = { value: workspacePath, updated_at: now() }
+  persist()
+  recordAudit('developer.workspace_configured', 'Developer source workspace configured', { workspacePath }, activeSession.email)
+  return getDeveloperWorkspace()
+}
+
+function setDeveloperEditor(payload) {
+  requireDeveloperHotfixCredentials('developer editor configuration')
+  const input = developerEditorSchema.parse(payload || {})
+  state.settings.developerPreferredEditor = { value: input.preferredEditor, updated_at: now() }
+  persist()
+  recordAudit('developer.editor_preference_updated', 'Developer editor preference updated', { preferredEditor: input.preferredEditor }, activeSession.email)
+  return getDeveloperWorkspace()
+}
+
+function recordDeveloperEditorLaunch(editor, workspacePath) {
+  requireDeveloperHotfixCredentials('developer editor launch')
+  const resolvedPath = validateDeveloperWorkspace(workspacePath)
+  recordAudit('developer.editor_opened', 'Developer source workspace opened in code editor', { editor, workspacePath: resolvedPath }, activeSession.email)
+  return { workspacePath: resolvedPath }
+}
+
 function getBootstrap() {
   requireSession('workspace bootstrap')
   return {
@@ -1315,7 +1484,10 @@ function getBootstrap() {
     approvalRequests: listApprovalRequests(),
     savedFormMemory: state.savedFormMemory,
     appToggles: state.appToggles,
+    customerSync: state.customerSync,
+    stripeConnector: getStripeConnectorStatus(),
     complianceSummary: getComplianceSummary(),
+    dataRequests: listDataRequests(),
     workflowJobs: listWorkflowJobs(),
     guidedLaunchRuns: [...state.guidedLaunchRuns],
     fraudSignals: listFraudSignals(),
@@ -1845,6 +2017,138 @@ function listCustomers() {
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
 }
 
+function activeWorkspaceId() {
+  return state.userProfiles.find((user) => user.firebase_uid === activeSession?.firebaseUid || user.email === activeSession?.email)?.workspace_id || ''
+}
+
+function customerTime(value) {
+  const parsed = Date.parse(value || '')
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function isSampleCustomer(customer) {
+  return customer.id === 'oh-cust-001' && customer.business_name === 'Oak City Detail'
+}
+
+function sharedCustomerFields(customer, workspaceId) {
+  return {
+    workspace_id: workspaceId,
+    created_by: activeSession.firebaseUid,
+    desktop_customer_id: customer.id,
+    name: customer.business_name || customer.owner_name || 'Customer',
+    owner_name: customer.owner_name || '',
+    email: String(customer.email || '').endsWith('@overhead.local') ? '' : customer.email || '',
+    industry: customer.industry || '',
+    service_area: customer.service_area || '',
+    preferred_contact: customer.preferred_contact || 'Email',
+    status: customer.status || 'Active',
+    created_at: customer.created_at || now(),
+    updated_at: customer.updated_at || now(),
+  }
+}
+
+function applySharedCustomer(remote) {
+  const localId = remote.desktop_customer_id || remote.id
+  let customer = state.customers.find((item) => item.id === localId || item.shared_customer_id === remote.id)
+  if (!customer) {
+    customer = { id: localId, created_at: remote.created_at || now() }
+    state.customers.push(customer)
+  }
+  Object.assign(customer, {
+    id: localId,
+    shared_customer_id: remote.id,
+    business_name: remote.name || remote.business_name || remote.owner_name || 'Customer',
+    owner_name: remote.owner_name || remote.name || 'Owner pending',
+    email: remote.email || 'customer@overhead.local',
+    industry: remote.industry || 'Shared workspace customer',
+    service_area: remote.service_area || 'Not specified',
+    preferred_contact: remote.preferred_contact || 'Email',
+    status: remote.status || 'Active',
+    created_at: remote.created_at || customer.created_at || now(),
+    updated_at: remote.updated_at || now(),
+  })
+  return customer
+}
+
+let customerSyncInFlight = null
+async function syncCustomersWithWorkspace() {
+  if (customerSyncInFlight) throw new Error('Customer synchronization is already running. Please wait for it to finish.')
+  customerSyncInFlight = performCustomerSync()
+  try { return await customerSyncInFlight } finally { customerSyncInFlight = null }
+}
+async function performCustomerSync() {
+  requireSession('customer synchronization')
+  if (activeSession.role === 'Customer') throw new Error('Customer accounts cannot synchronize the workspace customer register.')
+  if (!activeSession.firebaseIdToken || !activeSession.firebaseUid) {
+    state.customerSync = { status: 'Waiting for shared sign-in', last_synced_at: state.customerSync?.last_synced_at || '', message: 'Sign in with the shared workspace account to synchronize customer records.' }
+    persist()
+    return state.customerSync
+  }
+  const workspaceId = activeWorkspaceId()
+  if (!workspaceId) throw new Error('The shared workspace ID is unavailable for customer synchronization.')
+  const session = activeSession, store = state, token = session.firebaseIdToken
+  const checkSession = () => { if (activeSession !== session || state !== store) throw new Error('The account changed during customer synchronization. Sign in and retry.') }
+  const remoteCustomers = await listFirestoreDocuments(`workspaces/${workspaceId}/customers`, token)
+  checkSession()
+  const remoteById = new Map(remoteCustomers.map((customer) => [customer.id, customer]))
+  let uploaded = 0
+  let downloaded = 0
+
+  for (const localCustomer of state.customers.filter((customer) => !isSampleCustomer(customer))) {
+    const remoteId = localCustomer.shared_customer_id || localCustomer.id
+    const remoteCustomer = remoteById.get(remoteId)
+    if (!remoteCustomer) {
+      checkSession()
+      await writeFirestoreDocument(`workspaces/${workspaceId}/customers/${encodeURIComponent(remoteId)}`, sharedCustomerFields(localCustomer, workspaceId), token)
+      checkSession()
+      localCustomer.shared_customer_id = remoteId
+      uploaded += 1
+      continue
+    }
+    if (customerTime(remoteCustomer.updated_at) > customerTime(localCustomer.updated_at)) {
+      applySharedCustomer(remoteCustomer)
+      downloaded += 1
+    } else if (customerTime(localCustomer.updated_at) > customerTime(remoteCustomer.updated_at)) {
+      const fields = sharedCustomerFields(localCustomer, workspaceId)
+      delete fields.workspace_id
+      delete fields.created_by
+      delete fields.created_at
+      checkSession()
+      await updateFirestoreDocument(`workspaces/${workspaceId}/customers/${encodeURIComponent(remoteId)}`, fields, token)
+      checkSession()
+      localCustomer.shared_customer_id = remoteId
+      uploaded += 1
+    } else {
+      localCustomer.shared_customer_id = remoteId
+    }
+    remoteById.delete(remoteId)
+  }
+
+  for (const remoteCustomer of remoteById.values()) {
+    applySharedCustomer(remoteCustomer)
+    downloaded += 1
+  }
+  state.customerSync = {
+    status: 'Synchronized',
+    last_synced_at: now(),
+    message: `Customer records are up to date. ${uploaded} uploaded, ${downloaded} downloaded.`,
+  }
+  persist()
+  return state.customerSync
+}
+
+async function synchronizeCustomersAfterSignIn(session) {
+  if (activeSession.role !== 'Customer' && !isCylinderDeployment()) await syncStripeBilling().catch(() => {})
+  if (activeSession.role === 'Customer' || !state.appToggles.autoSyncCustomers) return { ...session, customerSync: state.customerSync }
+  try {
+    return { ...session, customerSync: await syncCustomersWithWorkspace() }
+  } catch (error) {
+    state.customerSync = { status: 'Needs attention', last_synced_at: state.customerSync?.last_synced_at || '', message: error.message || 'Customer synchronization could not finish.' }
+    persist()
+    return { ...session, customerSync: state.customerSync }
+  }
+}
+
 function listTasks() {
   requireSession('task viewing')
   return [...state.adminTasks].sort((a, b) => {
@@ -1894,14 +2198,47 @@ function processDueJobs() {
   const due = state.workflowJobs.filter((job) => job.status === 'Queued' && job.run_at <= now()).slice(0, 10)
   due.forEach((job) => {
     job.attempts += 1
-    job.status = 'Complete'
-    job.updated_at = now()
-    if (job.type === 'office.reminder' || job.type === 'owner.digest' || job.type.startsWith('workflow.')) {
-      state.adminTasks.unshift({ id: createId('task'), title: job.title, area: job.type === 'owner.digest' ? 'Owner Digest' : 'Automation', status: 'Open', priority: 'Normal', due_at: now(), protected: 0, created_at: now(), updated_at: now(), workflow_job_id: job.id })
+    try {
+      if (job.payload?.failReason) throw new Error(String(job.payload.failReason))
+      if (job.type === 'office.reminder' || job.type === 'owner.digest' || job.type.startsWith('workflow.')) {
+        state.adminTasks.unshift({ id: createId('task'), title: job.title, area: job.type === 'owner.digest' ? 'Owner Digest' : 'Automation', status: 'Open', priority: 'Normal', due_at: now(), protected: 0, created_at: now(), updated_at: now(), workflow_job_id: job.id })
+      } else {
+        throw new Error(`No local worker is registered for ${job.type}.`)
+      }
+      job.status = 'Complete'
+      job.last_error = ''
+      recordAudit('workflow.job_completed', 'Workflow job completed', { id: job.id, type: job.type })
+    } catch (error) {
+      job.last_error = error.message || 'Workflow job failed.'
+      if (job.attempts >= 3) {
+        job.status = 'Dead Letter'
+        recordAudit('workflow.job_dead_lettered', 'Workflow job moved to dead letter', { id: job.id, attempts: job.attempts, error: job.last_error })
+      } else {
+        job.status = 'Queued'
+        const retryDelayMinutes = 2 ** job.attempts
+        job.run_at = new Date(Date.now() + retryDelayMinutes * 60 * 1000).toISOString()
+        recordAudit('workflow.job_retry_scheduled', 'Workflow job retry scheduled', { id: job.id, attempts: job.attempts, retryDelayMinutes, error: job.last_error })
+      }
     }
-    recordAudit('workflow.job_completed', 'Workflow job completed', { id: job.id, type: job.type })
+    job.updated_at = now()
   })
   if (due.length) persist()
+  return listWorkflowJobs()
+}
+
+function retryWorkflowJob(payload) {
+  requireRole(['Owner', 'Front Desk', 'Support'], 'workflow retry')
+  const input = retryJobSchema.parse(payload || {})
+  const job = state.workflowJobs.find((item) => item.id === input.jobId)
+  if (!job) throw new Error('Workflow job not found.')
+  if (job.status !== 'Dead Letter') throw new Error('Only dead-letter jobs can be retried manually.')
+  job.status = 'Queued'
+  job.attempts = 0
+  job.last_error = ''
+  job.run_at = now()
+  job.updated_at = now()
+  persist()
+  recordAudit('workflow.job_retried', 'Dead-letter workflow job returned to queue', { id: job.id })
   return listWorkflowJobs()
 }
 
@@ -1983,6 +2320,12 @@ function createCustomer(payload) {
   })
   persist()
   recordAudit('customer.created', 'Customer created', { id: customer.id, businessName: customer.business_name })
+  if (state.appToggles.autoSyncCustomers && activeSession?.firebaseIdToken) {
+    syncCustomersWithWorkspace().catch((error) => {
+      state.customerSync = { status: 'Needs attention', last_synced_at: state.customerSync?.last_synced_at || '', message: error.message || 'Customer synchronization could not finish.' }
+      persist()
+    })
+  }
   return { customers: listCustomers(), tasks: listTasks() }
 }
 
@@ -2661,6 +3004,37 @@ function listDataRequests() {
   return [...state.dataRequests].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
 }
 
+function completeDataDeletion(payload = {}) {
+  requireRole(['Owner'], 'data deletion')
+  const input = dataDeletionSchema.parse(payload)
+  const request = state.dataRequests.find((item) => item.id === input.requestId)
+  if (!request || request.request_type !== 'delete' || request.status !== 'Open') throw new Error('Open deletion request not found.')
+  if (!request.subject_email || request.subject_email.endsWith('@overhead.local')) throw new Error('A customer email is required before local deletion can be completed.')
+  const affectedCustomers = state.customers.filter((customer) => customer.email === request.subject_email)
+  if (!affectedCustomers.length) throw new Error('No local customer record matches this deletion request.')
+  const backup = createBackup()
+  const customerIds = new Set(affectedCustomers.map((customer) => customer.id))
+  const documentRoot = path.resolve(path.join(dataRoot, 'documents')) + path.sep
+  const removedDocuments = state.documents.filter((document) => customerIds.has(document.customer_id))
+  removedDocuments.forEach((document) => {
+    const documentPath = path.resolve(document.stored_path || '')
+    if (documentPath.startsWith(documentRoot) && fs.existsSync(documentPath)) fs.unlinkSync(documentPath)
+  })
+  state.customers = state.customers.filter((customer) => !customerIds.has(customer.id))
+  state.documents = state.documents.filter((document) => !customerIds.has(document.customer_id))
+  state.workflowPreferences = state.workflowPreferences.filter((item) => !customerIds.has(item.customer_id))
+  state.appointments = state.appointments.filter((item) => !customerIds.has(item.customer_id))
+  state.quotes = state.quotes.filter((item) => !customerIds.has(item.customer_id))
+  state.invoices = state.invoices.filter((item) => !customerIds.has(item.customer_id))
+  state.adminTasks = state.adminTasks.filter((item) => !customerIds.has(item.customer_id))
+  request.status = 'Completed'
+  request.completed_at = now()
+  request.updated_at = now()
+  recordAudit('compliance.data_deleted', 'Local customer data deletion completed', { requestId: request.id, customerCount: affectedCustomers.length, documentCount: removedDocuments.length, safetyBackupPath: backup.backupPath })
+  persist()
+  return { customerCount: affectedCustomers.length, documentCount: removedDocuments.length, safetyBackupPath: backup.backupPath }
+}
+
 function getComplianceSummary() {
   requireSession('compliance viewing')
   const required = ['Terms of Use', 'Privacy Notice', 'Acceptable Use Policy', 'AI Use Disclosure', 'Data Retention Policy', 'Support Policy', 'Subscription Billing & Authorization Policy', 'Free Trial Policy', 'Cancellation & Prorated Refund Policy', 'Workspace License & Access Policy']
@@ -2694,9 +3068,37 @@ function validateRestorePackage(filePath) {
   if (!fs.existsSync(resolved)) throw new Error('Restore file not found.')
   const fileText = fs.readFileSync(resolved, 'utf8')
   const parsed = JSON.parse(decryptStore(fileText))
-  const valid = parsed.schema === 'overhead-local-store-v2' && Array.isArray(parsed.customers) && Array.isArray(parsed.adminTasks)
+  const valid = validRestoreState(parsed)
   recordAudit('restore.validated', valid ? 'Restore package validated' : 'Restore package rejected', { filePath: resolved, valid })
-  return { valid, schema: parsed.schema || 'unknown', filePath: resolved }
+  return { valid, schema: parsed?.schema || 'unknown', filePath: resolved }
+}
+
+function validRestoreState(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.schema !== 'overhead-local-store-v2') return false
+  // Missing newer collections may use defaults; present collections must be valid.
+  if (!Array.isArray(parsed.customers) || !Array.isArray(parsed.adminTasks) || !Array.isArray(parsed.userProfiles)) return false
+  return Object.entries(defaultState()).every(([key, value]) => {
+    if (!(key in parsed)) return true
+    if (Array.isArray(value)) return Array.isArray(parsed[key]) && parsed[key].every(row => row && typeof row === 'object' && !Array.isArray(row))
+    if (value && typeof value === 'object') return parsed[key] && typeof parsed[key] === 'object' && !Array.isArray(parsed[key])
+    return typeof parsed[key] === typeof value
+  })
+}
+
+function restoreFromPackage(payload = {}) {
+  requireRole(['Owner'], 'restore execution')
+  requireFeature('restore_validation')
+  const input = restoreSchema.parse(payload)
+  const validation = validateRestorePackage(input.filePath)
+  if (!validation.valid) throw new Error('Restore package was rejected.')
+  const backup = createBackup()
+  const restored = { ...defaultState(), ...JSON.parse(decryptStore(fs.readFileSync(validation.filePath, 'utf8'))) }
+  state = restored
+  seed()
+  recordAudit('restore.completed', 'Local workspace restored from validated package', { filePath: validation.filePath, safetyBackupPath: backup.backupPath })
+  persist()
+  activeSession = null
+  return { restored: true, safetyBackupPath: backup.backupPath }
 }
 
 function createSupportBundle(integrityReport = null) {
@@ -2711,12 +3113,15 @@ function createSupportBundle(integrityReport = null) {
   zip.addFile('tasks.json', Buffer.from(JSON.stringify(listTasks(), null, 2)))
   zip.addFile('customers.json', Buffer.from(JSON.stringify(listCustomers(), null, 2)))
   if (integrityReport) zip.addFile('integrity-report.json', Buffer.from(JSON.stringify(integrityReport, null, 2)))
-  const supportState = {
-    ...state,
-    microsoftConnections: state.microsoftConnections.map(({ token_cache: _tokenCache, ...connection }) => connection),
+  // Diagnostics must not export passwords, verification codes, or provider sessions.
+  if (state.appToggles.supportBundleIncludesStore) {
+    const supportState = {
+      schema: state.schema, createdAt: state.createdAt, updatedAt: state.updatedAt,
+      customerSync: state.customerSync, appToggles: state.appToggles,
+      counts: Object.fromEntries(Object.entries(state).filter(([, value]) => Array.isArray(value)).map(([key, value]) => [key, value.length])),
+    }
+    zip.addFile('overhead-store.json', Buffer.from(JSON.stringify(supportState, null, 2)))
   }
-  zip.addFile('overhead-store.json', Buffer.from(JSON.stringify(supportState, null, 2)))
-  if (state.appToggles.supportBundleIncludesStore) zip.addLocalFile(dbPath, '', 'overhead-store.secure')
   zip.writeZip(bundlePath)
 
   const createdAt = now()
@@ -2808,6 +3213,7 @@ module.exports = {
   createDataExport,
   attachCustomerDocument,
   createDataRequest,
+  completeDataDeletion,
   createQuickNote,
   createFillablePdf,
   createOperationalDocument,
@@ -2825,9 +3231,12 @@ module.exports = {
   getBootstrap,
   getComplianceSummary,
   getRemoteEntitlements,
+  getStripeConnectorStatus,
+  syncStripeBilling,
   getRemoteBillingActivity,
   getEntitlementState,
   getHealth,
+  getDeveloperWorkspace,
   getStoredDocumentPath,
   getRememberedSignIn,
   resumeRememberedSession,
@@ -2838,6 +3247,7 @@ module.exports = {
   listApprovalRequests,
   listBillingProfiles,
   listCustomers,
+  syncCustomersWithWorkspace,
   listDataRequests,
   listDocuments,
   listFraudSignals,
@@ -2856,10 +3266,14 @@ module.exports = {
   persistIntegritySnapshot,
   processDueJobs,
   queueWorkflowJob,
+  retryWorkflowJob,
   recordFraudSignal,
+  recordDeveloperEditorLaunch,
   saveStripeConnection,
   saveSquareConnection,
   saveBillingProfile,
+  setDeveloperEditor,
+  setDeveloperWorkspace,
   registerSharedProfile,
   registerCustomerAccess,
   signInSharedProfile,
@@ -2880,4 +3294,5 @@ module.exports = {
   refreshUserLicense,
   updateEmployeeLicense,
   validateRestorePackage,
+  restoreFromPackage,
 }
