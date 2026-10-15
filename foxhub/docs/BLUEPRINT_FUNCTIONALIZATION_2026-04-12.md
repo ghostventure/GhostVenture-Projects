@@ -109,4 +109,3 @@ Firebase Hosting deploy passed:
 ```bash
 npm run deploy:hosting
 ```
-

@@ -16,4 +16,3 @@ test("captcha challenge blocks missing, wrong, stale, and honeypot answers", () 
   assert.equal(validateCaptchaProof({ captchaChallenge: challenge, captchaAnswer: "16", website: "https://bot.example" }, 2000), "Robot check failed.");
   assert.equal(validateCaptchaProof({ captchaChallenge: challenge, captchaAnswer: "16" }, 11 * 60 * 1000), "Robot check expired. Refresh it and try again.");
 });
-

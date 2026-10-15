@@ -42,4 +42,3 @@ Use `preview` first for an internal build. Use `production` later for TestFlight
 - iOS bundle identifier: `com.foxhub.app`
 - URL scheme: `foxhub`
 - Encryption export flag: `ITSAppUsesNonExemptEncryption=false`
-

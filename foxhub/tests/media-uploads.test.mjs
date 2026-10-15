@@ -41,4 +41,3 @@ test("SVG sanitizer removes script and inline event handlers", () => {
   assert.equal(sanitized.includes("onclick"), false);
   assert.match(sanitized, /<svg/);
 });
-

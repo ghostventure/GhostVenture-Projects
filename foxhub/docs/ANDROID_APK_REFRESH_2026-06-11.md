@@ -48,4 +48,3 @@ The refreshed APK contains the current web bundle:
 - This is a debug APK for direct testing, not a signed Play Store release.
 - Firebase Hosting still cannot host APK files on the current Spark plan. Keep using the local `release/` output until another permitted download surface is chosen.
 - iOS was intentionally not refreshed in this pass.
-

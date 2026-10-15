@@ -120,4 +120,3 @@ export async function prepareImageAttachment(file) {
     size: Number(processedFile.size || file.size || 0)
   };
 }
-

@@ -37,4 +37,3 @@ export function validateCaptchaProof(payload = {}, now = Date.now()) {
   if (answer !== expected) return "Robot check answer does not match.";
   return "";
 }
-
