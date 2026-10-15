@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { foxhubExpansionComponents, miniApps } from "./data.js";
 import { THEME_OPTIONS, canUseTheme, getContextActions, getAccountEmblem, getThemeToggleLabel, hasFoxHubManagementAccess, getVisibleCount } from "./rules.js";
 
@@ -6,18 +6,19 @@ import { footerBoilerplateGroups } from "./footerBoilerplates.js";
 
 import FoxHeadMark from "./FoxHeadMark.jsx";
 import { isWindowsBrowserRuntime, base64UrlToBytes, credentialToServerPayload, runLocalWindowsHelloManagementCheck, getCurrentFirebaseIdToken, buildFilteredState, buildSectionFeedItems, SectionFeed, formatAuditDate, AppFooter } from "./workspaces/shared.jsx";
-import { HomeWorkspace } from "./workspaces/HomeWorkspace.jsx";
 import { MemberAccountControls } from "./workspaces/MemberAccountControls.jsx";
-import { ChatWorkspace } from "./workspaces/ChatWorkspace.jsx";
-import { NetworkWorkspace } from "./workspaces/NetworkWorkspace.jsx";
-import { MarketWorkspace } from "./workspaces/MarketWorkspace.jsx";
-import { PayWorkspace } from "./workspaces/PayWorkspace.jsx";
-import { ServicesWorkspace } from "./workspaces/ServicesWorkspace.jsx";
-import { GrowthWorkspace } from "./workspaces/GrowthWorkspace.jsx";
-import { ExperienceWorkspace } from "./workspaces/ExperienceWorkspace.jsx";
-import { BlueprintWorkspace } from "./workspaces/BlueprintWorkspace.jsx";
-import { ManagementWorkspace } from "./workspaces/ManagementWorkspace.jsx";
-import { ConnectorsWorkspace } from "./workspaces/ConnectorsWorkspace.jsx";
+
+const HomeWorkspace = lazy(() => import("./workspaces/HomeWorkspace.jsx").then((module) => ({ default: module.HomeWorkspace })));
+const ChatWorkspace = lazy(() => import("./workspaces/ChatWorkspace.jsx").then((module) => ({ default: module.ChatWorkspace })));
+const NetworkWorkspace = lazy(() => import("./workspaces/NetworkWorkspace.jsx").then((module) => ({ default: module.NetworkWorkspace })));
+const MarketWorkspace = lazy(() => import("./workspaces/MarketWorkspace.jsx").then((module) => ({ default: module.MarketWorkspace })));
+const PayWorkspace = lazy(() => import("./workspaces/PayWorkspace.jsx").then((module) => ({ default: module.PayWorkspace })));
+const ServicesWorkspace = lazy(() => import("./workspaces/ServicesWorkspace.jsx").then((module) => ({ default: module.ServicesWorkspace })));
+const GrowthWorkspace = lazy(() => import("./workspaces/GrowthWorkspace.jsx").then((module) => ({ default: module.GrowthWorkspace })));
+const ExperienceWorkspace = lazy(() => import("./workspaces/ExperienceWorkspace.jsx").then((module) => ({ default: module.ExperienceWorkspace })));
+const BlueprintWorkspace = lazy(() => import("./workspaces/BlueprintWorkspace.jsx").then((module) => ({ default: module.BlueprintWorkspace })));
+const ManagementWorkspace = lazy(() => import("./workspaces/ManagementWorkspace.jsx").then((module) => ({ default: module.ManagementWorkspace })));
+const ConnectorsWorkspace = lazy(() => import("./workspaces/ConnectorsWorkspace.jsx").then((module) => ({ default: module.ConnectorsWorkspace })));
 
 function FoxHubShell({
   theme,
@@ -675,7 +676,13 @@ function FoxHubShell({
                 value={quickQuery}
                 onChange={(event) => setQuickQuery(event.target.value)}
                 placeholder="Search this page"
+                aria-label="Search this page"
               />
+              {quickQuery ? (
+                <button type="button" className="ghost-button small" onClick={() => setQuickQuery("")}>
+                  Clear search
+                </button>
+              ) : null}
               <div className="toolbar-context">
                 <span>{currentView.title}</span>
                 <strong>{visibleCount} results</strong>
@@ -924,6 +931,7 @@ function FoxHubShell({
               />
             ) : null}
 
+            <Suspense fallback={<section className="surface-row" aria-live="polite"><article className="surface"><p className="card-label">Loading workspace</p><p className="surface-note">Preparing this part of FoxHub…</p></article></section>}>
             {activeTab === "hub" ? (
               <>
               {tutorialAssistant}
@@ -1226,6 +1234,7 @@ function FoxHubShell({
                 updateComplianceControl={updateComplianceControl}
               />
             ) : null}
+            </Suspense>
           </section>
         </section>
       </div>

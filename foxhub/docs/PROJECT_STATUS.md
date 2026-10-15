@@ -1,6 +1,6 @@
 # FoxHub Project Status
 
-Last updated: 2026-06-12
+Last updated: 2026-10-15
 
 ## Current state
 
@@ -18,6 +18,13 @@ It includes:
 - Android debug APK output for direct testing
 
 The project is not production-ready, but it is no longer a static mock.
+
+## 2026-10-15 Workspace UX and loading performance
+
+- Detailed record: `docs/WORKSPACE_UX_AND_LAZY_LOADING_2026-10-15.md`
+- Added an accessible Clear search action when page search has an active query.
+- Lazy-loaded workspace screens and added a local loading fallback; Vite build emitted separate workspace chunks.
+- Build passed; no tests or deployment were performed for this update, so production behavior is not yet verified.
 
 ## 2026-06-12 foxhub-superapp Hosting undeploy
 

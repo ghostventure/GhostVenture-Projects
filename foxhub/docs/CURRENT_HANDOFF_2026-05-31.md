@@ -19,6 +19,12 @@ To avoid duplicate status drift, keep live URLs, latest deploy verification, and
 - Current auth mode: Firebase-backed Auth/Firestore runtime
 - Latest verified copied Hosting deploy: October 15, 2026 at `22:46:54 GMT`; post-deploy smoke passed at 390px and 1440px.
 
+## Source Updates — October 15, 2026
+
+- Added an accessible Clear search action to the page-search toolbar; it appears only while a query is active.
+- Workspace screens now load on demand through React lazy imports, with a local loading fallback. `npm run vite:build` passed and emitted separate workspace chunks, including Services (70.44 KB raw) and Management (121.87 KB raw). This is build/code-splitting evidence, not a runtime benchmark.
+- These source changes have not been deployed, and no tests were run for this update. Production behavior is unverified. See `docs/WORKSPACE_UX_AND_LAZY_LOADING_2026-10-15.md`.
+
 ## Current Product State
 
 FoxHub is an interactive alpha shell, not a production banking/payment processor.

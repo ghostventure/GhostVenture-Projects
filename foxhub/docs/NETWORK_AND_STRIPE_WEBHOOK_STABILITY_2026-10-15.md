@@ -45,17 +45,15 @@ live webhook requests were run.
 
 ## Deployment status — October 15, 2026
 
-Hosting was deployed to `foxhub-c984b` at
-`https://foxhub-c984b.web.app` on October 15, 2026 at `22:46:54 GMT`; the
-Hosting version ID was not captured. This deployment includes the workspace
-feed cleanup described above.
+Hosting was deployed again to `foxhub-c984b` at
+`https://foxhub-c984b.web.app` on October 15, 2026 at 22:46:54 GMT. This release
+includes the workspace feed cleanup. The Hosting version ID was not captured.
 
-Post-deploy smoke passed on production at 390px and 1440px for public pages,
-sign-in, password recovery, and footer behavior, with no JavaScript errors.
-Routes `/`, `/signin`, `/management`, `/feedback`, and `/android/` all returned
-HTTP 200. The deployed shell and CSS contain the offline and reconnect behavior.
-The authenticated member layout was not exercised. This smoke did not validate
-live Stripe webhook behavior.
+Post-deploy production smoke passed at 390px and 1440px with no JavaScript
+errors. Routes `/`, `/signin`, `/management`, `/feedback`, and `/android/` all
+returned HTTP 200. The deployed shell contains the offline/reconnect behavior
+and feed suppression condition. The authenticated UI was not rendered in
+production. The smoke did not validate live Stripe webhook behavior.
 
 The Stripe webhook backend code was not deployed: the Cloud Functions API is
 disabled in `foxhub-c984b`, and the current account receives HTTP 403 for

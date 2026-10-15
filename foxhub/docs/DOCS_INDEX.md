@@ -1,6 +1,6 @@
 # FoxHub Docs Index
 
-Latest implementation handoff: [October 15 network UX and Stripe webhook stability](NETWORK_AND_STRIPE_WEBHOOK_STABILITY_2026-10-15.md).
+Latest implementation handoff: [October 15 workspace UX and loading performance](WORKSPACE_UX_AND_LAZY_LOADING_2026-10-15.md).
 
 Last updated: 2026-10-15
 
@@ -8,6 +8,8 @@ This file is the starting point for FoxHub repo documentation.
 
 - `NETWORK_AND_STRIPE_WEBHOOK_STABILITY_2026-10-15.md`
   - accessible offline/reconnect feedback, lazy-chunk recovery, focused workspace feeds, Stripe webhook validation, and validation/deployment limits
+- `WORKSPACE_UX_AND_LAZY_LOADING_2026-10-15.md`
+  - accessible clear-search control and lazy-loaded workspace chunks, with build evidence and source-only deployment status
 
 ## Foundation docs
 
