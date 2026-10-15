@@ -1,0 +1,17 @@
+{
+  "hosting": {
+    "public": "redirect-public",
+    "ignore": [
+      "firebase.redirect-superapp.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "redirects": [
+      {
+        "source": "**",
+        "destination": "https://foxhub-c984b.web.app",
+        "type": 301
+      }
+    ]
+  }
+}

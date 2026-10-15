@@ -1,0 +1,3 @@
+.network-status-notice { position: sticky; top: 0; z-index: 30; padding: 10px 16px; text-align: center; font-size: .92rem; font-weight: 650; background: var(--surface-strong); border-bottom: 1px solid var(--border); }
+.network-status-notice.is-offline { color: var(--accent-strong); }
+.network-status-notice.is-online { color: var(--accent); }

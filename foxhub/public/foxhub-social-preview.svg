@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbf7"/>
+      <stop offset="0.48" stop-color="#dfeee4"/>
+      <stop offset="1" stop-color="#0f2b1f"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#edf7ef" stop-opacity="0.9"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#092016" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <path d="M760 0h440v630H650c110-88 150-185 123-292-22-88-27-193-13-338z" fill="#123626" opacity="0.9"/>
+  <path d="M834 95c86-19 176 12 230 79 58 72 61 174 11 249-54 81-157 116-250 85-83-28-140-102-146-188-7-105 52-201 155-225z" fill="#d4a64d" opacity="0.28"/>
+  <g filter="url(#shadow)">
+    <rect x="76" y="74" width="650" height="482" rx="26" fill="url(#panel)" stroke="#b8d3c1"/>
+    <text x="126" y="147" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#137a4e">FoxHub</text>
+    <text x="126" y="238" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800" fill="#10251b">Your private circle</text>
+    <text x="126" y="310" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800" fill="#10251b">for local trust.</text>
+    <text x="126" y="374" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="#365545">Private groups, trusted local help, plans,</text>
+    <text x="126" y="416" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="#365545">recommendations, and early member access.</text>
+    <rect x="126" y="462" width="246" height="54" rx="27" fill="#137a4e"/>
+    <text x="160" y="497" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#ffffff">Request early access</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="790" y="128" width="294" height="130" rx="22" fill="#f9fffb" stroke="#b8d3c1"/>
+    <circle cx="842" cy="193" r="28" fill="#137a4e"/>
+    <text x="890" y="184" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#10251b">Private circles</text>
+    <text x="890" y="219" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#496457">Stay close without the noise</text>
+    <rect x="840" y="183" width="4" height="34" rx="2" fill="#ffffff"/>
+    <rect x="827" y="196" width="30" height="4" rx="2" fill="#ffffff"/>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="824" y="304" width="294" height="130" rx="22" fill="#f9fffb" stroke="#b8d3c1"/>
+    <circle cx="876" cy="369" r="28" fill="#d4a64d"/>
+    <text x="924" y="360" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#10251b">Local help</text>
+    <text x="924" y="395" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#496457">Ask people you already trust</text>
+    <path d="M861 369l11 11 22-26" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="760" y="480" width="300" height="74" rx="20" fill="#f9fffb" stroke="#b8d3c1"/>
+    <text x="792" y="526" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#10251b">Early access is open</text>
+  </g>
+</svg>

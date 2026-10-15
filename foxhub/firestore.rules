@@ -1,0 +1,879 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function nonEmptyString(value, max) {
+      return value is string && value.size() > 0 && value.size() <= max;
+    }
+
+    function optionalString(value, max) {
+      return !(value is string) || value.size() <= max;
+    }
+
+    function optionalId(value, max) {
+      return !(value is string) || (value.size() > 0 && value.size() <= max);
+    }
+
+    function optionalList(value, max) {
+      return value is list && value.size() <= max;
+    }
+
+    function optionalListingList(value, max) {
+      return !(value is list) || value.size() <= max;
+    }
+
+    function optionalSavedSearchList(value, max) {
+      return !(value is list) || value.size() <= max;
+    }
+
+    function optionalListingAlertList(value, max) {
+      return !(value is list) || value.size() <= max;
+    }
+
+    function requiredTimestamp(value) {
+      return value is timestamp;
+    }
+
+    function validEmail(value) {
+      return value is string && value.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$');
+    }
+
+    function validHandle(value) {
+      return value is string &&
+        value.size() <= 40 &&
+        (
+          value.size() == 0 ||
+          value.matches('^@[A-Za-z0-9_\\.]{1,39}$')
+        );
+    }
+
+    function validAccessState(value) {
+      return value in ['active', 'priority', 'waitlist'];
+    }
+
+    function validInviteCode(value) {
+      return value is string &&
+        value.size() <= 24 &&
+        (
+          value.size() == 0 ||
+          value.matches('^[A-Z0-9-]{1,24}$')
+        );
+    }
+
+    function validInviteStatus(value) {
+      return value in ['active', 'sponsor_pending', 'redeemed', 'denied', 'expired'];
+    }
+
+    function validPresenceState(value) {
+      return value in ['online', 'focus', 'away', 'offline'];
+    }
+
+    function validAuthMethod(value) {
+      return value in ['password', 'google', 'email_link'];
+    }
+
+    function validOneId(value) {
+      return value is string &&
+        value.size() <= 32 &&
+        (
+          value.size() == 0 ||
+          value.matches('^FOX-[A-Z0-9]{1,12}$')
+        );
+    }
+
+    function isPlatformOperator() {
+      return signedIn() &&
+        request.auth.token.platformOperator == true;
+    }
+
+    function isFounderUid(userId) {
+      return signedIn() &&
+        request.auth.uid == userId &&
+        userId in ['lIHK02ZtzhQPUspqqOiKJAH8SCl2', '43caVpuJfHaHEJdsvaGu5vKpttw1', 'OTl3spqo8WMHVDH7uhp5JTpsCLT2', 'hk8AblOZ9zTijXdewfZI6gG7psh2'];
+    }
+
+    function isFounderEmail(value) {
+      return value in ['solidartentertainment@gmail.com', 'founder@foxhubapp.com', 'founder@foxhub.com'];
+    }
+
+    function isFounderOwnerOperator() {
+      return isPlatformOperator() &&
+        (
+          request.auth.token.owner == true ||
+          request.auth.token.founder == true ||
+          request.auth.token.role == 'owner'
+        );
+    }
+
+    function canManagePlatform() {
+      return isPlatformOperator() || (signedIn() && isFounderUid(request.auth.uid));
+    }
+
+    function canCreateInvite() {
+      return signedIn();
+    }
+
+    function validProfileBase() {
+      return request.resource.data.schemaVersion == 4 &&
+      validOneId(request.resource.data.oneId) &&
+      request.resource.data.name is string &&
+      request.resource.data.name.size() <= 80 &&
+      validHandle(request.resource.data.handle) &&
+      request.resource.data.city is string &&
+      request.resource.data.city.size() <= 80 &&
+      optionalString(request.resource.data.bio, 280) &&
+      optionalString(request.resource.data.occupation, 80) &&
+      optionalString(request.resource.data.demographic, 80) &&
+      validEmail(request.resource.data.email) &&
+      request.resource.data.email == request.auth.token.email &&
+      request.resource.data.onboarded is bool &&
+      validAccessState(request.resource.data.accessState) &&
+      optionalString(request.resource.data.accessNote, 80) &&
+      validInviteCode(request.resource.data.inviteCode) &&
+      validHandle(request.resource.data.sponsorHandle) &&
+      optionalString(request.resource.data.waitlistEndsAt, 64) &&
+      request.resource.data.tutorialCompleted is bool &&
+      request.resource.data.verifiedPerformerSubscribed is bool &&
+      optionalString(request.resource.data.verifiedPerformerStatus, 32) &&
+      optionalString(request.resource.data.verifiedPerformerPlan, 32) &&
+      optionalString(request.resource.data.verifiedPerformerSince, 64) &&
+      validPresenceState(request.resource.data.presenceState) &&
+      optionalString(request.resource.data.lastSeenAt, 64) &&
+      optionalString(request.resource.data.lastActiveAt, 64) &&
+      validAuthMethod(request.resource.data.authMethod) &&
+      requiredTimestamp(request.resource.data.createdAt) &&
+      requiredTimestamp(request.resource.data.updatedAt);
+    }
+
+    function validProfileStateA() {
+      return
+      optionalList(request.resource.data.shortVideos, 60) &&
+      optionalList(request.resource.data.storyBundles, 24) &&
+      optionalList(request.resource.data.auctionLots, 40) &&
+      optionalList(request.resource.data.bidEvents, 120) &&
+      optionalList(request.resource.data.carts, 12) &&
+      optionalList(request.resource.data.fulfillmentOrders, 40) &&
+      optionalList(request.resource.data.shopProfiles, 24) &&
+      optionalList(request.resource.data.shopReviews, 120) &&
+      optionalList(request.resource.data.ratingRecords, 120) &&
+      optionalList(request.resource.data.ratingModerationQueue, 60) &&
+      optionalList(request.resource.data.reputationSnapshots, 60) &&
+      optionalList(request.resource.data.routePlans, 40) &&
+      optionalList(request.resource.data.professionalIdentities, 24) &&
+      optionalList(request.resource.data.endorsements, 120) &&
+      optionalList(request.resource.data.jobPosts, 60) &&
+      optionalList(request.resource.data.resumeEntries, 120) &&
+      optionalList(request.resource.data.miniProgramManifests, 24) &&
+      optionalList(request.resource.data.runtimeSessions, 24) &&
+      optionalList(request.resource.data.callSessions, 24) &&
+      optionalList(request.resource.data.callLogs, 80) &&
+      optionalList(request.resource.data.invites, 40) &&
+      optionalList(request.resource.data.userRecords, 40) &&
+      optionalList(request.resource.data.favorites, 24) &&
+      optionalList(request.resource.data.savedItems, 24) &&
+      optionalList(request.resource.data.miniAppRecents, 12) &&
+      optionalList(request.resource.data.miniAppPermissions, 12) &&
+      optionalList(request.resource.data.officialAccountSubscriptions, 12) &&
+      optionalList(request.resource.data.qrHistory, 12) &&
+      optionalList(request.resource.data.serviceContinuity, 12) &&
+      optionalListingList(request.resource.data.listings, 60) &&
+      optionalSavedSearchList(request.resource.data.savedSearches, 10) &&
+      optionalListingAlertList(request.resource.data.listingAlerts, 24) &&
+      optionalList(request.resource.data.moderationCases, 24) &&
+      optionalList(request.resource.data.verificationCases, 48) &&
+      optionalList(request.resource.data.auditEvents, 120) &&
+      optionalList(request.resource.data.notificationEvents, 120) &&
+      optionalList(request.resource.data.deviceSessions, 24) &&
+      optionalList(request.resource.data.documentVault, 120) &&
+      optionalList(request.resource.data.operatorActions, 120) &&
+      optionalList(request.resource.data.operatorAccessRecords, 8) &&
+      optionalList(request.resource.data.notificationSubscriptions, 12) &&
+      optionalList(request.resource.data.threadReadState, 60);
+    }
+
+    function validProfileStateB() {
+      return
+      optionalList(request.resource.data.growthCategories, 25) &&
+      optionalList(request.resource.data.growthEvents, 200) &&
+      optionalList(request.resource.data.growthOutputs, 200) &&
+      optionalList(request.resource.data.uxComponents, 30) &&
+      optionalList(request.resource.data.uxEvents, 200) &&
+      optionalList(request.resource.data.uxCommandRuns, 200) &&
+      optionalList(request.resource.data.uxTodayCards, 200) &&
+      optionalList(request.resource.data.uxContextRailItems, 200) &&
+      optionalList(request.resource.data.uxTimelines, 200) &&
+      optionalList(request.resource.data.uxInboxModes, 200) &&
+      optionalList(request.resource.data.uxTrustBadges, 200) &&
+      optionalList(request.resource.data.uxEmptyStateActions, 200) &&
+      optionalList(request.resource.data.uxOnboardingSteps, 200) &&
+      optionalList(request.resource.data.uxMiniAppPermissionReviews, 200) &&
+      optionalList(request.resource.data.uxPaymentSteppers, 200) &&
+      optionalList(request.resource.data.uxNotificationInbox, 200) &&
+      optionalList(request.resource.data.uxOperatorConsoleItems, 200) &&
+      optionalList(request.resource.data.uxDiscoveryViews, 200) &&
+      optionalList(request.resource.data.uxCompletenessMeters, 200) &&
+      optionalList(request.resource.data.uxSavedWorkspaceItems, 200) &&
+      optionalList(request.resource.data.uxToasts, 200) &&
+      optionalList(request.resource.data.uxRuntimeBanners, 200) &&
+      optionalList(request.resource.data.uxRoleHomeLayouts, 200) &&
+      optionalList(request.resource.data.uxObjectDetails, 200) &&
+      optionalList(request.resource.data.uxCreateMenuActions, 200) &&
+      optionalList(request.resource.data.productionComponents, 20) &&
+      optionalList(request.resource.data.productionEvents, 160) &&
+      optionalList(request.resource.data.serverJobs, 160) &&
+      optionalList(request.resource.data.pushDeliveries, 160) &&
+      optionalList(request.resource.data.storageObjects, 160) &&
+      optionalList(request.resource.data.authHardeningChecks, 160) &&
+      optionalList(request.resource.data.rbacAssignments, 160) &&
+      optionalList(request.resource.data.paymentWebhookEvents, 160) &&
+      optionalList(request.resource.data.searchIndexJobs, 160) &&
+      optionalList(request.resource.data.miniAppSandboxSessions, 160) &&
+      optionalList(request.resource.data.geoIndexRecords, 160) &&
+      optionalList(request.resource.data.moderationPipelineCases, 160) &&
+      optionalList(request.resource.data.analyticsExports, 160) &&
+      optionalList(request.resource.data.smokeTestRuns, 160);
+    }
+
+    function validProfileRuntime() {
+      return
+      optionalId(request.resource.data.activeCircleId, 80) &&
+      optionalId(request.resource.data.activeMiniAppId, 80) &&
+      optionalId(request.resource.data.selectedThreadId, 120) &&
+      requiredTimestamp(request.resource.data.mechanicsUpdatedAt) &&
+      (
+        !request.resource.data.onboarded ||
+        (
+          nonEmptyString(request.resource.data.name, 80) &&
+          nonEmptyString(request.resource.data.handle, 40) &&
+          nonEmptyString(request.resource.data.city, 80)
+        )
+      );
+    }
+
+    function validProfile() {
+      return validProfileBase() &&
+        validProfileStateA() &&
+        validProfileStateB() &&
+        validProfileRuntime();
+    }
+
+    function validProfileCreate() {
+      return validProfile() &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.schemaVersion == 4 &&
+        request.resource.data.mechanicsUpdatedAt == request.time;
+    }
+
+    function profileIdentityFieldsUnchanged() {
+      return resource.data.oneId == request.resource.data.oneId &&
+        resource.data.name == request.resource.data.name &&
+        resource.data.handle == request.resource.data.handle &&
+        resource.data.city == request.resource.data.city &&
+        resource.data.bio == request.resource.data.bio &&
+        resource.data.occupation == request.resource.data.occupation &&
+        resource.data.demographic == request.resource.data.demographic &&
+        resource.data.tutorialCompleted == request.resource.data.tutorialCompleted &&
+        resource.data.verifiedPerformerSubscribed == request.resource.data.verifiedPerformerSubscribed &&
+        resource.data.verifiedPerformerStatus == request.resource.data.verifiedPerformerStatus &&
+        resource.data.verifiedPerformerPlan == request.resource.data.verifiedPerformerPlan &&
+        resource.data.verifiedPerformerSince == request.resource.data.verifiedPerformerSince &&
+        resource.data.presenceState == request.resource.data.presenceState &&
+        resource.data.lastSeenAt == request.resource.data.lastSeenAt &&
+        resource.data.lastActiveAt == request.resource.data.lastActiveAt;
+    }
+
+    function validProfileUpdate() {
+      return validProfile() &&
+        resource.data.createdAt == request.resource.data.createdAt &&
+        request.resource.data.schemaVersion == 4 &&
+        resource.data.schemaVersion <= request.resource.data.schemaVersion &&
+        resource.data.email == request.resource.data.email &&
+        resource.data.onboarded == request.resource.data.onboarded &&
+        resource.data.accessState == request.resource.data.accessState &&
+        resource.data.accessNote == request.resource.data.accessNote &&
+        resource.data.inviteCode == request.resource.data.inviteCode &&
+        resource.data.sponsorHandle == request.resource.data.sponsorHandle &&
+        resource.data.waitlistEndsAt == request.resource.data.waitlistEndsAt &&
+        resource.data.authMethod == request.resource.data.authMethod &&
+        (
+          (!('oneId' in resource.data) && validOneId(request.resource.data.oneId)) ||
+          resource.data.oneId == request.resource.data.oneId
+        ) &&
+        request.resource.data.mechanicsUpdatedAt == request.time &&
+        (
+          request.resource.data.updatedAt == request.time ||
+          (
+            request.resource.data.updatedAt == resource.data.updatedAt &&
+            profileIdentityFieldsUnchanged()
+          )
+        );
+    }
+
+    function validOperatorApplicantAccessUpdate() {
+      return canManagePlatform() &&
+        validProfile() &&
+        resource.data.createdAt == request.resource.data.createdAt &&
+        resource.data.schemaVersion == request.resource.data.schemaVersion &&
+        resource.data.email == request.resource.data.email &&
+        resource.data.oneId == request.resource.data.oneId &&
+        resource.data.name == request.resource.data.name &&
+        resource.data.handle == request.resource.data.handle &&
+        resource.data.city == request.resource.data.city &&
+        resource.data.authMethod == request.resource.data.authMethod &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'accessState',
+          'accessNote',
+          'onboarded',
+          'waitlistEndsAt',
+          'reviewedAt',
+          'reviewedBy',
+          'updatedAt'
+        ]) &&
+        optionalString(request.resource.data.reviewedAt, 64) &&
+        optionalString(request.resource.data.reviewedBy, 80);
+    }
+
+    function validFounderOwnProfileBootstrap(userId) {
+      return isOwner(userId) &&
+        (isFounderOwnerOperator() || isFounderUid(userId)) &&
+        isFounderEmail(request.resource.data.email) &&
+        validEmail(request.resource.data.email);
+    }
+
+    function canFounderManageOwnUserData(userId) {
+      return isOwner(userId) && (isFounderOwnerOperator() || isFounderUid(userId));
+    }
+
+    function validTransactionalEmailEvent() {
+      return request.resource.data.keys().hasOnly([
+        'to',
+        'template',
+        'subject',
+        'body',
+        'status',
+        'source',
+        'createdAt'
+      ]) &&
+      validEmail(request.resource.data.to) &&
+      nonEmptyString(request.resource.data.template, 120) &&
+      nonEmptyString(request.resource.data.subject, 160) &&
+      nonEmptyString(request.resource.data.body, 1000) &&
+      request.resource.data.status in ['queued', 'sent', 'failed'] &&
+      request.resource.data.source in ['member_application_review'] &&
+      request.resource.data.createdAt is timestamp;
+    }
+
+    function validStaffRole(value) {
+      return value in ['staff', 'manager', 'admin', 'owner', 'founder', 'reviewer'];
+    }
+
+    function validStaffMember(userId) {
+      return request.resource.data.keys().hasOnly([
+        'schemaVersion',
+        'uid',
+        'email',
+        'name',
+        'handle',
+        'oneId',
+        'city',
+        'department',
+        'title',
+        'role',
+        'employmentStatus',
+        'accountType',
+        'founder',
+        'managementAccess',
+        'staffAccess',
+        'operatorAccessRef',
+        'memberProfileRef',
+        'accessState',
+        'scopes',
+        'lastSeenAt',
+        'lastActiveAt',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      request.resource.data.schemaVersion == 1 &&
+      request.resource.data.uid == userId &&
+      validEmail(request.resource.data.email) &&
+      nonEmptyString(request.resource.data.name, 80) &&
+      validHandle(request.resource.data.handle) &&
+      validOneId(request.resource.data.oneId) &&
+      optionalString(request.resource.data.city, 80) &&
+      optionalString(request.resource.data.department, 80) &&
+      optionalString(request.resource.data.title, 80) &&
+      validStaffRole(request.resource.data.role) &&
+      request.resource.data.employmentStatus in ['active', 'inactive', 'suspended', 'terminated'] &&
+      request.resource.data.accountType == 'staff' &&
+      request.resource.data.founder is bool &&
+      request.resource.data.managementAccess is bool &&
+      request.resource.data.staffAccess is bool &&
+      request.resource.data.operatorAccessRef == 'operatorAccess/' + userId &&
+      request.resource.data.memberProfileRef == 'users/' + userId &&
+      validAccessState(request.resource.data.accessState) &&
+      optionalList(request.resource.data.scopes, 24) &&
+      optionalString(request.resource.data.lastSeenAt, 64) &&
+      optionalString(request.resource.data.lastActiveAt, 64) &&
+      request.resource.data.createdAt is timestamp &&
+      request.resource.data.updatedAt is timestamp;
+    }
+
+    function validInvite() {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'code',
+        'label',
+        'note',
+        'createdBy',
+        'createdByHandle',
+        'status',
+        'createdAt',
+        'expiresAt',
+        'applicantUid',
+        'applicantEmail',
+        'applicantName',
+        'sponsorDecisionAt',
+        'retentionReviewAt',
+        'rapportBoostedAt',
+        'redeemedBy',
+        'redeemedAt',
+        'expiredAt',
+        'expirationReason'
+      ]) &&
+      nonEmptyString(request.resource.data.id, 80) &&
+      request.resource.data.code is string &&
+      request.resource.data.code.size() > 0 &&
+      validInviteCode(request.resource.data.code) &&
+      optionalString(request.resource.data.label, 80) &&
+      optionalString(request.resource.data.note, 160) &&
+      nonEmptyString(request.resource.data.createdBy, 128) &&
+      validHandle(request.resource.data.createdByHandle) &&
+      validInviteStatus(request.resource.data.status) &&
+      request.resource.data.createdAt is string &&
+      request.resource.data.expiresAt is timestamp &&
+      optionalString(request.resource.data.applicantUid, 128) &&
+      optionalString(request.resource.data.applicantEmail, 160) &&
+      optionalString(request.resource.data.applicantName, 80) &&
+      (
+        request.resource.data.sponsorDecisionAt == "" ||
+        request.resource.data.sponsorDecisionAt is timestamp
+      ) &&
+      (
+        request.resource.data.retentionReviewAt == "" ||
+        request.resource.data.retentionReviewAt is timestamp
+      ) &&
+      (
+        request.resource.data.rapportBoostedAt == "" ||
+        request.resource.data.rapportBoostedAt is timestamp
+      ) &&
+      optionalString(request.resource.data.redeemedBy, 160) &&
+      (
+        request.resource.data.redeemedAt == "" ||
+        request.resource.data.redeemedAt is timestamp
+      ) &&
+      (
+        !('expiredAt' in request.resource.data) ||
+        request.resource.data.expiredAt is timestamp
+      ) &&
+      optionalString(request.resource.data.expirationReason, 160);
+    }
+
+    function canExpireOwnInviteForReplacement() {
+      return signedIn() &&
+        resource.data.createdBy == request.auth.uid &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        resource.data.status in ['active', 'sponsor_pending'] &&
+        request.resource.data.status == 'expired' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'expiresAt',
+          'expiredAt',
+          'expirationReason'
+        ]) &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt <= request.time + duration.value(5, 'm') &&
+        request.resource.data.expiredAt is timestamp &&
+        request.resource.data.expirationReason == 'Superseded by a newer invite code';
+    }
+
+    function validInviteCreate(inviteId) {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'code',
+        'label',
+        'note',
+        'createdBy',
+        'createdByHandle',
+        'status',
+        'createdAt',
+        'expiresAt',
+        'applicantUid',
+        'applicantEmail',
+        'applicantName',
+        'sponsorDecisionAt',
+        'retentionReviewAt',
+        'rapportBoostedAt',
+        'redeemedBy',
+        'redeemedAt'
+      ]) &&
+        request.resource.data.id == inviteId &&
+        validInviteCode(request.resource.data.code) &&
+        optionalString(request.resource.data.label, 80) &&
+        optionalString(request.resource.data.note, 160) &&
+        request.resource.data.createdBy == request.auth.uid &&
+        validHandle(request.resource.data.createdByHandle) &&
+        request.resource.data.createdAt is string &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt <= request.time + duration.value(8, 'd') &&
+        request.resource.data.status == 'active' &&
+        request.resource.data.applicantUid == '' &&
+        request.resource.data.applicantEmail == '' &&
+        request.resource.data.applicantName == '' &&
+        request.resource.data.sponsorDecisionAt == '' &&
+        request.resource.data.retentionReviewAt == '' &&
+        request.resource.data.rapportBoostedAt == '' &&
+        request.resource.data.redeemedBy == '' &&
+        request.resource.data.redeemedAt == '';
+    }
+
+    function validContact(contactId) {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'name',
+        'handle',
+        'displayName',
+        'legalName',
+        'email',
+        'phone',
+        'city',
+        'region',
+        'status',
+        'accountType',
+        'trust',
+        'trustTier',
+        'peerRatingAverage',
+        'peerRatingCount',
+        'myPeerRating',
+        'verificationLevel',
+        'presenceState',
+        'lastActiveLabel',
+        'tier',
+        'customerStage',
+        'relationshipScore',
+        'lifetimeValue',
+        'lastTransaction',
+        'preferredSurface',
+        'tags',
+        'joinDate',
+        'referralSource',
+        'walletState',
+        'payoutMethod',
+        'supportTier'
+      ]) &&
+      request.resource.data.id == contactId &&
+      nonEmptyString(request.resource.data.name, 80) &&
+      nonEmptyString(request.resource.data.handle, 40) &&
+      optionalString(request.resource.data.displayName, 80) &&
+      optionalString(request.resource.data.legalName, 120) &&
+      optionalString(request.resource.data.email, 160) &&
+      optionalString(request.resource.data.phone, 32) &&
+      nonEmptyString(request.resource.data.city, 80) &&
+      optionalString(request.resource.data.region, 40) &&
+      nonEmptyString(request.resource.data.status, 40) &&
+      optionalString(request.resource.data.accountType, 40) &&
+      nonEmptyString(request.resource.data.trust, 40) &&
+      request.resource.data.trustTier in ['AA', 'A', 'B', 'C', 'D', 'F'] &&
+      (!(request.resource.data.peerRatingAverage is int) || (request.resource.data.peerRatingAverage >= 0 && request.resource.data.peerRatingAverage <= 5)) &&
+      (!(request.resource.data.peerRatingAverage is float) || (request.resource.data.peerRatingAverage >= 0 && request.resource.data.peerRatingAverage <= 5)) &&
+      request.resource.data.peerRatingCount is int &&
+      request.resource.data.peerRatingCount >= 0 &&
+      request.resource.data.peerRatingCount <= 999 &&
+      request.resource.data.myPeerRating in ['AA', 'A', 'B', 'C', 'D', 'F'] &&
+      optionalString(request.resource.data.verificationLevel, 120) &&
+      request.resource.data.presenceState in ['online', 'focus', 'away'] &&
+      optionalString(request.resource.data.lastActiveLabel, 80) &&
+      optionalString(request.resource.data.tier, 80) &&
+      optionalString(request.resource.data.customerStage, 40) &&
+      (!(request.resource.data.relationshipScore is int) || (request.resource.data.relationshipScore >= 0 && request.resource.data.relationshipScore <= 100)) &&
+      optionalString(request.resource.data.lifetimeValue, 40) &&
+      optionalString(request.resource.data.lastTransaction, 120) &&
+      optionalString(request.resource.data.preferredSurface, 40) &&
+      optionalList(request.resource.data.tags, 12) &&
+      optionalString(request.resource.data.joinDate, 40) &&
+      optionalString(request.resource.data.referralSource, 120) &&
+      optionalString(request.resource.data.walletState, 40) &&
+      optionalString(request.resource.data.payoutMethod, 80) &&
+      optionalString(request.resource.data.supportTier, 40);
+    }
+
+    function validCircle(circleId) {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'name',
+        'members',
+        'trust',
+        'focus'
+      ]) &&
+      request.resource.data.id == circleId &&
+      nonEmptyString(request.resource.data.name, 120) &&
+      nonEmptyString(request.resource.data.members, 40) &&
+      nonEmptyString(request.resource.data.trust, 40) &&
+      nonEmptyString(request.resource.data.focus, 160);
+    }
+
+    function validChannel(channelId) {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'name',
+        'summary',
+        'cadence'
+      ]) &&
+      request.resource.data.id == channelId &&
+      nonEmptyString(request.resource.data.name, 120) &&
+      nonEmptyString(request.resource.data.summary, 160) &&
+      nonEmptyString(request.resource.data.cadence, 80);
+    }
+
+    function validWalletEvent() {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'title',
+        'amount',
+        'meta'
+      ]) &&
+      request.resource.data.id is int &&
+      nonEmptyString(request.resource.data.title, 80) &&
+      nonEmptyString(request.resource.data.amount, 24) &&
+      nonEmptyString(request.resource.data.meta, 160);
+    }
+
+    function validMoment() {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'author',
+        'handle',
+        'text',
+        'meta',
+        'stats'
+      ]) &&
+      request.resource.data.id is int &&
+      nonEmptyString(request.resource.data.author, 80) &&
+      nonEmptyString(request.resource.data.handle, 40) &&
+      nonEmptyString(request.resource.data.text, 500) &&
+      nonEmptyString(request.resource.data.meta, 60) &&
+      nonEmptyString(request.resource.data.stats, 80);
+    }
+
+    function validThread(threadId) {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'name',
+        'type',
+        'members',
+        'presence',
+        'presenceState',
+        'lastActiveLabel',
+        'unreadCount'
+      ]) &&
+      request.resource.data.id == threadId &&
+      nonEmptyString(request.resource.data.name, 120) &&
+      request.resource.data.type in ['ops', 'direct', 'community', 'official'] &&
+      request.resource.data.members is int &&
+      nonEmptyString(request.resource.data.presence, 80) &&
+      request.resource.data.presenceState in ['online', 'focus', 'away'] &&
+      optionalString(request.resource.data.lastActiveLabel, 80) &&
+      request.resource.data.unreadCount is int &&
+      request.resource.data.unreadCount >= 0 &&
+      request.resource.data.unreadCount <= 999;
+    }
+
+    function validMessage() {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'author',
+        'text',
+        'time',
+        'mine',
+        'status',
+        'attachments'
+      ]) &&
+      request.resource.data.id is int &&
+      nonEmptyString(request.resource.data.author, 80) &&
+      nonEmptyString(request.resource.data.text, 2000) &&
+      nonEmptyString(request.resource.data.time, 40) &&
+      request.resource.data.mine is bool &&
+      (
+        !('attachments' in request.resource.data) ||
+        optionalList(request.resource.data.attachments, 12)
+      ) &&
+      (
+        !('status' in request.resource.data) ||
+        request.resource.data.status in ['sent', 'delivered', 'seen']
+      );
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || canManagePlatform();
+      allow create: if validFounderOwnProfileBootstrap(userId) || (isOwner(userId) && validProfileCreate());
+      allow update: if validFounderOwnProfileBootstrap(userId) || validOperatorApplicantAccessUpdate() || (isOwner(userId) && validProfileUpdate());
+      allow delete: if false;
+
+      match /contacts/{contactId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validContact(contactId);
+        allow delete: if false;
+      }
+
+      match /circles/{circleId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validCircle(circleId);
+        allow delete: if false;
+      }
+
+      match /channels/{channelId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validChannel(channelId);
+        allow delete: if false;
+      }
+
+      match /walletEvents/{eventId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validWalletEvent();
+        allow delete: if false;
+      }
+
+      match /moments/{momentId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validMoment();
+        allow delete: if false;
+      }
+
+      match /threads/{threadId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validThread(threadId);
+        allow delete: if false;
+
+        match /messages/{messageId} {
+          allow read: if isOwner(userId);
+          allow create, update: if isOwner(userId) && validMessage();
+          allow delete: if false;
+        }
+      }
+
+      match /{document=**} {
+        allow read, create, update: if canFounderManageOwnUserData(userId);
+        allow delete: if false;
+      }
+    }
+
+    match /operatorAccess/{userId} {
+      allow read: if isOwner(userId) || canManagePlatform();
+      allow create, update: if (canManagePlatform() || isFounderUid(userId)) &&
+        request.resource.data.userId == userId &&
+        validEmail(request.resource.data.email) &&
+        request.resource.data.role in ['viewer', 'reviewer', 'admin', 'owner', 'founder'] &&
+        request.resource.data.state in ['active', 'revoked'] &&
+        optionalList(request.resource.data.scopes, 24) &&
+        request.resource.data.grantedAt is timestamp &&
+        nonEmptyString(request.resource.data.grantedBy, 80);
+      allow delete: if false;
+    }
+
+    match /staffMembers/{userId} {
+      allow read: if isOwner(userId) || canManagePlatform();
+      allow create: if (canManagePlatform() || isFounderUid(userId)) &&
+        validStaffMember(userId) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time;
+      allow update: if (canManagePlatform() || isFounderUid(userId)) &&
+        validStaffMember(userId) &&
+        resource.data.createdAt == request.resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /transactionalEmailEvents/{eventId} {
+      allow read: if canManagePlatform();
+      allow create: if canManagePlatform() && validTransactionalEmailEvent();
+      allow update, delete: if false;
+    }
+
+    match /invites/{inviteId} {
+      allow read: if signedIn() &&
+        (
+          (
+            resource.data.expiresAt is timestamp &&
+            resource.data.status == 'active' &&
+            resource.data.expiresAt > request.time
+          ) ||
+          resource.data.createdBy == request.auth.uid ||
+          resource.data.applicantUid == request.auth.uid
+        );
+      allow create: if canCreateInvite() &&
+        validInviteCreate(inviteId);
+      allow update: if canExpireOwnInviteForReplacement() || (signedIn() &&
+        validInvite() &&
+        request.resource.data.id == inviteId &&
+        resource.data.code == request.resource.data.code &&
+        resource.data.createdBy == request.resource.data.createdBy &&
+        resource.data.createdByHandle == request.resource.data.createdByHandle &&
+        resource.data.createdAt == request.resource.data.createdAt &&
+        resource.data.expiresAt == request.resource.data.expiresAt &&
+        (
+          (
+            resource.data.expiresAt > request.time &&
+            resource.data.status == 'active' &&
+            request.resource.data.status == 'sponsor_pending' &&
+            request.resource.data.applicantUid == request.auth.uid &&
+            request.resource.data.applicantEmail == request.auth.token.email &&
+            request.resource.data.sponsorDecisionAt == '' &&
+            request.resource.data.retentionReviewAt == '' &&
+            request.resource.data.rapportBoostedAt == '' &&
+            request.resource.data.redeemedBy == '' &&
+            request.resource.data.redeemedAt == ''
+          ) ||
+          (
+            resource.data.expiresAt > request.time &&
+            resource.data.status == 'sponsor_pending' &&
+            resource.data.createdBy == request.auth.uid &&
+            request.resource.data.applicantUid == resource.data.applicantUid &&
+            request.resource.data.applicantEmail == resource.data.applicantEmail &&
+            request.resource.data.status in ['redeemed', 'denied'] &&
+            request.resource.data.sponsorDecisionAt is timestamp &&
+            (
+              (
+                request.resource.data.status == 'redeemed' &&
+                request.resource.data.redeemedBy == resource.data.applicantEmail &&
+                request.resource.data.redeemedAt is timestamp &&
+                request.resource.data.retentionReviewAt is timestamp
+              ) ||
+              (
+                request.resource.data.status == 'denied' &&
+                request.resource.data.redeemedBy == '' &&
+                request.resource.data.redeemedAt == ''
+              )
+            )
+          ) ||
+          (
+            resource.data.expiresAt > request.time &&
+            resource.data.status == 'active' &&
+            request.resource.data.status == 'redeemed' &&
+            request.resource.data.redeemedBy == request.auth.token.email &&
+            request.resource.data.redeemedAt is timestamp
+          )
+        ));
+      allow delete: if false;
+    }
+  }
+}

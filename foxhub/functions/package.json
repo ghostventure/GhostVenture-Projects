@@ -1,0 +1,28 @@
+{
+  "name": "foxhub-functions",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "deploy": "npx firebase-tools deploy --only functions --project foxhub-superapp"
+  },
+  "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
+    "docusign-esign": "^8.7.0",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.0.1",
+    "handlebars": "^4.7.9",
+    "hellosign-sdk": "^2.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "lob": "^7.1.0",
+    "next": "^14.2.35",
+    "plaid": "^41.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "stripe": "^22.0.1",
+    "twilio": "^5.13.1"
+  }
+}

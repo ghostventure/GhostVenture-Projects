@@ -1,0 +1,26 @@
+{
+  "name": "foxhub-mobile",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "expo": "~56.0.11",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.2.3",
+    "react-dom": "^19.2.3",
+    "react-native": "0.85.3",
+    "react-native-web": "^0.21.2",
+    "react-native-webview": "^13.16.1"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "export:web": "expo export --platform web",
+    "doctor": "npx expo install --check && npx expo config --type public",
+    "smoke": "node scripts/mobile-smoke.mjs && npx expo export --platform web",
+    "ready:ios": "npm run doctor && npm run smoke"
+  },
+  "private": true
+}

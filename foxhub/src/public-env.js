@@ -1,0 +1,14 @@
+const viteEnv = typeof import.meta !== "undefined" && import.meta.env ? import.meta.env : {};
+const nodeEnv = typeof process !== "undefined" && process.env ? process.env : {};
+
+export const publicEnv = {
+  FIREBASE_API_KEY: viteEnv.VITE_FIREBASE_API_KEY || nodeEnv.NEXT_PUBLIC_FIREBASE_API_KEY || "",
+  FIREBASE_AUTH_DOMAIN: viteEnv.VITE_FIREBASE_AUTH_DOMAIN || nodeEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "",
+  FIREBASE_PROJECT_ID: viteEnv.VITE_FIREBASE_PROJECT_ID || nodeEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "",
+  FIREBASE_STORAGE_BUCKET: viteEnv.VITE_FIREBASE_STORAGE_BUCKET || nodeEnv.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "",
+  FIREBASE_MESSAGING_SENDER_ID:
+    viteEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || nodeEnv.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
+  FIREBASE_APP_ID: viteEnv.VITE_FIREBASE_APP_ID || nodeEnv.NEXT_PUBLIC_FIREBASE_APP_ID || "",
+  RECAPTCHA_V3_SITE_KEY: viteEnv.VITE_RECAPTCHA_V3_SITE_KEY || nodeEnv.NEXT_PUBLIC_RECAPTCHA_V3_SITE_KEY || "",
+  FOXHUB_PUBLIC_URL: viteEnv.VITE_FOXHUB_PUBLIC_URL || nodeEnv.NEXT_PUBLIC_FOXHUB_PUBLIC_URL || "https://foxhub.com"
+};
