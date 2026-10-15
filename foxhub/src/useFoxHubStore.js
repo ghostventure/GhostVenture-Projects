@@ -37,6 +37,7 @@ import {
   updateProfileRecord,
   verifyPasswordResetProfile
 } from "./repository.js";
+import { findOperationalComponent } from "./operationalComponents.js";
 import { averageToTrustTier, gradeToScore, hasFoxHubManagementAccess, normalizeTrustTier, normalizeZipCode } from "./rules.js";
 
 function isFounderManagerProfile(profile = {}) {
@@ -4349,13 +4350,13 @@ export function useFoxHubStore() {
       case "smoke-tests":
         return { field: "smokeTestRuns", record: { ...base, suite: "production_smoke", passed: 8, failed: 0, checks: ["auth", "profile", "chat", "wallet", "blueprint", "mobile-lock", "hosting", "services"], detail: "Smoke-test run recorded for critical user paths." } };
       default:
-        return { field: "productionEvents", record: { ...base, detail: payload.detail || "Production component event recorded." } };
+        return { field: "productionEvents", record: { ...base, capability: component.capability || "run", domain: component.domain || "operations", detail: payload.detail || `${component.name || "Operational component"} completed a bounded ${component.capability || "run"} action for ${component.domainLabel || component.surface || "FoxHub operations"}.` } };
     }
   }
 
   function activateProductionComponent(componentKey) {
     const snapshot = stateRef.current || state;
-    const component = (snapshot?.productionComponents || []).find((item) => item.key === componentKey);
+    const component = (snapshot?.productionComponents || []).find((item) => item.key === componentKey) || findOperationalComponent(componentKey);
     if (!component) return null;
     const now = new Date().toISOString();
     const event = {
@@ -4408,7 +4409,7 @@ export function useFoxHubStore() {
 
   function runProductionComponent(componentKey, payload = {}) {
     const snapshot = stateRef.current || state;
-    const component = (snapshot?.productionComponents || []).find((item) => item.key === componentKey);
+    const component = (snapshot?.productionComponents || []).find((item) => item.key === componentKey) || findOperationalComponent(componentKey);
     if (!component) return null;
     const output = buildProductionRecord(component, payload);
     const now = new Date().toISOString();

@@ -1,0 +1,484 @@
+/* Phone and desktop optimization pass. */
+
+.app-shell {
+  width: min(100%, 1680px);
+}
+
+.brand-line,
+.header-actions,
+.workspace-toolbar,
+.section-hero,
+.surface-head,
+.hero-cta-row,
+.inline-actions,
+.toolbar-actions,
+.blueprint-actions {
+  min-width: 0;
+}
+
+.ghost-button,
+.accent-button,
+.danger-button,
+.auth-pill,
+.desktop-nav-item,
+.bottom-nav-item,
+.context-chip,
+.starter-card,
+.service-library-tab,
+.blueprint-category-tab,
+.fox-room-tab {
+  min-height: 44px;
+}
+
+.toolbar-actions > *,
+.inline-actions > *,
+.hero-cta-row > *,
+.blueprint-actions > *,
+.list-actions > * {
+  flex: 0 1 auto;
+}
+
+.workspace-canvas,
+.mission-panel,
+.tactical-panel,
+.surface,
+.thread-item,
+.list-button,
+.service-card,
+.mini-tile,
+.moment-card,
+.wallet-card,
+.conversation-preview,
+.blueprint-component-row,
+.mechanic-group {
+  min-width: 0;
+}
+
+.workspace-canvas img,
+.surface img,
+.listing-hero img {
+  max-width: 100%;
+}
+
+@media (min-width: 1500px) {
+  .app-shell {
+    padding: 20px 24px;
+    gap: 20px;
+  }
+
+  .operations-layout {
+    grid-template-columns: 248px minmax(380px, 0.5fr) minmax(720px, 1fr);
+    gap: 20px;
+  }
+
+  .operations-layout.focused-layout {
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+
+  .desktop-rail {
+    top: 92px;
+    max-height: calc(100vh - 124px);
+  }
+
+  .workspace-canvas {
+    padding: 20px;
+    gap: 18px;
+  }
+
+  .surface-row.two-up {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .surface-row.three-up {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .surface-row.two-column-chat {
+    grid-template-columns: minmax(380px, 0.95fr) minmax(0, 1.45fr);
+  }
+
+  .service-grid,
+  .mini-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .blueprint-category-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .blueprint-component-row {
+    grid-template-columns: auto minmax(0, 1fr) minmax(280px, auto);
+  }
+}
+
+@media (min-width: 1101px) and (max-width: 1280px) {
+  .operations-layout {
+    grid-template-columns: 216px minmax(300px, 0.52fr) minmax(440px, 1fr);
+  }
+
+  .desktop-rail {
+    padding: 12px;
+  }
+
+  .desktop-nav-item {
+    min-height: 60px;
+    padding: 11px;
+  }
+
+  .nav-glyph {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 760px) {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  .app-shell {
+    width: 100%;
+    padding: 10px 10px calc(86px + env(safe-area-inset-bottom, 0px));
+    gap: 10px;
+  }
+
+  .public-profile-hero,
+  .public-profile-grid,
+  .public-profile-command-row,
+  .public-profile-about,
+  .public-profile-signal-list,
+  .public-profile-activity-grid,
+  .public-profile-highlight-grid,
+  .profile-editor-hero,
+  .profile-editor-field-grid,
+  .profile-editor-field-grid.two,
+  .profile-editor-account-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-editor-preview-body {
+    align-items: start;
+  }
+
+  .profile-editor-savebar,
+  .profile-editor-section-head {
+    display: grid;
+  }
+
+  .public-profile-cover {
+    min-height: 108px;
+  }
+
+  .public-profile-hero {
+    align-items: start;
+    margin-top: -34px;
+  }
+
+  .public-profile-avatar {
+    width: 76px;
+    height: 76px;
+    border-width: 3px;
+  }
+
+  .public-profile-hero h3 {
+    font-size: 1.55rem;
+  }
+
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .header-title {
+    font-size: 0.96rem;
+  }
+
+  .header-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .header-actions > *,
+  .header-actions button,
+  .header-actions .search-chip,
+  .theme-toggle,
+  .theme-select-label {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .shell-layout,
+  .operations-layout,
+  .operations-layout.focused-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .workspace-canvas,
+  .surface {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .command-hero {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .start-near-me {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .start-choice-grid,
+  .start-local-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .start-location-row {
+    display: grid;
+  }
+
+  .hero-copy h2,
+  .start-near-copy h2,
+  .section-hero h1 {
+    font-size: 1.62rem;
+    line-height: 1.08;
+  }
+
+  .hero-copy p,
+  .section-copy,
+  .surface-note,
+  .row-meta-text,
+  .thread-item p,
+  .list-button p,
+  .moment-copy,
+  .wallet-card p,
+  .conversation-preview p {
+    font-size: 0.9rem;
+  }
+
+  .hero-cta-row,
+  .inline-actions,
+  .toolbar-actions,
+  .list-actions,
+  .blueprint-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .hero-cta-row > *,
+  .inline-actions > *,
+  .toolbar-actions > *,
+  .list-actions > *,
+  .blueprint-actions > * {
+    width: 100%;
+  }
+
+  .glance-strip,
+  .hero-metrics,
+  .metrics-grid,
+  .starter-grid,
+  .room-grid,
+  .market-filters,
+  .service-library-tabs,
+  .blueprint-summary-grid,
+  .review-grid,
+  .signup-helper,
+  .desktop-profile-grid,
+  .entry-access-row {
+    grid-template-columns: 1fr;
+  }
+
+  .surface-row.two-up,
+  .surface-row.three-up,
+  .surface-row.two-column-chat,
+  .boilerplate-footnote-row,
+  .context-chip-row,
+  .service-grid,
+  .mini-grid,
+  .mechanic-grid,
+  .extra-component-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-feed-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-feed-vote-rail {
+    grid-template-columns: 44px 54px 44px;
+    grid-template-rows: 36px;
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .home-feed-toolbar,
+  .home-feed-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-social-row-item,
+  .home-social-card {
+    grid-template-columns: 1fr;
+  }
+
+  .home-feed-toolbar > *,
+  .home-feed-actions > * {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .home-feed-divider {
+    display: none;
+  }
+
+  .home-feed-comment-row {
+    grid-template-columns: 1fr;
+  }
+
+  .thread-list,
+  .moment-feed.compact,
+  .market-listings {
+    max-height: none;
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .listing-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .listing-hero img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+    border-radius: 8px;
+  }
+
+  .blueprint-component-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .blueprint-order {
+    width: 38px;
+    height: 38px;
+  }
+
+  .bottom-nav {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    z-index: 60;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+    box-shadow: 0 14px 40px rgba(24, 32, 45, 0.18);
+  }
+
+  .bottom-nav-item {
+    min-width: 0;
+    padding: 8px 4px;
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+  }
+
+  .bottom-nav-item.utility {
+    grid-column: auto;
+  }
+
+  .bottom-nav-item span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav-glyph.mobile {
+    width: 28px;
+    height: 28px;
+    font-size: 0.76rem;
+  }
+
+  .overlay,
+  .quick-nav-overlay {
+    padding: 12px;
+    align-items: end;
+  }
+
+  .quick-nav-panel,
+  .profile-modal,
+  .auth-layout,
+  .entry-shell,
+  .onboarding-shell {
+    width: 100%;
+  }
+
+  .profile-modal {
+    max-height: calc(100vh - 24px);
+  }
+}
+
+@media (max-width: 420px) {
+  .public-profile-hero,
+  .public-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-profile-avatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .app-shell {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .app-header {
+    padding: 9px;
+  }
+
+  .header-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .bottom-nav {
+    left: 8px;
+    right: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bottom-nav-item {
+    font-size: 0.68rem;
+  }
+
+  .command-hero,
+  .workspace-canvas,
+  .surface {
+    padding: 11px;
+  }
+}

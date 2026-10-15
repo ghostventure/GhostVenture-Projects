@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "scheme": "foxhub",
     "ios": {
       "bundleIdentifier": "com.foxhub.app",
@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "com.foxhub.app",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -28,7 +29,11 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "foxhubWebUrl": "https://foxhub-superapp.web.app"
-    }
+      "foxhubWebUrl": "https://foxhub-c984b.web.app",
+      "eas": {
+        "projectId": "c54e988a-e7d2-4708-80c5-4039a95310e9"
+      }
+    },
+    "owner": "solidartentertainment"
   }
 }

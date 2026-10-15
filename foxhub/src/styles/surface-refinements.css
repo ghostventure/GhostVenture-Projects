@@ -1,0 +1,361 @@
+/* FoxHub GUI upgrade pass: sharper hierarchy, richer surfaces, calmer density. */
+
+:root {
+  --premium-line: color-mix(in srgb, var(--border) 74%, transparent);
+  --premium-line-strong: color-mix(in srgb, var(--border-strong) 82%, var(--accent) 18%);
+  --premium-panel: color-mix(in srgb, var(--surface) 86%, var(--surface-alt));
+  --premium-panel-raised: color-mix(in srgb, var(--surface) 94%, white 6%);
+  --premium-wash: color-mix(in srgb, var(--accent-soft) 34%, transparent);
+  --premium-shadow: 0 18px 52px rgba(17, 24, 39, 0.1);
+  --premium-shadow-soft: 0 10px 28px rgba(17, 24, 39, 0.075);
+}
+
+:root[data-theme="dark"],
+:root[data-theme="matrix"],
+:root[data-theme="forest"],
+:root[data-theme="ocean"],
+:root[data-theme="ember"],
+:root[data-theme="contrast"],
+:root[data-theme="cyberpunk"],
+:root[data-theme="midnight"],
+:root[data-theme="grape"],
+:root[data-theme="premium-marble"] {
+  --premium-panel: color-mix(in srgb, var(--surface) 88%, var(--surface-alt));
+  --premium-panel-raised: color-mix(in srgb, var(--surface) 88%, white 5%);
+  --premium-shadow: 0 22px 62px rgba(0, 0, 0, 0.26);
+  --premium-shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.2);
+}
+
+body {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 82%, white 18%) 0%, var(--bg) 44%, var(--bg-layer) 100%);
+}
+
+.app-shell {
+  max-width: 1720px;
+  padding: 20px;
+  gap: 18px;
+}
+
+.app-header {
+  border: 1px solid var(--premium-line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-glass) 92%, white 8%), var(--surface-glass));
+  box-shadow: var(--premium-shadow-soft);
+}
+
+.brand-mark {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 12px 28px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.brand-line {
+  gap: 12px;
+}
+
+.header-title,
+.desktop-profile strong,
+.command-summary strong,
+.surface-head h3,
+.section-hero h1,
+.hero-copy h2 {
+  text-wrap: balance;
+}
+
+.search-chip,
+.theme-toggle,
+.theme-select-label,
+.ghost-button,
+.accent-button,
+.danger-button,
+.auth-pill {
+  border: 1px solid var(--premium-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.search-chip:hover,
+.theme-toggle:hover,
+.theme-select-label:hover,
+.ghost-button:hover,
+.accent-button:hover,
+.danger-button:hover,
+.auth-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--premium-shadow-soft);
+}
+
+.accent-button {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white 8%), color-mix(in srgb, var(--accent) 82%, black 18%));
+  border-color: color-mix(in srgb, var(--accent) 72%, black 28%);
+}
+
+.desktop-rail {
+  padding: 14px;
+  border-color: var(--premium-line);
+  background:
+    linear-gradient(180deg, var(--premium-panel-raised), var(--premium-panel));
+  box-shadow: var(--premium-shadow-soft);
+}
+
+.command-summary,
+.command-status,
+.command-actions,
+.command-log,
+.desktop-profile,
+.desktop-summary {
+  border-color: var(--premium-line);
+  background: color-mix(in srgb, var(--surface) 88%, var(--surface-alt));
+}
+
+.desktop-nav {
+  gap: 8px;
+}
+
+.desktop-nav-item {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.desktop-nav-item strong {
+  color: var(--text);
+}
+
+.desktop-nav-item span {
+  color: var(--text-dim);
+}
+
+.desktop-nav-item.active,
+.desktop-nav-item:hover {
+  border-color: var(--premium-line-strong);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 54%, var(--surface)), color-mix(in srgb, var(--surface) 84%, var(--accent-soft)));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.workspace-canvas {
+  padding: 20px;
+  border-color: var(--premium-line);
+  background:
+    linear-gradient(180deg, var(--premium-panel-raised), var(--premium-panel));
+  box-shadow: var(--premium-shadow);
+}
+
+.command-hero,
+.section-hero,
+.rapport-hero,
+.network-rapport-hero,
+.blueprint-hero,
+.listing-hero,
+.profile-editor-hero,
+.public-profile-hero {
+  border-color: var(--premium-line-strong);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 86%, var(--accent-soft)) 0%, var(--surface) 46%, color-mix(in srgb, var(--surface-alt) 84%, var(--bg-layer)) 100%);
+  box-shadow: var(--premium-shadow-soft);
+}
+
+.surface,
+.list-button,
+.thread-item,
+.moment-card,
+.wallet-card,
+.service-card,
+.mini-tile,
+.conversation-preview,
+.security-lock-card,
+.metric-card,
+.queue-card,
+.starter-card,
+.glance-card,
+.review-card,
+.minimal-list li,
+.minimal-list-item,
+.home-feed-card,
+.local-people-card,
+.merchant-dashboard-card,
+.utility-card {
+  border-color: var(--premium-line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, white 6%), var(--surface));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 26px rgba(17, 24, 39, 0.055);
+}
+
+.surface:hover,
+.list-button:hover,
+.thread-item:hover,
+.service-card:hover,
+.mini-tile:hover,
+.moment-card:hover,
+.wallet-card:hover,
+.conversation-preview:hover {
+  border-color: var(--premium-line-strong);
+}
+
+.surface-head {
+  gap: 12px;
+}
+
+.surface-note,
+.section-copy,
+.hero-copy p,
+.list-button p,
+.thread-item p,
+.conversation-preview p,
+.moment-copy,
+.wallet-card p {
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.card-label,
+.auth-page-kicker,
+.auth-form-head,
+.auth-preview-topline {
+  color: color-mix(in srgb, var(--accent) 72%, var(--text) 28%);
+  font-weight: 800;
+}
+
+.badge,
+.status-chip,
+.search-chip,
+.context-chip {
+  border-color: var(--premium-line);
+  background: color-mix(in srgb, var(--surface-alt) 78%, var(--accent-soft));
+}
+
+.hero-metric,
+.glance-card,
+.metric-card {
+  border-color: var(--premium-line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 86%, var(--accent-soft)), var(--surface));
+}
+
+.hero-metric strong,
+.metric-card strong,
+.glance-card strong {
+  letter-spacing: 0;
+}
+
+.start-near-me,
+.auth-story,
+.auth-modal,
+.entry-story,
+.entry-panel,
+.onboarding-story,
+.onboarding-form,
+.auth-page-panel,
+.auth-page-story,
+.auth-page-form,
+.quick-nav-panel,
+.profile-modal {
+  border-color: var(--premium-line-strong);
+  box-shadow: var(--premium-shadow);
+}
+
+.auth-page {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 80%, white 20%), var(--bg) 52%, var(--bg-layer));
+}
+
+.auth-page-panel {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface) 88%, var(--accent-soft)) 0%, var(--surface) 48%, color-mix(in srgb, var(--surface-alt) 86%, var(--bg-layer)) 100%);
+}
+
+.auth-page-story,
+.auth-story,
+.entry-story,
+.onboarding-story {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--surface) 84%, var(--accent-soft)), var(--surface-alt));
+}
+
+.auth-page-form,
+.auth-modal,
+.entry-panel,
+.onboarding-form {
+  background: color-mix(in srgb, var(--surface) 94%, white 6%);
+}
+
+.auth-highlight-card,
+.auth-preview-message,
+.auth-preview-row,
+.auth-status-strip,
+.auth-database-panel,
+.auth-point,
+.entry-access-panel,
+.signup-helper-item,
+.onboarding-step,
+.quick-nav-item {
+  border-color: var(--premium-line);
+  background: color-mix(in srgb, var(--surface-alt) 82%, var(--surface));
+}
+
+input,
+textarea,
+select {
+  border-color: var(--premium-line);
+  background: color-mix(in srgb, var(--surface) 92%, var(--surface-alt));
+}
+
+input:hover,
+textarea:hover,
+select:hover {
+  border-color: var(--premium-line-strong);
+}
+
+.bottom-nav {
+  border-color: var(--premium-line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-glass) 92%, white 8%), var(--surface-glass));
+  box-shadow: 0 18px 48px rgba(17, 24, 39, 0.16);
+}
+
+.bottom-nav-item.active {
+  background: color-mix(in srgb, var(--accent-soft) 68%, var(--surface));
+  border-color: var(--premium-line-strong);
+}
+
+@media (min-width: 1500px) {
+  .app-shell {
+    padding: 24px 28px;
+  }
+
+  .workspace-canvas {
+    padding: 24px;
+  }
+
+  .command-hero {
+    padding: 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding: 10px 10px calc(92px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-header,
+  .workspace-canvas,
+  .surface,
+  .command-hero,
+  .auth-page-story,
+  .auth-page-form {
+    box-shadow: var(--premium-shadow-soft);
+  }
+
+  .workspace-canvas {
+    padding: 13px;
+  }
+
+  .desktop-nav-item,
+  .bottom-nav-item,
+  .ghost-button,
+  .accent-button,
+  .danger-button {
+    transform: none;
+  }
+}

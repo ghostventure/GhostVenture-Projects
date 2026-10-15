@@ -1,5 +1,5 @@
-const baseUrl = process.env.FOXHUB_LIVE_URL || "https://foxhub-superapp.web.app";
-const routes = ["/", "/signin", "/management", "/feedback"];
+const baseUrl = process.env.FOXHUB_LIVE_URL || "https://foxhub-c984b.web.app";
+const routes = ["/", "/signin", "/management", "/feedback", "/android/"];
 const requiredMarkers = [
   "FoxHub",
   "Profile photo",
@@ -7,6 +7,10 @@ const requiredMarkers = [
   "RuntimeErrorBoundary",
   "createRetryingLazyImport",
   "runtime-fallback",
+  "Workflow queue",
+  "Run daily member loop",
+  "Open Management dashboard",
+  "Management locked",
   "Management backend unavailable",
   "using Windows Hello local gate"
 ];

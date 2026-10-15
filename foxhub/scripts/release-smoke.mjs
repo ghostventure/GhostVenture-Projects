@@ -13,7 +13,15 @@ const jsAssets = assets.filter((file) => file.endsWith(".js"));
 const cssAssets = assets.filter((file) => file.endsWith(".css"));
 const jsBundle = jsAssets.map((file) => readFileSync(join(assetDir, file), "utf8")).join("\n");
 const cssBundle = cssAssets.map((file) => readFileSync(join(assetDir, file), "utf8")).join("\n");
-const publicUrl = (process.env.VITE_FOXHUB_PUBLIC_URL || process.env.NEXT_PUBLIC_FOXHUB_PUBLIC_URL || "https://foxhub-superapp.web.app").replace(/\/+$/, "");
+const expoAssetDir = join(distDir, "_expo", "static", "js", "web");
+const expoJsBundle = existsSync(expoAssetDir)
+  ? readdirSync(expoAssetDir)
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => readFileSync(join(expoAssetDir, file), "utf8"))
+      .join("\n")
+  : "";
+const searchableJsBundle = `${jsBundle}\n${expoJsBundle}`;
+const publicUrl = (process.env.VITE_FOXHUB_PUBLIC_URL || process.env.NEXT_PUBLIC_FOXHUB_PUBLIC_URL || "https://foxhub-c984b.web.app").replace(/\/+$/, "");
 const escapedPublicUrl = publicUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 assert.match(indexHtml, /<div id="root"><\/div>/, "dist/index.html should contain the Vite app root");
@@ -23,27 +31,26 @@ assert.match(indexHtml, /property="og:description"[\s\S]*content="Early access i
 assert.match(indexHtml, new RegExp(`${escapedPublicUrl}/foxhub-social-preview\\.png`), "dist/index.html should expose the hosted FoxHub social preview image");
 assert.match(indexHtml, /<meta name="twitter:card" content="summary_large_image"/, "dist/index.html should expose a large social preview card");
 assert.ok(existsSync(join(distDir, "foxhub-social-preview.png")), "dist should include the self-hosted FoxHub social preview image");
+assert.ok(existsSync(join(distDir, "favicon.ico")), "dist should include the root favicon");
+assert.ok(existsSync(join(distDir, "android", "index.html")), "dist should include the hosted Android app GUI at /android/");
+assert.ok(existsSync(join(distDir, "_expo")), "dist should include root Expo web assets for the hosted Android app GUI");
+assert.ok(existsSync(join(distDir, "downloads", "FoxHub-Android-Debug-0.1.0.apk.zip")), "dist should include the zipped Android APK download package");
 assert.equal(foxhubExpansionComponents.length, 220, "Organizer should contain 220 components");
 assert.equal(footerBoilerplateGroups.length, 8, "Footer should expose 8 boilerplate sections");
 
 const footerPage = getFooterPageByPath(getFooterItemHref("legal", "Privacy Policy"));
 assert.equal(footerPage?.title, "Privacy Policy", "Footer route lookup should resolve Privacy Policy");
-assert.match(footerPage?.headline || "", /private activity/i, "Privacy page should have public-ready privacy copy");
+assert.match(footerPage?.headline || "", /collects/i, "Privacy page should have public-ready privacy copy");
 
 for (const expected of [
-  "Splash footer",
-  "Rules, help, status",
   "Ad source",
-  "Your private circle for local trust.",
-  "Request early access",
-  "How early access works",
-  "Use an invite for priority review",
+  "Founding access is open",
   "After approval, sign in with the same email and password",
   "Privacy Policy",
-  "Your private activity, account controls, and staff-visible data should be clear.",
+  "What FoxHub collects, why it is used, and how to ask for help.",
   "literally almost anyone who has had enough with being watched online",
   "private messages or personal images for ad profiles",
-  "abuse, fraud, security, and illegal activity",
+  "FoxHub is designed not to scan private messages or personal images for ad profiles",
   "System Status",
   "Complaint Controls",
   "Complaint Prevention",
@@ -105,6 +112,10 @@ for (const expected of [
   "Draft backup",
   "Saved fields",
   "Management",
+  "Workflow queue",
+  "Run daily member loop",
+  "Open Management dashboard",
+  "Management locked",
   "Staff Tools",
   "Control Library",
   "Staff control center for access, trust, risk, and operations.",
@@ -209,7 +220,6 @@ for (const expected of [
   "Captcha or robot check",
   "Signup readiness will not complete",
   "Ad link or landing page issue",
-  "Launch support is open",
   "Launch context",
   "FoxHub adds the page, campaign, browser, screen size, and time zone to the support draft.",
   "Attach photo",
@@ -239,12 +249,30 @@ for (const expected of [
   "Approved seller tools",
   "Save inventory item",
   "Storefront settings",
-  "Save storefront settings"
+  "Save storefront settings",
+  "Mobile App Terms",
+  "The Android app follows the same rules as the FoxHub website.",
+  "FoxHub should not sell personal or sensitive user data.",
+  "Payment features are limited until production processing is enabled.",
+  "FoxHub uses local storage and cookies to keep the app working.",
+  "Use this path for privacy, account, and legal data requests.",
+  "Do not send passwords, full payment-card numbers, government IDs, or unnecessary private details through ordinary support messages.",
+  "One signup, more ways to use FoxHub",
+  "Theme aware",
+  "Same user database as the site",
+  "A place for your people.",
+  "Join FoxHub",
+  "Illustrative preview",
+  "Help and policies",
+  "Account, notifications & safety",
+  "More from your community",
+  "Staff sign-in",
+  "Find local help"
 ]) {
-  assert.ok(jsBundle.includes(expected), `Expected JS bundle to contain ${expected}`);
+  assert.ok(searchableJsBundle.includes(expected), `Expected JS bundle to contain ${expected}`);
 }
 
-for (const expected of ["landing-footer", "landing-campaign-note", "launch-support-note", "footer-info-page", "boilerplate-footer-summary", "auth-database-panel", "database-mode-grid", "home-feed-card", "home-feed-toolbar", "rapport-command-center", "rapport-summary-grid", "section-feed-surface", "section-feed-card", "public-profile-modal", "public-profile-hero", "public-profile-trust-meter", "public-profile-activity-grid", "public-profile-showcase", "public-profile-timeline", "profile-editor-modal", "profile-editor-preview-card", "profile-photo-dropzone", "runtime-fallback", "theme-select", "data-theme=green-composite", "data-theme=forest", "data-theme=contrast", "data-theme=cyberpunk", "data-theme=arctic", "data-theme=grape", "data-theme=premium-silver", "data-theme=premium-gold", "data-theme=premium-marble", "feedback-page-panel", "feedback-contact-card", "feedback-context-card", "home-social-panel", "visitor-preview-card", "attachment-dropzone", "content-visibility:auto", "captcha-gate", "captcha-honeypot", "signup-readiness-panel", "signup-readiness-item", "local-people-card", "merchant-application-form", "merchant-dashboard-card", "merchant-controls-grid", "management-credential-overlay", "management-credential-modal", "management-gate-card"]) {
+for (const expected of ["landing-footer", "landing-campaign-note", "launch-support-note", "landing-operations-center", "landing-operation-card", "landing-workflow-panel", "landing-control-lane", "footer-info-page", "boilerplate-footer-summary", "auth-database-panel", "database-mode-grid", "home-feed-card", "home-feed-toolbar", "workflow-queue-card", "workflow-shortcut", "rapport-command-center", "rapport-summary-grid", "section-feed-surface", "section-feed-card", "public-profile-modal", "public-profile-hero", "public-profile-trust-meter", "public-profile-activity-grid", "public-profile-showcase", "public-profile-timeline", "profile-editor-modal", "profile-editor-preview-card", "profile-photo-dropzone", "runtime-fallback", "theme-select", "data-theme=green-composite", "data-theme=forest", "data-theme=contrast", "data-theme=cyberpunk", "data-theme=arctic", "data-theme=grape", "data-theme=premium-silver", "data-theme=premium-gold", "data-theme=premium-marble", "feedback-page-panel", "feedback-contact-card", "feedback-context-card", "home-social-panel", "visitor-preview-card", "attachment-dropzone", "content-visibility:auto", "captcha-gate", "captcha-honeypot", "signup-readiness-panel", "signup-readiness-item", "local-people-card", "merchant-application-form", "merchant-dashboard-card", "merchant-controls-grid", "management-credential-overlay", "management-credential-modal", "management-gate-card"]) {
   assert.ok(cssBundle.includes(expected), `Expected CSS bundle to contain ${expected}`);
 }
 

@@ -1,0 +1,325 @@
+/* Responsive component alignment pass. */
+
+.landing-nav,
+.landing-page,
+.auth-page-panel,
+.app-header,
+.workspace-canvas,
+.surface,
+.list-button,
+.thread-item,
+.home-feed-card,
+.home-social-row-item,
+.rapport-hero,
+.rapport-command-center,
+.rapport-flow-card,
+.service-library-tab,
+.blueprint-component-row,
+.public-profile-hero,
+.profile-editor-hero {
+  container-type: inline-size;
+}
+
+.landing-page {
+  width: min(1240px, calc(100vw - 32px));
+}
+
+.landing-hero {
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+}
+
+.landing-hero,
+.landing-copy,
+.landing-photo-board,
+.landing-band,
+.landing-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.landing-page,
+.landing-hero,
+.landing-photo-board {
+  container-type: normal;
+}
+
+.landing-copy {
+  align-content: center;
+}
+
+.landing-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, max-content));
+  align-items: center;
+}
+
+.landing-actions > *,
+.auth-page-form .accent-button,
+.auth-page-form .ghost-button,
+.home-feed-actions > *,
+.inline-actions > *,
+.toolbar-actions > *,
+.list-actions > * {
+  max-width: 100%;
+}
+
+.landing-proof,
+.landing-band,
+.auth-status-strip,
+.auth-preview-row,
+.rapport-summary-grid,
+.rapport-flow-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.landing-photo-board {
+  aspect-ratio: 1 / 0.86;
+  min-height: 0;
+  width: 100%;
+  justify-self: stretch;
+}
+
+.landing-card,
+.auth-highlight-card,
+.auth-preview-message,
+.auth-preview-row div,
+.home-feed-card,
+.home-social-row-item,
+.rapport-signal-card,
+.rapport-lane-card,
+.rapport-flow-card,
+.service-library-tab,
+.blueprint-category-tab,
+.blueprint-component-row {
+  overflow: hidden;
+}
+
+.landing-card strong,
+.auth-highlight-card strong,
+.auth-preview-message strong,
+.auth-preview-row strong,
+.home-feed-body h3,
+.home-social-row-item strong,
+.rapport-signal-card strong,
+.rapport-lane-card strong,
+.service-library-tab strong,
+.blueprint-category-tab strong,
+.blueprint-component-title,
+.list-button strong {
+  overflow-wrap: anywhere;
+}
+
+.surface-row.two-up,
+.surface-row.three-up {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+.surface-row.two-column-chat,
+.rapport-command-center {
+  grid-template-columns: minmax(min(100%, 320px), 0.95fr) minmax(0, 1.35fr);
+}
+
+.rapport-hero {
+  grid-template-columns: minmax(min(100%, 360px), 1.1fr) minmax(260px, 0.9fr);
+}
+
+.service-library-tabs,
+.blueprint-category-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+}
+
+.service-library-tab,
+.blueprint-category-tab {
+  min-height: 84px;
+}
+
+.blueprint-component-row {
+  grid-template-columns: auto minmax(0, 1fr) minmax(min(100%, 260px), auto);
+}
+
+.market-filters,
+.glance-strip,
+.starter-grid,
+.room-grid,
+.service-grid,
+.mini-grid,
+.mechanic-grid,
+.catalog-service-grid,
+.visitor-preview-grid,
+.fox-home-compass-grid,
+.fox-home-wallet-shortcuts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+}
+
+.home-feed-toolbar,
+.home-feed-actions,
+.home-feed-meta,
+.inline-actions,
+.toolbar-actions,
+.list-actions,
+.blueprint-actions,
+.hero-cta-row {
+  row-gap: 8px;
+}
+
+.home-feed-comment-row {
+  grid-template-columns: minmax(0, 1fr) minmax(92px, auto);
+}
+
+.auth-page-panel {
+  grid-template-columns: minmax(min(100%, 300px), 0.84fr) minmax(340px, 1fr);
+}
+
+.auth-page-form input,
+.auth-page-form textarea,
+.auth-page-form select {
+  background: color-mix(in srgb, var(--surface) 90%, var(--surface-alt));
+  border-color: var(--premium-line);
+}
+
+.auth-profile-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+}
+
+.management-entry-button {
+  min-width: 0;
+}
+
+.management-entry-button span,
+.management-entry-button strong {
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 520px) {
+  .landing-actions,
+  .auth-status-strip,
+  .auth-preview-row,
+  .rapport-signal-grid,
+  .rapport-lane-grid,
+  .rapport-summary-grid,
+  .rapport-flow-grid,
+  .service-library-tabs,
+  .blueprint-category-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .home-feed-card,
+  .home-social-row-item,
+  .home-social-card,
+  .rapport-flow-card,
+  .blueprint-component-row,
+  .public-profile-hero,
+  .profile-editor-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .home-feed-vote-rail {
+    grid-template-columns: 44px 54px 44px;
+    grid-template-rows: 36px;
+    width: max-content;
+  }
+
+  .home-feed-comment-row,
+  .auth-recovery-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+}
+
+@media (max-width: 980px) {
+  .landing-hero,
+  .auth-page-panel,
+  .rapport-hero,
+  .rapport-command-center,
+  .surface-row.two-column-chat {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-photo-board {
+    min-height: 420px;
+    aspect-ratio: 16 / 10;
+  }
+}
+
+@media (max-width: 760px) {
+  .landing-page,
+  .landing-nav {
+    width: min(100%, calc(100vw - 24px));
+  }
+
+  .landing-nav {
+    align-items: stretch;
+  }
+
+  .landing-nav-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .landing-nav-actions a {
+    justify-content: center;
+    border: 1px solid var(--premium-line);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .landing-copy {
+    padding: 20px;
+  }
+
+  .landing-photo-board {
+    min-height: 320px;
+  }
+
+  .landing-photo.primary {
+    inset: 16px 16px auto auto;
+    width: 72%;
+    height: 56%;
+  }
+
+  .landing-photo.secondary {
+    left: 16px;
+    bottom: 18px;
+    width: 56%;
+    height: 36%;
+  }
+
+  .landing-photo.tertiary {
+    right: 18px;
+    bottom: 28px;
+    width: 34%;
+    height: 28%;
+  }
+
+  .landing-float-card {
+    left: 18px;
+    top: 18px;
+    width: min(220px, calc(100% - 36px));
+  }
+
+  .auth-page-panel {
+    padding: 14px;
+  }
+
+  .auth-page-form input {
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 460px) {
+  .landing-nav-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-copy h1 {
+    font-size: clamp(2rem, 12vw, 2.85rem);
+  }
+
+  .landing-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-photo-board {
+    min-height: 260px;
+  }
+}

@@ -49,6 +49,11 @@ export function isAtLeast18(birthDate = "", now = new Date()) {
   return age >= 18;
 }
 
+export function isStrongSignupPassword(value = "") {
+  const password = String(value || "");
+  return password.length >= 10 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password);
+}
+
 export function createProfile(draft = {}, accountClass = "member") {
   const email = normalizeEmail(draft.email);
   const name = String(draft.name || "").trim();
@@ -106,6 +111,7 @@ export function authenticate({ accounts, route, mode, draft }) {
     if (routeIsManagement) throw new Error("Not Permitted.");
     if (isFoxHubDomainEmail(email) || OWNER_EMAILS.has(email)) throw new Error("Not Permitted.");
     if (existing) throw new Error("This email is already registered.");
+    if (!isStrongSignupPassword(password)) throw new Error("Use a stronger password for FoxHub.");
     if (!isAtLeast18(draft.birthDate)) throw new Error("FoxHub membership requires 18+ age verification.");
     const profile = createProfile(draft, "member");
     return {

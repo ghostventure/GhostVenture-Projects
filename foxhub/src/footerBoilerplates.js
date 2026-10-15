@@ -3,11 +3,11 @@ export const footerBoilerplateGroups = [
     id: "legal",
     label: "Legal",
     glyph: "L",
-    summary: "Plain-language rules for accounts, privacy, complaint controls, marketplace activity, payments, and community behavior.",
+    summary: "Plain-language rules for accounts, privacy, mobile apps, complaint controls, marketplace activity, payments, and community behavior.",
     accent: "Clear rules",
     owner: "Policy",
     status: "Review-ready",
-    items: ["Terms of Use", "Privacy Policy", "Complaint Controls", "Marketplace Rules", "Payment Terms", "Cookie Notice"]
+    items: ["Terms of Use", "Privacy Policy", "Mobile App Terms", "Complaint Controls", "Marketplace Rules", "Payment Terms", "Cookie Notice"]
   },
   {
     id: "company",
@@ -136,15 +136,26 @@ export const footerQuickAccessLinks = [
 
 const footerPageContent = {
   "legal/privacy-policy": {
-    headline: "Your private activity, account controls, and staff-visible data should be clear.",
+    headline: "What FoxHub collects, why it is used, and how to ask for help.",
     body: [
-      "FoxHub is built around private circles, trusted local coordination, and clear account controls.",
-      "The product direction is to avoid broad scanning of private messages and personal images for advertising profiles. Private spaces should not feel like public feeds.",
-      "Member controls now separate public, private, staff-visible, notification, connection, security-session, and support paths so users are not guessing where their information goes.",
-      "Safety checks should stay focused on abuse, fraud, security, harmful recommendations, and clearly illegal activity, not ordinary private life.",
-      "Production privacy terms should be reviewed before any paid campaign scales."
+      "FoxHub may use account details, profile fields, sign-in activity, device/session signals, support context, safety reports, marketplace records, payment-related records, and audit records when those features are used.",
+      "The website and Android app use the same account. Service providers such as Firebase help FoxHub sign users in, store records, protect the service, and keep the app reliable.",
+      "FoxHub is designed not to scan private messages or personal images for ad profiles, and FoxHub should not sell personal or sensitive user data.",
+      "Privacy requests, account deletion, correction, export, and legal request handling live on Data Requests so this page can stay focused on the main privacy promise.",
+      "Mobile store disclosures should match this policy and the app's real data use before broader store publication."
     ],
-    actions: ["Review account visibility", "Manage device sessions", "Keep private circles private"]
+    actions: ["Review account visibility", "Open Data Requests", "Contact privacy support"]
+  },
+  "legal/mobile-app-terms": {
+    headline: "The Android app follows the same rules as the FoxHub website.",
+    body: [
+      "The Android app is another way to use the same FoxHub account, profile, support, safety, and marketplace features.",
+      "Install FoxHub only from official FoxHub-controlled links. Early APK builds may be shared through Expo EAS while store publication is prepared.",
+      "The app should request only permissions needed for visible features. If sensitive permissions are added later, the app screen and store listing should explain why.",
+      "Do not tamper with the app, overload it, scrape it, bypass access controls, impersonate staff, or access accounts you are not allowed to use.",
+      "Mobile access may be limited or suspended for security, fraud, abuse, legal compliance, or product-integrity reasons."
+    ],
+    actions: ["Use official install links", "Keep account secure", "Report mobile issues"]
   },
   "legal/complaint-controls": {
     headline: "The complaint controls are now part of the product surface.",
@@ -159,10 +170,46 @@ const footerPageContent = {
     headline: "Simple rules for a private community app.",
     body: [
       "FoxHub members should use the app for lawful, respectful, and trust-based coordination.",
-      "Marketplace, payments, services, and merchant tools need clear rules before production use.",
-      "The current page is ready for final legal review and public launch copy."
+      "Accounts are personal to the registered user unless FoxHub approves a staff, merchant, organization, or operator role. Do not share credentials, impersonate others, evade access controls, or misrepresent your relationship to a person, business, event, listing, or payment.",
+      "Public profile details, listings, messages, posts, support reports, and marketplace activity must not be illegal, deceptive, abusive, invasive, infringing, exploitative, or unsafe.",
+      "FoxHub may review, limit, remove, preserve, or disclose records when needed for safety, security, fraud prevention, legal compliance, support, payment disputes, or enforcement.",
+      "Marketplace and payment details live on their own pages so these Terms can stay focused on account and community rules.",
+      "These terms are public launch copy and should be reviewed by counsel before paid campaigns, store publication, payment processing, or broad marketplace operations scale."
     ],
-    actions: ["Define accepted use", "Explain account limits", "Finalize legal review"]
+    actions: ["Use FoxHub lawfully", "Respect account limits", "Contact support"]
+  },
+  "legal/marketplace-rules": {
+    headline: "Marketplace activity needs trust, accuracy, and clear boundaries.",
+    body: [
+      "Listings, service offers, jobs, housing, merchant posts, event offers, and local deals must be accurate, lawful, and posted by someone authorized to make the offer.",
+      "FoxHub can hold, review, limit, or remove listings for fraud risk, unsafe categories, misleading claims, price abuse, prohibited goods or services, impersonation, intellectual-property concerns, or repeated complaints.",
+      "Members and merchants are responsible for taxes, licenses, permits, insurance, refunds, delivery, in-person safety, and compliance obligations that apply to their own activity.",
+      "FoxHub may provide trust signals, rapport context, moderation tools, dispute intake, and staff review, but those tools are not a guarantee that a person, place, product, service, or transaction is risk-free.",
+      "Offline meetings, rides, housing arrangements, jobs, services, and local transactions should be handled cautiously and with appropriate verification."
+    ],
+    actions: ["Post accurate listings", "Report unsafe offers", "Use dispute help"]
+  },
+  "legal/payment-terms": {
+    headline: "Payment features are limited until production processing is enabled.",
+    body: [
+      "FoxHub may show wallet, checkout, payment, merchant, payout, or settlement interfaces before every processor-backed feature is fully live.",
+      "Members should not treat a displayed payment surface as a completed charge, payout, refund, escrow, bank transfer, or financial account unless FoxHub clearly confirms the transaction through the active processor flow.",
+      "When payment processing is enabled, FoxHub may use third-party processors and keep the transaction, dispute, fraud, settlement, and support records needed to operate the feature.",
+      "FoxHub is not a bank, card issuer, lender, insurer, tax adviser, escrow agent, or legal adviser.",
+      "Users and merchants remain responsible for taxes, licenses, refunds, delivery, and their own contractual obligations."
+    ],
+    actions: ["Check payment status", "Open dispute help", "Review merchant rules"]
+  },
+  "legal/cookie-notice": {
+    headline: "FoxHub uses local storage and cookies to keep the app working.",
+    body: [
+      "FoxHub may use cookies, local storage, IndexedDB, authentication tokens, session records, theme preferences, sign-up draft context, device/session indicators, and security signals.",
+      "These tools support sign-in, account security, drafts, app preferences, fraud prevention, abuse prevention, support context, release diagnostics, and basic site delivery.",
+      "Clearing browser or device storage can sign you out, remove unsent drafts, reset preferences, or make support context less complete.",
+      "If marketing, analytics, or cross-site advertising tools are added later, this notice and any consent experience should be updated before rollout.",
+      "Privacy choices and deletion requests belong on Privacy Policy and Data Requests; this page only explains browser and app storage."
+    ],
+    actions: ["Manage browser storage", "Sign out of sessions", "Contact privacy support"]
   },
   "support/help-center": {
     headline: "Help should be easy to find before sign-in and after account setup.",
@@ -185,11 +232,12 @@ const footerPageContent = {
   "support/contact-support": {
     headline: "A clear support lane for early users.",
     body: [
-      "Early access users need a visible route for account, invite, privacy, marketplace, and safety issues.",
-      "This page should become the main public contact path before ad spend increases.",
-      "The support experience should set expectations for response time and what information users should include."
+      "Use support for account access, invites, Android app trouble, privacy questions, marketplace issues, payment questions, safety reports, and product problems.",
+      "Support may ask for account email, profile handle, device or app context, the page or route, a screenshot, a listing or transaction reference, and a short description.",
+      "Do not send passwords, full payment-card numbers, government IDs, or unnecessary private details through ordinary support messages.",
+      "Privacy exports, deletion, correction, and legal requests belong on Data Requests so staff can verify the requester and route the issue correctly."
     ],
-    actions: ["Describe the issue", "Attach context", "Set response expectations"]
+    actions: ["Describe the issue", "Attach context", "Open Data Requests"]
   },
   "support/safety-center": {
     headline: "Safety belongs on the front porch.",
@@ -199,6 +247,17 @@ const footerPageContent = {
       "Safety pages should be visible to both new visitors and signed-in users."
     ],
     actions: ["Report a problem", "Avoid scams", "Understand appeals"]
+  },
+  "trust/data-requests": {
+    headline: "Use this path for privacy, account, and legal data requests.",
+    body: [
+      "Members can ask for account correction, export, deletion, privacy help, security review, or legal request routing here.",
+      "FoxHub may need to verify the requester before changing, exporting, deleting, or disclosing account records.",
+      "Some records may be retained for security, fraud prevention, payment disputes, legal obligations, abuse investigations, audit logs, backup integrity, or an active support case.",
+      "Staff should keep restricted operational notes separate from user-facing summaries and redact sensitive details when needed.",
+      "Law-enforcement or third-party legal requests should go through the support/legal review path, not ordinary member messages."
+    ],
+    actions: ["Verify requester", "Review retention", "Escalate legal request"]
   },
   "trust/complaint-zero-standards": {
     headline: "Complaint-zero means no repeat complaint should stay unresolved.",
@@ -269,6 +328,7 @@ const footerPageContent = {
     body: [
       "Account controls include profile settings, connection permissions, messages and blocks, notification settings, support or dispute help, report security concern, trusted contacts, and device-session management.",
       "The complaint-prevention panel gives users a simple path when feed, privacy, ads, spam, safety, support, notification, or product-direction issues come up.",
+      "The Android app uses the same account controls and should keep member-visible privacy, support, safety, and device-session paths aligned with the hosted website.",
       "The goal is to solve predictable social-app complaints before they become public frustration."
     ],
     actions: ["Edit profile", "Manage connections", "Open support"]

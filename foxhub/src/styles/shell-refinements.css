@@ -1,0 +1,280 @@
+/* Contemporary shell pass: flatter, familiar workspace surfaces. */
+
+.app-shell * {
+  letter-spacing: 0;
+}
+
+.app-shell button,
+.app-shell input,
+.app-shell textarea,
+.app-shell select,
+.app-shell .surface,
+.app-shell .desktop-rail,
+.app-shell .workspace-canvas,
+.app-shell .bottom-nav,
+.app-shell .profile-modal,
+.app-shell .thread-item,
+.app-shell .list-button,
+.app-shell .service-card,
+.app-shell .mini-tile,
+.app-shell .moment-card,
+.app-shell .wallet-card,
+.app-shell .search-chip,
+.app-shell .status-chip,
+.app-shell .conversation-preview,
+.app-shell .security-lock-card,
+.app-shell .desktop-summary,
+.app-shell .desktop-profile,
+.app-shell .command-summary,
+.app-shell .command-status,
+.app-shell .command-actions,
+.app-shell .command-log,
+.app-shell .command-hero,
+.app-shell .hero-metric,
+.app-shell .mission-row,
+.app-shell .metric-card,
+.app-shell .queue-card,
+.app-shell .starter-card,
+.app-shell .glance-card,
+.app-shell .context-chip,
+.app-shell .minimal-list li,
+.app-shell .minimal-list-item,
+.app-shell .review-card {
+  border-radius: 8px;
+}
+
+.app-shell .surface,
+.app-shell .desktop-rail,
+.app-shell .workspace-canvas,
+.app-shell .bottom-nav,
+.app-shell .profile-modal,
+.app-shell .thread-item,
+.app-shell .list-button,
+.app-shell .service-card,
+.app-shell .mini-tile,
+.app-shell .moment-card,
+.app-shell .wallet-card,
+.app-shell .conversation-preview,
+.app-shell .security-lock-card {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.app-shell .surface-strong,
+.app-shell .surface-premium,
+.app-shell .command-hero {
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-alt) 100%);
+  box-shadow: var(--shadow-md);
+}
+
+.app-shell .accent-button,
+.app-shell .brand-mark {
+  background: var(--accent);
+  color: #fff;
+}
+
+.app-shell .danger-button {
+  background: #fff1f1;
+  color: #a91d1d;
+  border-color: #f0b8b8;
+}
+
+.app-shell .desktop-nav-item.active .nav-glyph,
+.app-shell .desktop-nav-item:hover .nav-glyph {
+  background: var(--accent);
+  color: #fff;
+  --fox-head-cutout: var(--accent);
+  --fox-head-nose: var(--accent);
+}
+
+:root[data-theme="dark"] .app-shell .glance-card.warm {
+  background: #2d2023;
+}
+
+:root[data-theme="dark"] .app-shell .glance-card.cool {
+  background: #1d3028;
+}
+
+:root[data-theme="dark"] .app-shell .glance-card.soft {
+  background: #202733;
+}
+
+@media (min-width: 1360px) {
+  .operations-layout {
+    grid-template-columns: 232px minmax(340px, 0.48fr) minmax(620px, 1fr);
+  }
+
+  .operations-layout.focused-layout {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+}
+
+.overlay,
+.quick-nav-overlay {
+  background: rgba(24, 32, 45, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.entry-story,
+.onboarding-story,
+.entry-panel,
+.onboarding-form,
+.auth-story,
+.auth-modal,
+.quick-nav-panel,
+.auth-page-panel,
+.auth-page-story,
+.auth-page-form,
+.onboarding-step,
+.entry-lock-note,
+.onboarding-preview,
+.auth-point,
+.entry-access-panel,
+.join-waitlist-note,
+.signup-helper-item,
+.quick-nav-item {
+  border-radius: 8px;
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.entry-story,
+.onboarding-story,
+.auth-story,
+.auth-page-story {
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-alt) 100%);
+}
+
+.entry-panel,
+.onboarding-form,
+.auth-modal,
+.auth-page-form {
+  background: var(--surface);
+}
+
+.onboarding-story h2,
+.entry-panel h3,
+.onboarding-form h3,
+.entry-story h2,
+.auth-point strong,
+.profile-intro h3 {
+  font-family: "Aptos", "Segoe UI", sans-serif;
+  letter-spacing: 0;
+}
+
+.entry-story h2,
+.onboarding-story h2 {
+  font-size: 2.5rem;
+  line-height: 1.06;
+  max-width: 14ch;
+}
+
+.onboarding-step,
+.entry-lock-note,
+.onboarding-preview,
+.auth-point,
+.entry-access-panel,
+.signup-helper-item,
+.quick-nav-item {
+  background: var(--surface-alt);
+}
+
+.onboarding-step.complete {
+  background: #eefbf4;
+  border-color: #b8e3cc;
+}
+
+:root[data-theme="dark"] .onboarding-step.complete {
+  background: #1d3028;
+  border-color: #396b56;
+}
+
+.quick-nav-search,
+.auth-page-form input {
+  border-radius: 8px;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.quick-nav-item:hover,
+.quick-nav-item:focus {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 760px) {
+  .entry-story h2,
+  .onboarding-story h2 {
+    font-size: 2rem;
+    max-width: none;
+  }
+
+  .service-library-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .blueprint-summary-grid,
+  .blueprint-toolbar,
+  .blueprint-component-row {
+    grid-template-columns: 1fr;
+  }
+
+  .blueprint-category-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .blueprint-component-row .badge {
+    justify-self: start;
+  }
+
+  .blueprint-actions {
+    justify-content: flex-start;
+  }
+
+  .profile-overlay {
+    padding: 18px 12px;
+    place-items: start stretch;
+  }
+
+  .profile-modal {
+    width: 100%;
+    max-height: calc(100vh - 36px);
+  }
+
+  .auth-page-panel {
+    width: min(100%, calc(100vw - 24px));
+    padding: 12px;
+  }
+
+  .auth-page-story,
+  .auth-page-form {
+    padding: 16px;
+  }
+
+  .auth-page-kicker,
+  .auth-form-head,
+  .auth-preview-topline {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .auth-status-strip,
+  .auth-preview-row,
+  .stripe-billing-readiness,
+  .stripe-plan-grid,
+  .staff-stat-grid,
+  .staff-action-grid,
+  .member-control-center,
+  .member-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-page-story h2 {
+    font-size: 1.55rem;
+    line-height: 1.12;
+  }
+}

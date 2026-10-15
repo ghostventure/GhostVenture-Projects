@@ -7,7 +7,11 @@ const dataModuleUrl = pathToFileURL(path.join(rootDir, "src/data.js")).href;
 const data = await import(dataModuleUrl);
 const rulesModuleUrl = pathToFileURL(path.join(rootDir, "src/rules.js")).href;
 const rules = await import(rulesModuleUrl);
-const cssSource = await readFile(path.join(rootDir, "src/styles.css"), "utf8");
+const cssEntry = await readFile(path.join(rootDir, "src/styles.css"), "utf8");
+// Resolve the ordered CSS modules before extracting the existing theme tokens.
+const cssSource = (await Promise.all([...cssEntry.matchAll(/@import "(.+?)";/g)].map((match) =>
+  readFile(path.resolve(rootDir, "src", match[1]), "utf8")
+))).join("\n");
 
 function text(value = "", fallback = "") {
   return String(value || fallback || "").trim();

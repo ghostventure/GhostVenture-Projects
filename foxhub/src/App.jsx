@@ -1,3 +1,5 @@
+import { LandingPage } from "./components/LandingPage.jsx";
+import { LandingFooter } from "./components/LandingFooter.jsx";
 import { Suspense, lazy, startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { miniApps, views } from "./data.js";
 import {
@@ -693,157 +695,6 @@ function EntryPage({
   );
 }
 
-function LandingPage({ openSignIn, openSignUp, openFeedback, openWorkspace, isAuthenticated = false, campaignSource = null }) {
-  const landingImages = [
-    {
-      src: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=900&q=80",
-      alt: "Friends gathered around a shared table"
-    },
-    {
-      src: "https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=900&q=80",
-      alt: "Neighbors meeting at a local place"
-    },
-    {
-      src: "https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=900&q=80",
-      alt: "People greeting each other in the community"
-    }
-  ];
-
-  return (
-    <div className="auth-page" aria-live="polite">
-      <header className="landing-nav" aria-label="FoxHub landing navigation">
-        <button type="button" className="landing-brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-          <span aria-hidden="true">
-            <FoxHeadMark className="fox-head-icon" />
-          </span>
-          <strong>FoxHub</strong>
-        </button>
-        <div className="landing-nav-actions">
-          <a href="#why-foxhub">Why FoxHub</a>
-          <a href="/comparison">Compare</a>
-          <button type="button" className="ghost-button small" onClick={isAuthenticated ? openWorkspace : openSignIn}>
-            {isAuthenticated ? "Open app" : "Sign in"}
-          </button>
-          <button type="button" className="accent-button small" onClick={openSignUp}>
-            Sign up
-          </button>
-        </div>
-      </header>
-
-      <main className="landing-page">
-        <section className="landing-hero">
-          <div className="landing-copy">
-            <p className="card-label">Early access is open</p>
-            <h1>Your private circle for local trust.</h1>
-            <p>
-              Join FoxHub to share updates, make plans, ask around, find trusted help, and keep your people connected without bouncing between apps.
-            </p>
-            <p className="landing-privacy-note">
-              Built for people who want online community to feel useful, local, and less exposed. FoxHub is designed not to scan private messages or personal images for ad profiles.
-            </p>
-            {campaignSource ? (
-              <div className="landing-campaign-note" aria-label="Campaign source">
-                <span>Ad source</span>
-                <strong>{campaignSource.source || "Direct"}{campaignSource.campaign ? ` / ${campaignSource.campaign}` : ""}</strong>
-              </div>
-            ) : null}
-            <div className="landing-actions">
-              <button type="button" className="accent-button" onClick={openSignUp}>
-                Request early access
-              </button>
-              <button type="button" className="ghost-button" onClick={isAuthenticated ? openWorkspace : openSignIn}>
-                {isAuthenticated ? "Open app" : "Sign in"}
-              </button>
-              <a className="ghost-button" href="/comparison">
-                Compare FoxHub
-              </a>
-              <button type="button" className="ghost-button" onClick={openFeedback}>
-                Sign-up help
-              </button>
-            </div>
-            <div className="landing-flow-note" aria-label="Early access flow">
-              <strong>How early access works</strong>
-              <span>Use an invite for priority review, or request access and wait for a FoxHub manager decision.</span>
-            </div>
-            <div className="landing-flow-note launch-support-note" aria-label="Launch support">
-              <strong>Launch support is open</strong>
-              <span>If sign-up stalls, use Sign-up help. FoxHub attaches campaign and device context so support can see where the flow broke.</span>
-            </div>
-            <div className="landing-proof">
-              <div>
-                <strong>1</strong>
-                <span>home for people, groups, and trusted help</span>
-              </div>
-              <div>
-                <strong>100+</strong>
-                <span>ways to ask, share, plan, and help</span>
-              </div>
-              <div>
-                <strong>Invite</strong>
-                <span>priority access for trusted members</span>
-              </div>
-              <div>
-                <strong>Local</strong>
-                <span>circles, meetups, neighbors, and local finds</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="landing-photo-board" aria-label="FoxHub community previews">
-            <img className="landing-photo primary" src={landingImages[0].src} alt={landingImages[0].alt} fetchPriority="high" decoding="async" />
-            <img className="landing-photo secondary" src={landingImages[1].src} alt={landingImages[1].alt} loading="lazy" decoding="async" />
-            <img className="landing-photo tertiary" src={landingImages[2].src} alt={landingImages[2].alt} loading="lazy" decoding="async" />
-            <div className="landing-float-card">
-              <span>Why join now</span>
-              <strong>Founding members help set the tone for their circles.</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-band" id="why-foxhub">
-          <div className="landing-card">
-            <span>Stay close</span>
-            <strong>Catch up with friends, groups, neighbors, creators, and local circles in one familiar place.</strong>
-          </div>
-          <div className="landing-card">
-            <span>Ask your circle</span>
-            <strong>Need a hand, a recommendation, a ride, a repair, a sitter, or a place to go? Start with people you trust.</strong>
-          </div>
-          <div className="landing-card">
-            <span>Show up together</span>
-            <strong>Plan cookouts, meetups, pop-ups, watch parties, fundraisers, and everyday community moments.</strong>
-          </div>
-          <div className="landing-card">
-            <span>Keep it private</span>
-            <strong>Private rooms should feel private, with safety checks focused on abuse, fraud, security, and illegal activity.</strong>
-          </div>
-        </section>
-
-        <section className="landing-band landing-steps" aria-label="How FoxHub opens">
-          <div className="landing-card">
-            <span>Step 1</span>
-            <strong>Create your member profile with your email, username, city, and 18+ check.</strong>
-          </div>
-          <div className="landing-card">
-            <span>Step 2</span>
-            <strong>Choose invite access if someone brought you in, or send a request for Management review.</strong>
-          </div>
-          <div className="landing-card">
-            <span>Step 3</span>
-            <strong>After approval, sign in with the same email and password to open your FoxHub workspace.</strong>
-          </div>
-          <div className="landing-card">
-            <span>Need help?</span>
-            <strong>Use the sign-up help page if an invite, approval, password, or button gets in the way.</strong>
-          </div>
-        </section>
-
-        <LandingFooter />
-      </main>
-    </div>
-  );
-}
-
 function SignupFeedbackPage({
   feedbackDraft,
   setFeedbackDraft,
@@ -1107,69 +958,6 @@ function ComparisonPage({ openLanding, openSignIn, openSignUp, openWorkspace, is
   );
 }
 
-function LandingFooter() {
-  const totalPages = footerBoilerplateGroups.reduce((total, group) => total + group.items.length, 0);
-
-  return (
-    <footer className="landing-footer" aria-label="FoxHub splash footer">
-      <section className="boilerplate-footnotes" aria-label="Footer links">
-        <div className="boilerplate-footnote-head">
-          <div>
-            <p className="card-label">Footer Links</p>
-            <h2>Rules, help, status, and product pages are ready from the first screen.</h2>
-            <p className="boilerplate-footnote-copy">
-              New visitors can find legal, support, trust, company, product, business, developer, and status paths before signing in.
-            </p>
-          </div>
-          <div className="boilerplate-footer-summary" aria-label="Footer summary">
-            <span className="badge subtle">Splash footer</span>
-            <strong>{footerBoilerplateGroups.length} sections</strong>
-            <span>{totalPages} links</span>
-          </div>
-        </div>
-        <div className="footer-quick-access" aria-label="Quick footer access">
-          {footerQuickAccessLinks.map((link) => (
-            <a key={link.href} className="footer-quick-link" href={link.href}>
-              <strong>{link.label}</strong>
-              <span>{link.detail}</span>
-            </a>
-          ))}
-        </div>
-        <div className="boilerplate-footnote-row">
-          {footerBoilerplateGroups.map((group) => (
-            <section key={group.id} className="boilerplate-footnote-item">
-              <div className="boilerplate-topline">
-                <span className="boilerplate-glyph" aria-hidden="true">{group.glyph}</span>
-                <span className="boilerplate-accent">{group.accent}</span>
-              </div>
-              <div className="boilerplate-head">
-                <strong>{group.label}</strong>
-                <span>{group.items.length} pages</span>
-              </div>
-              <p className="boilerplate-copy">{group.summary}</p>
-              <div className="boilerplate-meta-row">
-                <span>{group.owner}</span>
-                <span>{group.status}</span>
-              </div>
-              <div className="tag-row">
-                {group.items.map((item) => (
-                  <a key={item} className="template-tag" href={getFooterItemHref(group.id, item)}>
-                    {item}
-                  </a>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      </section>
-      <div className="footer-baseline">
-        <span>FoxHub</span>
-        <span>Built for local trust, payments, mini apps, and community operations.</span>
-      </div>
-    </footer>
-  );
-}
-
 function FooterInfoPage({ page, openLanding, openSignIn, openSignUp, isAuthenticated = false, openWorkspace }) {
   const related = page?.relatedItems || [];
 
@@ -1269,70 +1057,13 @@ function SignInPage({
   const isSigningUp = authMode === "signup";
   const hasInvite = Boolean(authDraft.inviteCode || authDraft.sponsorHandle);
   const signupReady = !isSigningUp || getSignupReadiness(authDraft).ready;
-  const accessHighlights = [
-    { label: "One account", detail: "Sign up once, then use the same email and password everywhere." },
-    { label: "Invite-aware", detail: "Invite requests go back to the current user who invited you." },
-    { label: "Manager review", detail: "No-invite requests stay in the manager approval lane." }
-  ];
-  const statusTiles = [
-    { label: "Runtime", value: state.backendMode === "firebase" ? "Live sync" : state.backendMode === "locked" ? "Locked" : "Preview" },
-    { label: "Access", value: state.profile.accessNote || (state.profile.accessState === "waitlist" ? "Review" : "Ready") },
-    { label: "Identity", value: state.profile.oneId || "OneID" }
-  ];
-
   return (
-    <div className="auth-page auth-page-centered" aria-live="polite">
+    <div className="auth-page auth-page-centered member-access-page" aria-live="polite">
       <div className="auth-page-panel">
-        <section className="auth-page-story">
-          <div className="auth-page-kicker">
-            <p className="card-label">FoxHub Access</p>
-            <span className="badge subtle">{state.backendMode === "firebase" ? "Live account" : "Preview account"}</span>
-          </div>
-          <h2>{isSigningUp ? "Create the account once, then come back faster." : "Come back to your people, posts, and local signal."}</h2>
-          <p className="panel-copy">
-            {isSigningUp
-              ? "Start with your login, access path, and profile basics. After approval, the same email and password open FoxHub without extra detours."
-              : "Sign in with the email and password created during sign-up. FoxHub checks the registered account before access opens."}
-          </p>
-          <div className="auth-page-cta">
-            <strong>{authDraft.email || state.profile.email || "Start with your email"}</strong>
-            <span>{isSigningUp ? "Use these credentials again after invite or manager approval." : state.profile.accessNote || "Sign in to reconnect with your people."}</span>
-          </div>
-          <div className="auth-highlight-grid">
-            {accessHighlights.map((item) => (
-              <div key={item.label} className="auth-highlight-card">
-                <strong>{item.label}</strong>
-                <span>{item.detail}</span>
-              </div>
-            ))}
-          </div>
-          <div className="auth-status-strip" aria-label="Account status">
-            {statusTiles.map((item) => (
-              <div key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="auth-database-panel" aria-label="Member database mode">
-            <span className="badge subtle">Member database</span>
-            <strong>Public sign-up writes to <code>users/{"{uid}"}</code>.</strong>
-            <p>
-              FoxHub Members are stored separately from employees. This route is for member credentials, member profiles, invite approval, and Management review.
-            </p>
-          </div>
-          <button type="button" className="ghost-button wide" onClick={openFeedback}>
-            Trouble signing up?
-          </button>
-          <button type="button" className="ghost-button wide" onClick={openLanding}>
-            Back to FoxHub
-          </button>
-        </section>
-
         <form className="auth-page-form" onSubmit={handleSubmit}>
           <div className="auth-form-head">
             <div>
-              <p className="card-label">{isSigningUp ? "Create account" : "Secure entry"}</p>
+              <p className="card-label">FoxHub</p>
               <h3>{isSigningUp ? "Sign up" : "Sign in"}</h3>
             </div>
             <span className="badge subtle">{isLockedMode ? "Connection needed" : "Ready"}</span>
@@ -1510,8 +1241,8 @@ function SignInPage({
                 </label>
               </div>
               <div className="entry-lock-note">
-                <strong>Single sign-on rule</strong>
-                <span>After approval, sign in with this exact email and password. There is no alternate member login path.</span>
+                <strong>Your account</strong>
+                <span>After approval, use this account on the web or Android.</span>
               </div>
               <CaptchaGate authDraft={authDraft} setAuthDraft={setAuthDraft} />
               <SignupReadinessPanel authDraft={authDraft} />
@@ -1519,15 +1250,12 @@ function SignInPage({
           ) : (
             <>
               <div className="auth-recovery-row">
-                <span>Use the email and password created during sign-up. Accounts are checked before access opens.</span>
+                <span>Use your FoxHub account.</span>
                 <button type="button" className="text-link-button" onClick={openPasswordRecovery}>
                   Forgot password?
                 </button>
               </div>
-              <button type="button" className="management-entry-button" onClick={openManagementSignIn} disabled={busy || isLockedMode}>
-                <strong>Management</strong>
-                <span>Sign in and open the Management dashboard.</span>
-              </button>
+
             </>
           )}
           {authError ? <p className="error-text">{authError}</p> : null}
@@ -1540,31 +1268,11 @@ function SignInPage({
               Having difficulties signing up?
             </button>
           ) : null}
-          <div className="auth-preview-panel" aria-label="FoxHub preview">
-            <div className="auth-preview-topline">
-              <strong>After sign-in</strong>
-              <span>{state.profile.handle || "@you"}</span>
-            </div>
-            <div className="auth-preview-message">
-              <span>Social</span>
-              <strong>{state.threads?.[0]?.name || "Your active thread"}</strong>
-              <p>{state.threads?.[0]?.messages?.slice(-1)?.[0]?.text || "Messages, saves, and next actions return here."}</p>
-            </div>
-            <div className="auth-preview-row">
-              <div>
-                <span>Moments</span>
-                <strong>{state.moments?.length || 0}</strong>
-              </div>
-              <div>
-                <span>Circles</span>
-                <strong>{state.circles?.length || 0}</strong>
-              </div>
-              <div>
-                <span>Services</span>
-                <strong>{state.services?.length || 0}</strong>
-              </div>
-            </div>
-          </div>
+          <nav className="member-access-links" aria-label="Account help">
+            <button type="button" className="text-link-button" onClick={openFeedback}>Need help?</button>
+            <button type="button" className="text-link-button" onClick={openLanding}>Back to FoxHub</button>
+            <button type="button" className="text-link-button" onClick={openManagementSignIn} disabled={busy || isLockedMode}>Staff sign-in</button>
+          </nav>
         </form>
       </div>
     </div>
@@ -2196,6 +1904,8 @@ function App() {
     setFeatureFlag,
     assignExperimentVariant,
     evaluateWalletRisk,
+    saveWorkflowPreset,
+    runWorkflowPreset,
     activateGrowthCategory,
     runGrowthCategory,
     activateAllGrowthCategories,
@@ -3842,6 +3552,8 @@ function App() {
             runUxComponent={runUxComponent}
             activateProductionComponent={activateProductionComponent}
             runProductionComponent={runProductionComponent}
+            saveWorkflowPreset={saveWorkflowPreset}
+            runWorkflowPreset={runWorkflowPreset}
             updateProfile={updateProfile}
             tutorialAssistant={
               !state.profile?.tutorialCompleted && state.authenticated ? (

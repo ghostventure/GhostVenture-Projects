@@ -4,13 +4,16 @@ import {
   buildInitialAccounts,
   getAccessLabel,
   hasFoxHubManagementAccess,
-  isAtLeast18
+  isAtLeast18,
+  isStrongSignupPassword
 } from "../src/foxhubMobileCore.js";
 
 let accounts = buildInitialAccounts();
 
 assert.equal(isAtLeast18("1990-01-01", new Date("2026-06-13T12:00:00Z")), true);
 assert.equal(isAtLeast18("2012-01-01", new Date("2026-06-13T12:00:00Z")), false);
+assert.equal(isStrongSignupPassword("FoxHubMember123"), true);
+assert.equal(isStrongSignupPassword("weak"), false);
 
 assert.throws(
   () =>
@@ -84,6 +87,22 @@ assert.throws(
       }
     }),
   /18\+/
+);
+
+assert.throws(
+  () =>
+    authenticate({
+      accounts,
+      route: "member",
+      mode: "signup",
+      draft: {
+        email: "weak-password@example.com",
+        password: "weak",
+        name: "Weak Password",
+        birthDate: "1998-01-01"
+      }
+    }),
+  /stronger password/
 );
 
 console.log("foxhub mobile smoke passed");

@@ -12,6 +12,10 @@ Firebase project: `foxhub-c984b`.
 - **Lazy-chunk recovery:** when `sessionStorage` is blocked, a one-time URL
   marker provides the stale-chunk reload guard. The app shell removes the marker
   after loading to avoid a repeated reload loop.
+- **Workspace content focus:** the shared Home-style `SectionFeed` is omitted
+  from Social/chat, Rapport/circles, Communal/growth, and Services/Merchant/
+  discover, allowing each dedicated workspace to lead with its own content.
+  The feed remains on market, wallet, and experience.
 - **Stripe webhook validation:** both the Firebase Functions webhook and the
   Next API webhook verify the Stripe signature before processing, reject
   malformed event payloads, and use a Firestore transaction to deduplicate
@@ -22,7 +26,8 @@ Firebase project: `foxhub-c984b`.
 ## Source map
 
 - `src/FoxHubShell.jsx`, `src/styles/refresh.css`: connection status behavior
-  and theme-aware notice.
+  and theme-aware notice; workspace-specific feed visibility.
+- `src/workspaces/shared.jsx`: shared `SectionFeed` component and feed content.
 - `src/runtimeReliability.js`: lazy-chunk retry and one-time URL fallback when
   `sessionStorage` is unavailable, with marker cleanup after shell load.
 - `functions/index.js`: Firebase Functions Stripe webhook.
@@ -33,12 +38,17 @@ Firebase project: `foxhub-c984b`.
 
 The JavaScript syntax checks and both Vite and Next production builds passed.
 `npm test` passed: 34/34 tests. Focused runtime reliability tests passed 4/4.
-No live webhook requests were run.
+Synthetic member assertions confirm the feed is absent on hub/chat/circles/
+growth/discover and present on market/wallet/experience. `npm run
+smoke:modernization` passed at 390px and 1440px with no JavaScript errors. No
+live webhook requests were run.
 
 ## Deployment status — October 15, 2026
 
-Hosting was deployed to `foxhub-c984b` at `https://foxhub-c984b.web.app`.
-The Hosting version ID was not captured.
+Hosting was deployed to `foxhub-c984b` at
+`https://foxhub-c984b.web.app` on October 15, 2026 at `22:46:54 GMT`; the
+Hosting version ID was not captured. This deployment includes the workspace
+feed cleanup described above.
 
 Post-deploy smoke passed on production at 390px and 1440px for public pages,
 sign-in, password recovery, and footer behavior, with no JavaScript errors.

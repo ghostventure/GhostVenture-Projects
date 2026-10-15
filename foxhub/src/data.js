@@ -4870,32 +4870,32 @@ export const defaultProfile = {
 
 export const views = {
   hub: {
-    title: "Home starts with social, rapport, community, then service.",
+    title: "Your day on FoxHub",
     description:
-      "FoxHub is arranged as a community rapport network: people connect, trust forms, communities coordinate, then services and merchants become useful."
+      "Catch up with your people, make plans, and find local help."
   },
   chat: {
-    title: "Social is the daily relationship layer.",
+    title: "Messages & updates",
     description:
-      "Direct threads, group threads, moments, voice, and media should be the first reason users open FoxHub."
+      "Keep your conversations and shared updates together."
   },
   circles: {
-    title: "Rapport turns contacts into trusted context.",
+    title: "Your people & circles",
     description:
       "Contacts, circles, vouches, endorsements, reputation, and introduction paths show how people know each other and what they can safely do together."
   },
   wallet: {
-    title: "Pay orbits trusted relationships.",
+    title: "Payments & activity",
     description:
       "Peer transfers, merchant pay, scanning, and payout activity should stay close to conversation, community, and verified service context."
   },
   discover: {
-    title: "Services and merchants grow from community trust.",
+    title: "Find a service",
     description:
       "Mini-apps, local utilities, official service channels, merchant workflows, and return context sit on top of social rapport."
   },
   market: {
-    title: "Needs and offers bridge community into commerce.",
+    title: "Local needs & offers",
     description:
       "Requests, gigs, listings, alerts, and trust-graded sellers route every post back into FoxHub relationships."
   },
@@ -4910,12 +4910,12 @@ export const views = {
       "Managers, staff, and moderators can review FoxHub Member applications, verification work, and trust queues from one dashboard."
   },
   experience: {
-    title: "UX and goodies make the network easier every day.",
+    title: "Preferences & extras",
     description:
       "Quick actions, daily cards, payment steps, helpful notices, and simple empty states make the app feel clearer."
   },
   growth: {
-    title: "Communal spaces turn belonging into coordination.",
+    title: "Community spaces",
     description:
       "Local rooms, events, shared services, creators, public pages, and community programs give people reasons to return together."
   },

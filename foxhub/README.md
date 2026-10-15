@@ -1,5 +1,7 @@
 # FoxHub
 
+Latest member experience refresh: [October 13 modernization handoff](docs/MODERNIZATION_2026-10-13.md).
+
 FoxHub is a U.S.-built super-app foundation aimed at the WeChat model: private messaging, communities, payments, and mini-app distribution in one product.
 
 Preferred public domain:
@@ -8,12 +10,12 @@ Preferred public domain:
 
 Current Firebase Hosting fallback:
 
-- `https://foxhub-superapp.web.app`
+- `https://foxhub-c984b.web.app`
 
 Firebase deploy account:
 
-- Use `solidartentertainment@gmail.com` for `foxhub-superapp` deploys.
-- See `docs/FIREBASE_SETUP.md` before publishing; the wrong CLI account can build locally but fail with a Firebase Hosting `403`.
+- Use an account with access to the target Firebase project for deploys.
+- See `docs/FOXHUB_C984B_PROJECT_COPY_2026-06-12.md` before publishing; this checkout is configured for the copied Firebase project.
 
 ## Current state
 

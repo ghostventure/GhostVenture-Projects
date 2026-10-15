@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -14,16 +14,25 @@ import {
   View
 } from "react-native";
 import { WebView } from "react-native-webview";
+import Svg, { Path } from "react-native-svg";
 import {
   authenticate,
   buildInitialAccounts,
   getAccessLabel,
   hasFoxHubManagementAccess
 } from "./src/foxhubMobileCore";
+import {
+  FOXHUB_FIREBASE_PROJECT_ID,
+  FOXHUB_WEB_APP_URL,
+  createLiveProfile,
+  signInLiveProfile,
+  signOutLiveProfile,
+  watchLiveAuth
+} from "./src/foxhubMobileFirebase";
 import { mobileScreens, mobileTabs } from "./src/foxhubMobileContent.generated";
 import { defaultMobileThemeId, mobileThemes } from "./src/foxhubMobileThemes.generated";
 
-const FOXHUB_WEB_APP_URL = "https://foxhub-superapp.web.app";
+const initialMobileThemeId = mobileThemes.some((theme) => theme.id === "dark") ? "dark" : defaultMobileThemeId;
 
 const blankDraft = {
   email: "",
@@ -34,7 +43,8 @@ const blankDraft = {
   zipCode: "",
   birthDate: "",
   inviteCode: "",
-  sponsorHandle: ""
+  sponsorHandle: "",
+  bio: ""
 };
 
 const demoCredentials = [
@@ -101,43 +111,109 @@ function Metric({ styles, label, value }) {
   );
 }
 
-function AuthScreen({ styles, colors, route, mode, setRoute, setMode, draft, setDraft, onSubmit, error }) {
+function ValueChip({ styles, label, detail }) {
+  return (
+    <View style={styles.valueChip}>
+      <Text style={styles.valueChipLabel}>{label}</Text>
+      <Text style={styles.valueChipDetail}>{detail}</Text>
+    </View>
+  );
+}
+
+function FoxMark({ styles }) {
+  return (
+    <View style={styles.logoMark}>
+      <Svg width="52" height="52" viewBox="0 0 64 64" accessibilityLabel="FoxHub logo">
+        <Path fill={styles.logoMainColor.color} d="M10 8l15 9 7-5 7 5 15-9-5 22 4 11-21 15-21-15 4-11L10 8z" />
+        <Path fill={styles.logoCutoutColor.color} d="M19 25l9 4-7 6-5-2 3-8zm26 0l3 8-5 2-7-6 9-4zM25 39h14l-7 7-7-7z" />
+        <Path fill={styles.logoNoseColor.color} d="M28 36h8l-4 5-4-5z" />
+      </Svg>
+    </View>
+  );
+}
+
+function AuthScreen({ styles, colors, route, mode, setRoute, setMode, draft, setDraft, onSubmit, error, backendMode, setBackendMode, busy }) {
   const signingUp = mode === "signup";
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
       <ScrollView contentContainerStyle={styles.authPage} keyboardShouldPersistTaps="handled">
-        <View style={styles.brandRow}>
-          <View style={styles.mark}>
-            <Text style={styles.markText}>FH</Text>
+        <View style={styles.authHero}>
+          <View style={styles.scanLine} />
+          <View style={styles.brandRow}>
+            <FoxMark styles={styles} />
+            <View style={styles.brandCopy}>
+              <Text style={styles.eyebrow}>FoxHub Android</Text>
+              <Text style={styles.title}>Your same FoxHub, tuned for your phone.</Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.eyebrow}>FoxHub Mobile</Text>
-            <Text style={styles.title}>Trusted social, services, and operations.</Text>
+          <View style={styles.heroOfferRow}>
+            <ValueChip styles={styles} label="Same login" detail="Web + Android" />
+            <ValueChip styles={styles} label="Live profile" detail="Shared records" />
+            <ValueChip styles={styles} label="Night ready" detail="Theme aware" />
+          </View>
+          <View style={styles.syncPanel}>
+            <View style={styles.syncNode}>
+              <Text style={styles.syncNodeTitle}>Website</Text>
+              <Text style={styles.syncNodeDetail}>foxhub-c984b</Text>
+            </View>
+            <View style={styles.syncBeam} />
+            <View style={styles.syncNode}>
+              <Text style={styles.syncNodeTitle}>User database</Text>
+              <Text style={styles.syncNodeDetail}>one account</Text>
+            </View>
+            <View style={styles.syncBeam} />
+            <View style={styles.syncNode}>
+              <Text style={styles.syncNodeTitle}>Android</Text>
+              <Text style={styles.syncNodeDetail}>same profile</Text>
+            </View>
           </View>
         </View>
 
-        <Segment
-          styles={styles}
-          value={route}
-          onChange={setRoute}
-          options={[
-            { value: "member", label: "Member" },
-            { value: "management", label: "Management" }
-          ]}
-        />
-        <Segment
-          styles={styles}
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: "signin", label: "Sign in" },
-            { value: "signup", label: "Sign up" }
-          ]}
-        />
+        <View style={styles.statusPanel}>
+          <View>
+            <Text style={styles.statusLabel}>Connection</Text>
+            <Text style={styles.statusValue}>{backendMode === "live" ? "Same user database as the site" : "Try the sample mode"}</Text>
+          </View>
+          <Text style={styles.statusPill}>{backendMode === "live" ? "Synced" : "Sample"}</Text>
+        </View>
+
+        <View style={styles.controlPanel}>
+          <Segment
+            styles={styles}
+            value={backendMode}
+            onChange={setBackendMode}
+            options={[
+              { value: "live", label: "Real account" },
+              { value: "demo", label: "Sample" }
+            ]}
+          />
+          <Segment
+            styles={styles}
+            value={route}
+            onChange={setRoute}
+            options={[
+              { value: "member", label: "Member" },
+              { value: "management", label: "Staff" }
+            ]}
+          />
+          <Segment
+            styles={styles}
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "signin", label: "Sign in" },
+              { value: "signup", label: "Sign up" }
+            ]}
+          />
+        </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <View style={styles.form}>
+        <View style={styles.formPanel}>
+          <View style={styles.formHead}>
+            <Text style={styles.panelTitle}>{signingUp ? "Create your profile" : "Open your profile"}</Text>
+            <Text style={styles.copy}>{signingUp ? "Start with your name, city, and invite if you have one." : "Use the same email and password as the FoxHub website."}</Text>
+          </View>
           <Field styles={styles} colors={colors} label="Email" value={draft.email} onChangeText={(email) => setDraft({ ...draft, email })} placeholder="you@example.com" keyboardType="email-address" />
           <Field styles={styles} colors={colors} label="Password" value={draft.password} onChangeText={(password) => setDraft({ ...draft, password })} placeholder="Password" secureTextEntry />
 
@@ -149,17 +225,23 @@ function AuthScreen({ styles, colors, route, mode, setRoute, setMode, draft, set
               <Field styles={styles} colors={colors} label="ZIP code" value={draft.zipCode} onChangeText={(zipCode) => setDraft({ ...draft, zipCode })} placeholder="30301" keyboardType="number-pad" />
               <Field styles={styles} colors={colors} label="Birth date" value={draft.birthDate} onChangeText={(birthDate) => setDraft({ ...draft, birthDate })} placeholder="YYYY-MM-DD" />
               <Field styles={styles} colors={colors} label="Invite code" value={draft.inviteCode} onChangeText={(inviteCode) => setDraft({ ...draft, inviteCode })} placeholder="Optional sponsor code" />
+              <Field styles={styles} colors={colors} label="Personal note" value={draft.bio} onChangeText={(bio) => setDraft({ ...draft, bio })} placeholder="What should your circle know first?" />
             </>
           ) : null}
         </View>
 
-        <Pressable style={styles.primaryButton} onPress={onSubmit}>
-          <Text style={styles.primaryButtonText}>{signingUp ? "Create FoxHub profile" : "Open FoxHub"}</Text>
+        <Pressable style={[styles.primaryButton, busy && styles.buttonDisabled]} onPress={onSubmit} disabled={busy}>
+          <Text style={styles.primaryButtonText}>{busy ? "Connecting..." : signingUp ? "Create FoxHub profile" : "Open FoxHub"}</Text>
         </Pressable>
 
-        <View style={styles.demoBox}>
+        <View style={styles.promisePanel}>
+          <Text style={styles.promiseTitle}>One signup, more ways to use FoxHub</Text>
+          <Text style={styles.promiseText}>Sign in once and use the same FoxHub profile, circles, staff access, and activity records on the website or Android app.</Text>
+        </View>
+
+        {backendMode === "demo" ? <View style={styles.demoBox}>
           <Text style={styles.demoTitle}>Smoke credentials</Text>
-          <Text style={styles.demoText}>Member credentials must use the Member lane. Management credentials must use the Management lane.</Text>
+          <Text style={styles.demoText}>Sample member accounts open the Member side. Sample staff accounts open the Staff side.</Text>
           <View style={styles.demoActions}>
             {demoCredentials.map((credential) => (
               <Pressable
@@ -176,8 +258,8 @@ function AuthScreen({ styles, colors, route, mode, setRoute, setMode, draft, set
             ))}
           </View>
           <Text style={styles.demoText}>Member: member@example.com / FoxHubMember123</Text>
-          <Text style={styles.demoText}>Management: founder@foxhub.com / FoxHubFounder123</Text>
-        </View>
+          <Text style={styles.demoText}>Staff: founder@foxhub.com / FoxHubFounder123</Text>
+        </View> : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -237,6 +319,67 @@ function WebsiteScreen({ styles, screenId, profile, accounts }) {
   );
 }
 
+function TodayScreen({ styles, profile, setActiveTab }) {
+  const stats = profile.mobileStats || {};
+  const quickActions = [
+    { label: "Social", tab: "chat", detail: "Threads and moments" },
+    { label: "Rapport", tab: "circles", detail: "People and trust" },
+    { label: "Services", tab: "discover", detail: "Needs and listings" },
+    { label: "Pay", tab: "wallet", detail: "Wallet context" }
+  ];
+  if (hasFoxHubManagementAccess(profile)) {
+    quickActions.push({ label: "Ops", tab: "management", detail: "Staff controls" });
+  }
+
+  return (
+    <View style={styles.stack}>
+      <View style={styles.todayHero}>
+        <View style={styles.heroTopLine}>
+          <Text style={styles.heroKicker}>Today</Text>
+          <Text style={styles.liveDot}>Ready</Text>
+        </View>
+        <Text style={styles.todayTitle}>Hi, {profile.displayName || profile.name}.</Text>
+        <Text style={styles.todayCopy}>Your people, local asks, profile, and helpful tools in one phone-first home.</Text>
+        <View style={styles.heroOfferRow}>
+          <ValueChip styles={styles} label={getAccessLabel(profile)} detail="Access lane" />
+          <ValueChip styles={styles} label={profile.city || "Local"} detail="Home base" />
+          <ValueChip styles={styles} label="Shared DB" detail="Website match" />
+        </View>
+      </View>
+      <View style={styles.quickGrid}>
+        {quickActions.map((action) => (
+          <Pressable key={action.tab} style={styles.quickTile} onPress={() => setActiveTab(action.tab)}>
+            <Text style={styles.quickIcon}>{action.label.slice(0, 1)}</Text>
+            <Text style={styles.quickLabel}>{action.label}</Text>
+            <Text style={styles.quickDetail}>{action.detail}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.metricsGrid}>
+        <Metric styles={styles} label="Contacts" value={stats.contacts ?? 0} />
+        <Metric styles={styles} label="Threads" value={stats.threads ?? 0} />
+      </View>
+      <View style={styles.metricsGrid}>
+        <Metric styles={styles} label="Moments" value={stats.moments ?? 0} />
+        <Metric styles={styles} label="Wallet" value={stats.walletEvents ?? 0} />
+      </View>
+      <View style={styles.panel}>
+        <View style={styles.oneIdHeader}>
+          <View style={styles.avatarMini}>
+            <Text style={styles.avatarMiniText}>{String(profile.displayName || profile.name || "FH").slice(0, 2).toUpperCase()}</Text>
+          </View>
+          <View style={styles.cardText}>
+            <Text style={styles.panelTitle}>Your profile card</Text>
+            <Text style={styles.profileLine}>{profile.handle} · {profile.city || "City pending"}</Text>
+          </View>
+        </View>
+        <Text style={styles.copy}>{profile.accessNote}</Text>
+        <Text style={styles.metaLine}>Same FoxHub user database as the website: {profile.email}</Text>
+      </View>
+    </View>
+  );
+}
+
 function BrowserParityScreen({ styles }) {
   if (Platform.OS === "web") {
     return (
@@ -244,7 +387,7 @@ function BrowserParityScreen({ styles }) {
         <Text style={styles.eyebrow}>Browser parity</Text>
         <Text style={styles.screenTitle}>Open the real FoxHub web app.</Text>
         <Text style={styles.copy}>
-          The hosted website blocks iframe embedding in the Expo web preview. On iOS and Android this tab uses a native WebView; in this browser preview, open the site directly.
+          The Android build opens the full FoxHub website inside the app. In this browser preview, open the site directly.
         </Text>
         <Pressable style={styles.primaryButton} onPress={() => Linking.openURL(FOXHUB_WEB_APP_URL)}>
           <Text style={styles.primaryButtonText}>Open FoxHub Website</Text>
@@ -266,11 +409,12 @@ function BrowserParityScreen({ styles }) {
   );
 }
 
-function AppShell({ styles, colors, themeId, setThemeId, profile, accounts, onSignOut }) {
-  const [activeTab, setActiveTab] = useState("browser");
+function AppShell({ styles, colors, themeId, setThemeId, profile, accounts, onSignOut, backendMode, statusBarStyle }) {
+  const [activeTab, setActiveTab] = useState("today");
   const [themeOpen, setThemeOpen] = useState(false);
   const visibleTabs = useMemo(
     () => [
+      { id: "today", label: "Today" },
       { id: "browser", label: "Browser" },
       ...mobileTabs.filter((tab) => !tab.managementOnly || hasFoxHubManagementAccess(profile))
     ],
@@ -280,11 +424,16 @@ function AppShell({ styles, colors, themeId, setThemeId, profile, accounts, onSi
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={statusBarStyle} />
       <View style={styles.appHeader}>
-        <View>
-          <Text style={styles.eyebrow}>FoxHub</Text>
+        <View style={styles.appIdentity}>
+          <View style={styles.avatarMini}>
+            <Text style={styles.avatarMiniText}>{String(profile.displayName || profile.name || "FH").slice(0, 2).toUpperCase()}</Text>
+          </View>
+          <View>
+          <Text style={styles.eyebrow}>{backendMode === "live" ? "FoxHub" : "FoxHub Sample"}</Text>
           <Text style={styles.headerTitle}>{profile.handle}</Text>
+          </View>
         </View>
         <Pressable style={styles.secondaryButton} onPress={onSignOut}>
           <Text style={styles.secondaryButtonText}>Sign out</Text>
@@ -324,7 +473,9 @@ function AppShell({ styles, colors, themeId, setThemeId, profile, accounts, onSi
         ))}
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        {activeTab === "browser" ? (
+        {activeTab === "today" ? (
+          <TodayScreen styles={styles} profile={profile} setActiveTab={setActiveTab} />
+        ) : activeTab === "browser" ? (
           <BrowserParityScreen styles={styles} />
         ) : (
           <WebsiteScreen styles={styles} screenId={activeTab} profile={profile} accounts={accounts} />
@@ -337,39 +488,96 @@ function AppShell({ styles, colors, themeId, setThemeId, profile, accounts, onSi
 export default function App() {
   const [accounts, setAccounts] = useState(() => buildInitialAccounts());
   const [profile, setProfile] = useState(null);
+  const [backendMode, setBackendMode] = useState("live");
   const [route, setRoute] = useState("member");
   const [mode, setMode] = useState("signin");
   const [draft, setDraft] = useState(blankDraft);
   const [error, setError] = useState("");
-  const [themeId, setThemeId] = useState(defaultMobileThemeId);
+  const [busy, setBusy] = useState(false);
+  const [booting, setBooting] = useState(true);
+  const [themeId, setThemeId] = useState(initialMobileThemeId);
   const theme = mobileThemes.find((item) => item.id === themeId) || mobileThemes[0];
   const colors = {
     ...defaultColors,
     ...theme.colors,
     green: theme.colors.green || theme.colors.accent,
-    greenDark: theme.colors.accentStrong || theme.colors.accent,
-    blue: theme.colors.green || theme.colors.accent,
+    greenDark: theme.colors.accent || theme.colors.green || defaultColors.greenDark,
+    blue: theme.colors.soft || theme.colors.green || theme.colors.accent,
     red: theme.colors.accentStrong || defaultColors.red
   };
+  const isDarkTheme = String(colors.bg || "").toLowerCase().startsWith("#0") || String(colors.bg || "").toLowerCase().startsWith("#1") || String(colors.bg || "").toLowerCase().startsWith("#2");
+  const statusBarStyle = isDarkTheme ? "light" : "dark";
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  function submitAuth() {
+  useEffect(() => {
+    if (backendMode !== "live") {
+      setBooting(false);
+      return undefined;
+    }
+    setBooting(true);
+    const unsubscribe = watchLiveAuth(
+      (liveProfile) => {
+        setProfile(liveProfile);
+        setBooting(false);
+      },
+      (message) => {
+        setError(message);
+        setBooting(false);
+      }
+    );
+    return unsubscribe;
+  }, [backendMode]);
+
+  async function submitAuth() {
+    if (busy) return;
+    setBusy(true);
     try {
-      const result = authenticate({ accounts, route, mode, draft });
-      setAccounts(result.accounts);
-      setProfile(result.profile);
+      if (backendMode === "live") {
+        const liveProfile = mode === "signup" ? await createLiveProfile({ route, draft }) : await signInLiveProfile({ route, draft });
+        setProfile(liveProfile);
+      } else {
+        const result = authenticate({ accounts, route, mode, draft });
+        setAccounts(result.accounts);
+        setProfile(result.profile);
+      }
       setError("");
     } catch (authError) {
       const message = authError instanceof Error ? authError.message : "Unable to authenticate.";
       setError(message);
       if (message === "Not Permitted.") Alert.alert("Not Permitted.", "This account cannot open that FoxHub lane.");
+    } finally {
+      setBusy(false);
     }
+  }
+
+  async function handleSignOut() {
+    if (backendMode === "live") {
+      try {
+        await signOutLiveProfile();
+      } catch (signOutError) {
+        setError(signOutError instanceof Error ? signOutError.message : "Unable to sign out.");
+      }
+    }
+    setProfile(null);
+  }
+
+  if (booting && backendMode === "live") {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style={statusBarStyle} />
+        <View style={styles.loadingPage}>
+          <FoxMark styles={styles} />
+          <Text style={styles.title}>Opening FoxHub Mobile</Text>
+          <Text style={styles.copy}>Getting your FoxHub account ready.</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   if (!profile) {
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar style="dark" />
+        <StatusBar style={statusBarStyle} />
         <AuthScreen
           styles={styles}
           colors={colors}
@@ -381,19 +589,22 @@ export default function App() {
           setDraft={setDraft}
           onSubmit={submitAuth}
           error={error}
+          backendMode={backendMode}
+          setBackendMode={setBackendMode}
+          busy={busy}
         />
       </SafeAreaView>
     );
   }
 
-  return <AppShell styles={styles} colors={colors} themeId={themeId} setThemeId={setThemeId} profile={profile} accounts={accounts} onSignOut={() => setProfile(null)} />;
+  return <AppShell styles={styles} colors={colors} themeId={themeId} setThemeId={setThemeId} profile={profile} accounts={accounts} onSignOut={handleSignOut} backendMode={backendMode} statusBarStyle={statusBarStyle} />;
 }
 
 const defaultColors = {
   ink: "#17211f",
   muted: "#5d6965",
   line: "#d8e0dd",
-  bg: "#f6f8f6",
+  bg: "#eef7f0",
   panel: "#ffffff",
   green: "#216b49",
   greenDark: "#174832",
@@ -403,6 +614,17 @@ const defaultColors = {
 };
 
 function createStyles(colors = defaultColors) {
+const accentSoft = colors.accentSoft || "#edf5f0";
+const layer = colors.layer || "#e9f2ec";
+const panelAlt = colors.panelAlt || colors.panel;
+const softText = colors.soft || colors.ink;
+const bgHex = String(colors.bg || "").toLowerCase();
+const isDarkTheme = bgHex.startsWith("#0") || bgHex.startsWith("#1") || bgHex.startsWith("#2");
+const onAccent = isDarkTheme ? "#06120d" : "#ffffff";
+const fieldBg = panelAlt;
+const subtlePanel = isDarkTheme ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.64)";
+const floatingPanel = isDarkTheme ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.76)";
+const errorBg = isDarkTheme ? "rgba(240,90,90,0.14)" : "#fff5f3";
 return StyleSheet.create({
   flex: {
     flex: 1
@@ -412,27 +634,74 @@ return StyleSheet.create({
     backgroundColor: colors.bg
   },
   authPage: {
-    padding: 20,
-    gap: 16
+    padding: 18,
+    paddingTop: 24,
+    gap: 12
+  },
+  loadingPage: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28,
+    gap: 14
   },
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    marginTop: 8
+    marginTop: 4
+  },
+  authHero: {
+    borderRadius: 8,
+    backgroundColor: isDarkTheme ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: colors.lineStrong || colors.line,
+    padding: 14,
+    gap: 16
+  },
+  scanLine: {
+    height: 3,
+    borderRadius: 8,
+    backgroundColor: colors.accent || colors.green,
+    opacity: 0.9
+  },
+  brandCopy: {
+    flex: 1
   },
   mark: {
-    width: 54,
-    height: 54,
+    width: 68,
+    height: 68,
     borderRadius: 8,
-    backgroundColor: colors.green,
+    backgroundColor: colors.accent || colors.greenDark,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.lineStrong || colors.line
   },
   markText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 20
+    color: onAccent,
+    fontWeight: "900",
+    fontSize: 25
+  },
+  logoMark: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.lineStrong || colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden"
+  },
+  logoMainColor: {
+    color: colors.accent || colors.green
+  },
+  logoCutoutColor: {
+    color: colors.panelAlt || colors.bg
+  },
+  logoNoseColor: {
+    color: colors.ink
   },
   eyebrow: {
     color: colors.gold,
@@ -442,37 +711,155 @@ return StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: "900",
+    maxWidth: 300
+  },
+  heroOfferRow: {
+    flexDirection: "row",
+    gap: 8
+  },
+  valueChip: {
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 8,
+    backgroundColor: accentSoft,
+    borderWidth: 1,
+    borderColor: colors.lineStrong || colors.line,
+    padding: 9,
+    justifyContent: "center"
+  },
+  syncPanel: {
+    minHeight: 78,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.lineStrong || colors.line,
+    backgroundColor: isDarkTheme ? "rgba(101,214,159,0.08)" : "rgba(22,130,79,0.08)",
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  syncNode: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: floatingPanel,
+    padding: 8,
+    justifyContent: "center"
+  },
+  syncNodeTitle: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  syncNodeDetail: {
+    color: colors.muted,
+    fontSize: 10,
     fontWeight: "800",
-    maxWidth: 280
+    marginTop: 2
+  },
+  syncBeam: {
+    width: 14,
+    height: 2,
+    borderRadius: 4,
+    backgroundColor: colors.accent || colors.green
+  },
+  valueChipLabel: {
+    color: colors.accent || colors.greenDark,
+    fontWeight: "900",
+    fontSize: 13
+  },
+  valueChipDetail: {
+    color: softText,
+    fontWeight: "700",
+    fontSize: 11,
+    marginTop: 2
   },
   segment: {
     flexDirection: "row",
-    backgroundColor: "#e9eeeb",
+    backgroundColor: layer,
     borderRadius: 8,
     padding: 4,
     gap: 4
   },
   segmentButton: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 44,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center"
   },
   segmentButtonActive: {
-    backgroundColor: colors.panel
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line
   },
   segmentText: {
     color: colors.muted,
-    fontWeight: "700"
+    fontWeight: "900"
   },
   segmentTextActive: {
     color: colors.greenDark
   },
   form: {
     gap: 12
+  },
+  statusPanel: {
+    minHeight: 70,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: floatingPanel,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  statusLabel: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  statusValue: {
+    color: colors.ink,
+    fontWeight: "900",
+    fontSize: 16,
+    marginTop: 3
+  },
+  statusPill: {
+    color: colors.accent || colors.greenDark,
+    backgroundColor: accentSoft,
+    borderRadius: 6,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  controlPanel: {
+    gap: 10,
+    borderRadius: 8,
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    padding: 0
+  },
+  formPanel: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: floatingPanel,
+    padding: 14,
+    gap: 12
+  },
+  formHead: {
+    gap: 4,
+    paddingBottom: 2
   },
   field: {
     gap: 6
@@ -482,24 +869,31 @@ return StyleSheet.create({
     fontWeight: "700"
   },
   input: {
-    minHeight: 48,
+    minHeight: 52,
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     color: colors.ink,
-    backgroundColor: colors.panel
+    backgroundColor: fieldBg,
+    fontWeight: "700"
   },
   primaryButton: {
-    minHeight: 50,
+    minHeight: 56,
     borderRadius: 8,
-    backgroundColor: colors.green,
+    backgroundColor: colors.accent || colors.green,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.lineStrong || colors.greenDark
   },
   primaryButtonText: {
-    color: "#fff",
-    fontWeight: "800"
+    color: onAccent,
+    fontWeight: "900",
+    fontSize: 16
+  },
+  buttonDisabled: {
+    opacity: 0.64
   },
   secondaryButton: {
     minHeight: 38,
@@ -508,7 +902,8 @@ return StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    backgroundColor: colors.panel
   },
   secondaryButtonText: {
     color: colors.greenDark,
@@ -516,7 +911,30 @@ return StyleSheet.create({
   },
   error: {
     color: colors.red,
-    fontWeight: "800"
+    fontWeight: "900",
+    backgroundColor: errorBg,
+    borderWidth: 1,
+    borderColor: "#f0c5bd",
+    borderRadius: 8,
+    padding: 10
+  },
+  promisePanel: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: "transparent",
+    padding: 14,
+    gap: 5
+  },
+  promiseTitle: {
+    color: colors.accent || colors.ink,
+    fontWeight: "900",
+    fontSize: 16
+  },
+  promiseText: {
+    color: softText,
+    fontWeight: "700",
+    lineHeight: 20
   },
   demoBox: {
     borderWidth: 1,
@@ -543,7 +961,7 @@ return StyleSheet.create({
     flex: 1,
     minHeight: 40,
     borderRadius: 8,
-    backgroundColor: "#edf5f0",
+    backgroundColor: accentSoft,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 8
@@ -555,13 +973,20 @@ return StyleSheet.create({
   },
   appHeader: {
     padding: 16,
+    paddingBottom: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
   },
+  appIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1
+  },
   headerTitle: {
     color: colors.ink,
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: "800"
   },
   tabBar: {
@@ -572,18 +997,18 @@ return StyleSheet.create({
     paddingBottom: 10
   },
   tabButton: {
-    width: "31.8%",
-    minHeight: 40,
+    width: "31.5%",
+    minHeight: 42,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.line,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.panel
+    backgroundColor: floatingPanel
   },
   tabButtonActive: {
-    backgroundColor: colors.greenDark,
-    borderColor: colors.greenDark
+    backgroundColor: colors.accent || colors.greenDark,
+    borderColor: colors.lineStrong || colors.greenDark
   },
   themeBar: {
     paddingHorizontal: 16,
@@ -591,7 +1016,7 @@ return StyleSheet.create({
     minHeight: 48
   },
   themeToggleButton: {
-    minHeight: 42,
+    minHeight: 44,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.line,
@@ -649,14 +1074,14 @@ return StyleSheet.create({
     flex: 1
   },
   themeOptionTextActive: {
-    color: "#fff"
+    color: onAccent
   },
   tabText: {
     color: colors.muted,
     fontWeight: "800"
   },
   tabTextActive: {
-    color: "#fff"
+    color: onAccent
   },
   content: {
     padding: 16,
@@ -681,6 +1106,81 @@ return StyleSheet.create({
     borderColor: colors.line,
     gap: 8
   },
+  todayHero: {
+    backgroundColor: colors.panel,
+    borderRadius: 8,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    gap: 12
+  },
+  heroTopLine: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  heroKicker: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  liveDot: {
+    color: colors.accent || colors.ink,
+    backgroundColor: accentSoft,
+    borderRadius: 6,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontWeight: "900",
+    fontSize: 12
+  },
+  todayTitle: {
+    color: colors.ink,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "900"
+  },
+  todayCopy: {
+    color: softText,
+    lineHeight: 21,
+    fontWeight: "700"
+  },
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10
+  },
+  quickTile: {
+    width: "48.4%",
+    minHeight: 112,
+    backgroundColor: colors.panel,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 13,
+    justifyContent: "space-between"
+  },
+  quickIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    overflow: "hidden",
+    textAlign: "center",
+    lineHeight: 30,
+    color: onAccent,
+    backgroundColor: colors.accent || colors.greenDark,
+    fontWeight: "900"
+  },
+  quickLabel: {
+    color: colors.ink,
+    fontWeight: "900",
+    fontSize: 18
+  },
+  quickDetail: {
+    color: colors.muted,
+    fontWeight: "700"
+  },
   screenTitle: {
     color: colors.ink,
     fontSize: 28,
@@ -701,7 +1201,8 @@ return StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.line,
-    padding: 14
+    padding: 14,
+    minHeight: 82
   },
   metricValue: {
     color: colors.blue,
@@ -734,6 +1235,25 @@ return StyleSheet.create({
     flex: 1,
     gap: 5
   },
+  oneIdHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
+  avatarMini: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: colors.accent || colors.greenDark,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.lineStrong || colors.line
+  },
+  avatarMiniText: {
+    color: onAccent,
+    fontWeight: "900"
+  },
   sectionHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -752,7 +1272,7 @@ return StyleSheet.create({
   badge: {
     alignSelf: "flex-start",
     maxWidth: 96,
-    backgroundColor: "#edf5f0",
+    backgroundColor: accentSoft,
     color: colors.greenDark,
     borderRadius: 6,
     overflow: "hidden",

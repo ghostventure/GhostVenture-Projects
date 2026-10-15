@@ -1,7 +1,7 @@
 import "../src/styles.css";
 
 export const metadata = {
-  metadataBase: new URL("https://foxhub-superapp.web.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_FOXHUB_PUBLIC_URL || "https://foxhub-c984b.web.app"),
   title: "FoxHub - Private circles and trusted local help",
   description: "Join FoxHub for private circles, trusted local help, groups, events, and member-first community tools in one place.",
   alternates: {
