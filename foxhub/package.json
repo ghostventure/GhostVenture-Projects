@@ -23,7 +23,7 @@
     "clean": "rm -rf .next out dist .firebase release node_modules/.vite",
     "build:site-with-mobile": "npm run vite:build && npm run mobile:sync-content && npm --prefix mobile run export:web && node scripts/stage-mobile-web.mjs",
     "deploy:hosting": "npm run build:site-with-mobile && npx firebase-tools deploy --only hosting --project foxhub-c984b",
-    "deploy:next": "npm run build:next:functions && npx firebase-tools deploy --config firebase.next.json --only functions:nextApp,hosting --project foxhub-superapp",
+    "deploy:next": "npm run build:next:functions && npx firebase-tools deploy --config firebase.next.json --only functions:nextApp,hosting --project foxhub-c984b",
     "mobile:sync-content": "node scripts/sync-mobile-content.mjs",
     "mobile": "npm run mobile:sync-content && npm --prefix mobile start",
     "mobile:ios": "npm run mobile:sync-content && npm --prefix mobile run ios",
