@@ -58,7 +58,9 @@ Currently installed:
 ### Network UX and Stripe Webhook Stability
 
 - The member shell now announces offline and reconnect states accessibly.
+- Lazy-chunk recovery uses a one-time URL marker when `sessionStorage` is blocked and removes the marker after the app shell loads.
 - Both Stripe webhook paths validate signatures and payloads, deduplicate event IDs transactionally, and store event metadata without the full payload.
+- Validation passed: `npm test` 34/34, including 4/4 focused runtime reliability tests; Vite and Next production builds passed.
 - Hosting-only deployment to `foxhub-c984b` completed on October 15, 2026. Post-deploy smoke passed at 390px and 1440px for public pages, sign-in, password recovery, and footer behavior; `/`, `/signin`, `/management`, `/feedback`, and `/android/` returned HTTP 200 with no JavaScript errors. The authenticated member layout was not exercised, and the Stripe webhook was not live-tested.
 - The webhook backend was not deployed. See `docs/NETWORK_AND_STRIPE_WEBHOOK_STABILITY_2026-10-15.md` for the current deployment limits and validation record.
 

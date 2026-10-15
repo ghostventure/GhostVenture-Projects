@@ -9,6 +9,9 @@ Firebase project: `foxhub-c984b`.
   offline and a short reconnect message for 4.5 seconds after connectivity
   returns. The notice follows the active theme. This is browser connectivity
   feedback; it does not confirm that pending writes have synced successfully.
+- **Lazy-chunk recovery:** when `sessionStorage` is blocked, a one-time URL
+  marker provides the stale-chunk reload guard. The app shell removes the marker
+  after loading to avoid a repeated reload loop.
 - **Stripe webhook validation:** both the Firebase Functions webhook and the
   Next API webhook verify the Stripe signature before processing, reject
   malformed event payloads, and use a Firestore transaction to deduplicate
@@ -20,6 +23,8 @@ Firebase project: `foxhub-c984b`.
 
 - `src/FoxHubShell.jsx`, `src/styles/refresh.css`: connection status behavior
   and theme-aware notice.
+- `src/runtimeReliability.js`: lazy-chunk retry and one-time URL fallback when
+  `sessionStorage` is unavailable, with marker cleanup after shell load.
 - `functions/index.js`: Firebase Functions Stripe webhook.
 - `app/api/stripe/webhook/route.js`: Next API Stripe webhook.
 - `app/api/_server/foxhub-server.js`: shared Next API signature verification.
@@ -27,8 +32,8 @@ Firebase project: `foxhub-c984b`.
 ## Validation and deployment status
 
 The JavaScript syntax checks and both Vite and Next production builds passed.
-Focused tests were added and `npm test` passed: 6 test files, 6 passed. No live
-webhook requests were run.
+`npm test` passed: 34/34 tests. Focused runtime reliability tests passed 4/4.
+No live webhook requests were run.
 
 ## Deployment status — October 15, 2026
 
