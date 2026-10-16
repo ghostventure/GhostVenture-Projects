@@ -37,7 +37,9 @@
     "smoke:matched-gigs-accessibility": "node scripts/smoke-matched-gigs-accessibility.mjs",
     "smoke:gig-budget": "node scripts/smoke-gig-budget.mjs",
     "smoke:performer-public-profile": "node scripts/smoke-performer-public-profile.mjs",
-    "smoke:quick-replies": "node scripts/smoke-quick-replies.mjs"
+    "smoke:quick-replies": "node scripts/smoke-quick-replies.mjs",
+    "smoke:performer-agenda": "node scripts/smoke-performer-agenda.mjs",
+    "smoke:gig-radar-filters": "node scripts/smoke-gig-radar-filters.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

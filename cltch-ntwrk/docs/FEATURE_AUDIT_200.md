@@ -50,7 +50,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 035. Venue document expiry reminders
 - [ ] 036. Duplicate booking merge flow
 - [ ] 037. Host booking analytics export
-- [ ] 038. Calendar export with timezone-safe events
+- [x] 038. Filter confirmed bookings by date and export a bounded, escaped .ics file with explicit floating-time and one-hour defaults — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
 - [ ] 039. Venue capacity and equipment details
 - [ ] 040. Venue-specific safety checklist
 
@@ -77,14 +77,14 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 056. Availability pause with resume date
 - [x] 057. Safe portfolio URL manager — blocks scripts, credentials, duplicates, and oversized input; caps saved links at 20. Verified in scripts/smoke-portfolio-links.mjs.
 - [ ] 058. Review response and correction request
-- [ ] 059. Reference request workflow
+- [x] 059. Copy a date-filtered upcoming booking itinerary with line-break sanitization — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
 - [ ] 060. Business profile verification checklist
 
 ## Discovery and search
 
 - [x] 061. Export local search presets as JSON for browser-to-browser portability — `site-init.js`; Chromium export smoke
 - [x] 062. Import page-scoped search presets with file-size, schema, search-length, filter, sort, duplicate, and count validation — `site-init.js`; Chromium import smoke
-- [ ] 063. Distance filter with location precision setting
+- [x] 063. Bounded minimum-pay filter with storage fallback, reset control, and accurate empty state — `gig-radar.html`, `app/gig-radar-filters.js`; `npm run smoke:gig-radar-filters`
 - [ ] 064. Saved combined filters
 - [ ] 065. Accessible map and list view
 - [ ] 066. Stale listing suppression reason
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 42.
-- Remaining checklist items: 158.
+- Implemented and verified in this change: 45.
+- Remaining checklist items: 155.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

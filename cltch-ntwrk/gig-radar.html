@@ -303,6 +303,36 @@
       padding: 12px 14px;
       font-family: inherit;
     }
+    .pay-filter-row {
+      display: flex;
+      align-items: end;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: #9ea8ba;
+      font-size: 12px;
+    }
+    .pay-filter-row label { display: flex; flex-direction: column; gap: 5px; }
+    .pay-filter-row input {
+      width: 150px;
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #fff;
+      padding: 9px 10px;
+      font: inherit;
+    }
+    .pay-filter-row input:focus-visible,
+    .pay-filter-row button:focus-visible { outline: 2px solid #f5a623; outline-offset: 2px; }
+    .pay-filter-row button {
+      min-height: 44px;
+      padding: 0 11px;
+      border: 1px solid #2a3d50;
+      border-radius: 8px;
+      color: #dce8f5;
+      background: #13202d;
+      font: inherit;
+      cursor: pointer;
+    }
     .filter-row {
       display: flex;
       gap: 8px;
@@ -853,7 +883,14 @@
         </div>
       </div>
       <div class="command-grid">
-        <input class="command-search" id="gigSearchInput" type="search" placeholder="Search venue, location, genre, or pay">
+        <input class="command-search" id="gigSearchInput" type="search" aria-label="Search gigs" placeholder="Search venue, location, genre, or pay">
+        <div class="pay-filter-row">
+          <label for="gigMinimumPay">Minimum listed pay (USD)
+            <input id="gigMinimumPay" type="number" inputmode="numeric" min="0" max="100000" step="25" value="0" aria-describedby="gigMinimumPayHelp">
+          </label>
+          <button type="button" id="resetGigFilters">Reset filters</button>
+          <span id="gigMinimumPayHelp">Gigs without a listed pay amount are hidden when this is above $0.</span>
+        </div>
         <div class="command-grid-bottom">
           <div class="filter-row" id="gigFilterRow">
             <button class="filter-chip active" type="button" data-filter="all">All</button>
@@ -971,7 +1008,7 @@
     <div class="dash-section workspace-pane" id="gig-radar">
       <div class="section-hdr">
         <span class="section-title">Gig Radar</span>
-        <div class="badge" id="newBadge">NEW</div>
+        <div class="badge" id="newBadge" aria-live="polite">NEW</div>
       </div>
       <p class="section-sub">Incoming gigs that match your style and availability. Move fast when the fit is strong.</p>
       <div id="gigList">
@@ -1007,6 +1044,7 @@
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
+    import { meetsMinimumGigPay, readMinimumGigPay, saveMinimumGigPay } from "./app/gig-radar-filters.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1108,6 +1146,8 @@
     const gigSearchInput = document.getElementById('gigSearchInput');
     const gigFilterRow = document.getElementById('gigFilterRow');
     const gigSortSelect = document.getElementById('gigSortSelect');
+    const gigMinimumPay = document.getElementById('gigMinimumPay');
+    const resetGigFilters = document.getElementById('resetGigFilters');
     const workspaceTabs = [...document.querySelectorAll('[data-workspace-tab]')];
     const workspaceViewLabel = document.getElementById('workspaceViewLabel');
     const SAVED_GIGS_STORAGE_KEY = 'cltch_saved_gigs_v1';
@@ -1115,6 +1155,8 @@
     const SEARCH_INPUT_DEBOUNCE_MS = 120;
     let feedRenderTimerId = 0;
     let activeSearchTerm = '';
+    let minimumGigPay = readMinimumGigPay();
+    if (gigMinimumPay) gigMinimumPay.value = String(minimumGigPay);
 
     function loadSavedGigIds() {
       try {
@@ -1390,6 +1432,25 @@
           renderQueues();
         }, SEARCH_INPUT_DEBOUNCE_MS);
       });
+      gigMinimumPay?.addEventListener('change', () => {
+        minimumGigPay = saveMinimumGigPay(gigMinimumPay.value);
+        gigMinimumPay.value = String(minimumGigPay);
+        renderQueues();
+      });
+      resetGigFilters?.addEventListener('click', () => {
+        if (feedRenderTimerId) window.clearTimeout(feedRenderTimerId);
+        feedRenderTimerId = 0;
+        activeSearchTerm = '';
+        minimumGigPay = saveMinimumGigPay(0);
+        activeGigFilter = 'all';
+        if (gigSearchInput) gigSearchInput.value = '';
+        if (gigMinimumPay) gigMinimumPay.value = '0';
+        try { localStorage.setItem('cltch_gig_filter_v1', activeGigFilter); } catch {}
+        gigFilterRow?.querySelectorAll('[data-filter]').forEach((chip) => {
+          chip.classList.toggle('active', chip.dataset.filter === activeGigFilter);
+        });
+        renderQueues();
+      });
       if (gigSortSelect) {
         gigSortSelect.value = activeGigSort;
         gigSortSelect.addEventListener('change', () => {
@@ -1421,6 +1482,7 @@
     }
 
     function matchesFeedControls(item) {
+      if (!meetsMinimumGigPay(item, minimumGigPay)) return false;
       if (activeGigFilter === 'top' && item.match.percent < 90) return false;
       if (activeGigFilter === 'urgent' && item.daysAway > 2) return false;
       if (activeGigFilter === 'actionable' && !item.isActionable) return false;
@@ -1954,13 +2016,15 @@
 
       if (visibleMatches.length === 0) {
         newBadge.style.display = 'inline-block';
-        newBadge.textContent = `${matchedGigFeed.length} LIVE`;
+        newBadge.textContent = '0 MATCH';
+        newBadge.setAttribute('aria-label', 'No gigs match the current filters');
         gigList.innerHTML = `<div class="empty"><span>🔎</span>No gigs match your current search or filter. Reset the queue controls or widen your view.</div>`;
         return;
       }
 
       newBadge.style.display = 'inline-block';
       newBadge.textContent   = `${visibleMatches.length} LIVE`;
+      newBadge.setAttribute('aria-label', `${visibleMatches.length} gigs match the current filters`);
       gigList.innerHTML = '';
 
       const tip = document.createElement('p');

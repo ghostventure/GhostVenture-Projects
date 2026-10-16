@@ -604,6 +604,38 @@
     .grade-bar-track { flex: 1; height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
     .grade-bar-fill  { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
     .grade-bar-count { width: 20px; color: #444; flex-shrink: 0; }
+    .agenda-tools {
+      margin: 0 0 14px;
+      padding: 14px;
+      border: 1px solid #24394b;
+      border-radius: 12px;
+      background: #101923;
+    }
+    .agenda-tools-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .agenda-tools-title { color: #dceafa; font-size: 13px; font-weight: 800; }
+    .agenda-tools-copy { color: #91a3b6; font-size: 12px; line-height: 1.5; }
+    .agenda-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .agenda-filter, .agenda-action {
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid #30465a;
+      border-radius: 9px;
+      background: #111c27;
+      color: #dceafa;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .agenda-filter[aria-pressed="true"] { border-color: #f5a623; color: #f5a623; background: #211b10; }
+    .agenda-action.primary { border-color: #f5a623; background: #f5a623; color: #111; }
+    .agenda-filter:focus-visible, .agenda-action:focus-visible { outline: 3px solid #9edcff; outline-offset: 2px; }
+    .agenda-status { min-height: 1.5em; margin-top: 8px; color: #a8bacb; font-size: 12px; }
+    @media (max-width: 480px) {
+      .agenda-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .agenda-controls button { width: 100%; }
+      .agenda-tools-head { display: block; }
+    }
     @media (max-width: 640px) {
       .analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .command-grid { grid-template-columns: 1fr; }
@@ -756,6 +788,23 @@
         <span class="section-title">Upcoming Gigs</span>
         <span class="count-pill" id="upcomingCount" style="display:none;"></span>
       </div>
+      <section class="agenda-tools" aria-labelledby="agendaToolsTitle">
+        <div class="agenda-tools-head">
+          <div>
+            <h2 class="agenda-tools-title" id="agendaToolsTitle">Your booking agenda</h2>
+            <p class="agenda-tools-copy">Choose a date window to export confirmed gigs or copy a shareable itinerary. Calendar entries use the entered wall-clock time without timezone conversion and a one-hour default block; check both after importing if you travel.</p>
+          </div>
+        </div>
+        <div class="agenda-controls" role="group" aria-label="Filter upcoming bookings by date">
+          <button class="agenda-filter" type="button" data-agenda-days="7" aria-pressed="false">Next 7 days</button>
+          <button class="agenda-filter" type="button" data-agenda-days="30" aria-pressed="true">Next 30 days</button>
+          <button class="agenda-filter" type="button" data-agenda-days="90" aria-pressed="false">Next 90 days</button>
+          <button class="agenda-filter" type="button" data-agenda-days="all" aria-pressed="false">All dates</button>
+          <button class="agenda-action primary" id="agendaExport" type="button">Download .ics</button>
+          <button class="agenda-action" id="agendaCopy" type="button">Copy itinerary</button>
+        </div>
+        <p class="agenda-status" id="agendaStatus" role="status" aria-live="polite">Showing bookings in the next 30 days.</p>
+      </section>
       <div id="upcomingList">
         <div class="empty-sm">No upcoming bookings yet.</div>
       </div>
@@ -817,6 +866,7 @@
     import { derivePerformerTier, describeTierProgress } from "./app/performer-tier.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
+    import { bookingsToCalendar, filterUpcomingBookings, formatAgendaText } from "./app/performer-agenda.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -839,6 +889,8 @@
     let musicianProfile = null;
     let matchedGigFeed  = [];
     let reviewCache     = [];
+    let upcomingGigsCache = [];
+    let agendaDays = 30;
     let activeGigFilter = localStorage.getItem('cltch_gig_filter_v1') || 'all';
 
     // Gate: must be signed in with a profile
@@ -1269,6 +1321,8 @@
       // Split upcoming vs past
       const upcoming = gigs.filter(g => g.date >= todayStr).sort((a,b) => a.date.localeCompare(b.date));
       const past     = gigs.filter(g => g.date <  todayStr).sort((a,b) => b.date.localeCompare(a.date));
+      upcomingGigsCache = upcoming;
+      renderAgendaStatus();
 
       const el = document.getElementById('upcomingList');
       const countPill = document.getElementById('upcomingCount');
@@ -1352,6 +1406,53 @@
         ${badge}`;
       return card;
     }
+
+    function getAgendaBookings() {
+      return filterUpcomingBookings(upcomingGigsCache, agendaDays);
+    }
+
+    function renderAgendaStatus(message) {
+      const status = document.getElementById('agendaStatus');
+      if (!status) return;
+      if (message) { status.textContent = message; return; }
+      const count = getAgendaBookings().length;
+      const rangeLabel = agendaDays === Infinity ? 'all upcoming dates' : `the next ${agendaDays} days`;
+      status.textContent = `${count} confirmed booking${count === 1 ? '' : 's'} in ${rangeLabel}. Calendar exports use entered wall-clock times and one-hour blocks.`;
+    }
+
+    document.querySelectorAll('[data-agenda-days]').forEach((button) => {
+      button.addEventListener('click', () => {
+        agendaDays = button.dataset.agendaDays === 'all' ? Infinity : Number(button.dataset.agendaDays);
+        document.querySelectorAll('[data-agenda-days]').forEach((filter) => filter.setAttribute('aria-pressed', String(filter === button)));
+        renderAgendaStatus();
+      });
+    });
+
+    document.getElementById('agendaExport').addEventListener('click', () => {
+      const bookings = getAgendaBookings();
+      if (!bookings.length) { renderAgendaStatus('No bookings in this date range to export.'); return; }
+      const blob = new Blob([bookingsToCalendar(bookings)], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `cltch-bookings-${new Date().toISOString().slice(0, 10)}.ics`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      renderAgendaStatus(`Downloaded ${bookings.length} booking${bookings.length === 1 ? '' : 's'} as a calendar file.`);
+    });
+
+    document.getElementById('agendaCopy').addEventListener('click', async () => {
+      const bookings = getAgendaBookings();
+      if (!bookings.length) { renderAgendaStatus('No bookings in this date range to copy.'); return; }
+      try {
+        await navigator.clipboard.writeText(formatAgendaText(bookings));
+        renderAgendaStatus(`Copied an itinerary with ${bookings.length} booking${bookings.length === 1 ? '' : 's'}.`);
+      } catch {
+        renderAgendaStatus('Clipboard access is unavailable. Use Download .ics to save your bookings.');
+      }
+    });
 
     function buildBookingTimeline(g, isPast) {
       const steps = [
