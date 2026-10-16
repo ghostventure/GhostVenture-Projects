@@ -839,6 +839,9 @@
     </form>
 
     <div class="status" id="statusMsg"></div>
+    <section id="performerComparison" hidden aria-labelledby="performerComparisonTitle" style="margin-top:16px;padding:14px;border:1px solid #344252;border-radius:12px;background:#10161d;color:#d8e3ee;font-size:13px;line-height:1.55;">
+      <h2 id="performerComparisonTitle" style="margin:0 0 8px;font-size:16px;color:#f4f7fb;">Available profile matches</h2>
+    </section>
         </div>
       </section>
 
@@ -896,7 +899,8 @@
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
-    import { buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
+    import { AVAILABLE_MUSICIAN_QUERY_LIMIT, buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
+    import { buildPerformerComparison, renderPerformerComparison } from "./app/performer-comparison.js";
     import { findPotentialDuplicateGig } from "./app/duplicate-gig.js";
     import { generateGigDates } from "./app/gig-series.js";
     import { calculateGigSeriesBudget } from "./app/gig-budget.js";
@@ -1014,6 +1018,7 @@
     seriesCadenceSelect?.addEventListener('change', syncSeriesCountState);
     form?.addEventListener('reset', () => setTimeout(syncSeriesCountState, 0));
     const statusMsg = document.getElementById('statusMsg');
+    const performerComparisonEl = document.getElementById('performerComparison');
     const submitBtn = document.getElementById('submitBtn');
     const gigList = document.getElementById('gigList');
     const incidentReportStatus = document.getElementById('incidentReportStatus');
@@ -1889,12 +1894,13 @@
     }
 
     async function countMatches(genre, performerType, gigLat, gigLng, skillNeed) {
-      if (!gigLat || !gigLng) return { count: 0, radius: 40 };
+      if (!Number.isFinite(gigLat) || !Number.isFinite(gigLng)) return { count: 0, radius: 40, comparison: null };
       const snap = await getDocs(buildAvailableMusiciansQuery(db, performerType));
+      const candidates = [];
       let count40 = 0, count65 = 0;
       snap.forEach(d => {
         const p = d.data();
-        if (!p.lat || !p.lng) return;
+        if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
         // Performer type filter: 'any' matches all; otherwise must match
         if (performerType !== 'any' && (p.performerType || 'musician') !== performerType) return;
         // Genre filter: 'Open / Any' gig matches all; 'Open Format' performer matches all gigs
@@ -1908,10 +1914,20 @@
         const dist = miles(gigLat, gigLng, p.lat, p.lng);
         if (dist <= 40) count40++;
         else if (dist <= 65) count65++;
+        if (dist <= 65) candidates.push({ id: d.id, profile: p, distanceMiles: dist });
       });
-      return count40 > 0
-        ? { count: count40, radius: 40 }
-        : { count: count65, radius: 65 };
+      const radius = count40 > 0 ? 40 : 65;
+      const count = count40 > 0 ? count40 : count65;
+      const inRadius = candidates.filter((candidate) => candidate.distanceMiles <= radius);
+      return {
+        count,
+        radius,
+        comparison: buildPerformerComparison(inRadius, {
+          loadedCount: snap.size,
+          feedLimit: AVAILABLE_MUSICIAN_QUERY_LIMIT,
+          radius
+        })
+      };
     }
 
     function applyRebookDraftIfPresent() {
@@ -1943,6 +1959,8 @@
     applyRebookDraftIfPresent();
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      performerComparisonEl.hidden = true;
+      performerComparisonEl.replaceChildren(document.getElementById('performerComparisonTitle'));
       if (!hostProfileReady) {
         saveDraft();
         statusMsg.className = 'status error';
@@ -2031,6 +2049,7 @@
         const match = coords
           ? await countMatches(genre, performerType, coords.lat, coords.lng, skillNeed)
           : { count: 0, radius: 40 };
+        if (coords && match.comparison) renderPerformerComparison(performerComparisonEl, match.comparison);
 
         statusMsg.className = 'status success';
         statusMsg.textContent = match.count > 0

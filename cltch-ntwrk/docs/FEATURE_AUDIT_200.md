@@ -98,12 +98,12 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 071. Stable paginated search results
 - [x] 072. Explicit Nominatim location resolution and confirmed in-memory coordinate override, preserving the entered location string — `host.html`, `app/gig-location-resolution.js`; `npm run smoke:gig-location-resolution`
 - [x] 073. Approximate distance disclosure
-- [ ] 074. Blocked-user exclusion from matching
+- [x] 074. Performer device-local host mute from matching (not an access or safety block) — `gig-radar.html`, `musician-matched-gigs.html`, `app/host-mutes.js`; `npm run smoke:host-mutes`
 - [x] 075. Filter-aware empty-state recovery
 - [ ] 076. Response speed with sample-size threshold
 - [ ] 077. Host reliability with denominator
 - [x] 078. Keyboard and screen-reader search results
-- [ ] 079. Accessible performer comparison table
+- [x] 079. Accessible table comparing up to five available profile matches from the host query, explicitly not applicants or date-confirmed available; only allowlisted public-facing fields — `host.html`, `app/performer-comparison.js`; `npm run smoke:performer-comparison`
 - [x] 080. Alerts for new matching opportunities
 
 ## Booking lifecycle

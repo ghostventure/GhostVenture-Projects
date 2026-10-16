@@ -1051,6 +1051,7 @@
         <h2>New match alerts</h2>
         <p>Sign in to manage local alerts for new matching gigs.</p>
       </section>
+      <section id="hostMutePanel" aria-label="Mute hosts from matching" style="margin:12px 0;padding:14px;border:1px solid #2a3d50;border-radius:12px;background:#111923;"></section>
       <div class="map-list-controls" role="group" aria-label="Gig display mode">
         <button type="button" id="gigListMode" aria-pressed="true">List view</button>
         <button type="button" id="gigMapMode" aria-pressed="false">Map view</button>
@@ -1110,6 +1111,7 @@
     import { meetsMinimumGigPay, readMinimumGigPay, saveMinimumGigPay } from "./app/gig-radar-filters.js";
     import { readMatchAlerts, setMatchAlertsEnabled, addNewMatchAlerts, clearMatchAlerts, renderMatchAlertPanel } from "./app/match-alerts.js";
     import { mountMatchFeedback } from "./app/match-feedback.js";
+    import { createHostMuteController, mountHostMutePanel, createHostMuteButton, filterMutedHostMatches } from "./app/host-mutes.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1133,6 +1135,7 @@
     let matchedGigFeed  = [];
     let previousMatchedIds = null;
     let matchAlertState = null;
+    let hostMuteController = null;
     let staleOpenListingDocs = [];
     let staleListingState = 'loading';
     let staleListingLimitReached = false;
@@ -1148,6 +1151,7 @@
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
       const profileSnap = await getDoc(doc(db, 'musicians', user.uid));
       MUSICIAN_ID     = user.uid;
+      initHostMuteControls(MUSICIAN_ID);
       matchAlertState = readMatchAlerts(safeLocalStorage(), MUSICIAN_ID);
       renderNewMatchAlerts();
       loadSavedGigIds();
@@ -1179,6 +1183,32 @@
 
     function safeLocalStorage() {
       try { return window.localStorage; } catch { return null; }
+    }
+
+    function getUnmutedMatches() {
+      return filterMutedHostMatches(matchedGigFeed, hostMuteController?.getMutedHostIds() || []);
+    }
+
+    function initHostMuteControls(userId) {
+      if (hostMuteController?.userId === userId) return;
+      hostMuteController = createHostMuteController({ userId });
+      mountHostMutePanel(document.getElementById('hostMutePanel'), hostMuteController, document);
+      hostMuteController.subscribe(() => {
+        const current = getUnmutedMatches();
+        analyticsState.activeMatches = current.length;
+        analyticsState.avgMatchPercent = current.length
+          ? Math.round(current.reduce((sum, item) => sum + (item.match.percent || 0), 0) / current.length)
+          : 0;
+        previousMatchedIds = new Set(current.map((item) => item.gigId));
+        updateAnalyticsPanel();
+        renderRadarSummary();
+        renderQueues();
+      });
+    }
+
+    function appendHostMuteButton(container, hostId) {
+      const button = createHostMuteButton(hostId, hostMuteController, document);
+      if (button && container) container.append(button);
     }
 
     function renderNewMatchAlerts() {
@@ -1610,7 +1640,7 @@
     }
 
     function getVisibleMatches() {
-      return matchedGigFeed.filter(matchesFeedControls).sort(compareGigItems);
+      return getUnmutedMatches().filter(matchesFeedControls).sort(compareGigItems);
     }
 
     function clearGigMapEmbed() {
@@ -1732,7 +1762,7 @@
       staleOpenListingDocs.forEach((docSnap) => {
         const gig = docSnap.data();
         if (!gig?.date || gig.date >= today) return;
-        if (gig.hostId === MUSICIAN_ID || (gig.passedBy || []).includes(MUSICIAN_ID)) return;
+        if (gig.hostId === MUSICIAN_ID || hostMuteController?.isMuted(gig.hostId) || (gig.passedBy || []).includes(MUSICIAN_ID)) return;
         if (!isGigActionable({ ...gig, id: docSnap.id }, blackouts, bookedGigIds, bookedDatesSet)) return;
         if (!matchScore(gig, musicianProfile, false) && !matchScore(gig, musicianProfile, true)) return;
         count += 1;
@@ -1831,9 +1861,10 @@
 
       const ordered = getVisibleMatches();
       const best = ordered[0];
-      const urgent = matchedGigFeed.filter((item) => item.daysAway <= 7).length;
-      const saved = matchedGigFeed.filter((item) => item.isSaved).length;
-      const actionable = matchedGigFeed.filter((item) => item.isActionable).length;
+      const unmutedMatches = getUnmutedMatches();
+      const urgent = unmutedMatches.filter((item) => item.daysAway <= 7).length;
+      const saved = unmutedMatches.filter((item) => item.isSaved).length;
+      const actionable = unmutedMatches.filter((item) => item.isActionable).length;
 
       bestValue.textContent = best ? `${best.match.percent}%` : '—';
       bestNote.textContent = best ? `${best.g.venue || 'Opportunity'} • ${best.g.pay || 'Pay pending'}` : 'Waiting for live gigs.';
@@ -2228,9 +2259,10 @@
           return daysUntil(a.docSnap.data().date) - daysUntil(b.docSnap.data().date);
         });
 
-        analyticsState.activeMatches = matched.length;
-        analyticsState.avgMatchPercent = matched.length > 0
-          ? Math.round(matched.reduce((sum, item) => sum + (item.match.percent || 0), 0) / matched.length)
+        const visibleMatched = matched.filter(({ docSnap }) => !hostMuteController?.isMuted(docSnap.data().hostId));
+        analyticsState.activeMatches = visibleMatched.length;
+        analyticsState.avgMatchPercent = visibleMatched.length > 0
+          ? Math.round(visibleMatched.reduce((sum, item) => sum + (item.match.percent || 0), 0) / visibleMatched.length)
           : 0;
         updateAnalyticsPanel();
         const nextMatchedGigFeed = matched.map(({ docSnap, match }) => {
@@ -2250,7 +2282,7 @@
             searchText: normalizeText([g.venue, g.location, g.genre, g.pay, g.notes].join(' '))
           };
         });
-        const currentMatchedIds = new Set(nextMatchedGigFeed.map((item) => item.gigId));
+        const currentMatchedIds = new Set(filterMutedHostMatches(nextMatchedGigFeed, hostMuteController?.getMutedHostIds() || []).map((item) => item.gigId));
         if (previousMatchedIds !== null && matchAlertState?.enabled) {
           const newIds = [...currentMatchedIds].filter((gigId) => !previousMatchedIds.has(gigId));
           if (newIds.length) {
@@ -2302,7 +2334,9 @@
       const visibleMatches = getVisibleMatches();
       if (!visibleMatches.length) {
         countEl.style.display = 'none';
-        listEl.innerHTML = '<div class="empty-sm">No live matches yet. New matches will show up here as hosts post fitting gigs.</div>';
+        listEl.innerHTML = matchedGigFeed.length
+          ? '<div class="empty-sm">Current matches from muted hosts are hidden on this browser and device. Unmute a host above to show them again. Booking access is unchanged.</div>'
+          : '<div class="empty-sm">No live matches yet. New matches will show up here as hosts post fitting gigs.</div>';
         return;
       }
       countEl.textContent = String(visibleMatches.length);
@@ -2325,7 +2359,7 @@
                 </div>
                 <div class="radar-insight ${insight.cls}">${insight.text}</div>
               </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div class="host-mute-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button type="button" onclick="toggleSavedGig('${gigId}')" class="save-btn ${isSaved ? 'saved' : ''}">${isSaved ? 'Saved' : 'Save'}</button>
                 <a href="booking.html?id=${gigId}" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 12px;border-radius:10px;border:1px solid #2a3d50;background:#13202d;color:#f4f7fb;text-decoration:none;font-size:12px;font-weight:700;">Details</a>
                 <button type="button" onclick="respond('${gigId}','accept')" style="min-height:38px;padding:0 12px;border-radius:10px;border:0;background:#f5a623;color:#111;font-size:12px;font-weight:800;cursor:pointer;">Approve</button>
@@ -2334,6 +2368,9 @@
             </div>
           </div>`;
       }).join('');
+      visibleMatches.forEach((item, index) => {
+        appendHostMuteButton(listEl.children[index]?.querySelector('.host-mute-actions'), item.g.hostId);
+      });
     }
 
     function renderOpenRequests() {
@@ -2343,9 +2380,11 @@
       announceVisibleGigResults(visibleMatches.length);
       if (gigDisplayMode === 'map') renderGigMapLocations(visibleMatches);
 
-      if (matchedGigFeed.length === 0) {
+      if (!getUnmutedMatches().length) {
         newBadge.style.display = 'none';
-        gigList.innerHTML = `<div class="empty"><span>🎵</span>No matching gigs right now. Tighten your profile, keep availability open, and check back as new host requests come in.</div>`;
+        gigList.innerHTML = matchedGigFeed.length
+          ? `<div class="empty"><span>🔕</span>Current matches from muted hosts are hidden on this browser and device. Unmute a host above to show them again. Booking access is unchanged.</div>`
+          : `<div class="empty"><span>🎵</span>No matching gigs right now. Tighten your profile, keep availability open, and check back as new host requests come in.</div>`;
         return;
       }
 
@@ -2423,6 +2462,7 @@
         feedbackContainer.style.marginTop = '12px';
         mountMatchFeedback(feedbackContainer, { userId: MUSICIAN_ID, gigId, documentRef: document });
         card.appendChild(feedbackContainer);
+        appendHostMuteButton(card.querySelector('.actions'), g.hostId);
         gigList.appendChild(card);
         addSwipeGesture(card, gigId);
       });

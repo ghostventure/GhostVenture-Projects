@@ -55,6 +55,7 @@
     "smoke:booking-offline": "node scripts/smoke-booking-offline.mjs",
     "smoke:checkin-consent": "node scripts/smoke-checkin-consent.mjs",
     "smoke:host-analytics-export": "node scripts/smoke-host-analytics-export.mjs",
+    "smoke:performer-comparison": "node scripts/smoke-performer-comparison.mjs",
     "smoke:business-profile-checklist": "node scripts/smoke-business-profile-checklist.mjs",
     "smoke:gig-location-resolution": "node scripts/smoke-gig-location-resolution.mjs",
     "smoke:booking-walkthrough": "node scripts/smoke-booking-walkthrough.mjs",
@@ -74,6 +75,7 @@
     "smoke:match-feedback": "node scripts/smoke-match-feedback.mjs",
     "smoke:gig-discovery-relevance": "node scripts/smoke-gig-discovery-relevance.mjs",
     "smoke:match-alerts": "node scripts/smoke-match-alerts.mjs",
+    "smoke:host-mutes": "node scripts/smoke-host-mutes.mjs",
     "smoke:gig-radar-search-a11y": "node scripts/smoke-gig-radar-search-a11y.mjs",
     "smoke:gig-radar-map-list": "node scripts/smoke-gig-radar-map-list.mjs",
     "smoke:secret-scan": "node scripts/smoke-secret-scan.mjs"
