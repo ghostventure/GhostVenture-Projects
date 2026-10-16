@@ -690,6 +690,22 @@
         </div>
       </div>
 
+      <div class="row">
+        <div class="form-group">
+          <label for="gigSeriesCadence">Repeat schedule</label>
+          <select id="gigSeriesCadence">
+            <option value="0">One event</option>
+            <option value="7">Weekly</option>
+            <option value="14">Every two weeks</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="gigSeriesCount">Number of dates</label>
+          <input type="number" id="gigSeriesCount" min="1" max="12" value="1" disabled>
+        </div>
+      </div>
+      <p class="fee-note">Repeated dates create separate gig posts with the same details in one all-or-nothing batch. Maximum 12 dates.</p>
+
       <div class="form-group">
         <label>Location</label>
         <input type="text" id="location" placeholder="City, State" required>
@@ -826,12 +842,13 @@
 
   <!-- Firebase -->
   <script type="module">
-    import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, deleteField, serverTimestamp }
+    import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, deleteField, serverTimestamp, writeBatch }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
     import { buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
     import { findPotentialDuplicateGig } from "./app/duplicate-gig.js";
+    import { generateGigDates } from "./app/gig-series.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { installUnsavedChangesGuard } from "./app/unsaved-changes.js";
@@ -915,6 +932,18 @@
     }
 
     const form = document.getElementById('gigForm');
+    const seriesCadenceSelect = document.getElementById('gigSeriesCadence');
+    const seriesCountInput = document.getElementById('gigSeriesCount');
+    const syncSeriesCountState = () => {
+      const repeating = Number(seriesCadenceSelect?.value || 0) > 0;
+      if (seriesCountInput) {
+        seriesCountInput.disabled = !repeating;
+        if (!repeating) seriesCountInput.value = '1';
+        else if (Number(seriesCountInput.value) <= 1) seriesCountInput.value = '4';
+      }
+    };
+    seriesCadenceSelect?.addEventListener('change', syncSeriesCountState);
+    form?.addEventListener('reset', () => setTimeout(syncSeriesCountState, 0));
     const statusMsg = document.getElementById('statusMsg');
     const submitBtn = document.getElementById('submitBtn');
     const gigList = document.getElementById('gigList');
@@ -1603,10 +1632,21 @@
         time: document.getElementById('time').value,
         location
       };
-      const duplicate = findPotentialDuplicateGig(baseGig, hostGigCache.map((item) => item.g));
-      if (duplicate && !window.confirm(`Possible duplicate: ${duplicate.venue} is already ${duplicate.status} for ${duplicate.date} at ${duplicate.time}. Post another one anyway?`)) {
+      let seriesDates;
+      try {
+        seriesDates = generateGigDates(baseGig.date, Number(seriesCountInput?.value || 1), Number(seriesCadenceSelect?.value || 0));
+      } catch (error) {
+        statusMsg.className = 'status error';
+        statusMsg.textContent = error.message || 'Check the repeated event schedule.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Post Gig →';
+        return;
+      }
+      const existingGigs = hostGigCache.map((item) => item.g);
+      const duplicateDates = seriesDates.filter((date) => findPotentialDuplicateGig({ ...baseGig, date }, existingGigs));
+      if (duplicateDates.length && !window.confirm(`Possible existing gig(s) on ${duplicateDates.join(', ')}. Post these dates anyway?`)) {
         statusMsg.className = 'status';
-        statusMsg.textContent = 'Posting canceled. Review the existing booking or change its details.';
+        statusMsg.textContent = 'Posting canceled. Review existing bookings or change the schedule.';
         submitBtn.disabled = false;
         submitBtn.textContent = 'Post Gig →';
         return;
@@ -1645,7 +1685,13 @@
       submitBtn.textContent = 'Posting…';
 
       try {
-        await addDoc(collection(db, 'gigs'), gig);
+        if (seriesDates.length === 1) {
+          await addDoc(collection(db, 'gigs'), gig);
+        } else {
+          const batch = writeBatch(db);
+          seriesDates.forEach((date) => batch.set(doc(collection(db, 'gigs')), { ...gig, date }));
+          await batch.commit();
+        }
 
         // Count matching performers by radius
         const performerType = document.getElementById('performerType').value;
@@ -1656,8 +1702,8 @@
 
         statusMsg.className = 'status success';
         statusMsg.textContent = match.count > 0
-          ? `Gig posted! ${match.count} performer${match.count !== 1 ? 's' : ''} within ${match.radius} miles notified.`
-          : 'Gig posted! No performers matched nearby — expanding search automatically.';
+          ? `${seriesDates.length} gig post${seriesDates.length === 1 ? '' : 's'} created. ${match.count} available performer profile${match.count === 1 ? '' : 's'} match within ${match.radius} miles; no notification was sent.`
+          : `${seriesDates.length} gig post${seriesDates.length === 1 ? '' : 's'} created. No available performer profiles matched nearby; review the listing details or check back later.`;
         form.reset();
         renderPayEstimate();
         clearDraft();

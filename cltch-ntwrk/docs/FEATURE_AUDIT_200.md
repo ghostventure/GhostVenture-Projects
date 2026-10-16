@@ -31,7 +31,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Host and venue workflows
 
 - [ ] 021. Saved gig templates per host
-- [ ] 022. Multi-date event series
+- [x] 022. Weekly or biweekly repeat-post batch (up to 12 separate gig documents, atomic Firestore write) — `host.html`, `app/gig-series.js`; `npm run smoke:gig-series`
 - [ ] 023. Budget and fee preview before publishing
 - [ ] 024. Venue contact roster with scoped visibility
 - [x] 025. Browser-local booking preparation checklist scoped per booking, with explicit private/not-confirmed status — `scripts/platform-components.js`, `booking.html`; Chromium isolation smoke
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 21.
-- Remaining checklist items: 179.
+- Implemented and verified in this change: 22.
+- Remaining checklist items: 178.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.
