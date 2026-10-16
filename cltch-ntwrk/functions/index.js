@@ -9,12 +9,20 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
+const plugzAdminApp = admin.apps.find((app) => app.name === 'plugz-untd-gear')
+  || admin.initializeApp({ projectId: 'plugz-untd-gear' }, 'plugz-untd-gear');
 const ALLOWED_ORIGINS = new Set([
   'https://cltch-ntwrk-social.web.app',
   'https://cltch-ntwrk.web.app',
   'https://cltch.network',
-  'https://www.cltch.network'
+  'https://www.cltch.network',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
 ]);
+const PLUGZ_PROJECT_ID = 'plugz-untd-gear';
+const PLUGZ_PROVIDER_ID = 'plugz';
+const PLUGZ_MEMBERSHIP_MONTHS = 6;
+const PLUGZ_TERMS_VERSION = 'plugz-cltch-bridge-2026-07-29';
 
 function getPlaidClient() {
   const clientId = process.env.PLAID_CLIENT_ID || '';
@@ -134,6 +142,215 @@ function respond(res, status, payload) {
 
 function validRole(role) {
   return role === 'host' || role === 'musician';
+}
+
+function normalizeEmail(email) {
+  return typeof email === 'string' ? email.trim().toLowerCase().slice(0, 160) : '';
+}
+
+function cleanText(value, max = 120) {
+  return typeof value === 'string' ? value.trim().slice(0, max) : '';
+}
+
+function addMonths(date, months) {
+  const next = new Date(date.getTime());
+  const originalDate = next.getDate();
+  next.setMonth(next.getMonth() + months);
+  if (next.getDate() !== originalDate) {
+    next.setDate(0);
+  }
+  return next;
+}
+
+function buildOneId(uid) {
+  const cleanUid = cleanText(uid, 128).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return cleanUid ? `CLTCH-${cleanUid.slice(0, 10)}` : '';
+}
+
+function dashboardRouteForRole(role) {
+  return role === 'host' ? 'host.html' : 'musician-matched-gigs.html';
+}
+
+function profileRouteForRole(role) {
+  return role === 'host' ? 'host-profile.html' : 'musician-profile.html';
+}
+
+function buildPlugzBridgeUid(plugzUid) {
+  const safeUid = cleanText(plugzUid, 96).replace(/[^a-zA-Z0-9_-]/g, '');
+  return safeUid ? `plugz_${safeUid}`.slice(0, 128) : '';
+}
+
+function buildPlugzImportedProfile(plugzUser) {
+  return {
+    uid: cleanText(plugzUser.uid, 128),
+    email: normalizeEmail(plugzUser.email),
+    displayName: cleanText(plugzUser.name || plugzUser.displayName || '', 80),
+    photoURL: cleanText(plugzUser.picture || plugzUser.photoURL || '', 240),
+    provider: cleanText(plugzUser.firebase?.sign_in_provider || '', 60),
+    emailVerified: plugzUser.email_verified === true,
+    importedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+}
+
+async function resolveOrCreateCltchUserFromPlugz(plugzUser) {
+  const email = normalizeEmail(plugzUser.email);
+  const displayName = cleanText(plugzUser.name || plugzUser.displayName || email.split('@')[0] || 'Plugz Member', 80);
+
+  if (!email) {
+    const err = new Error('Plugz account is missing an email address.');
+    err.status = 400;
+    throw err;
+  }
+
+  try {
+    return await admin.auth().getUserByEmail(email);
+  } catch (error) {
+    if (error?.code !== 'auth/user-not-found') {
+      throw error;
+    }
+  }
+
+  const uid = buildPlugzBridgeUid(plugzUser.uid);
+  if (!uid) {
+    const err = new Error('Plugz account identifier is invalid.');
+    err.status = 400;
+    throw err;
+  }
+
+  try {
+    return await admin.auth().createUser({
+      uid,
+      email,
+      emailVerified: plugzUser.email_verified === true,
+      displayName
+    });
+  } catch (error) {
+    if (error?.code === 'auth/uid-already-exists') {
+      return admin.auth().getUser(uid);
+    }
+    throw error;
+  }
+}
+
+async function grantPlugzMembership(uid, email, role, plugzUser, acceptance = {}) {
+  const now = new Date();
+  const expiresAt = addMonths(now, PLUGZ_MEMBERSHIP_MONTHS);
+  const membershipRef = db.collection('memberships').doc(uid);
+  const userRef = db.collection('users').doc(uid);
+  const roleRef = db.collection('userRoles').doc(uid);
+  const plugzUid = cleanText(plugzUser.uid, 128);
+  const claimRef = db.collection('plugzBridgeClaims').doc(plugzUid);
+  const eventRef = db.collection('plugzBridgeEvents').doc();
+  const importedProfile = buildPlugzImportedProfile(plugzUser);
+  let nextExpiresAt = expiresAt;
+
+  await db.runTransaction(async (transaction) => {
+    const [membershipSnap, claimSnap] = await Promise.all([
+      transaction.get(membershipRef),
+      transaction.get(claimRef)
+    ]);
+    const existing = membershipSnap.exists ? membershipSnap.data() || {} : {};
+    const existingExpires = existing.expiresAt?.toDate ? existing.expiresAt.toDate() : null;
+    nextExpiresAt = existingExpires && existingExpires > expiresAt ? existingExpires : expiresAt;
+
+    if (claimSnap.exists) {
+      const claim = claimSnap.data() || {};
+      if (claim.cltchUid && claim.cltchUid !== uid) {
+        const err = new Error('This Plugz account is already connected to another CLTCH account.');
+        err.status = 409;
+        throw err;
+      }
+    }
+
+    const membershipPayload = {
+      uid,
+      email,
+      provider: PLUGZ_PROVIDER_ID,
+      source: 'plugz-untd-gear',
+      projectId: PLUGZ_PROJECT_ID,
+      plan: 'cltch-free-6-months',
+      status: 'active',
+      trialMonths: PLUGZ_MEMBERSHIP_MONTHS,
+      startedAt: existing.startedAt || admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: admin.firestore.Timestamp.fromDate(nextExpiresAt),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      plugzUid,
+      plugzEmailVerified: plugzUser.email_verified === true,
+      termsAccepted: true,
+      termsVersion: PLUGZ_TERMS_VERSION,
+      termsAcceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      termsAcceptedFrom: cleanText(acceptance.source, 40),
+      importedProfile
+    };
+
+    transaction.set(roleRef, {
+      role,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    transaction.set(userRef, {
+      uid,
+      oneId: buildOneId(uid),
+      role,
+      email,
+      displayName: cleanText(plugzUser.name || plugzUser.displayName || '', 80),
+      status: 'active',
+      profileComplete: false,
+      payoutReady: false,
+      authProvider: PLUGZ_PROVIDER_ID,
+      profileRoute: profileRouteForRole(role),
+      dashboardRoute: dashboardRouteForRole(role),
+      membershipPlan: 'cltch-free-6-months',
+      membershipSource: 'plugz',
+      membershipStatus: 'active',
+      membershipExpiresAt: admin.firestore.Timestamp.fromDate(nextExpiresAt),
+      plugzUid,
+      plugzTermsAccepted: true,
+      plugzTermsVersion: PLUGZ_TERMS_VERSION,
+      plugzTermsAcceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      plugzImportedAt: admin.firestore.FieldValue.serverTimestamp(),
+      plugzImportedEmail: importedProfile.email,
+      plugzImportedDisplayName: importedProfile.displayName,
+      plugzImportedPhotoURL: importedProfile.photoURL,
+      plugzImportedProvider: importedProfile.provider,
+      authLastSignInAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: existing.createdAt || admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    transaction.set(membershipRef, membershipPayload, { merge: true });
+    transaction.set(claimRef, {
+      plugzUid,
+      cltchUid: uid,
+      email,
+      status: 'claimed',
+      source: 'plugz-untd-gear',
+      firstClaimedAt: claimSnap.exists ? claimSnap.data().firstClaimedAt : admin.firestore.FieldValue.serverTimestamp(),
+      lastClaimedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    transaction.set(eventRef, {
+      uid,
+      email,
+      plugzUid,
+      role,
+      type: 'plugz_membership_grant',
+      status: 'active',
+      plan: 'cltch-free-6-months',
+      termsAccepted: true,
+      termsVersion: PLUGZ_TERMS_VERSION,
+      termsAcceptedFrom: cleanText(acceptance.source, 40),
+      importedProfile,
+      expiresAt: admin.firestore.Timestamp.fromDate(nextExpiresAt),
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  });
+
+  return {
+    plan: 'cltch-free-6-months',
+    status: 'active',
+    source: 'plugz-untd-gear',
+    expiresAt: nextExpiresAt.toISOString()
+  };
 }
 
 function sanitizeInstitution(name) {
@@ -329,6 +546,79 @@ exports.apiSessionBootstrap = onRequest({ region: 'us-central1' }, async (req, r
     const status = error.status || 500;
     logger.error('apiSessionBootstrap failed', error);
     respond(res, status, { ok: false, error: error.message || 'Unable to load session bootstrap.' });
+  }
+});
+
+exports.plugzBridge = onRequest({ region: 'us-central1', invoker: 'public' }, async (req, res) => {
+  setCors(req, res);
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+  if (req.method !== 'POST') {
+    respond(res, 405, { error: 'Method not allowed.' });
+    return;
+  }
+
+  try {
+    validateOrigin(req);
+    await verifyAppCheckIfPresent(req);
+    const body = parseBody(req);
+    const plugzIdToken = typeof body.plugzIdToken === 'string' ? body.plugzIdToken.trim() : '';
+    const cltchIdToken = typeof body.cltchIdToken === 'string' ? body.cltchIdToken.trim() : '';
+    const requestedRole = validRole(body.role) ? body.role : 'musician';
+    const acceptedTerms = body.acceptedTerms === true;
+    const acceptedTermsVersion = cleanText(body.termsVersion, 80);
+
+    if (!plugzIdToken) {
+      respond(res, 400, { error: 'Missing Plugz auth token.' });
+      return;
+    }
+    if (!acceptedTerms || acceptedTermsVersion !== PLUGZ_TERMS_VERSION) {
+      respond(res, 400, { error: 'Accept the CLTCH Plugz membership terms before continuing.' });
+      return;
+    }
+
+    const decodedPlugzUser = await plugzAdminApp.auth().verifyIdToken(plugzIdToken);
+    if (decodedPlugzUser.aud !== PLUGZ_PROJECT_ID || decodedPlugzUser.firebase?.sign_in_provider === 'anonymous') {
+      respond(res, 403, { error: 'Plugz account is not eligible for CLTCH access.' });
+      return;
+    }
+    if (decodedPlugzUser.email_verified !== true) {
+      respond(res, 403, { error: 'Verify your Plugz email before activating CLTCH membership.' });
+      return;
+    }
+
+    let cltchUser;
+    if (cltchIdToken) {
+      const decodedCltchUser = await admin.auth().verifyIdToken(cltchIdToken);
+      cltchUser = await admin.auth().getUser(decodedCltchUser.uid);
+    } else {
+      cltchUser = await resolveOrCreateCltchUserFromPlugz(decodedPlugzUser);
+    }
+    const email = normalizeEmail(cltchUser.email || decodedPlugzUser.email);
+    const membership = await grantPlugzMembership(cltchUser.uid, email, requestedRole, decodedPlugzUser, {
+      source: cltchIdToken ? 'profile' : 'auth'
+    });
+    const customToken = await admin.auth().createCustomToken(cltchUser.uid, {
+      provider: PLUGZ_PROVIDER_ID,
+      plugz: true,
+      membership: 'cltch-free-6-months'
+    });
+
+    respond(res, 200, {
+      ok: true,
+      customToken,
+      role: requestedRole,
+      uid: cltchUser.uid,
+      email,
+      membership,
+      termsVersion: PLUGZ_TERMS_VERSION
+    });
+  } catch (error) {
+    const status = error.status || 500;
+    logger.error('plugzBridge failed', error);
+    respond(res, status, { ok: false, error: error.message || 'Unable to connect Plugz to CLTCH.' });
   }
 });
 

@@ -39,10 +39,10 @@
     var target = document.getElementById(targetId);
     if (!target) return;
     var cards = [
-      { title: 'Accessibility', body: 'Keyboard-first UI, alt text, captions, and ADA/Section 508 tests every release.' },
-      { title: 'Privacy Rights', body: '30- and 45-day request SLAs for CCPA/CPRA, Colorado CPA, and statewide regimes.' },
-      { title: 'Copyright / DMCA', body: '17 U.S.C. § 512 compliant notices, counter-notices, and repeat-infringer tracking.' },
-      { title: 'Local Ordinances', body: 'City/county/borough/parish-specific obligations are mapped via our local-law layer.' }
+	      { title: 'Accessibility', body: 'WCAG 2.2 AA is the practical target for public pages and core booking workflows.' },
+	      { title: 'Privacy Rights', body: 'Verified privacy requests are acknowledged promptly and generally completed within 45 days.' },
+	      { title: 'Copyright / DMCA', body: 'DMCA notices, counter-notices, portfolio content, flyers, and repeat-infringer signals are handled through the legal path.' },
+	      { title: 'Local Obligations', body: 'Hosts, venues, and performers remain responsible for permits, insurance, age rules, licensing, and event-specific requirements.' }
     ];
     target.innerHTML = '';
     var grid = createElement('div', { className: 'compliance-grid' });
@@ -74,30 +74,30 @@
       {
         label: 'Getting Started',
         items: [
-          { q: 'How do I create an account?', a: 'Sign up, verify your email, provide ID/selfie details (18+ only), and pick Host or Performer roles—or both—for venues and talent.' },
-          { q: 'Which documents are required?', a: 'We ask for government-issued ID and selfie matching; sensitive identifiers like SSNs/ITINs never leave the verification vendor, only an approval flag.' }
+	          { q: 'How do I create an account?', a: 'Sign up, verify your email if prompted, and choose the Host or Performer workspace that fits what you need to do.' },
+	          { q: 'Who can use CLTCH?', a: 'CLTCH.NTWRK is limited to users 18 and older. Hosts, venues, performers, DJs, musicians, photographers, cinematographers, models, and related creative talent can use the platform when they provide accurate profile information.' }
         ]
       },
       {
         label: 'Pricing & Fees',
         items: [
-          { q: 'What does CLTCH charge?', a: 'Hosts pay a 2% processing fee per completed booking. Verified Performer is optional at $20/month. There are no hidden subscriptions, just the disclosed processing and service fees.' },
-          { q: 'When do payouts occur?', a: 'Once bookings close you receive funds via the payout method selected in your profile (Apple Pay, Google Pay, etc.) and fees are settled at the same time.' }
+	          { q: 'What does CLTCH charge?', a: 'CLTCH may show platform fees, processing fees, or optional paid profile features where those features are active. Pricing shown in-product controls the specific workflow.' },
+	          { q: 'When do payouts occur?', a: 'If CLTCH provides an active payout or payment path, the displayed payment terms apply. If payment is handled directly between host and performer, those users remain responsible for that payment relationship.' }
         ]
       },
       {
         label: 'Legal & Compliance',
         items: [
-          { q: 'Which laws cover my bookings?', a: 'We follow ADA/Section 508, COPPA, CCPA/CPRA (+ Colorado, Virginia, Connecticut privacy laws), FTC marketing rules, DMCA, Title VII standards, and any relevant city/county/borough/parish ordinances for your venue.' },
-          { q: 'How do I manage privacy rights?', a: 'Email privacy@cltch.ntwrk or use the contact form. We usually acknowledge within 10 business days and resolve requests within 45, unless a lawful extension is needed.' },
-          { q: 'Why can’t minors sign up?', a: 'Accounts are limited to users 18+ so we comply with COPPA, FLSA child labor rules, and local child employment ordinances; underage accounts are closed unless parental consent/permits are provided.' }
+	          { q: 'Which laws cover my bookings?', a: 'CLTCH designs for privacy, accessibility, copyright, consumer-protection, and trust/safety obligations, but hosts and performers remain responsible for event permits, licenses, insurance, age rules, taxes, and local venue requirements.' },
+	          { q: 'How do I manage privacy rights?', a: 'Email privacy@cltch.ntwrk or use the contact form. We usually acknowledge within 10 business days and resolve requests within 45, unless a lawful extension is needed.' },
+	          { q: 'Why can’t minors sign up?', a: 'Accounts are limited to users 18 and older. If we learn that an underage person created an account, we close it and delete or restrict associated data as required.' }
         ]
       },
       {
         label: 'Hosts & Performers',
         items: [
           { q: 'How does Gig Radar match opportunities?', a: 'We weight role, genres, availability, location, and intent filters to deliver high-match gigs; saved gigs and insights help you decide quickly.' },
-          { q: 'How do I report compliance issues?', a: 'Use support.html or email legal@cltch.ntwrk to flag child labor, safety, or suspicious payment concerns—compliance gets those within 24 hours.' }
+	          { q: 'How do I report compliance issues?', a: 'Use support.html or email legal@cltch.ntwrk to flag safety, copyright, privacy, payment, accessibility, or suspicious booking concerns.' }
         ]
       }
     ];
@@ -128,7 +128,7 @@
     var target = document.getElementById(targetId);
     if (!target) return;
     var banner = createElement('div', { className: 'accessibility-banner' });
-    banner.innerHTML = '<strong>Accessibility & Compliance</strong>: keyboard-first navigation, captions, and clear escalation routes are verified on every update. <a href="accessibility.html">Learn more</a>.';
+	    banner.innerHTML = '<strong>Accessibility & Compliance</strong>: keyboard-first navigation, visible focus states, policy pages, and clear escalation routes are part of the product workflow. <a href="accessibility.html">Learn more</a> or review <a href="compliance.html">Compliance</a>.';
     target.appendChild(banner);
   }
 

@@ -1,11 +1,33 @@
 {
   "name": "CLTCH.NTWRK",
   "short_name": "CLTCH.NTWRK",
+  "id": "/",
+  "scope": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#0a0a0a",
   "description": "CLTCH.NTWRK connects hosts, venues, musicians, and DJs in a real-time booking marketplace.",
+  "shortcuts": [
+    {
+      "name": "Post a Gig",
+      "short_name": "Post Gig",
+      "url": "/host.html",
+      "description": "Open the host workspace to post a booking request."
+    },
+    {
+      "name": "Find Gigs",
+      "short_name": "Find Gigs",
+      "url": "/gig-radar.html",
+      "description": "Open Gig Radar to review matching opportunities."
+    },
+    {
+      "name": "My Bookings",
+      "short_name": "Bookings",
+      "url": "/musician-matched-gigs.html",
+      "description": "Open the performer booking dashboard."
+    }
+  ],
   "icons": [
     {
       "src": "/icons/cltch-icon.svg",

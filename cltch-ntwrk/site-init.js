@@ -36,7 +36,15 @@
     }
   }
 
-  applyTheme(getSavedTheme() || preferredTheme(), false);
+	  applyTheme(getSavedTheme() || preferredTheme(), false);
+
+	  function runWhenIdle(callback) {
+	    if (typeof window.requestIdleCallback === "function") {
+	      window.requestIdleCallback(callback, { timeout: 1200 });
+	      return;
+	    }
+	    window.setTimeout(callback, 0);
+	  }
 
   function getPageLabel(path) {
     var file = String(path || "").split("/").pop() || "index.html";
@@ -91,7 +99,7 @@
     } catch (error) {}
   }
 
-  rememberPageVisit();
+	  runWhenIdle(rememberPageVisit);
 
   var quickPalette = document.createElement("div");
   quickPalette.id = "cltchQuickPalette";
@@ -912,12 +920,17 @@
     }
   }
 
+  var a11yOpener = null;
+
   function openA11yPanel() {
     var panel = document.getElementById("cltchAccessPanel");
     if (!panel) return;
+    if (!panel.classList.contains("open")) a11yOpener = document.activeElement;
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
     syncA11yPanelState();
+    var firstControl = panel.querySelector("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])");
+    if (firstControl) firstControl.focus();
   }
 
   function closeA11yPanel() {
@@ -925,6 +938,8 @@
     if (!panel) return;
     panel.classList.remove("open");
     panel.setAttribute("aria-hidden", "true");
+    if (a11yOpener && a11yOpener.isConnected && typeof a11yOpener.focus === "function") a11yOpener.focus();
+    a11yOpener = null;
   }
 
   function initA11yPanel() {
@@ -936,9 +951,9 @@
     panel.setAttribute("aria-hidden", "true");
     panel.innerHTML =
       '<div class="cltch-access-scrim" data-access-close="true"></div>' +
-      '<div class="cltch-access-card" role="dialog" aria-modal="true" aria-label="Accessibility controls">' +
+      '<div class="cltch-access-card" role="dialog" aria-modal="true" aria-labelledby="cltchAccessTitle">' +
         '<div class="cltch-access-head">' +
-          '<div class="cltch-access-title">Accessibility</div>' +
+          '<div class="cltch-access-title" id="cltchAccessTitle">Accessibility</div>' +
           '<button type="button" class="cltch-access-close" data-access-close="true">Close</button>' +
         '</div>' +
         '<div class="cltch-access-body">' +
@@ -958,6 +973,25 @@
 
     panel.querySelectorAll("[data-access-close='true']").forEach(function (el) {
       el.addEventListener("click", closeA11yPanel);
+    });
+
+    panel.addEventListener("keydown", function (event) {
+      if (event.key !== "Tab" || !panel.classList.contains("open")) return;
+      var controls = Array.prototype.slice.call(panel.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"))
+        .filter(function (control) { return control.getAttribute("aria-hidden") !== "true" && control.offsetParent !== null; });
+      if (!controls.length) {
+        event.preventDefault();
+        return;
+      }
+      var first = controls[0];
+      var last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     });
 
     panel.querySelectorAll("[data-a11y-scale]").forEach(function (button) {
@@ -1146,7 +1180,6 @@
     if (document.getElementById("cltchQuickDock")) return;
     var config = getHubConfig();
     var candidates = dedupeActions((config && config.primary ? config.primary : []).concat(defaultHubActionsFromPage()));
-    if (!candidates.length) return;
 
     var dock = document.createElement("div");
     dock.className = "cltch-quickdock";
@@ -1170,7 +1203,7 @@
     var componentsButton = document.createElement("button");
     componentsButton.type = "button";
     componentsButton.className = "cltch-quickbtn";
-    componentsButton.textContent = "Dispatch Kit";
+    componentsButton.textContent = "Feature Concepts";
     componentsButton.addEventListener("click", function () {
       openComponentLibrary();
     });
@@ -1184,6 +1217,18 @@
       openA11yPanel();
     });
     dock.appendChild(accessButton);
+
+    var installButton = document.createElement("button");
+    installButton.type = "button";
+    installButton.className = "cltch-quickbtn";
+    installButton.id = "cltchInstallAppButton";
+    installButton.textContent = "Install App";
+    installButton.addEventListener("click", showInstallInstructions);
+    if ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true) {
+      installButton.textContent = "App Installed";
+      installButton.disabled = true;
+    }
+    dock.appendChild(installButton);
 
     candidates.slice(0, 2).forEach(function (item, index) {
       var action = document.createElement("button");
@@ -1206,6 +1251,55 @@
     dock.appendChild(status);
 
     document.body.appendChild(dock);
+  }
+
+  var deferredInstallPrompt = null;
+
+  function initAppInstall() {
+    window.addEventListener("beforeinstallprompt", function (event) {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      var button = document.getElementById("cltchInstallAppButton");
+      if (button) button.textContent = "Install CLTCH";
+    });
+    window.addEventListener("appinstalled", function () {
+      deferredInstallPrompt = null;
+      var button = document.getElementById("cltchInstallAppButton");
+      if (button) {
+        button.textContent = "App Installed";
+        button.disabled = true;
+      }
+    });
+  }
+
+  async function showInstallInstructions() {
+    if (deferredInstallPrompt) {
+      var installEvent = deferredInstallPrompt;
+      installEvent.prompt();
+      var choice = await installEvent.userChoice.catch(function () { return { outcome: "unknown" }; });
+      deferredInstallPrompt = null;
+      var installButton = document.getElementById("cltchInstallAppButton");
+      if (installButton && choice && choice.outcome === "accepted") {
+        installButton.textContent = "App Installed";
+        installButton.disabled = true;
+      }
+      return;
+    }
+    var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+    var message = isIOS
+      ? "To install CLTCH.NTWRK, open the Share menu in Safari and choose Add to Home Screen."
+      : "Use your browser menu and choose Install app or Add to Home Screen when that option is available.";
+    var dialog = document.getElementById("cltchInstallHelp");
+    if (!dialog) {
+      dialog = document.createElement("dialog");
+      dialog.id = "cltchInstallHelp";
+      dialog.setAttribute("aria-labelledby", "cltchInstallHelpTitle");
+      dialog.innerHTML = '<form method="dialog"><h2 id="cltchInstallHelpTitle">Install CLTCH.NTWRK</h2><p></p><button type="submit">Close</button></form>';
+      document.body.appendChild(dialog);
+    }
+    dialog.querySelector("p").textContent = message;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else window.alert(message);
   }
 
   function refreshConnectionStatus() {
@@ -1341,8 +1435,8 @@
     }
   }
 
-  function getCltchComponentRegistry() {
-    return [
+	  function getCltchComponentRegistry() {
+	    var registry = [
       { order: 1, id: "host-command-dashboard", category: "Host / Venue", name: "Host Command Dashboard", route: "host.html", mechanic: "Centralizes host next actions, queue health, profile readiness, and booking status." },
       { order: 2, id: "gig-post-wizard", category: "Host / Venue", name: "Gig Post Wizard", route: "host.html#gigForm", mechanic: "Guides hosts through date, time, pay, location, performer type, and policy basics." },
       { order: 3, id: "draft-gig-autosave", category: "Host / Venue", name: "Draft Gig Autosave", route: "host.html#gigForm", mechanic: "Keeps unfinished gig posts recoverable before submission." },
@@ -1488,67 +1582,9 @@
       { order: 143, id: "loaded-gig-fit-reasons", category: "Loaded Kit / UX/UI Features", name: "Gig Fit Reasons", route: "gig-radar.html#gigList", mechanic: "Shows clear reasons like near your city, matches your category, open on this date, and pay meets your rate." },
       { order: 144, id: "loaded-empty-state-action-cards", category: "Loaded Kit / UX/UI Features", name: "Empty-State Action Cards", route: "index.html", mechanic: "Replaces blank states with direct actions such as add availability, post first gig, or save first performer." },
       { order: 145, id: "loaded-payment-plain-english-tooltip", category: "Loaded Kit / UX/UI Features", name: "Payment Plain-English Tooltip", route: "booking.html", mechanic: "Explains fees, holds, net payout, and payout timing in simple words." }
-    ];
-  }
-
-  function componentInstallState() {
-    var state = readJsonStorage("cltch_component_installs_v1", { enabled: {}, activity: [] });
-    if (!state.enabled || typeof state.enabled !== "object") state.enabled = {};
-    if (!Array.isArray(state.activity)) state.activity = [];
-    return state;
-  }
-
-  function saveComponentInstallState(state) {
-    writeJsonStorage("cltch_component_installs_v1", state);
-  }
-
-  function enableCltchComponent(component) {
-    if (!component) return;
-    var state = componentInstallState();
-    state.enabled[component.id] = {
-      id: component.id,
-      name: component.name,
-      category: component.category,
-      route: component.route,
-      enabledAt: Date.now()
-    };
-    state.activity = [{
-      id: "component-" + Date.now(),
-      type: "enable",
-      componentId: component.id,
-      name: component.name,
-      category: component.category,
-      at: Date.now()
-    }].concat(state.activity || []).slice(0, 80);
-    saveComponentInstallState(state);
-    return state;
-  }
-
-  function runCltchComponent(component) {
-    if (!component) return;
-    var state = enableCltchComponent(component);
-    var actionKey = "cltch_component_action_v1:" + component.id;
-    writeJsonStorage(actionKey, {
-      componentId: component.id,
-      name: component.name,
-      category: component.category,
-      route: component.route,
-      mechanic: component.mechanic,
-      ranAt: Date.now(),
-      page: pageName()
-    });
-    state.activity = [{
-      id: "component-run-" + Date.now(),
-      type: "run",
-      componentId: component.id,
-      name: component.name,
-      category: component.category,
-      at: Date.now()
-    }].concat(state.activity || []).slice(0, 80);
-    saveComponentInstallState(state);
-    showDexterityToast(component.name + " activated", 1600);
-    refreshComponentLibrary();
-  }
+	    ];
+	    return registry;
+	  }
 
   function openComponentRoute(component) {
     if (!component || !component.route) return;
@@ -1579,16 +1615,13 @@
     var root = document.getElementById("cltchComponentLibrary");
     if (!root) return;
     var registry = getCltchComponentRegistry();
-    var state = componentInstallState();
     var category = root.getAttribute("data-category") || "All";
     var query = String((document.getElementById("cltchComponentSearch") || {}).value || "").trim().toLowerCase();
     var categories = ["All"].concat(Array.from(new Set(registry.map(function (item) { return item.category; }))));
-    var enabledCount = Object.keys(state.enabled || {}).length;
     var tabs = root.querySelector("#cltchComponentCategories");
     var list = root.querySelector("#cltchComponentList");
     var summary = root.querySelector("#cltchComponentSummary");
-    var activity = root.querySelector("#cltchComponentActivity");
-    if (summary) summary.textContent = enabledCount + " enabled / " + registry.length + " on-demand tools installed";
+    if (summary) summary.textContent = registry.length.toLocaleString() + " proposed concepts · 0 active integrations";
     if (tabs) {
       tabs.innerHTML = categories.map(function (cat) {
         var count = cat === "All" ? registry.length : registry.filter(function (item) { return item.category === cat; }).length;
@@ -1606,43 +1639,23 @@
       if (!query) return true;
       return [item.name, item.category, item.mechanic, item.route, item.id].join(" ").toLowerCase().indexOf(query) !== -1;
     });
-    if (list) {
-      list.innerHTML = filtered.map(function (item) {
-        var enabled = !!state.enabled[item.id];
-        return '<article class="cltch-component-row">' +
+	    if (list) {
+	      var visible = filtered.slice(0, 120);
+	      list.innerHTML = visible.map(function (item) {
+	        return '<article class="cltch-component-row">' +
           '<div class="cltch-component-number">' + String(item.order).padStart(2, "0") + '</div>' +
           '<div><strong>' + escapeHtml(item.name) + '</strong><p>' + escapeHtml(item.mechanic) + '</p><span>' + escapeHtml(item.category) + ' · ' + escapeHtml(item.route) + '</span></div>' +
           '<div class="cltch-component-actions">' +
-            '<span class="cltch-pill ' + (enabled ? "ok" : "") + '">' + (enabled ? "Enabled" : "Ready") + '</span>' +
-            '<button type="button" class="cltch-exp-chip" data-component-enable="' + escapeHtml(item.id) + '">Enable</button>' +
-            '<button type="button" class="cltch-exp-chip" data-component-run="' + escapeHtml(item.id) + '">Run</button>' +
-            '<button type="button" class="cltch-exp-chip" data-component-open="' + escapeHtml(item.id) + '">Open</button>' +
-          '</div>' +
-        '</article>';
-      }).join("") || '<div class="cltch-exp-note">No matching components.</div>';
-      list.querySelectorAll("[data-component-enable]").forEach(function (button) {
-        button.addEventListener("click", function () {
-          var component = registry.find(function (item) { return item.id === button.getAttribute("data-component-enable"); });
-          enableCltchComponent(component);
-          showDexterityToast(component.name + " enabled", 1400);
-          refreshComponentLibrary();
-        });
-      });
-      list.querySelectorAll("[data-component-run]").forEach(function (button) {
-        button.addEventListener("click", function () {
-          runCltchComponent(registry.find(function (item) { return item.id === button.getAttribute("data-component-run"); }));
-        });
-      });
+	            '<span class="cltch-pill">Proposed concept</span>' +
+	            '<button type="button" class="cltch-exp-chip" data-component-open="' + escapeHtml(item.id) + '">Open related page</button>' +
+	          '</div>' +
+	        '</article>';
+	      }).join("") + (filtered.length > visible.length ? '<div class="cltch-exp-note">Showing first ' + visible.length.toLocaleString() + ' of ' + filtered.length.toLocaleString() + ' matching components. Use search or category filters to narrow the list.</div>' : "") || '<div class="cltch-exp-note">No matching components.</div>';
       list.querySelectorAll("[data-component-open]").forEach(function (button) {
         button.addEventListener("click", function () {
           openComponentRoute(registry.find(function (item) { return item.id === button.getAttribute("data-component-open"); }));
         });
       });
-    }
-    if (activity) {
-      activity.innerHTML = (state.activity || []).slice(0, 6).map(function (event) {
-        return '<div class="cltch-doc-item"><span style="font-size:12px;">' + escapeHtml(event.type) + ': ' + escapeHtml(event.name) + '</span><span class="cltch-exp-note">' + new Date(event.at).toLocaleTimeString() + '</span></div>';
-      }).join("") || '<div class="cltch-exp-note">No component activity yet.</div>';
     }
   }
 
@@ -1655,16 +1668,16 @@
     root.setAttribute("data-category", "All");
     root.innerHTML =
       '<div class="cltch-component-scrim" data-component-close="true"></div>' +
-      '<div class="cltch-component-card" role="dialog" aria-modal="true" aria-label="CLTCH dispatch kit">' +
+      '<div class="cltch-component-card" role="dialog" aria-modal="true" aria-label="CLTCH feature concepts">' +
         '<div class="cltch-component-head">' +
-          '<div><div class="cltch-component-title">CLTCH Dispatch Kit</div><div class="cltch-component-sub" id="cltchComponentSummary">145 on-demand tools installed</div></div>' +
+        '<div><div class="cltch-component-title">CLTCH Feature Concepts</div><div class="cltch-component-sub" id="cltchComponentSummary">Proposed ideas; none are active integrations.</div></div>' +
           '<button type="button" class="cltch-access-close" data-component-close="true">Close</button>' +
         '</div>' +
         '<div class="cltch-component-body">' +
-          '<div class="cltch-component-toolbar"><input id="cltchComponentSearch" type="search" placeholder="Search dispatch, request, nearby talent, event day, payout, safety, or booking tools"><button type="button" class="cltch-exp-chip" id="cltchComponentEnableVisible">Enable Visible</button></div>' +
+          '<div class="cltch-component-toolbar"><input id="cltchComponentSearch" type="search" aria-label="Search proposed feature concepts" placeholder="Search dispatch, request, nearby talent, event day, payout, safety, or booking concepts"></div>' +
           '<div class="cltch-component-categories" id="cltchComponentCategories"></div>' +
           '<div class="cltch-component-list" id="cltchComponentList"></div>' +
-          '<div class="cltch-exp-card cltch-component-activity"><div class="cltch-exp-head"><div class="cltch-exp-title">Recent Dispatch Kit Activity</div></div><div class="cltch-doc-list" id="cltchComponentActivity"></div></div>' +
+          '<p class="cltch-exp-note">These entries describe ideas for future work. “Open related page” only opens an existing page; it does not enable the proposed behavior.</p>' +
         '</div>' +
       '</div>';
     document.body.appendChild(root);
@@ -1673,13 +1686,6 @@
     });
     var search = root.querySelector("#cltchComponentSearch");
     if (search) search.addEventListener("input", refreshComponentLibrary);
-    var enableVisible = root.querySelector("#cltchComponentEnableVisible");
-    if (enableVisible) {
-      enableVisible.addEventListener("click", function () {
-        root.querySelectorAll("[data-component-enable]").forEach(function (button) { button.click(); });
-        showDexterityToast("Visible components enabled", 1600);
-      });
-    }
     refreshComponentLibrary();
   }
 
@@ -1713,6 +1719,11 @@
         '<button type="button" id="cltchPresetApply" class="cltch-exp-chip">Apply</button>' +
         '<button type="button" id="cltchPresetDelete" class="cltch-exp-chip">Delete</button>' +
       "</div>" +
+      '<div class="cltch-exp-row" style="margin-top:8px;">' +
+        '<button type="button" id="cltchPresetExport" class="cltch-exp-chip">Export Presets</button>' +
+        '<button type="button" id="cltchPresetImport" class="cltch-exp-chip">Import Presets</button>' +
+        '<input type="file" id="cltchPresetFile" accept="application/json,.json" hidden>' +
+      "</div>" +
       '<div class="cltch-exp-note" id="cltchSavedSearchNote" style="margin-top:8px;">Save common filters and replay them instantly.</div>';
     mount.insertAdjacentElement("afterend", card);
 
@@ -1725,7 +1736,7 @@
     function readState() {
       var activeFilterEl = filterRow.querySelector("[data-filter].active");
       return {
-        search: (searchInput.value || "").trim(),
+        search: (searchInput.value || "").trim().slice(0, 200),
         filter: activeFilterEl ? activeFilterEl.getAttribute("data-filter") : "all",
         sort: sortSelect ? sortSelect.value || "best" : "best"
       };
@@ -1783,6 +1794,66 @@
       writeJsonStorage(storageKey, data);
       renderSelect();
       note.textContent = "Preset removed.";
+    });
+
+    card.querySelector("#cltchPresetExport").addEventListener("click", function () {
+      var payload = {
+        version: 1,
+        page: pageName(),
+        exportedAt: new Date().toISOString(),
+        presets: data.presets.slice(0, 8)
+      };
+      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = "cltch-search-presets.json";
+      link.click();
+      window.setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+      note.textContent = "Exported " + payload.presets.length + " local search preset(s).";
+    });
+
+    var presetFile = card.querySelector("#cltchPresetFile");
+    card.querySelector("#cltchPresetImport").addEventListener("click", function () {
+      presetFile.click();
+    });
+    presetFile.addEventListener("change", async function () {
+      var file = presetFile.files && presetFile.files[0];
+      presetFile.value = "";
+      if (!file) return;
+      if (file.size > 65536) {
+        note.textContent = "Import rejected: file must be 64 KB or smaller.";
+        return;
+      }
+      try {
+        var parsed = JSON.parse(await file.text());
+        if (parsed.version !== 1 || parsed.page !== pageName() || !Array.isArray(parsed.presets)) throw new Error("wrong format or page");
+        var valid = parsed.presets.slice(0, 8).filter(function (item) {
+          if (!item || typeof item.name !== "string" || !item.name.trim() || item.name.length > 30 || !item.state || typeof item.state !== "object") return false;
+          var filters = Array.from(filterRow.querySelectorAll("[data-filter]"));
+          var filterValid = filters.some(function (el) { return el.getAttribute("data-filter") === item.state.filter; });
+          var sortValid = !sortSelect || Array.from(sortSelect.options).some(function (option) { return option.value === item.state.sort; });
+          return typeof item.state.search === "string" && item.state.search.length <= 200 && filterValid && sortValid;
+        });
+        if (!valid.length) throw new Error("no valid presets");
+        var importedCount = 0;
+        var seenNames = new Set();
+        var merged = [];
+        valid.concat(data.presets).forEach(function (item, index) {
+          var name = item.name.trim();
+          var key = name.toLowerCase();
+          if (seenNames.has(key) || merged.length >= 8) return;
+          seenNames.add(key);
+          merged.push({ name: name, state: { search: item.state.search, filter: item.state.filter, sort: item.state.sort } });
+          if (index < valid.length) importedCount += 1;
+        });
+        data.presets = merged;
+        writeJsonStorage(storageKey, data);
+        renderSelect();
+        note.textContent = "Imported or updated " + importedCount + " preset(s).";
+      } catch (error) {
+        note.textContent = "Import rejected: choose a valid CLTCH preset file for this page.";
+      }
     });
 
     alertsToggle?.addEventListener("change", function () {
@@ -1883,7 +1954,7 @@
     observer.observe(gigList, { childList: true, subtree: true });
   }
 
-  function initHostPostingGateAndDelegates() {
+  function initHostPostingReadiness() {
     var form = document.getElementById("gigForm");
     if (!form || document.getElementById("cltchHostGateCard")) return;
 
@@ -1891,20 +1962,14 @@
     container.className = "cltch-exp-card";
     container.id = "cltchHostGateCard";
     container.innerHTML =
-      '<div class="cltch-exp-head"><div class="cltch-exp-title">Availability Gate + Team Access</div></div>' +
-      '<div class="cltch-exp-note" id="cltchGateStatus">Complete core fields to unlock a stronger posting signal.</div>' +
+      '<div class="cltch-exp-head"><div class="cltch-exp-title">Posting Readiness</div></div>' +
+      '<div class="cltch-exp-note" id="cltchGateStatus">Advisory checklist only. It does not block publishing or grant account access.</div>' +
       '<div class="cltch-exp-grid" style="margin-top:8px;">' +
         '<div class="cltch-exp-chip" id="cltchGateScore">Score: 0/6</div>' +
         '<div class="cltch-exp-chip" id="cltchGateSla">SLA: Unknown</div>' +
         '<div class="cltch-exp-chip" id="cltchGateLead">Lead: Unknown</div>' +
         '<div class="cltch-exp-chip" id="cltchGateReady">Not Ready</div>' +
-      '</div>' +
-      '<div class="cltch-exp-note" style="margin-top:12px;">Delegate access (MVP): share planning visibility with your team.</div>' +
-      '<div class="cltch-exp-row" style="margin-top:8px;">' +
-        '<input id="cltchDelegateEmail" type="email" placeholder="team-member@email.com" style="min-height:38px;padding:0 10px;border-radius:10px;border:1px solid var(--cltch-line);background:var(--cltch-surface);color:var(--cltch-text);">' +
-        '<button type="button" id="cltchDelegateAdd" class="cltch-exp-chip">Add Delegate</button>' +
-      '</div>' +
-      '<div class="cltch-doc-list" id="cltchDelegateList"></div>';
+      '</div>';
     form.parentNode.insertBefore(container, form);
 
     var fields = {
@@ -1951,45 +2016,6 @@
     });
     updateGate();
 
-    var delegateKey = "cltch_host_delegates_v1";
-    var delegateInput = document.getElementById("cltchDelegateEmail");
-    var delegateList = document.getElementById("cltchDelegateList");
-    var delegates = readJsonStorage(delegateKey, { items: [] });
-    if (!Array.isArray(delegates.items)) delegates.items = [];
-
-    function renderDelegates() {
-      if (!delegates.items.length) {
-        delegateList.innerHTML = '<div class="cltch-exp-note">No delegates yet.</div>';
-        return;
-      }
-      delegateList.innerHTML = delegates.items.map(function (email, idx) {
-        return '<div class="cltch-doc-item"><span style="font-size:12px;">' + escapeHtml(email) + '</span><button type="button" class="cltch-exp-chip" data-delegate-remove="' + idx + '">Remove</button></div>';
-      }).join("");
-      delegateList.querySelectorAll("[data-delegate-remove]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          var idx = Number(btn.getAttribute("data-delegate-remove"));
-          if (!Number.isFinite(idx)) return;
-          delegates.items.splice(idx, 1);
-          writeJsonStorage(delegateKey, delegates);
-          renderDelegates();
-        });
-      });
-    }
-
-    document.getElementById("cltchDelegateAdd").addEventListener("click", function () {
-      var email = String(delegateInput.value || "").trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        showDexterityToast("Enter a valid delegate email", 1600);
-        return;
-      }
-      if (delegates.items.indexOf(email) === -1) delegates.items.push(email);
-      delegates.items = delegates.items.slice(0, 8);
-      writeJsonStorage(delegateKey, delegates);
-      delegateInput.value = "";
-      renderDelegates();
-      showDexterityToast("Delegate saved", 1500);
-    });
-    renderDelegates();
   }
 
   function initBookingExperienceTools() {
@@ -6280,7 +6306,7 @@
     initNotificationCenter();
     initSavedSearchAndAlerts();
     initGigCardEnhancements();
-    initHostPostingGateAndDelegates();
+    initHostPostingReadiness();
     initBookingExperienceTools();
     initBookingOpsExtensions();
     initTrustMetricsCards();
@@ -6386,6 +6412,107 @@
     window.setTimeout(task, delay || 180);
   }
 
+  function canonicalWorkspacePage(page) {
+    if (page === "musician-dashboard.html") return "musician-matched-gigs.html";
+    if (!page) return "index.html";
+    return page;
+  }
+
+  function normalizeInternalHref(href) {
+    var value = String(href || "").trim();
+    if (!value || value.charAt(0) === "#") return "";
+    if (value.indexOf("//") === 0) return "";
+    if (/^(?:https?|mailto|tel|javascript|data):/i.test(value)) return "";
+    if (value.charAt(0) === "/") value = value.slice(1) || "index.html";
+    value = value.split("#")[0].split("?")[0] || "index.html";
+    return canonicalWorkspacePage(value);
+  }
+
+  function workspaceConnectionLinks(role) {
+    if (role === "host") {
+      return [
+        ["host.html", "Host"],
+        ["host-profile.html", "Account"],
+        ["booking.html", "Bookings"],
+        ["ops.html", "Ops"],
+        ["support.html", "Support"]
+      ];
+    }
+    if (role === "ops") {
+      return [
+        ["ops.html", "Ops"],
+        ["host.html", "Host"],
+        ["musician-matched-gigs.html", "Performer"],
+        ["booking.html", "Bookings"],
+        ["support.html", "Support"]
+      ];
+    }
+    return [
+      ["musician-matched-gigs.html", "Matches"],
+      ["gig-radar.html", "Radar"],
+      ["musician-profile.html", "Profile"],
+      ["booking.html", "Bookings"],
+      ["support.html", "Support"]
+    ];
+  }
+
+  function inferWorkspaceRoleForUx(page) {
+    if (/^host(?:-profile)?\.html$/.test(page)) return "host";
+    if (page === "ops.html") return "ops";
+    if (/^(musician|gig-radar|performer-view)/.test(page)) return "performer";
+    if (page === "booking.html") return "booking";
+    return "";
+  }
+
+  function applyConnectedActiveLinks(currentPage) {
+    var canonicalPage = canonicalWorkspacePage(currentPage);
+    document.querySelectorAll("a[href]").forEach(function (link) {
+      var target = normalizeInternalHref(link.getAttribute("href"));
+      if (!target) return;
+      var isActive = target === canonicalPage || (canonicalPage === "booking.html" && target === "booking.html");
+      link.classList.toggle("is-current", isActive);
+      if (isActive) link.setAttribute("aria-current", "page");
+      else if (link.getAttribute("aria-current") === "page") link.removeAttribute("aria-current");
+    });
+  }
+
+  function ensureWorkspaceConnector(currentPage, role) {
+    if (document.getElementById("cltchWorkspaceConnector")) return;
+    if (!role) return;
+    if (!document.body.classList.contains("cltch-workspace-page") && !/^(ops|booking)\.html$/.test(currentPage)) return;
+
+    var header = document.querySelector("header");
+    if (!header || !header.parentNode) return;
+    var canonicalPage = canonicalWorkspacePage(currentPage);
+    var effectiveRole = role === "booking" ? inferRoleFromPage() : role;
+    if (effectiveRole === "general") effectiveRole = "performer";
+    var links = workspaceConnectionLinks(effectiveRole);
+    var nav = document.createElement("nav");
+    nav.id = "cltchWorkspaceConnector";
+    nav.className = "cltch-workspace-connector";
+    nav.setAttribute("aria-label", "Workspace shortcuts");
+    nav.innerHTML = links.map(function (item) {
+      var active = canonicalWorkspacePage(item[0]) === canonicalPage ? " is-current" : "";
+      return '<a class="cltch-workspace-connector__link' + active + '" href="' + escapeHtml(item[0]) + '"' + (active ? ' aria-current="page"' : "") + '>' + escapeHtml(item[1]) + "</a>";
+    }).join("");
+    header.insertAdjacentElement("afterend", nav);
+  }
+
+  function normalizeWorkspaceAliases(currentPage) {
+    if (currentPage !== "musician-dashboard.html") return;
+    document.querySelectorAll('a[href^="musician-dashboard.html"]').forEach(function (link) {
+      var raw = link.getAttribute("href") || "";
+      link.setAttribute("href", raw.replace("musician-dashboard.html", "musician-matched-gigs.html"));
+    });
+  }
+
+  function initConnectedUx() {
+    var currentPage = pageName();
+    normalizeWorkspaceAliases(currentPage);
+    applyConnectedActiveLinks(currentPage);
+    ensureWorkspaceConnector(currentPage, inferWorkspaceRoleForUx(currentPage));
+  }
+
   function initGlobalSplash() {
     if (!document.body) return;
     if (document.getElementById("splashScreen")) return;
@@ -6437,6 +6564,8 @@
       initGuidedGrouping();
       initDexterityShortcuts();
       initRuntimeSecurityHardening();
+      initConnectedUx();
+      initAppInstall();
       initGlobalSplash();
       scheduleNonCritical(initA11yPanel, 140);
       scheduleNonCritical(initDexterityPalette, 180);
@@ -6454,6 +6583,8 @@
     initGuidedGrouping();
     initDexterityShortcuts();
     initRuntimeSecurityHardening();
+    initConnectedUx();
+    initAppInstall();
     initGlobalSplash();
     scheduleNonCritical(initA11yPanel, 140);
     scheduleNonCritical(initDexterityPalette, 180);

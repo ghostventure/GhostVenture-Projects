@@ -16,6 +16,18 @@
     } catch (error) {}
   }
 
+  function normalizeExternalUrl(value) {
+    var raw = String(value || "").trim();
+    if (!raw || raw.length > 500) return "";
+    try {
+      var url = new URL(raw);
+      if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password) return "";
+      return url.href;
+    } catch (error) {
+      return "";
+    }
+  }
+
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -47,14 +59,19 @@
     container.appendChild(list);
   }
 
-  function initBookingAgreement(containerId) {
+  function scopedBookingKey(name, bookingId) {
+    var scope = String(bookingId || "unlinked").slice(0, 128);
+    return name + ":" + encodeURIComponent(scope);
+  }
+
+  function initBookingAgreement(containerId, bookingId) {
     var container = document.getElementById(containerId);
     if (!container) return;
-    renderChecklist(container, "booking_agreement", [
-      { id: "scope", title: "Scope locked", copy: "Event time, role, rate, and setup expectations are confirmed." },
-      { id: "terms", title: "Terms accepted", copy: "Cancellation, late arrival, and payment timing are visible to both sides." },
-      { id: "contacts", title: "Day-of contacts set", copy: "Host contact, performer contact, and emergency contact are documented." },
-      { id: "rider", title: "Rider reviewed", copy: "Equipment, parking, access, dress code, and venue notes are attached." }
+    renderChecklist(container, scopedBookingKey("booking_agreement", bookingId), [
+      { id: "scope", title: "Review event scope", copy: "Check the date, time, role, rate, and setup expectations." },
+      { id: "terms", title: "Review booking terms", copy: "Read cancellation, arrival, and payment timing details." },
+      { id: "contacts", title: "Check event-day contacts", copy: "Confirm host and performer contact details are available." },
+      { id: "rider", title: "Review venue setup", copy: "Check equipment, parking, access, dress code, and venue notes." }
     ]);
   }
 
@@ -90,10 +107,10 @@
     container.appendChild(rail);
   }
 
-  function initPaymentLifecycle(containerId) {
+  function initPaymentLifecycle(containerId, bookingId) {
     var container = document.getElementById(containerId);
     if (!container) return;
-    renderChecklist(container, "payment_lifecycle", [
+    renderChecklist(container, scopedBookingKey("payment_lifecycle", bookingId), [
       { id: "method", title: "Payment method captured", copy: "Preferred payout/payment method is present before confirmation." },
       { id: "hold", title: "Funds plan documented", copy: "Manual or provider-backed payment plan is clear for both sides." },
       { id: "release", title: "Release condition set", copy: "Payment release depends on completion, check-in, or host approval." },
@@ -101,25 +118,26 @@
     ]);
   }
 
-  function initDisputeFlow(containerId) {
+  function initDisputeFlow(containerId, bookingId) {
     var container = document.getElementById(containerId);
     if (!container) return;
-    var state = readState("dispute_flow", { reason: "", note: "" });
+    var key = scopedBookingKey("dispute_flow", bookingId);
+    var state = readState(key, { reason: "", note: "" });
     container.innerHTML = "";
     var form = el("form", "cltch-component-form");
     form.innerHTML = [
-      "<label>Issue Type</label>",
+      "<label>Reminder category</label>",
       "<select name=\"reason\">",
-      "<option value=\"\">No active issue</option>",
+      "<option value=\"\">Choose a reminder category</option>",
       "<option>No-show</option>",
       "<option>Late arrival</option>",
       "<option>Payment issue</option>",
       "<option>Venue access problem</option>",
       "<option>Scope changed</option>",
       "</select>",
-      "<label>Resolution Notes</label>",
-      "<textarea name=\"note\" rows=\"3\" placeholder=\"Add the next action, refund note, replacement performer, or support decision.\"></textarea>",
-      "<button type=\"submit\">Save Issue Note</button>",
+      "<label>Private planning note</label>",
+      "<textarea name=\"note\" rows=\"3\" maxlength=\"1000\" placeholder=\"Keep a private reminder for yourself. Do not enter sensitive details.\"></textarea>",
+      "<button type=\"submit\">Save Local Note</button>",
       "<p class=\"cltch-component-status\"></p>"
     ].join("");
     form.reason.value = state.reason || "";
@@ -128,8 +146,8 @@
       event.preventDefault();
       state.reason = form.reason.value;
       state.note = form.note.value.trim();
-      writeState("dispute_flow", state);
-      form.querySelector(".cltch-component-status").textContent = state.reason ? "Issue note saved for operations review." : "No active issue saved.";
+      writeState(key, state);
+      form.querySelector(".cltch-component-status").textContent = "Saved in this browser only; not sent to support or the other booking participant.";
     });
     container.appendChild(form);
   }
@@ -148,15 +166,21 @@
   function initPortfolioManager(containerId) {
     var container = document.getElementById(containerId);
     if (!container) return;
-    var state = readState("portfolio_manager", []);
+    var stored = readState("portfolio_manager", []);
+    var state = Array.isArray(stored) ? stored.slice(0, 20).map(function (item) {
+      var url = item && normalizeExternalUrl(item.url);
+      return url ? { url: url, label: String(item.label || "Media link").slice(0, 100) } : null;
+    }).filter(Boolean) : [];
+    writeState("portfolio_manager", state);
     container.innerHTML = "";
     var form = el("form", "cltch-component-form");
     form.innerHTML = [
       "<label>Portfolio / EPK Link</label>",
-      "<input name=\"url\" type=\"url\" placeholder=\"https://...\">",
+      "<input name=\"url\" type=\"url\" maxlength=\"500\" required placeholder=\"https://...\">",
       "<label>Label</label>",
-      "<input name=\"label\" type=\"text\" placeholder=\"Live set, reel, EPK, gallery, social\">",
-      "<button type=\"submit\">Add Media Link</button>"
+      "<input name=\"label\" type=\"text\" maxlength=\"100\" placeholder=\"Live set, reel, EPK, gallery, social\">",
+      "<button type=\"submit\">Add Media Link</button>",
+      "<p class=\"cltch-component-status\" role=\"status\" aria-live=\"polite\"></p>"
     ].join("");
     var list = el("div", "cltch-chip-list");
     function renderList() {
@@ -168,11 +192,13 @@
       state.forEach(function (item, index) {
         var chip = el("span", "vault-chip");
         var link = el("a", "", item.label || item.url);
-        link.href = item.url;
+        link.href = normalizeExternalUrl(item.url);
         link.target = "_blank";
-        link.rel = "noopener";
+        link.rel = "noopener noreferrer";
+        link.referrerPolicy = "no-referrer";
         var remove = el("button", "", "x");
         remove.type = "button";
+        remove.setAttribute("aria-label", "Remove " + String(item.label || "portfolio link"));
         remove.addEventListener("click", function () {
           state.splice(index, 1);
           writeState("portfolio_manager", state);
@@ -185,11 +211,24 @@
     }
     form.addEventListener("submit", function (event) {
       event.preventDefault();
-      var url = form.url.value.trim();
-      if (!url) return;
-      state.push({ url: url, label: form.label.value.trim() || "Media link" });
+      var url = normalizeExternalUrl(form.url.value);
+      var status = form.querySelector('[role="status"]');
+      if (!url) {
+        if (status) status.textContent = "Use a valid http or https URL without embedded sign-in credentials.";
+        return;
+      }
+      if (state.some(function (item) { return item.url === url; })) {
+        if (status) status.textContent = "That portfolio link is already saved.";
+        return;
+      }
+      if (state.length >= 20) {
+        if (status) status.textContent = "You can save up to 20 portfolio links.";
+        return;
+      }
+      state.push({ url: url, label: form.label.value.trim().slice(0, 100) || "Media link" });
       writeState("portfolio_manager", state);
       form.reset();
+      if (status) status.textContent = "Portfolio link saved in this browser.";
       renderList();
     });
     container.appendChild(form);
@@ -225,6 +264,7 @@
     initDisputeFlow: initDisputeFlow,
     initTrustVerification: initTrustVerification,
     initPortfolioManager: initPortfolioManager,
-    initOperationsDashboard: initOperationsDashboard
+    initOperationsDashboard: initOperationsDashboard,
+    normalizeExternalUrl: normalizeExternalUrl
   };
 })();

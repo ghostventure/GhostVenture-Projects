@@ -289,6 +289,26 @@
     }
     .btn-google:hover { border-color: var(--muted-2); }
     .btn-google:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-plugz {
+      width: 100%;
+      min-height: 52px;
+      padding: 13px;
+      background: #111;
+      color: #fff;
+      border: 1px solid #111;
+      border-radius: 16px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: border-color 0.2s, background 0.2s;
+      font-family: inherit;
+    }
+    .btn-plugz:hover { background: #1c1c1c; border-color: var(--accent); }
+    .btn-plugz:disabled { opacity: 0.6; cursor: not-allowed; }
     .btn-secondary {
       width: 100%;
       padding: 13px;
@@ -350,6 +370,27 @@
       font-size: 12px;
       margin-top: 16px;
       line-height: 1.5;
+    }
+    .plugz-terms {
+      margin: 12px 0 0;
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 10px;
+      align-items: start;
+      color: var(--muted-2);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .plugz-terms input {
+      width: 16px;
+      height: 16px;
+      margin-top: 1px;
+      accent-color: var(--accent);
+    }
+    .plugz-terms a {
+      color: var(--link);
+      font-weight: 700;
+      text-decoration: none;
     }
     footer {
       text-align: center;
@@ -657,6 +698,7 @@
 
     .btn-auth,
     .btn-google,
+    .btn-plugz,
     .btn-secondary {
       min-height: 50px;
       border-radius: 8px !important;
@@ -690,10 +732,21 @@
       color: var(--auth-ink) !important;
     }
 
+    .btn-plugz {
+      border: 1px solid #111 !important;
+      background: #111 !important;
+      color: #fff !important;
+    }
+
     .btn-google:hover,
     .btn-secondary:hover {
       border-color: var(--auth-teal) !important;
       background: var(--auth-soft) !important;
+    }
+
+    .btn-plugz:hover {
+      border-color: var(--auth-red) !important;
+      background: #1d1d1d !important;
     }
 
     .divider {
@@ -883,6 +936,12 @@
         </div>
         <button class="btn-secondary" id="siEmailLinkBtn" type="button" style="margin-top:10px;">Email Me a Sign-In Link</button>
         <div class="divider">or</div>
+        <label class="plugz-terms" for="siPlugzTerms">
+          <input type="checkbox" id="siPlugzTerms">
+          <span>I accept the CLTCH Plugz membership terms for the free six-month membership. <a href="terms.html#plugz-membership">Terms</a></span>
+        </label>
+        <button class="btn-plugz" id="siPlugzBtn" type="button">Continue with Plugz</button>
+        <div class="divider">or</div>
         <button class="btn-google" id="siGoogleBtn" type="button">
           <svg width="18" height="18" viewBox="0 0 48 48">
             <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.9z"/>
@@ -894,7 +953,8 @@
         </button>
       </form>
 
-      <form id="signupForm" style="display:none;">
+	      <form id="signupForm" style="display:none;" aria-labelledby="tabSignUp">
+	        <span id="signup" style="position:relative;top:-90px;"></span>
         <div class="form-group">
           <label>I am a</label>
           <select id="suRole">
@@ -923,6 +983,12 @@
         <input type="text" id="suWebsite" autocomplete="off" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;height:1px;width:1px;">
         <div class="hint">Use at least 8 characters with uppercase, lowercase, and a number. Performer accounts can be used for musicians, DJs, photographers, cinematographers, and models. Verification emails can land in spam or junk.</div>
         <button class="btn-auth" id="suBtn" type="submit">Create Account</button>
+        <div class="divider">or</div>
+        <label class="plugz-terms" for="suPlugzTerms">
+          <input type="checkbox" id="suPlugzTerms">
+          <span>I accept the CLTCH Plugz membership terms for the free six-month membership. <a href="terms.html#plugz-membership">Terms</a></span>
+        </label>
+        <button class="btn-plugz" id="suPlugzBtn" type="button">Continue with Plugz and Get 6 Months</button>
         <div class="divider">or</div>
         <button class="btn-google" id="suGoogleBtn" type="button">
           <svg width="18" height="18" viewBox="0 0 48 48">
@@ -956,6 +1022,7 @@
       isSignInWithEmailLink,
       sendSignInLinkToEmail,
       signInWithEmailLink,
+      signInWithCustomToken,
       sendPasswordResetEmail,
       sendEmailVerification,
       signOut,
@@ -965,6 +1032,13 @@
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { auth, db } from "./app/firebase-client.js";
     import { clearResumeTarget, readResumeTarget } from "./app/idle-logout.js";
+    import {
+      clearPlugzBridgeRole,
+      exchangePlugzCredentialForCltch,
+      readPlugzBridgeRole,
+      readPlugzRedirectCredential,
+      signInToPlugzWithGoogle
+    } from "./app/plugz-bridge.js";
     import { ensureRoleRecord, normalizeRole, readUserSummary, recordAuthEvent, writeUserSummary } from "./app/user-db.js";
 
     const ROLE_CACHE_KEY = "cltch_last_role_v1";
@@ -984,6 +1058,8 @@
     const suBtn = document.getElementById("suBtn");
     const siGoogleBtn = document.getElementById("siGoogleBtn");
     const suGoogleBtn = document.getElementById("suGoogleBtn");
+    const siPlugzBtn = document.getElementById("siPlugzBtn");
+    const suPlugzBtn = document.getElementById("suPlugzBtn");
     const passwordToggleButtons = Array.from(document.querySelectorAll("[data-toggle-password]"));
     let hasRedirected = false;
 
@@ -1027,6 +1103,8 @@
       suBtn.disabled = isBusy;
       siGoogleBtn.disabled = isBusy;
       suGoogleBtn.disabled = isBusy;
+      siPlugzBtn.disabled = isBusy;
+      suPlugzBtn.disabled = isBusy;
       siEmailLinkBtn.disabled = isBusy;
       suEmailLinkBtn.disabled = isBusy;
       siBtn.textContent = isBusy ? "Signing in..." : "Sign In";
@@ -1415,6 +1493,53 @@
     siGoogleBtn.addEventListener("click", startGoogleSignIn);
     suGoogleBtn.addEventListener("click", startGoogleSignIn);
 
+    async function startPlugzBridge() {
+      clearStatus();
+      setButtonsBusy(true);
+      const selectedRole = document.getElementById("suRole").value || readCachedRole() || "musician";
+      const isSignup = signUpForm.style.display !== "none";
+      const acceptedTerms = document.getElementById(isSignup ? "suPlugzTerms" : "siPlugzTerms")?.checked === true;
+      try {
+        if (!acceptedTerms) {
+          showError("Accept the CLTCH Plugz membership terms before continuing.");
+          return;
+        }
+        showSuccess("Checking your Plugz account...");
+        const plugzCredential = await signInToPlugzWithGoogle(selectedRole);
+        if (!plugzCredential?.user) return;
+        await completePlugzBridge(plugzCredential.user, selectedRole, true);
+      } catch (err) {
+        showError(friendlyError(err));
+      } finally {
+        setButtonsBusy(false);
+      }
+    }
+
+    async function completePlugzBridge(plugzUser, role, acceptedTerms = false) {
+      const bridge = await withTimeout(
+        exchangePlugzCredentialForCltch(plugzUser, role, { acceptedTerms }),
+        AUTH_TIMEOUT_MS,
+        "Plugz bridge timed out. Please try again."
+      );
+      const credential = await withTimeout(
+        signInWithCustomToken(auth, bridge.customToken),
+        AUTH_TIMEOUT_MS,
+        "CLTCH sign-in timed out. Please try again."
+      );
+      const resolvedRole = bridge.role === "host" ? "host" : "musician";
+      clearPlugzBridgeRole();
+      cacheRole(resolvedRole);
+      showSuccess("Plugz verified. Your six-month CLTCH membership is active.");
+      recordAuthEvent(db, credential.user, "sign_in", {
+        authProvider: "plugz",
+        membershipSource: "plugz"
+      }).catch(() => {});
+      await forceRouteAfterLogin(credential.user, resolvedRole);
+    }
+
+    siPlugzBtn.addEventListener("click", startPlugzBridge);
+    suPlugzBtn.addEventListener("click", startPlugzBridge);
+
     siEmailLinkBtn.addEventListener("click", async () => {
       clearStatus();
       const email = normalizeEmailValue(document.getElementById("siEmail").value);
@@ -1502,6 +1627,17 @@
       goToRole(role, hasProfile);
     }).catch((err) => {
       showError(friendlyError(err));
+    });
+
+    readPlugzRedirectCredential().then(async (result) => {
+      if (!result?.user || hasRedirected) return;
+      setButtonsBusy(true);
+      const role = readPlugzBridgeRole(readCachedRole() || "musician");
+      await completePlugzBridge(result.user, role, true);
+    }).catch((err) => {
+      showError(friendlyError(err));
+    }).finally(() => {
+      setButtonsBusy(false);
     });
 
     onAuthStateChanged(auth, async (user) => {

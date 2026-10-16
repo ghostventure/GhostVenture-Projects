@@ -408,7 +408,10 @@ service cloud.firestore {
           'uid', 'oneId', 'role', 'email', 'displayName', 'city', 'state', 'status',
           'profileComplete', 'payoutReady', 'authProvider', 'profileRoute', 'dashboardRoute',
           'authLastSignInAt', 'authLastSignOutAt', 'authLastPasswordResetAt',
-          'updatedAt', 'createdAt'
+          'membershipPlan', 'membershipSource', 'membershipStatus', 'membershipExpiresAt',
+          'plugzUid', 'plugzTermsAccepted', 'plugzTermsVersion', 'plugzTermsAcceptedAt',
+          'plugzImportedAt', 'plugzImportedEmail', 'plugzImportedDisplayName',
+          'plugzImportedPhotoURL', 'plugzImportedProvider', 'updatedAt', 'createdAt'
         ])
         && isString('uid', 128)
         && request.resource.data.uid == userId
@@ -424,12 +427,40 @@ service cloud.firestore {
         && isOptionalString('authProvider', 40)
         && isOptionalString('profileRoute', 120)
         && isOptionalString('dashboardRoute', 120)
+        && isOptionalString('membershipPlan', 80)
+        && isOptionalString('membershipSource', 40)
+        && isOptionalString('membershipStatus', 24)
+        && (!has('membershipExpiresAt') || request.resource.data.membershipExpiresAt is timestamp)
+        && isOptionalString('plugzUid', 128)
+        && (!has('plugzTermsAccepted') || request.resource.data.plugzTermsAccepted is bool)
+        && isOptionalString('plugzTermsVersion', 80)
+        && (!has('plugzTermsAcceptedAt') || request.resource.data.plugzTermsAcceptedAt is timestamp)
+        && (!has('plugzImportedAt') || request.resource.data.plugzImportedAt is timestamp)
+        && isOptionalString('plugzImportedEmail', 160)
+        && isOptionalString('plugzImportedDisplayName', 80)
+        && isOptionalString('plugzImportedPhotoURL', 240)
+        && isOptionalString('plugzImportedProvider', 60)
         && (!has('authLastSignInAt') || request.resource.data.authLastSignInAt is timestamp)
         && (!has('authLastSignOutAt') || request.resource.data.authLastSignOutAt is timestamp)
         && (!has('authLastPasswordResetAt') || request.resource.data.authLastPasswordResetAt is timestamp)
         && (!has('updatedAt') || request.resource.data.updatedAt is timestamp)
         && (!has('createdAt') || request.resource.data.createdAt is timestamp);
       allow delete: if false;
+    }
+
+    // ─── Membership Grants (server-managed) ────────────────────────
+    match /memberships/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // ─── Plugz Bridge Regulation (server-managed only) ─────────────
+    match /plugzBridgeClaims/{plugzUid} {
+      allow read, write: if false;
+    }
+
+    match /plugzBridgeEvents/{eventId} {
+      allow read, write: if false;
     }
 
     // ─── Plaid Items (server-managed only) ──────────────────────────

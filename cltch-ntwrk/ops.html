@@ -9,8 +9,10 @@
   <link rel="icon" href="icons/cltch-icon.svg" type="image/svg+xml">
   <title>CLTCH.NTWRK - Operations</title>
   <link rel="stylesheet" href="cltch-boilerplate.css">
-  <script src="site-init.js" defer></script>
-  <style>
+	  <script src="site-init.js" defer></script>
+	  <script src="scripts/platform-components.js" defer></script>
+	  <script src="app/operational-components.js" defer></script>
+	  <style>
     .ops-page {
       width: min(1160px, calc(100% - 32px));
       margin: 36px auto 64px;
@@ -34,14 +36,138 @@
       letter-spacing: 0;
     }
 
-    .ops-hero p {
-      max-width: 720px;
-      margin-top: 14px;
-      color: var(--cltch-muted) !important;
-      font-size: 16px;
-      line-height: 1.65;
-    }
-  </style>
+	    .ops-hero p {
+	      max-width: 720px;
+	      margin-top: 14px;
+	      color: var(--cltch-muted) !important;
+	      font-size: 16px;
+	      line-height: 1.65;
+	    }
+
+	    .cltch-component-catalog {
+	      display: grid;
+	      gap: 16px;
+	    }
+
+	    .cltch-component-catalog__summary {
+	      display: grid;
+	      grid-template-columns: repeat(4, minmax(0, 1fr));
+	      gap: 10px;
+	    }
+
+	    .cltch-component-catalog__summary article,
+	    .cltch-component-catalog__row {
+	      border: 1px solid var(--cltch-line);
+	      border-radius: 12px;
+	      background: color-mix(in srgb, var(--cltch-card-bg) 92%, transparent);
+	    }
+
+	    .cltch-component-catalog__summary article {
+	      padding: 14px;
+	      display: grid;
+	      gap: 4px;
+	    }
+
+	    .cltch-component-catalog__summary strong {
+	      color: var(--cltch-text);
+	      font-size: 22px;
+	    }
+
+	    .cltch-component-catalog__summary span,
+	    .cltch-component-catalog__meta,
+	    .cltch-component-catalog__row span,
+	    .cltch-component-catalog__row dt {
+	      color: var(--cltch-muted);
+	    }
+
+	    .cltch-component-catalog__tools {
+	      display: grid;
+	      grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+	      gap: 12px;
+	      align-items: end;
+	    }
+
+	    .cltch-component-catalog__tools label {
+	      display: grid;
+	      gap: 6px;
+	      color: var(--cltch-muted);
+	      font-size: 12px;
+	      font-weight: 800;
+	      text-transform: uppercase;
+	      letter-spacing: 0;
+	    }
+
+	    .cltch-component-catalog__tools input,
+	    .cltch-component-catalog__tools select {
+	      min-height: 44px;
+	      border: 1px solid var(--cltch-line);
+	      border-radius: 10px;
+	      background: var(--cltch-bg);
+	      color: var(--cltch-text);
+	      padding: 0 12px;
+	      font: inherit;
+	    }
+
+	    .cltch-component-catalog__list {
+	      display: grid;
+	      gap: 10px;
+	      max-height: 680px;
+	      overflow: auto;
+	      padding-right: 4px;
+	    }
+
+	    .cltch-component-catalog__row {
+	      padding: 14px;
+	      display: grid;
+	      grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+	      gap: 14px;
+	    }
+
+	    .cltch-component-catalog__row strong {
+	      display: block;
+	      color: var(--cltch-text);
+	      font-size: 15px;
+	      line-height: 1.35;
+	    }
+
+	    .cltch-component-catalog__row span {
+	      display: block;
+	      margin-top: 4px;
+	      line-height: 1.45;
+	    }
+
+	    .cltch-component-catalog__row dl {
+	      margin: 0;
+	      display: grid;
+	      grid-template-columns: repeat(4, minmax(0, 1fr));
+	      gap: 8px;
+	    }
+
+	    .cltch-component-catalog__row dt {
+	      font-size: 11px;
+	      font-weight: 800;
+	      text-transform: uppercase;
+	    }
+
+	    .cltch-component-catalog__row dd {
+	      margin: 2px 0 0;
+	      color: var(--cltch-text);
+	      font-weight: 700;
+	      overflow-wrap: anywhere;
+	    }
+
+	    @media (max-width: 760px) {
+	      .cltch-component-catalog__summary,
+	      .cltch-component-catalog__tools,
+	      .cltch-component-catalog__row {
+	        grid-template-columns: 1fr;
+	      }
+
+	      .cltch-component-catalog__row dl {
+	        grid-template-columns: repeat(2, minmax(0, 1fr));
+	      }
+	    }
+	  </style>
 </head>
 <body>
   <header>
@@ -57,14 +183,20 @@
     <section class="ops-hero">
       <p class="hero-kicker">Operations</p>
       <h1>Platform health, trust, payment, and support review.</h1>
-      <p>This page gives CLTCH operations a single local control surface for the components that need human oversight before deeper provider integrations are connected.</p>
+      <p>This page provides browser-local review aids. It does not connect to production booking cases or an admin backend. Do not enter sensitive customer or payment details here.</p>
     </section>
 
-    <section class="platform-card">
-      <h2>Operations Dashboard</h2>
-      <p>Use these lanes to review booking health, support problems, payment readiness, and profile trust signals.</p>
-      <div id="opsDashboardComponent" style="margin-top:16px;"></div>
-    </section>
+	    <section class="platform-card">
+	      <h2>Operations Dashboard</h2>
+	      <p>Use these lanes to review booking health, support problems, payment readiness, and profile trust signals.</p>
+	      <div id="opsDashboardComponent" style="margin-top:16px;"></div>
+	    </section>
+
+	    <section class="platform-card">
+	      <h2>Available Operator Helpers</h2>
+	      <p>Seven wired local helpers for booking, payment, trust, support, portfolio, and platform review. Their saved state remains in this browser.</p>
+	      <div id="opsComponentCatalog" style="margin-top:16px;"></div>
+	    </section>
 
     <section class="platform-grid" style="width:100%;margin:0;">
       <div class="platform-component">
@@ -78,8 +210,8 @@
         <div id="opsTrustComponent"></div>
       </div>
       <div class="platform-component">
-        <h2>Issue Queue</h2>
-        <p>Record active booking problems and the next support action.</p>
+        <h2>Issue Note (Local)</h2>
+        <p>Record a non-sensitive issue summary and the next support action in this browser.</p>
         <div id="opsDisputeComponent"></div>
       </div>
     </section>
@@ -87,16 +219,16 @@
 
   <footer>&copy; 2026 CLTCH.NTWRK</footer>
 
-  <script src="scripts/platform-components.js"></script>
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      if (!window.PlatformComponents) return;
-      window.PlatformComponents.initOperationsDashboard("opsDashboardComponent");
-      window.PlatformComponents.initPaymentLifecycle("opsPaymentComponent");
-      window.PlatformComponents.initTrustVerification("opsTrustComponent");
-      window.PlatformComponents.initDisputeFlow("opsDisputeComponent");
-      window.CLTCHLoading?.done();
-    });
-  </script>
+	  <script>
+	    document.addEventListener("DOMContentLoaded", function () {
+	      if (!window.PlatformComponents) return;
+	      window.PlatformComponents.initOperationsDashboard("opsDashboardComponent");
+	      window.PlatformComponents.initPaymentLifecycle("opsPaymentComponent");
+	      window.PlatformComponents.initTrustVerification("opsTrustComponent");
+	      window.PlatformComponents.initDisputeFlow("opsDisputeComponent");
+	      window.CLTCHOperationalComponents?.mount("opsComponentCatalog");
+	      window.CLTCHLoading?.done();
+	    });
+	  </script>
 </body>
 </html>

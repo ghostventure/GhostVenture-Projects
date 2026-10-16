@@ -1,11 +1,15 @@
 # CLTCH.NTWRK Docs Index
 
-Last updated: 2026-05-22
+Last updated: 2026-10-16
 
 This file is the entry point for the current CLTCH.NTWRK repo documentation set.
 
 ## Core docs
 
+- `CLTCH_MODERNIZATION_2026-10-16.md`
+  - Current profile-data safeguards, account-copy export, PWA install flow, truthful Ops catalog scope, and verification evidence.
+- `FEATURE_AUDIT_200.md`
+  - Numbered 200-item delivery checklist; only evidence-backed checked items count as implemented.
 - `PROJECT_STATUS.md`
   - Current implemented state of the live website, wrapper work, native alternates, and known limits.
 - `SECURITY_PERFORMANCE.md`
@@ -51,6 +55,12 @@ This file is the entry point for the current CLTCH.NTWRK repo documentation set.
   - Next.js foundation added while preserving the existing static HTML and mobile wrapper paths.
 - `ANDROID_APK_REFRESH_2026-04-22.md`
   - latest Android debug APK refresh after the Next foundation.
+- `ANDROID_APP_SITE_PACKAGE_2026-07-15.md`
+  - hosted Android app GUI page, shared Firebase Auth/user database, role-record parity, zipped APK path, and deploy verification notes.
+- `PLUGZ_CLTCH_BRIDGE_2026-07-29.md`
+  - Plugz Firebase to CLTCH sign-in bridge, sign-in-gated token verification, six-month membership grant, deployment record, live smoke results, and Firebase console prerequisites.
+- `PLUGZ_IDENTITY_HANDOFF_2026-07-29.md`
+  - Plugz-side identity handoff for required auth sequence, accepted Plugz user data, server-owned records, profile-page behavior, live endpoint checks, and real-user test checklist.
 
 ## Fast lookup
 
@@ -119,13 +129,18 @@ This file is the entry point for the current CLTCH.NTWRK repo documentation set.
   - user summaries
   - role persistence
   - auth activity markers
+- `android-app.html`
+  - hosted Android-facing GUI
+  - shared Firebase Auth sign-in/sign-up
+  - shared `users/{uid}` summaries and `userRoles/{uid}` role routing
+  - zipped Android package download link
 - `app/gig-queries.js`
   - shared bounded Firestore query builders for host and performer gig reads
 - `site-init.js`
   - shared splash, dexterity layer, deferred quick dock, enhanced guided assistant, and persistent theme toggle
   - assistant now includes page-specific next-step checklists, action chips, and remembered quick-question topics
   - dexterity layer now also includes a lightweight quick-jump palette
-  - component library now presents as the CLTCH Dispatch Kit with 145 on-demand tools, including the 45-item Loaded Kit
+  - feature catalog is labeled as 145 proposed concepts, with no active integrations; fake enable/run controls are removed
 - `app/visible-snapshot.js`
   - pauses live Firestore listeners while tabs are hidden
 - `app/mode-switch.js`

@@ -27,6 +27,7 @@ Shared language now follows:
 - Changed the shared quick-dock button from `Components` to `Dispatch Kit`.
 - Changed the component modal from `CLTCH Component Library` to `CLTCH Dispatch Kit`.
 - Changed the install summary to `145 on-demand tools installed`.
+- **Correction (2026-10-16):** those entries were proposals, not installed tools. The Enable/Run buttons only wrote local activity markers; the current UI labels them as proposed concepts and only opens related pages. See `docs/CLTCH_MODERNIZATION_2026-10-16.md`.
 - Reframed shared page action hubs:
   - Host pages now lead with `Request Talent Now`.
   - Performer pages lead with availability, nearby requests, and accepted jobs.

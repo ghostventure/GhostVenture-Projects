@@ -145,25 +145,20 @@
     </section>
   </main>
 
-  <section class="platform-grid" aria-label="Booking workflow components">
+  <section class="platform-grid" aria-label="Private booking planning tools">
     <div class="platform-component">
-      <h2>Booking Agreement</h2>
-      <p>Lock the scope, terms, contacts, and rider details before the gig moves to confirmed.</p>
+      <h2>Booking Preparation Checklist</h2>
+      <p>Saved in this browser for this booking only. Checkboxes are private reminders, not confirmations shared with either participant.</p>
       <div id="bookingAgreementComponent"></div>
     </div>
     <div class="platform-component">
-      <h2>Status Timeline</h2>
-      <p>Track the booking from request through payment with one visible status model.</p>
-      <div id="bookingStatusComponent"></div>
-    </div>
-    <div class="platform-component">
-      <h2>Payment Lifecycle</h2>
-      <p>Keep the payment path clear while external payment rails are being connected.</p>
+      <h2>Payment Planning Checklist</h2>
+      <p>Private browser reminders only; these checkboxes do not verify or change payment status.</p>
       <div id="paymentLifecycleComponent"></div>
     </div>
     <div class="platform-component">
-      <h2>Issue Resolution</h2>
-      <p>Document no-shows, payment issues, access problems, and the next support action.</p>
+      <h2>Private Booking Note</h2>
+      <p>Notes stay in this browser for this booking and are not sent to support or the other participant.</p>
       <div id="disputeFlowComponent"></div>
     </div>
   </section>
@@ -529,10 +524,10 @@
         window.Enhancements.initFeedbackForms('hostFeedbackForm', 'performerFeedbackForm');
       }
       if (window.PlatformComponents) {
-        window.PlatformComponents.initBookingAgreement('bookingAgreementComponent');
-        window.PlatformComponents.initStatusTimeline('bookingStatusComponent');
-        window.PlatformComponents.initPaymentLifecycle('paymentLifecycleComponent');
-        window.PlatformComponents.initDisputeFlow('disputeFlowComponent');
+        const bookingId = new URLSearchParams(window.location.search).get('id') || 'unlinked';
+        window.PlatformComponents.initBookingAgreement('bookingAgreementComponent', bookingId);
+        window.PlatformComponents.initPaymentLifecycle('paymentLifecycleComponent', bookingId);
+        window.PlatformComponents.initDisputeFlow('disputeFlowComponent', bookingId);
       }
     });
   </script>

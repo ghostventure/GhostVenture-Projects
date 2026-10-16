@@ -16,7 +16,18 @@
     "open:ios": "npx cap open ios",
     "open:android": "npx cap open android",
     "doctor:mobile": "npx cap doctor",
-    "log:policy": "node scripts/policy-log.mjs \"Compliance refresh\""
+    "log:policy": "node scripts/policy-log.mjs \"Compliance refresh\"",
+    "smoke:components": "node scripts/smoke-operational-components.mjs",
+    "smoke:plugz": "node scripts/smoke-plugz-bridge.mjs",
+    "smoke:draft-protection": "node scripts/smoke-profile-drafts.mjs",
+    "smoke:account-export": "node scripts/smoke-account-export.mjs",
+    "smoke:hosting-policy": "node scripts/smoke-hosting-policy.mjs",
+    "smoke:portfolio-links": "node scripts/smoke-portfolio-links.mjs",
+    "smoke:pwa-shortcuts": "node scripts/smoke-pwa-shortcuts.mjs",
+    "smoke:dispatch-catalog": "node scripts/smoke-dispatch-catalog.mjs",
+    "smoke:host-readiness": "node scripts/smoke-host-readiness.mjs",
+    "smoke:local-data": "node scripts/smoke-local-data.mjs",
+    "smoke:travel-fee": "node scripts/smoke-travel-fee.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

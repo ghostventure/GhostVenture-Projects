@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090b10">
+  <meta name="description" content="CLTCH.NTWRK Android app preview and install page.">
+  <link rel="icon" href="icons/cltch-icon.svg" type="image/svg+xml">
+  <title>CLTCH Android</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      color-scheme: dark;
+      --bg: #090b10;
+      --surface: #101720;
+      --surface-2: #171f2a;
+      --surface-3: #202936;
+      --ink: #f8f0e4;
+      --muted: #b9ad9b;
+      --soft: #dfd0b7;
+      --line: rgba(228, 188, 113, 0.22);
+      --gold: #e4bc71;
+      --gold-2: #b77a23;
+      --teal: #69d7d0;
+      --red: #f06a5f;
+      --green: #7bdda2;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(105, 215, 208, 0.18), transparent 28%),
+        radial-gradient(circle at 86% 18%, rgba(240, 106, 95, 0.12), transparent 28%),
+        linear-gradient(160deg, #090b10 0%, #101620 54%, #18120c 100%);
+      color: var(--ink);
+      font-family: "Space Grotesk", "Manrope", "Inter", system-ui, sans-serif;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input, select {
+      font: inherit;
+    }
+    .app-shell {
+      width: min(480px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      background:
+        linear-gradient(90deg, rgba(105, 215, 208, 0.045) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(228, 188, 113, 0.035) 1px, transparent 1px),
+        rgba(9, 11, 16, 0.88);
+      background-size: 28px 28px;
+      border-inline: 1px solid rgba(228, 188, 113, 0.12);
+      position: relative;
+      box-shadow: var(--shadow);
+    }
+    .top-app-bar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      min-height: calc(72px + var(--safe-top));
+      padding: calc(12px + var(--safe-top)) 16px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(9, 11, 16, 0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(228, 188, 113, 0.16);
+    }
+    .identity {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .identity img {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.06);
+      padding: 7px;
+    }
+    .identity span {
+      display: block;
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+    .identity strong {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1.1;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .icon-button {
+      width: 44px;
+      height: 44px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .content {
+      padding: 16px 16px calc(110px + var(--safe-bottom));
+    }
+    .screen {
+      display: none;
+      animation: fadeIn 160ms ease;
+    }
+    .screen.active { display: block; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .signal-card {
+      border: 1px solid rgba(228, 188, 113, 0.24);
+      border-radius: 24px;
+      background:
+        linear-gradient(135deg, rgba(228, 188, 113, 0.11), transparent 38%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035));
+      padding: 18px;
+    }
+    .scan {
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--red), var(--teal), var(--gold));
+      margin-bottom: 16px;
+    }
+    .kicker {
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 8px 0 10px;
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .copy {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+    .pill-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .pill,
+    .mini-card,
+    .auth-card,
+    .sheet-card {
+      border: 1px solid rgba(228, 188, 113, 0.18);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .pill {
+      min-height: 70px;
+      padding: 10px;
+    }
+    .pill strong,
+    .mini-card strong,
+    .sheet-card strong {
+      display: block;
+      color: var(--green);
+      font-size: 13px;
+      line-height: 1.2;
+    }
+    .pill span,
+    .mini-card span,
+    .sheet-card span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 18px 0 10px;
+    }
+    .section-title h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.1;
+    }
+    .section-title span {
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+    .gig-card {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid rgba(228, 188, 113, 0.18);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.055);
+      padding: 12px;
+    }
+    .time {
+      min-width: 54px;
+      min-height: 54px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      background: rgba(105, 215, 208, 0.12);
+      color: var(--teal);
+      font-weight: 900;
+      line-height: 1;
+    }
+    .gig-card h3 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+    .gig-card p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .badge {
+      border: 1px solid rgba(123, 221, 162, 0.28);
+      border-radius: 999px;
+      color: var(--green);
+      background: rgba(123, 221, 162, 0.08);
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .mini-card {
+      min-height: 112px;
+      padding: 14px;
+    }
+    .mini-card .icon {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      background: rgba(228, 188, 113, 0.12);
+      color: var(--gold);
+      font-weight: 900;
+    }
+    .auth-card {
+      padding: 16px;
+      margin-top: 14px;
+    }
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin: 12px 0;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .segmented button {
+      min-height: 46px;
+      border: 1px solid transparent;
+      border-radius: 16px;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .segmented button.active {
+      border-color: rgba(105, 215, 208, 0.34);
+      background: rgba(105, 215, 208, 0.12);
+      color: var(--teal);
+    }
+    .field {
+      display: grid;
+      gap: 6px;
+      margin: 10px 0;
+    }
+    label {
+      color: var(--soft);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    input,
+    select {
+      min-height: 50px;
+      width: 100%;
+      border: 1px solid rgba(228, 188, 113, 0.18);
+      border-radius: 16px;
+      background: rgba(7, 10, 15, 0.74);
+      color: var(--ink);
+      padding: 0 12px;
+      font-weight: 800;
+    }
+    .primary-action {
+      min-height: 52px;
+      width: 100%;
+      border: 1px solid rgba(255, 230, 178, 0.62);
+      border-radius: 18px;
+      background: linear-gradient(180deg, var(--gold), var(--gold-2));
+      color: #17100a;
+      font-weight: 950;
+      cursor: pointer;
+    }
+    .status {
+      min-height: 20px;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .status.error { color: #ff938b; }
+    .hidden { display: none; }
+    .sync-map {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .node {
+      min-height: 72px;
+      border: 1px solid rgba(228, 188, 113, 0.18);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.055);
+      padding: 10px;
+    }
+    .node strong { color: var(--teal); font-size: 12px; }
+    .node span { display: block; color: var(--muted); font-size: 11px; font-weight: 800; }
+    .beam {
+      width: 12px;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--teal);
+    }
+    .install-card {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid rgba(228, 188, 113, 0.24);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .install-card a {
+      min-height: 50px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 230, 178, 0.62);
+      background: linear-gradient(180deg, var(--gold), var(--gold-2));
+      color: #17100a;
+      font-weight: 950;
+    }
+    .bottom-nav {
+      position: fixed;
+      left: 50%;
+      bottom: 0;
+      z-index: 40;
+      width: min(480px, 100%);
+      transform: translateX(-50%);
+      padding: 8px 12px calc(8px + var(--safe-bottom));
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      border-top: 1px solid rgba(228, 188, 113, 0.18);
+      background: rgba(9, 11, 16, 0.94);
+      backdrop-filter: blur(16px);
+    }
+    .bottom-nav button {
+      min-height: 58px;
+      border: 0;
+      border-radius: 18px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .bottom-nav button span {
+      display: block;
+      margin-bottom: 2px;
+      font-size: 17px;
+    }
+    .bottom-nav button.active {
+      background: rgba(228, 188, 113, 0.12);
+      color: var(--gold);
+    }
+    .fab {
+      position: fixed;
+      right: max(18px, calc((100vw - 480px) / 2 + 18px));
+      bottom: calc(92px + var(--safe-bottom));
+      z-index: 45;
+      width: 62px;
+      height: 62px;
+      border: 1px solid rgba(255, 230, 178, 0.7);
+      border-radius: 22px;
+      background: linear-gradient(180deg, var(--gold), var(--gold-2));
+      color: #17100a;
+      font-size: 30px;
+      font-weight: 900;
+      box-shadow: 0 18px 36px rgba(0,0,0,0.32);
+      cursor: pointer;
+    }
+    @media (min-width: 900px) {
+      body {
+        display: grid;
+        place-items: start center;
+      }
+      .app-shell {
+        margin-top: 24px;
+        min-height: calc(100vh - 48px);
+        border-radius: 34px;
+        overflow: hidden;
+      }
+      .top-app-bar {
+        border-radius: 34px 34px 0 0;
+      }
+      .bottom-nav {
+        border-radius: 24px 24px 0 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app-shell" aria-label="CLTCH Android app">
+    <header class="top-app-bar">
+      <a class="identity" href="index.html" aria-label="CLTCH.NTWRK home">
+        <img src="icons/cltch-icon.svg" alt="">
+        <span>
+          <span>CLTCH Android</span>
+          <strong id="appTitle">Today</strong>
+        </span>
+      </a>
+      <a class="icon-button" href="auth.html" aria-label="Open CLTCH sign in">↗</a>
+    </header>
+
+    <section class="content">
+      <article class="screen active" id="screen-today">
+        <div class="signal-card">
+          <div class="scan"></div>
+          <p class="kicker">Gig command center</p>
+          <h1>Book faster. Show up ready.</h1>
+          <p class="copy">A custom Android surface for hosts, venues, performers, and creative crews. Same CLTCH account, faster mobile decisions.</p>
+          <div class="pill-grid">
+            <div class="pill"><strong>Same login</strong><span>Web + Android</span></div>
+            <div class="pill"><strong>Shared DB</strong><span>Users + roles</span></div>
+            <div class="pill"><strong>Secure</strong><span>Auth events</span></div>
+          </div>
+        </div>
+
+        <div class="section-title">
+          <h2>Today queue</h2>
+          <span>Live pattern</span>
+        </div>
+        <div class="timeline">
+          <article class="gig-card">
+            <div class="time">7p</div>
+            <div><h3>Rooftop DJ request</h3><p>Host needs a fast accept with payout ready.</p></div>
+            <span class="badge">Match</span>
+          </article>
+          <article class="gig-card">
+            <div class="time">9p</div>
+            <div><h3>Brand film crew slot</h3><p>Creative team needs confirmation and arrival notes.</p></div>
+            <span class="badge">Review</span>
+          </article>
+        </div>
+
+        <div class="section-title">
+          <h2>Quick actions</h2>
+          <span>Android first</span>
+        </div>
+        <div class="mini-grid">
+          <button class="mini-card" type="button" data-jump="auth"><span class="icon">+</span><strong>Create profile</strong><span>Start shared CLTCH account setup.</span></button>
+          <button class="mini-card" type="button" data-jump="work"><span class="icon">◎</span><strong>Open radar</strong><span>See performer and host work lanes.</span></button>
+          <button class="mini-card" type="button" data-jump="security"><span class="icon">▣</span><strong>Check sync</strong><span>Review user and role database path.</span></button>
+          <button class="mini-card" type="button" data-jump="install"><span class="icon">↓</span><strong>Install</strong><span>Get the Android package.</span></button>
+        </div>
+      </article>
+
+      <article class="screen" id="screen-auth">
+        <p class="kicker">Shared account</p>
+        <h1>Use the same CLTCH login.</h1>
+        <p class="copy">This Android flow uses the same Firebase Auth users, account summaries, and host/performer role records as the website.</p>
+        <div class="auth-card">
+          <div class="segmented" role="tablist" aria-label="Auth mode">
+            <button id="signinTab" class="active" type="button">Sign in</button>
+            <button id="signupTab" type="button">Sign up</button>
+          </div>
+          <div class="field signup-only hidden">
+            <label for="role">I am a</label>
+            <select id="role">
+              <option value="musician">Performer / Creative</option>
+              <option value="host">Host / Venue</option>
+            </select>
+          </div>
+          <div class="field signup-only hidden">
+            <label for="displayName">Display name</label>
+            <input id="displayName" autocomplete="name" placeholder="Stage name or venue">
+          </div>
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" placeholder="Upper/lower/number">
+          </div>
+          <input id="website" class="hidden" tabindex="-1" autocomplete="off">
+          <button id="authButton" type="button" class="primary-action">Open CLTCH</button>
+          <p id="authStatus" class="status" aria-live="polite"></p>
+        </div>
+      </article>
+
+      <article class="screen" id="screen-work">
+        <p class="kicker">Work lanes</p>
+        <h1>Purpose-built for gig flow.</h1>
+        <p class="copy">This does not mirror the website screen-for-screen. It compresses the important Android jobs: see work, accept fast, post cleanly, and keep profile readiness close.</p>
+        <div class="mini-grid">
+          <a class="mini-card" href="gig-radar.html"><span class="icon">R</span><strong>Gig Radar</strong><span>Open performer matches and review queues.</span></a>
+          <a class="mini-card" href="host.html"><span class="icon">H</span><strong>Host Desk</strong><span>Post, duplicate, cancel, and reopen gigs.</span></a>
+          <a class="mini-card" href="musician-profile.html"><span class="icon">P</span><strong>Performer profile</strong><span>Availability, payout, tier, and profile setup.</span></a>
+          <a class="mini-card" href="host-profile.html"><span class="icon">V</span><strong>Venue profile</strong><span>Host details, payout, and venue readiness.</span></a>
+        </div>
+      </article>
+
+      <article class="screen" id="screen-security">
+        <p class="kicker">Security parity</p>
+        <h1>Same data contract, mobile shape.</h1>
+        <p class="copy">Android keeps CLTCH account logic aligned with the website while presenting it in a faster mobile interface.</p>
+        <div class="sync-map" aria-label="Shared database path">
+          <div class="node"><strong>Auth</strong><span>Firebase users</span></div>
+          <div class="beam"></div>
+          <div class="node"><strong>Database</strong><span>users/{uid}</span></div>
+          <div class="beam"></div>
+          <div class="node"><strong>Roles</strong><span>userRoles/{uid}</span></div>
+        </div>
+        <div class="section-title">
+          <h2>Matched safeguards</h2>
+          <span>CLTCH</span>
+        </div>
+        <div class="timeline">
+          <article class="gig-card">
+            <div class="time">PW</div>
+            <div><h3>Strong password rule</h3><p>Uppercase, lowercase, number, and 8+ characters.</p></div>
+            <span class="badge">On</span>
+          </article>
+          <article class="gig-card">
+            <div class="time">RL</div>
+            <div><h3>Role normalization</h3><p>Android writes host or performer through the shared helper.</p></div>
+            <span class="badge">On</span>
+          </article>
+          <article class="gig-card">
+            <div class="time">EV</div>
+            <div><h3>Auth event logging</h3><p>Sign-in state updates use the same site helper.</p></div>
+            <span class="badge">On</span>
+          </article>
+        </div>
+      </article>
+
+      <article class="screen" id="screen-install">
+        <p class="kicker">Install</p>
+        <h1>Android package is ready.</h1>
+        <p class="copy">The public page stays app-native. The native package remains a zipped APK while Capacitor stays the underlying Android build path.</p>
+        <div class="install-card">
+          <strong>CLTCH Android package</strong>
+          <span>Direct site-hosted zipped APK for internal Android install testing.</span>
+          <a href="downloads/CLTCH-NTWRK-Android-Debug-1.0.0.apk.zip" download>Download Android Package</a>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <button class="fab" type="button" data-jump="auth" aria-label="Create or open account">+</button>
+  <nav class="bottom-nav" aria-label="Primary Android app navigation">
+    <button class="active" type="button" data-target="today"><span>⌂</span>Today</button>
+    <button type="button" data-target="work"><span>◎</span>Work</button>
+    <button type="button" data-target="security"><span>▣</span>Sync</button>
+    <button type="button" data-target="install"><span>↓</span>Install</button>
+  </nav>
+
+  <script type="module">
+    import {
+      createUserWithEmailAndPassword,
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { auth, db, firebaseConfig } from "./app/firebase-client.js";
+    import { ensureRoleRecord, normalizeRole, readUserSummary, recordAuthEvent, writeUserSummary } from "./app/user-db.js";
+
+    const screens = Array.from(document.querySelectorAll(".screen"));
+    const navButtons = Array.from(document.querySelectorAll(".bottom-nav [data-target]"));
+    const titleEl = document.getElementById("appTitle");
+    const emailEl = document.getElementById("email");
+    const passwordEl = document.getElementById("password");
+    const displayNameEl = document.getElementById("displayName");
+    const roleEl = document.getElementById("role");
+    const websiteEl = document.getElementById("website");
+    const statusEl = document.getElementById("authStatus");
+    const authButton = document.getElementById("authButton");
+    const signinTab = document.getElementById("signinTab");
+    const signupTab = document.getElementById("signupTab");
+    let mode = "signin";
+    let currentUser = null;
+
+    function openScreen(id) {
+      screens.forEach((screen) => screen.classList.toggle("active", screen.id === `screen-${id}`));
+      navButtons.forEach((button) => button.classList.toggle("active", button.dataset.target === id));
+      titleEl.textContent = id === "today" ? "Today" : id === "work" ? "Work" : id === "security" ? "Sync" : id === "install" ? "Install" : "Account";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle("error", isError);
+    }
+
+    function validEmail(value) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+    }
+
+    function strongPassword(value) {
+      return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(value || ""));
+    }
+
+    function setMode(nextMode) {
+      mode = nextMode;
+      signinTab.classList.toggle("active", mode === "signin");
+      signupTab.classList.toggle("active", mode === "signup");
+      document.querySelectorAll(".signup-only").forEach((item) => item.classList.toggle("hidden", mode !== "signup"));
+      authButton.textContent = mode === "signup" ? "Create CLTCH account" : "Open CLTCH";
+      setStatus(firebaseConfig.projectId ? `Connected to ${firebaseConfig.projectId}` : "Firebase config unavailable");
+    }
+
+    async function routeFor(user) {
+      const summary = await readUserSummary(db, user.uid);
+      const role = normalizeRole(summary?.role || roleEl.value, "musician");
+      return role === "host" ? "host.html" : "musician-matched-gigs.html";
+    }
+
+    async function completeSession(user, role, displayName = "") {
+      const safeRole = await ensureRoleRecord(db, user.uid, role);
+      await writeUserSummary(db, user.uid, {
+        email: user.email || emailEl.value,
+        role: safeRole,
+        displayName: displayName || user.displayName || "",
+        status: "active",
+        authProvider: user.providerData?.[0]?.providerId || "password"
+      }, true);
+      await recordAuthEvent(db, user, "sign_in", { role: safeRole });
+      const target = safeRole === "host" ? "host.html" : "musician-matched-gigs.html";
+      setStatus(`Signed in. Opening ${safeRole === "host" ? "Host Desk" : "Gig Radar"}...`);
+      window.setTimeout(() => { window.location.href = target; }, 650);
+    }
+
+    async function handleAuth() {
+      if (currentUser) {
+        await signOut(auth);
+        currentUser = null;
+        authButton.textContent = mode === "signup" ? "Create CLTCH account" : "Open CLTCH";
+        setStatus("Signed out.");
+        return;
+      }
+      const email = String(emailEl.value || "").trim().toLowerCase();
+      const password = String(passwordEl.value || "");
+      if (websiteEl.value) return setStatus("Signup blocked.", true);
+      if (!validEmail(email)) return setStatus("Enter a valid email.", true);
+      if (!strongPassword(password)) return setStatus("Use 8+ characters with uppercase, lowercase, and a number.", true);
+      authButton.disabled = true;
+      setStatus(mode === "signup" ? "Creating shared CLTCH account..." : "Opening shared CLTCH account...");
+      try {
+        if (mode === "signup") {
+          const credential = await createUserWithEmailAndPassword(auth, email, password);
+          await completeSession(credential.user, normalizeRole(roleEl.value, "musician"), displayNameEl.value);
+        } else {
+          const credential = await signInWithEmailAndPassword(auth, email, password);
+          const target = await routeFor(credential.user);
+          await recordAuthEvent(db, credential.user, "sign_in");
+          setStatus(`Signed in. Opening ${target.includes("host") ? "Host Desk" : "Gig Radar"}...`);
+          window.setTimeout(() => { window.location.href = target; }, 650);
+        }
+      } catch (error) {
+        setStatus(error?.code === "auth/email-already-in-use" ? "This email already has a CLTCH account." : "Unable to open that CLTCH account.", true);
+      } finally {
+        authButton.disabled = false;
+      }
+    }
+
+    navButtons.forEach((button) => button.addEventListener("click", () => openScreen(button.dataset.target)));
+    document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => openScreen(button.dataset.jump)));
+    signinTab.addEventListener("click", () => setMode("signin"));
+    signupTab.addEventListener("click", () => setMode("signup"));
+    authButton.addEventListener("click", handleAuth);
+
+    onAuthStateChanged(auth, async (user) => {
+      currentUser = user;
+      if (!user) {
+        setMode(mode);
+        return;
+      }
+      const summary = await readUserSummary(db, user.uid).catch(() => null);
+      authButton.textContent = "Sign out";
+      setStatus(`Signed in as ${summary?.displayName || user.email}. Shared database is active.`);
+    });
+  </script>
+</body>
+</html>

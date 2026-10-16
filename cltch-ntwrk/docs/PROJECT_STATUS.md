@@ -1,6 +1,6 @@
 # CLTCH.NTWRK Project Status
 
-Last updated: 2026-05-22
+Last updated: 2026-10-16
 
 This file records the current implemented state of the CLTCH.NTWRK website and native app work in this repository.
 
@@ -22,14 +22,22 @@ Latest workspace UI enrichment record: `docs/WORKSPACE_UI_ENRICHMENT_2026-05-01.
 Latest homepage service clarity record: `docs/HOMEPAGE_SERVICE_CLARITY_ROLLOUT_2026-05-21.md`
 Latest sticky tile/card table cleanup record: `docs/STICKY_TILE_CARD_TABLE_CLEANUP_2026-05-22.md`
 Latest handoff record: `docs/HANDOFF_2026-04-17.md`
+Latest modernization record: `docs/CLTCH_MODERNIZATION_2026-10-16.md`
+Feature target audit: `docs/FEATURE_AUDIT_200.md` (11 verified in this change; 189 remain unchecked).
 
 ## Live Website
 
-- Live Hosting URL: `https://cltch-ntwrk.web.app`
-- Firebase project: `cltch-ntwrk`
+- Live Hosting URL: `https://cltch-ntwrk-social.web.app`
+- Firebase project and Hosting site: `cltch-ntwrk-social` (project number `566614252202`).
 - Hosting serves the repo root, but native/dev folders are excluded through `firebase.json` so only website assets deploy.
 - Hosting-side backend bridge changes were deployed on 2026-04-28.
 - Full Functions deployment is currently blocked until the Firebase project is upgraded to Blaze.
+
+## 2026-10-16 Modernization
+
+- See `docs/CLTCH_MODERNIZATION_2026-10-16.md` for implemented account export, per-account profile draft safeguards, and PWA installation behavior.
+- `ops.html` is a browser-local review aid with seven wired helpers and no connected live operations API. It must not be used as production case management.
+- The 200-feature target is incomplete: 11 distinct capabilities are implemented and verified in this change; 189 checklist entries remain unchecked in `docs/FEATURE_AUDIT_200.md`.
 
 ## Next.js Foundation
 
@@ -69,7 +77,7 @@ Latest handoff record: `docs/HANDOFF_2026-04-17.md`
   - Arrive
   - Complete
   - Pay + Review
-- The shared component library is now presented as the `CLTCH Dispatch Kit`.
+- The shared component browser is now presented as `CLTCH Feature Concepts`. Its 145 entries are proposals, and none are active integrations; the former `Enable`/`Run` controls only recorded local clicks and have been removed.
 - Detailed record: `docs/ON_DEMAND_DISPATCH_REFRAME_2026-04-18.md`
 - The Dispatch Kit, shared quick action tiles, gig radar cards, and host profile fields now wrap into responsive columns on wider screens instead of forcing long single-column scrolling.
 - The quick action dock now lives in the page flow instead of sticking to the viewport; the guided assistant remains the only persistent helper.
@@ -400,11 +408,3 @@ Latest handoff record: `docs/HANDOFF_2026-04-17.md`
 - Firebase Storage is still optional and not required for the current core flows.
 - Plaid function routes remain in Hosting config, but Cloud Functions are not fully deployable on the current project plan.
 - Full native release binaries for the SwiftUI and Kotlin alternates still need to be generated from Xcode and Android Studio on your machines.
-
-## 2026-06-25 GitHub Upload Note
-
-- Uploaded CLTCH.NTWRK to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
-- Repository subfolder: `cltch-ntwrk/`.
-- Upload commit: `65920a4 Add FoxHub CLTCH EstateHat and ExcelBolt projects`.
-- The GitHub copy is source-focused. It intentionally excludes local dependencies, build output, Firebase cache, release APKs, environment files, local databases, generated webview bundles, and generated native build artifacts.
-- The GitHub repository is currently public, so do not commit credentials, private user data, payment/provider secrets, or unpublished operational secrets.

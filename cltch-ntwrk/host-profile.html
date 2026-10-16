@@ -299,6 +299,24 @@
       </div>
       <div id="draftRestoreText" style="font-size:12px;color:#8f8f8f;line-height:1.5;">Profile drafts save locally while you work.</div>
       <div id="authActivityText" style="font-size:12px;color:#8f8f8f;line-height:1.5;margin-top:6px;">Auth activity will appear here once available.</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;">
+        <button type="button" id="downloadAccountCopy" class="btn-plaid" style="min-height:40px;width:auto;">Download account copy (JSON)</button>
+        <button type="button" id="clearLocalDraft" class="btn-plaid" style="min-height:40px;width:auto;">Clear local draft</button>
+        <span id="accountCopyStatus" role="status" aria-live="polite" style="font-size:12px;color:#8f8f8f;"></span>
+      </div>
+      <p style="font-size:11px;color:#8f8f8f;line-height:1.5;margin-top:6px;">The file contains your account and profile records, including payout contact details. It is saved to this device.</p>
+    </div>
+    <div style="background:#111;border:1px solid #262626;border-radius:14px;padding:16px 18px;margin-bottom:18px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+        <strong style="font-size:15px;">Plugz Member Access</strong>
+        <span id="plugzMembershipState" style="font-size:13px;color:#8ea4bf;">Not connected</span>
+      </div>
+      <p id="plugzMembershipNote" style="font-size:12px;color:#8f8f8f;line-height:1.5;margin-bottom:12px;">Connect a Plugz account to activate a free six-month CLTCH membership on this host profile.</p>
+      <label style="display:grid;grid-template-columns:18px 1fr;gap:10px;align-items:start;font-size:12px;color:#8f8f8f;line-height:1.5;text-transform:none;letter-spacing:0;margin-bottom:12px;">
+        <input type="checkbox" id="plugzMembershipTerms" style="width:16px;height:16px;margin-top:1px;">
+        <span>I accept the CLTCH Plugz membership terms and allow CLTCH to import and auto-save my Plugz account information for this feature.</span>
+      </label>
+      <button type="button" class="btn-plaid" id="plugzMembershipBtn" style="width:auto;min-width:160px;border-color:#f5a623;background:#f5a623;color:#000;">Connect Plugz</button>
     </div>
 
     <form id="profileForm">
@@ -426,7 +444,9 @@
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { getStripeConfig } from "./app/stripe-connect.js";
     import { initProfileDrafts } from "./app/profile-drafts.js";
+    import { createAccountExport, downloadAccountExport } from "./app/account-export.js";
     import { installUnsavedChangesGuard } from "./app/unsaved-changes.js";
+    import { activatePlugzMembershipForCurrentCltchUser, finishPendingPlugzProfileActivation } from "./app/plugz-bridge.js";
     import { buildOneId, readUserSummary, recordAuthEvent, writeUserSummary } from "./app/user-db.js";
 
     async function refreshUserVerification(user) {
@@ -520,6 +540,8 @@
       document.getElementById('payMethod').value = 'applepay';
       window.updatePayHandle();
       await loadProfile();
+      initUserScopedProfileDraft();
+      await finishPendingProfilePlugzActivation();
       window.CLTCHLoading?.done();
     });
 
@@ -529,6 +551,31 @@
       if (auth.currentUser) await recordAuthEvent(db, auth.currentUser, 'sign_out').catch(() => {});
       await signOut(auth);
       window.location.href = 'auth.html';
+    });
+
+    document.getElementById('downloadAccountCopy').addEventListener('click', async () => {
+      const button = document.getElementById('downloadAccountCopy');
+      const status = document.getElementById('accountCopyStatus');
+      if (!HOST_ID || !auth.currentUser) return;
+      if (!window.confirm('Download your account and profile records, including payout contact details, to this device?')) return;
+      button.disabled = true;
+      status.textContent = 'Preparing your account copy…';
+      try {
+        const snapshot = await createAccountExport({
+          user: auth.currentUser,
+          readDocument: async (collection, uid) => {
+            const result = await getDoc(doc(db, collection, uid));
+            return result.exists() ? result.data() : null;
+          }
+        });
+        downloadAccountExport(snapshot);
+        status.textContent = 'Account copy downloaded. Store the file somewhere private.';
+      } catch (error) {
+        console.error('Account export failed:', error);
+        status.textContent = 'Could not prepare the account copy. Try again when your connection is available.';
+      } finally {
+        button.disabled = false;
+      }
     });
 
     function formatTs(value) {
@@ -557,6 +604,25 @@
       const summary = await readUserSummary(db, HOST_ID);
       const oneId = summary?.oneId || buildOneId(HOST_ID);
       document.getElementById('authActivityText').textContent = `OneID: ${oneId} • Last sign-in: ${formatTs(summary?.authLastSignInAt)} • Last sign-out: ${formatTs(summary?.authLastSignOutAt)}`;
+      renderPlugzMembership(summary);
+    }
+
+    function renderPlugzMembership(summary = {}) {
+      const stateEl = document.getElementById('plugzMembershipState');
+      const noteEl = document.getElementById('plugzMembershipNote');
+      const buttonEl = document.getElementById('plugzMembershipBtn');
+      const termsEl = document.getElementById('plugzMembershipTerms');
+      if (!stateEl || !noteEl || !buttonEl) return;
+      const isActive = summary.membershipSource === 'plugz' && summary.membershipStatus === 'active';
+      const expiresAt = summary.membershipExpiresAt?.toDate ? summary.membershipExpiresAt.toDate() : (summary.membershipExpiresAt ? new Date(summary.membershipExpiresAt) : null);
+      const expiresLabel = expiresAt && Number.isFinite(expiresAt.getTime()) ? expiresAt.toLocaleDateString() : '';
+      stateEl.textContent = isActive ? 'Active' : 'Not connected';
+      stateEl.style.color = isActive ? '#4caf82' : '#8ea4bf';
+      noteEl.textContent = isActive
+        ? `Your Plugz six-month CLTCH membership is active${expiresLabel ? ' through ' + expiresLabel : ''}. Plugz account information has been auto-saved to CLTCH.`
+        : 'Connect a Plugz account to activate a free six-month CLTCH membership on this host profile.';
+      buttonEl.textContent = isActive ? 'Reconnect Plugz' : 'Connect Plugz';
+      if (termsEl && isActive) termsEl.checked = true;
     }
 
     async function initModeSwitch(currentMode, userId) {
@@ -788,6 +854,48 @@
       saveBtn.textContent = 'Save Profile';
     });
 
+    const plugzMembershipBtn = document.getElementById('plugzMembershipBtn');
+    if (plugzMembershipBtn) {
+      plugzMembershipBtn.addEventListener('click', async () => {
+        const statusMsg = document.getElementById('statusMsg');
+        const acceptedTerms = document.getElementById('plugzMembershipTerms')?.checked === true;
+        if (!acceptedTerms) {
+          statusMsg.className = 'status error';
+          statusMsg.textContent = 'Accept the CLTCH Plugz membership terms before connecting Plugz.';
+          return;
+        }
+        plugzMembershipBtn.disabled = true;
+        plugzMembershipBtn.textContent = 'Checking Plugz...';
+        try {
+          const bridge = await activatePlugzMembershipForCurrentCltchUser(auth, 'host', { acceptedTerms: true });
+          if (!bridge) return;
+          statusMsg.className = 'status success';
+          statusMsg.textContent = 'Plugz connected. CLTCH imported and auto-saved your Plugz account information for this host profile.';
+          await refreshAccountActivity();
+        } catch (error) {
+          statusMsg.className = 'status error';
+          statusMsg.textContent = error?.message || 'Could not connect Plugz right now.';
+        } finally {
+          plugzMembershipBtn.disabled = false;
+          plugzMembershipBtn.textContent = 'Connect Plugz';
+        }
+      });
+    }
+
+    async function finishPendingProfilePlugzActivation() {
+      const statusMsg = document.getElementById('statusMsg');
+      try {
+        const bridge = await finishPendingPlugzProfileActivation(auth);
+        if (!bridge) return;
+        statusMsg.className = 'status success';
+        statusMsg.textContent = 'Plugz connected. CLTCH imported and auto-saved your Plugz account information for this host profile.';
+        await refreshAccountActivity();
+      } catch (error) {
+        statusMsg.className = 'status error';
+        statusMsg.textContent = error?.message || 'Could not finish the Plugz connection.';
+      }
+    }
+
     // ── Inline field validation ────────────────────────────────────────
     function validateField(input, errId, message) {
       const err = document.getElementById(errId);
@@ -813,22 +921,31 @@
       document.getElementById(id)?.addEventListener('change', updateProfileCompletion);
     });
 
-    profileDraftApi = initProfileDrafts({
-      form: document.getElementById('profileForm'),
-      key: HOST_PROFILE_DRAFT_KEY,
-      fields: [
-        { id: 'firstName' }, { id: 'lastName' }, { id: 'phone' }, { id: 'venueName' },
-        { id: 'venueType' }, { id: 'zipCode' }, { id: 'website' }, { id: 'bio' },
-        { id: 'payMethod' }, { id: 'payHandle' }, { id: 'budget' }
-      ],
-      onStatus(message) {
-        document.getElementById('draftRestoreText').textContent = message;
-      },
-      onRestore() {
-        window.updatePayHandle();
-        updateProfileCompletion();
-      }
-    });
+    function initUserScopedProfileDraft() {
+      if (profileDraftApi || !HOST_ID) return;
+      profileDraftApi = initProfileDrafts({
+        form: document.getElementById('profileForm'),
+        key: HOST_PROFILE_DRAFT_KEY,
+        ownerId: HOST_ID,
+        legacyKey: HOST_PROFILE_DRAFT_KEY,
+        fields: [
+          { id: 'firstName' }, { id: 'lastName' }, { id: 'phone' }, { id: 'venueName' },
+          { id: 'venueType' }, { id: 'zipCode' }, { id: 'website' }, { id: 'bio' },
+          { id: 'payMethod' }, { id: 'payHandle' }, { id: 'budget' }
+        ],
+        onStatus(message) {
+          document.getElementById('draftRestoreText').textContent = message;
+        },
+        onRestore() {
+          window.updatePayHandle();
+          updateProfileCompletion();
+        }
+      });
+      document.getElementById('clearLocalDraft')?.addEventListener('click', () => {
+        if (!window.confirm('Clear this account’s unfinished profile draft from this browser?')) return;
+        profileDraftApi?.clear();
+      });
+    }
   </script>
 
 </body>
