@@ -2051,6 +2051,7 @@
 
     // Returns a match descriptor with a percent score (Uber-style confidence ranking).
     function matchScore(gig, profile, useFallback) {
+      if (!profile || profile.available === false) return null;
       if (!performerTypeMatch(gig, profile)) return null;
       if (!genreMatch(gig, profile)) return null;
       const skill = skillMatch(gig, profile);

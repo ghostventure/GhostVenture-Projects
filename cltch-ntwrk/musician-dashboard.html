@@ -808,6 +808,9 @@
       <div id="upcomingList">
         <div class="empty-sm">No upcoming bookings yet.</div>
       </div>
+      <section class="agenda-tools" id="staleBookingRecovery" aria-live="polite" aria-label="Past accepted booking recovery">
+        <p>Checking for past accepted bookings…</p>
+      </section>
     </div>
 
     <!-- Matched Gigs Queue -->
@@ -867,6 +870,7 @@
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { bookingsToCalendar, filterUpcomingBookings, formatAgendaText } from "./app/performer-agenda.js";
+    import { renderStaleBookingRecovery } from "./app/stale-booking-recovery.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1311,10 +1315,46 @@
     }
 
     // ── Upcoming Booked Gigs ───────────────────────────────────────────
+    async function loadStaleBookingRecovery() {
+      const container = document.getElementById('staleBookingRecovery');
+      if (!container || !MUSICIAN_ID) return;
+      container.replaceChildren();
+      const loading = document.createElement('p');
+      loading.textContent = 'Checking for past accepted bookings…';
+      container.append(loading);
+      const todayStr = isoToday();
+      try {
+        const staleQuery = query(
+          collection(db, 'gigs'),
+          where('acceptedBy', '==', MUSICIAN_ID),
+          where('status', '==', 'accepted'),
+          where('date', '<', todayStr),
+          orderBy('date', 'desc'),
+          limit(20)
+        );
+        const staleSnap = await getDocs(staleQuery);
+        const staleGigs = [];
+        staleSnap.forEach(d => staleGigs.push({ id: d.id, ...d.data() }));
+        renderStaleBookingRecovery(container, staleGigs, { today: todayStr });
+      } catch (error) {
+        console.error('Past booking recovery lookup failed:', error);
+        container.replaceChildren();
+        const message = document.createElement('p');
+        message.textContent = 'Past bookings could not be loaded. Your upcoming bookings are still available.';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'agenda-action';
+        retry.textContent = 'Retry past bookings';
+        retry.addEventListener('click', () => loadStaleBookingRecovery());
+        container.append(message, retry);
+      }
+    }
+
     async function loadUpcomingGigs() {
       const todayStr = isoToday();
       const q = buildAcceptedGigQuery(db, MUSICIAN_ID, { today: todayStr });
       const snap = await getDocs(q);
+      loadStaleBookingRecovery();
       const gigs = [];
       snap.forEach(d => gigs.push({ id: d.id, ...d.data() }));
 

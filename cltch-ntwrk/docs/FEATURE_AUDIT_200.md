@@ -85,7 +85,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 061. Export local search presets as JSON for browser-to-browser portability — `site-init.js`; Chromium export smoke
 - [x] 062. Import page-scoped search presets with file-size, schema, search-length, filter, sort, duplicate, and count validation — `site-init.js`; Chromium import smoke
 - [x] 063. Bounded minimum-pay filter with storage fallback, reset control, and accurate empty state — `gig-radar.html`, `app/gig-radar-filters.js`; `npm run smoke:gig-radar-filters`
-- [ ] 064. Saved combined filters
+- [x] 064. Save and restore one account-scoped combined open-gig search, reapplying phrase, performer type, date bounds, and minimum pay to live results — `gig-discovery.html`, `app/gig-discovery.js`, `app/gig-discovery-filters.js`; `npm run smoke:gig-discovery`
 - [ ] 065. Accessible map and list view
 - [ ] 066. Stale listing suppression reason
 - [ ] 067. Availability conflict warning with timezone
@@ -112,7 +112,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 082. Idempotent accept, cancel, and check-in actions
 - [ ] 083. Booking audit trail with actor and server time
 - [ ] 084. Conflict-safe simultaneous acceptance
-- [ ] 085. Booking confirmation receipt
+- [x] 085. Accepted-participant printable booking receipt with sanitized fields, generated timestamp, and explicit payment/event disclaimers — `booking.html`, `app/booking-receipt.js`; `npm run smoke:booking-receipt`
 - [ ] 086. Optional arrival check-in with consent
 - [ ] 087. Offline note conflict resolution
 - [ ] 088. Two-party completion sign-off
@@ -122,7 +122,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Booking reliability and support
 
 - [ ] 091. Opt-out booking reminders and quiet hours
-- [ ] 092. Stale booking recovery panel
+- [x] 092. Bounded past accepted-booking recovery panel, with an isolated retry state and safe details route — `musician-dashboard.html`, `app/stale-booking-recovery.js`; `npm run smoke:stale-booking-recovery`
 - [ ] 093. Bounded booking health dashboard
 - [ ] 094. Private booking incident report
 - [ ] 095. Evidence attachment retention controls
@@ -194,7 +194,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 146. FAQ search announces match counts and an empty-result state — `scripts/legal-components.js`; `npm run smoke:faq-accessibility`
 - [x] 147. FAQ expand-all and collapse-all controls — `scripts/legal-components.js`; `npm run smoke:faq-accessibility`
 - [x] 148. FAQ controls reflow for mobile and honor reduced-motion preference — `faq.html`; `npm run smoke:faq-accessibility`
-- [ ] 149. Accessible date/time picker
+- [x] 149. Keyboard-operable performer availability calendar with day/week/month navigation, announced date states, and non-toggleable past/booked days — `musician-profile.html`; `npm run smoke:profile-calendar-a11y`
 - [x] 150. Visible keyboard focus and mobile clear-search target on Matched Gigs — `musician-matched-gigs.html`; `npm run smoke:matched-gigs-accessibility`
 
 ## Mobile and safeguarding
@@ -226,7 +226,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Release and supply chain
 
 - [ ] 171. GitHub CI for lint, smoke, build, and security
-- [ ] 172. Dependency update policy and automation
+- [x] 172. Weekly Dependabot updates scoped to the Cltch npm workspace and GitHub Actions, with a review and vulnerability-triage policy — `.github/dependabot.yml`, `docs/DEPENDENCY_POLICY.md`
 - [ ] 173. SBOM generation and vulnerability triage
 - [ ] 174. Secret scanning and artifact publication guard
 - [ ] 175. Data migration dry-run and verification
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 46.
-- Remaining checklist items: 154.
+- Implemented and verified in this change: 52.
+- Remaining checklist items: 148.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

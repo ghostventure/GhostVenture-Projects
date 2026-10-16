@@ -227,6 +227,7 @@
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { readUserSummary, recordAuthEvent } from "./app/user-db.js";
     import { deleteQuickReply, readQuickReplies, saveQuickReply } from "./app/quick-replies.js";
+    import { downloadBookingReceipt } from "./app/booking-receipt.js";
 
     const bookingId = new URL(window.location.href).searchParams.get("id") || "";
     const titleEl = document.getElementById("bookingTitle");
@@ -503,11 +504,25 @@
       actionsEl.innerHTML = [
         `<a class="btn" href="${backHref}">Back to Workspace</a>`,
         isHostOwner && gig.acceptedBy ? `<a class="btn" href="performer-view.html?id=${encodeURIComponent(gig.acceptedBy)}">View Performer</a>` : "",
+        gig.status === "accepted" && (isHostOwner || isAcceptedPerformer) ? `<button class="btn" id="downloadBookingReceiptBtn" type="button">Download booking receipt</button>` : "",
         summary?.role === "musician" && isAcceptedPerformer ? `<button class="btn" id="checkInBtn" ${checkIn.allowed ? "" : "disabled"}>${checkIn.label}</button>` : "",
         `<a class="btn primary" href="${summary?.role === "host" ? "host-profile.html" : "musician-profile.html"}">Open Profile</a>`
       ].filter(Boolean).join("");
 
       const checkInBtn = document.getElementById("checkInBtn");
+      const receiptBtn = document.getElementById("downloadBookingReceiptBtn");
+      if (receiptBtn) {
+        receiptBtn.addEventListener("click", () => {
+          try {
+            downloadBookingReceipt(gig);
+            statusEl.textContent = "Booking receipt downloaded. Check the booking page for the latest status.";
+          } catch (error) {
+            console.error(error);
+            statusEl.textContent = "Unable to create the booking receipt. Please reload the booking and try again.";
+          }
+        });
+      }
+
       if (checkInBtn && checkIn.allowed) {
         checkInBtn.addEventListener("click", async () => {
           try {

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="description" content="Save and restore a combined CLTCH.NTWRK gig search.">
+  <title>Saved Gig Search — CLTCH.NTWRK</title>
+  <style>
+    :root { color-scheme: dark; --accent:#f5a623; --panel:#111820; --line:#293746; --muted:#aab6c3; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#090d11; color:#f4f7fb; font:16px/1.5 system-ui,sans-serif; }
+    header { padding:18px clamp(16px,4vw,48px); border-bottom:1px solid #202a34; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    a { color:#ffd078; }
+    .brand { color:#fff; font-weight:800; letter-spacing:.12em; text-decoration:none; }
+    main { width:min(920px,100%); margin:auto; padding:28px 16px 64px; }
+    h1 { margin:0 0 6px; font-size:clamp(26px,5vw,38px); }
+    .intro,.hint { color:var(--muted); }
+    form,.result { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; }
+    form { margin:22px 0; }
+    .fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr)); gap:14px; }
+    label { display:grid; gap:6px; font-weight:700; }
+    input,select,button { min-height:46px; border-radius:10px; font:inherit; }
+    input,select { width:100%; padding:9px 11px; border:1px solid #425263; background:#080c10; color:#fff; }
+    input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible { outline:3px solid #ffd078; outline-offset:2px; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+    button { border:1px solid #526171; padding:8px 16px; color:#fff; background:#18232e; cursor:pointer; font-weight:750; }
+    button.primary { border-color:var(--accent); color:#101010; background:var(--accent); }
+    button:disabled { opacity:.55; cursor:wait; }
+    #feedStatus { min-height:28px; margin:18px 0 10px; color:var(--muted); }
+    #feedStatus[data-state="error"] { color:#ff9eaa; }
+    .gig { padding:16px 0; border-top:1px solid #293746; }
+    .gig:first-child { border-top:0; }
+    .gig h2 { font-size:19px; margin:0; }
+    .gig p { margin:5px 0; color:#c3cfdb; }
+    .pill { display:inline-block; margin:5px 6px 0 0; border:1px solid #425263; border-radius:999px; padding:2px 9px; font-size:13px; }
+    @media (max-width:520px) { header { align-items:flex-start; flex-direction:column; } form,.result { padding:14px; } }
+  </style>
+</head>
+<body>
+  <header><a class="brand" href="index.html">CLTCH.NTWRK</a><a href="gig-radar.html">Back to Gig Radar</a></header>
+  <main>
+    <h1>Saved gig search</h1>
+    <p class="intro">Combine a phrase, performer role, date window, and minimum pay. Save the whole search on this device and restore it later.</p>
+    <form id="searchForm">
+      <div class="fields">
+        <label for="phrase">Search gigs<input id="phrase" type="search" maxlength="80" autocomplete="off" placeholder="Venue, city, genre"></label>
+        <label for="performerType">Performer role<select id="performerType"><option value="any">Any role</option><option value="musician">Musician</option><option value="dj">DJ</option><option value="photographer">Photographer</option><option value="cinematographer">Cinematographer</option><option value="model">Model</option></select></label>
+        <label for="fromDate">From<input id="fromDate" type="date"></label>
+        <label for="toDate">Through<input id="toDate" type="date"></label>
+        <label for="minimumPay">Minimum listed pay (USD)<input id="minimumPay" type="number" min="0" max="100000" step="25" inputmode="numeric" value="0"></label>
+      </div>
+      <p class="hint" id="savedState" aria-live="polite">Your saved search stays in this browser.</p>
+      <div class="actions"><button class="primary" type="button" id="saveSearch">Save combined search</button><button type="button" id="restoreSearch">Restore saved search</button><button type="reset">Clear filters</button></div>
+    </form>
+    <p id="feedStatus" role="status" aria-live="polite">Sign in to load open gigs.</p>
+    <section class="result" aria-label="Matching open gigs"><div id="results"></div></section>
+  </main>
+  <script type="module" src="./app/gig-discovery.js"></script>
+</body>
+</html>

@@ -421,6 +421,7 @@
     }
     .cal-cell {
       aspect-ratio: 1;
+      min-height: 40px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -432,6 +433,14 @@
       font-weight: 500;
       transition: border-color 0.12s, color 0.12s, background 0.12s;
     }
+    button.cal-cell {
+      width: 100%;
+      padding: 0;
+      font: inherit;
+      background: transparent;
+    }
+    .cal-cell:focus-visible,
+    .cal-nav:focus-visible { outline: 3px solid #ffd16a; outline-offset: 2px; }
     .cal-cell:hover          { border-color: #f5a623; color: #f5a623; }
     .cal-cell.today          { border-color: #3a3a3a; color: #fff; font-weight: 700; }
     .cal-cell.blocked        { background: #2e0d0d; border-color: #5c1a1a !important; color: #cf6679; }
@@ -870,14 +879,14 @@
       <p style="font-size:13px; color:#555; margin-bottom:16px; line-height:1.5;">Tap any future date to mark it unavailable. You won't see gig requests on blocked days.</p>
       <div class="cal-wrapper">
         <div class="cal-header">
-          <button type="button" class="cal-nav" id="calPrevBtn" onclick="calPrev()">&#8249;</button>
-          <div class="cal-title" id="calTitle"></div>
-          <button type="button" class="cal-nav" onclick="calNext()">&#8250;</button>
+          <button type="button" class="cal-nav" id="calPrevBtn" aria-label="Previous month" onclick="calPrev()">&#8249;</button>
+          <div class="cal-title" id="calTitle" aria-live="polite" aria-atomic="true"></div>
+          <button type="button" class="cal-nav" aria-label="Next month" onclick="calNext()">&#8250;</button>
         </div>
         <div class="cal-weekdays">
           <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
         </div>
-      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-grid" id="calGrid" role="group" aria-label="Availability dates. Use arrow keys to move by day and Space or Enter to block or unblock an available date."></div>
       <div class="cal-legend">
         <div class="leg"><div class="dot dot-open"></div> Available</div>
         <div class="leg"><div class="dot dot-blocked"></div> Blocked</div>
@@ -1402,6 +1411,8 @@
     const _today = new Date(); _today.setHours(0,0,0,0);
     let calYear = _today.getFullYear();
     let calMonth = _today.getMonth();
+    let calFocusDate = new Date(_today);
+    let focusCalendarAfterRender = false;
     const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
     function renderCalendar() {
@@ -1422,9 +1433,12 @@
 
       // Leading days from previous month
       for (let i = firstDow - 1; i >= 0; i--) {
-        const cell = document.createElement('div');
+        const cell = document.createElement('button');
+        cell.type = 'button';
         cell.className = 'cal-cell other-month';
         cell.textContent = daysInPrev - i;
+        cell.disabled = true;
+        cell.setAttribute('aria-hidden', 'true');
         grid.appendChild(cell);
       }
 
@@ -1435,10 +1449,10 @@
         const isPast  = date < _today;
         const isToday = date.getTime() === _today.getTime();
 
-        const cell = document.createElement('div');
         const isBooked  = bookedDatesMap.has(dateStr);
         const isBlocked = blackoutDates.has(dateStr);
-
+        const cell = document.createElement('button');
+        cell.type = 'button';
         let cls = 'cal-cell';
         if (isPast)    cls += ' past';
         if (isToday)   cls += ' today';
@@ -1446,6 +1460,13 @@
         else if (isBlocked) cls += ' blocked';
         cell.className = cls;
         cell.textContent = d;
+        cell.dataset.date = dateStr;
+        cell.tabIndex = date.getFullYear() === calFocusDate.getFullYear() && date.getMonth() === calFocusDate.getMonth() && date.getDate() === calFocusDate.getDate() ? 0 : -1;
+        const spokenDate = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+        const state = isBooked ? `Booked${bookedDatesMap.get(dateStr)?.venue ? ` at ${bookedDatesMap.get(dateStr).venue}` : ''}` : isPast ? 'Past date' : isBlocked ? 'Unavailable, blocked' : 'Available';
+        cell.setAttribute('aria-label', `${spokenDate}, ${state}`);
+        if (!isPast && !isBooked) cell.setAttribute('aria-pressed', String(isBlocked));
+        if (isToday) cell.setAttribute('aria-current', 'date');
 
         if (isBooked) {
           // Show info tooltip on hover
@@ -1453,11 +1474,15 @@
           const booking = bookedDatesMap.get(dateStr);
           cell.addEventListener('mouseenter', (ev) => showBookedTooltip(ev, booking));
           cell.addEventListener('mouseleave', hideBookedTooltip);
+          cell.addEventListener('focus', (ev) => showBookedTooltip({ clientX: ev.target.getBoundingClientRect().left, clientY: ev.target.getBoundingClientRect().top - 10 }, booking));
+          cell.addEventListener('blur', hideBookedTooltip);
           cell.addEventListener('click', () => showBookedTooltip({ clientX: cell.getBoundingClientRect().left, clientY: cell.getBoundingClientRect().top - 10 }, booking));
         } else if (!isPast) {
           cell.addEventListener('click', () => {
             if (blackoutDates.has(dateStr)) blackoutDates.delete(dateStr);
             else blackoutDates.add(dateStr);
+            calFocusDate = date;
+            focusCalendarAfterRender = true;
             renderCalendar();
             renderProfileDashboard();
           });
@@ -1469,22 +1494,56 @@
       const total    = firstDow + daysInMonth;
       const trailing = total % 7 === 0 ? 0 : 7 - (total % 7);
       for (let d = 1; d <= trailing; d++) {
-        const cell = document.createElement('div');
+        const cell = document.createElement('button');
+        cell.type = 'button';
         cell.className = 'cal-cell other-month';
         cell.textContent = d;
+        cell.disabled = true;
+        cell.setAttribute('aria-hidden', 'true');
         grid.appendChild(cell);
+      }
+      if (focusCalendarAfterRender) {
+        focusCalendarAfterRender = false;
+        grid.querySelector('[data-date][tabindex="0"]')?.focus();
       }
     }
 
+    document.getElementById('calGrid').addEventListener('keydown', (event) => {
+      const active = event.target.closest('[data-date]');
+      if (!active) return;
+      const date = new Date(`${active.dataset.date}T00:00:00`);
+      const offsets = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, Home: -((date.getDay() + 7) % 7), End: 6 - date.getDay() };
+      if (Object.hasOwn(offsets, event.key)) {
+        event.preventDefault();
+        date.setDate(date.getDate() + offsets[event.key]);
+        calFocusDate = date;
+        calYear = date.getFullYear();
+        calMonth = date.getMonth();
+        focusCalendarAfterRender = true;
+        renderCalendar();
+      } else if (event.key === 'PageUp' || event.key === 'PageDown') {
+        event.preventDefault();
+        moveCalendarMonth(event.key === 'PageUp' ? -1 : 1);
+      }
+    });
+
+    function moveCalendarMonth(delta) {
+      const next = new Date(calYear, calMonth + delta, 1);
+      const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+      next.setDate(Math.min(calFocusDate.getDate(), lastDay));
+      calYear = next.getFullYear();
+      calMonth = next.getMonth();
+      calFocusDate = next;
+      focusCalendarAfterRender = true;
+      renderCalendar();
+    }
     window.calPrev = () => {
       const isCurrentMonth = calYear === _today.getFullYear() && calMonth === _today.getMonth();
       if (isCurrentMonth) return;
-      calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
-      renderCalendar();
+      moveCalendarMonth(-1);
     };
     window.calNext = () => {
-      calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
-      renderCalendar();
+      moveCalendarMonth(1);
     };
 
     // Tooltip for booked dates
