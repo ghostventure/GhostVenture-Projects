@@ -113,7 +113,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 083. Booking audit trail with actor and server time
 - [ ] 084. Conflict-safe simultaneous acceptance
 - [x] 085. Accepted-participant printable booking receipt with sanitized fields, generated timestamp, and explicit payment/event disclaimers — `booking.html`, `app/booking-receipt.js`; `npm run smoke:booking-receipt`
-- [ ] 086. Optional arrival check-in with consent
+- [x] 086. Optional performer check-in consent panel with a separately confirmed, role/booking-window-guarded arrival timestamp — `booking.html`, `app/checkin-consent.js`; `npm run smoke:checkin-consent`
 - [ ] 087. Offline note conflict resolution
 - [ ] 088. Two-party completion sign-off
 - [ ] 089. Two-party booking amendment acceptance
@@ -257,7 +257,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 194. Referral attribution with consent
 - [ ] 195. Invite links with expiry and revocation
 - [ ] 196. Onboarding progress saved to account
-- [ ] 197. First booking tutorial walkthrough
+- [x] 197. Resumable four-step first-booking walkthrough with contextual links, progress, skip/restart, and UID-scoped browser-local state — `musician-dashboard.html`, `app/booking-walkthrough.js`; `npm run smoke:booking-walkthrough`
 - [ ] 198. Seasonal marketplace insights using aggregate data
 - [ ] 199. Service outage banner with recovery guidance
 - [ ] 200. Feature rollout percentage with server-side kill switch

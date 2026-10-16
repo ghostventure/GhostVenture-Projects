@@ -53,7 +53,16 @@ const [booking, rules, offlineModule, packageJson, checklist] = await Promise.al
 ]);
 assert.match(booking, /installBookingOfflineStatus\(/);
 assert.match(booking, /messageSendBtn\.disabled = !enabled \|\| offline/);
-assert.match(booking, /if \(isBrowserOffline\(navigator\)\) \{[\s\S]{0,220}Check-in was not started[\s\S]{0,300}await updateDoc/);
+const openConsentAt = booking.indexOf('checkInBtn.addEventListener("click", () => {');
+const consentOpenedAt = booking.indexOf('checkInPanel.hidden = false;', openConsentAt);
+const consentInputsAt = booking.indexOf('checkInConsent.addEventListener("change"', openConsentAt);
+assert.ok(openConsentAt >= 0 && booking.indexOf('isBrowserOffline(navigator) || !checkInAllowed', openConsentAt) < consentOpenedAt);
+assert.ok(consentOpenedAt < consentInputsAt && !booking.slice(openConsentAt, consentInputsAt).includes('updateDoc('), 'opening consent cannot write check-in');
+const confirmAt = booking.indexOf('confirmCheckInBtn.addEventListener("click", async () => {');
+const offlineGuardAt = booking.indexOf('&& !isBrowserOffline(navigator)', confirmAt);
+const confirmedHelperAt = booking.indexOf('await confirmArrivalWithConsent(', confirmAt);
+const writeAt = booking.indexOf('updateDoc(doc(db, "gigs", bookingId), { checkedInAt: serverTimestamp() })', confirmAt);
+assert.ok(confirmAt >= 0 && offlineGuardAt > confirmAt && confirmedHelperAt > offlineGuardAt && writeAt > confirmedHelperAt, 'the guarded confirmation precedes its only check-in write');
 assert.match(booking, /if \(isBrowserOffline\(navigator\)\) \{[\s\S]{0,240}draft remains here[\s\S]{0,200}return;\s*\}\s*const text[\s\S]{0,300}await addDoc/);
 assert.ok(booking.indexOf('await addDoc(') < booking.indexOf('messageInputEl.value = ""'), 'composer clears only after Firestore write resolves');
 assert.match(rules, /get\([^\n]*gigs\/\$\(gigId\)[^\n]*\.data\.status == 'accepted'/);

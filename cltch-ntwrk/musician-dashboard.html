@@ -767,7 +767,7 @@
           <a class="command-link" href="support.html">Need help?</a>
         </div>
       </div>
-      <div id="musicianBookingGuide" style="font-size:13px;line-height:1.65;color:#cfd7e2;">Loading your booking flow…</div>
+      <div id="musicianBookingGuide" role="region" aria-label="First booking tutorial" aria-live="polite" aria-atomic="true" style="font-size:13px;line-height:1.65;color:#cfd7e2;">Loading your booking flow…</div>
     </section>
 
     <section class="review-spotlight workspace-scope" id="reviewSpotlight">
@@ -872,6 +872,7 @@
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { bookingsToCalendar, filterUpcomingBookings, formatAgendaText } from "./app/performer-agenda.js";
     import { renderStaleBookingRecovery } from "./app/stale-booking-recovery.js";
+    import { createBookingWalkthrough, renderBookingWalkthrough } from "./app/booking-walkthrough.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1157,12 +1158,21 @@
       const el = document.getElementById('musicianBookingGuide');
       if (!el) return;
       const acceptedCount = Number(analyticsState.acceptedCount || 0);
+      const profileReady = !!(musicianProfile && Array.isArray(musicianProfile.genres) && musicianProfile.genres.length && musicianProfile.bio);
       const steps = [
-        renderChecklistStep(!!(musicianProfile && Array.isArray(musicianProfile.genres) && musicianProfile.genres.length), '1. Keep your profile bookable', !!(musicianProfile && Array.isArray(musicianProfile.genres) && musicianProfile.genres.length) ? 'Your style setup is ready for host matching.' : 'Add genres, bio, and payout details so hosts can trust the fit.'),
-        renderChecklistStep(acceptedCount > 0, '2. Accept the right gig', acceptedCount > 0 ? 'You already have an accepted booking in motion.' : 'Use the match reasons on each card to decide fast without guessing.'),
-        renderChecklistStep(reviewCache.length > 0, '3. Complete the gig and earn a review', reviewCache.length > 0 ? 'Your trust history is now visible to hosts.' : 'The first completed booking starts your public reputation.')
+        { title: 'Make your profile bookable', detail: profileReady ? 'Your bio and styles are ready for hosts to review.' : 'Add a bio, styles, and payout preference so hosts can understand your fit.', href: 'musician-profile.html', linkLabel: 'Review your profile', done: profileReady },
+        { title: 'Review live matches', detail: analyticsState.activeMatches > 0 ? `${analyticsState.activeMatches} current match${analyticsState.activeMatches === 1 ? '' : 'es'} are available to review.` : 'Compare match reasons and booking details before deciding.', href: '#matchedQueueList', linkLabel: 'Go to match results', done: acceptedCount > 0 },
+        { title: 'Choose a gig that works for you', detail: acceptedCount > 0 ? 'You have an accepted gig in progress. Check its details and preparation steps.' : 'Accept only when the date, location, pay, and requirements work for you.', href: '#matchedQueueList', linkLabel: acceptedCount > 0 ? 'Review your booking' : 'Review available gigs', done: acceptedCount > 0 },
+        { title: 'Finish the booking and build trust', detail: reviewCache.length > 0 ? 'Your review history is visible to hosts.' : 'After the event, check in with your host and leave an honest review when prompted.', href: '#upcomingSection', linkLabel: 'Go to upcoming bookings', done: reviewCache.length > 0 }
       ];
-      el.innerHTML = steps.join('');
+      let storage = null;
+      try { storage = window.localStorage; } catch {}
+      const workflow = createBookingWalkthrough(steps, {
+        storage,
+        storageKey: `cltch.booking-walkthrough.v1.${MUSICIAN_ID}`,
+        suggestedIndex: profileReady ? (acceptedCount > 0 ? 3 : 1) : 0
+      });
+      renderBookingWalkthrough(el, workflow);
     }
 
     async function refreshPerformanceAnalytics() {

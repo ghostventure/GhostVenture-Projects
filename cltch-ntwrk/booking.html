@@ -82,6 +82,19 @@
       <div class="meta" id="bookingMeta"></div>
       <div class="timeline" id="bookingTimeline"></div>
       <div class="actions" id="bookingActions"></div>
+      <section id="checkInConsentPanel" class="card stack" hidden aria-labelledby="checkInConsentTitle" style="margin-top:16px;">
+        <h2 id="checkInConsentTitle">Confirm your arrival</h2>
+        <p class="small">Check in only after you arrive. This records an arrival timestamp that the host can see.</p>
+        <label style="display:flex;gap:10px;align-items:flex-start;line-height:1.5;">
+          <input id="checkInConsent" type="checkbox" style="margin-top:4px;">
+          <span>I confirm I have arrived and want to share this check-in with the host.</span>
+        </label>
+        <div class="actions" style="margin-top:0;">
+          <button class="btn primary" id="confirmCheckInBtn" type="button" disabled>Confirm Arrival</button>
+          <button class="btn" id="cancelCheckInBtn" type="button">Cancel</button>
+        </div>
+        <p id="checkInConsentStatus" class="small" role="status" aria-live="polite"></p>
+      </section>
       <div class="status" id="bookingStatus"></div>
     </section>
 
@@ -233,6 +246,7 @@
     import { deleteQuickReply, readQuickReplies, saveQuickReply } from "./app/quick-replies.js";
     import { downloadBookingReceipt } from "./app/booking-receipt.js";
     import { installBookingOfflineStatus, isBrowserOffline } from "./app/booking-offline.js";
+    import { confirmArrivalWithConsent } from "./app/checkin-consent.js";
 
     const bookingId = new URL(window.location.href).searchParams.get("id") || "";
     const titleEl = document.getElementById("bookingTitle");
@@ -260,6 +274,13 @@
       if (activeBooking && activeUser) renderMessageState(activeBooking, activeUser);
       const checkInBtn = document.getElementById('checkInBtn');
       if (checkInBtn) checkInBtn.disabled = !checkInAllowed || isOffline;
+      const consent = document.getElementById('checkInConsent');
+      const confirm = document.getElementById('confirmCheckInBtn');
+      if (confirm) confirm.disabled = !checkInAllowed || isOffline || !consent?.checked;
+      const consentStatus = document.getElementById('checkInConsentStatus');
+      if (isOffline && consentStatus && !document.getElementById('checkInConsentPanel')?.hidden) {
+        consentStatus.textContent = 'Browser reports no connection. Your consent is kept, but no check-in will be sent until you reconnect and choose Confirm Arrival.';
+      }
     }
 
     const removeOfflineStatus = installBookingOfflineStatus({
@@ -537,6 +558,11 @@
 
       const checkInBtn = document.getElementById("checkInBtn");
       const receiptBtn = document.getElementById("downloadBookingReceiptBtn");
+      const checkInPanel = document.getElementById("checkInConsentPanel");
+      const checkInConsent = document.getElementById("checkInConsent");
+      const confirmCheckInBtn = document.getElementById("confirmCheckInBtn");
+      const cancelCheckInBtn = document.getElementById("cancelCheckInBtn");
+      const checkInConsentStatus = document.getElementById("checkInConsentStatus");
       applyConnectionState(isBrowserOffline(navigator));
       if (receiptBtn) {
         receiptBtn.addEventListener("click", () => {
@@ -550,19 +576,56 @@
         });
       }
 
-      if (checkInBtn && checkIn.allowed) {
-        checkInBtn.addEventListener("click", async () => {
-          if (isBrowserOffline(navigator)) {
-            statusEl.textContent = "Check-in was not started because your browser reports no network. Reconnect, review the booking, then choose Check In again.";
+      if (checkInBtn && checkIn.allowed && checkInPanel) {
+        checkInBtn.addEventListener("click", () => {
+          if (isBrowserOffline(navigator) || !checkInAllowed) return;
+          checkInConsent.checked = false;
+          confirmCheckInBtn.disabled = true;
+          checkInConsentStatus.textContent = "No check-in is recorded until you confirm.";
+          checkInPanel.hidden = false;
+          checkInConsent.focus();
+        });
+        checkInConsent.addEventListener("change", () => {
+          applyConnectionState(isBrowserOffline(navigator));
+          checkInConsentStatus.textContent = checkInConsent.checked
+            ? "Ready to record your arrival if you choose Confirm Arrival."
+            : "No check-in is recorded until you confirm.";
+        });
+        cancelCheckInBtn.addEventListener("click", () => {
+          checkInConsent.checked = false;
+          applyConnectionState(isBrowserOffline(navigator));
+          checkInPanel.hidden = true;
+          statusEl.textContent = "Check-in cancelled. No arrival was recorded.";
+          checkInBtn.focus();
+        });
+        confirmCheckInBtn.addEventListener("click", async () => {
+          const currentCheckIn = activeBooking ? checkInState(activeBooking) : { allowed: false };
+          const stillEligible = activeSummary?.role === "musician"
+            && activeBooking?.acceptedBy === activeUser?.uid
+            && activeUser?.uid === user.uid
+            && currentCheckIn.allowed
+            && checkInAllowed
+            && !isBrowserOffline(navigator);
+          if (!stillEligible || !checkInConsent.checked) {
+            checkInConsentStatus.textContent = "Check-in is unavailable or consent was not confirmed. No arrival was recorded.";
+            applyConnectionState(isBrowserOffline(navigator));
             return;
           }
+          confirmCheckInBtn.disabled = true;
+          checkInConsentStatus.textContent = "Recording your arrival…";
           try {
-            await updateDoc(doc(db, "gigs", bookingId), { checkedInAt: serverTimestamp() });
+            await confirmArrivalWithConsent({
+              allowed: stillEligible,
+              consentChecked: checkInConsent.checked,
+              write: () => updateDoc(doc(db, "gigs", bookingId), { checkedInAt: serverTimestamp() })
+            });
+            checkInPanel.hidden = true;
             statusEl.textContent = "Checked in. The host can now see that you confirmed attendance.";
             await renderBooking(user);
           } catch (error) {
             console.error(error);
-            statusEl.textContent = "Unable to confirm whether check-in completed. Reload the booking after reconnecting before trying again.";
+            checkInConsentStatus.textContent = "Unable to confirm whether check-in completed. Reload the booking after reconnecting before trying again.";
+            applyConnectionState(isBrowserOffline(navigator));
           }
         });
       }
