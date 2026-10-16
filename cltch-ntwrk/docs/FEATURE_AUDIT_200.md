@@ -86,7 +86,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 062. Import page-scoped search presets with file-size, schema, search-length, filter, sort, duplicate, and count validation — `site-init.js`; Chromium import smoke
 - [x] 063. Bounded minimum-pay filter with storage fallback, reset control, and accurate empty state — `gig-radar.html`, `app/gig-radar-filters.js`; `npm run smoke:gig-radar-filters`
 - [x] 064. Save and restore one account-scoped combined open-gig search, reapplying phrase, performer type, date bounds, and minimum pay to live results — `gig-discovery.html`, `app/gig-discovery.js`, `app/gig-discovery-filters.js`; `npm run smoke:gig-discovery`
-- [ ] 065. Accessible map and list view
+- [x] 065. Accessible map and list view — `gig-radar.html`, `app/gig-radar-map.js`; `npm run smoke:gig-radar-map-list`
 - [x] 066. Stale listing suppression reason
 - [ ] 067. Availability conflict warning with timezone
 - [x] 068. Search relevance controls and reset
