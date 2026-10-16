@@ -23,7 +23,7 @@ Latest homepage service clarity record: `docs/HOMEPAGE_SERVICE_CLARITY_ROLLOUT_2
 Latest sticky tile/card table cleanup record: `docs/STICKY_TILE_CARD_TABLE_CLEANUP_2026-05-22.md`
 Latest handoff record: `docs/HANDOFF_2026-04-17.md`
 Latest modernization record: `docs/CLTCH_MODERNIZATION_2026-10-16.md`
-Feature target audit: `docs/FEATURE_AUDIT_200.md` (11 verified in this change; 189 remain unchecked).
+Feature target audit: `docs/FEATURE_AUDIT_200.md` (80 verified in source; 120 remain unchecked).
 
 ## Live Website
 
@@ -37,7 +37,7 @@ Feature target audit: `docs/FEATURE_AUDIT_200.md` (11 verified in this change; 1
 
 - See `docs/CLTCH_MODERNIZATION_2026-10-16.md` for implemented account export, per-account profile draft safeguards, and PWA installation behavior.
 - `ops.html` is a browser-local review aid with seven wired helpers and no connected live operations API. It must not be used as production case management.
-- The 200-feature target is incomplete: 11 distinct capabilities are implemented and verified in this change; 189 checklist entries remain unchecked in `docs/FEATURE_AUDIT_200.md`.
+- The 200-feature target is incomplete: 80 checklist items are marked implemented; 120 remain unchecked in `docs/FEATURE_AUDIT_200.md`. Some local-only tools are explicitly documented as not synced/shared, and backend payment features remain gated until Functions billing/configuration is available.
 
 ## Next.js Foundation
 

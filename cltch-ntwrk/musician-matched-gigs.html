@@ -1403,6 +1403,7 @@
     import { buildAcceptedGigQuery, buildOpenGigFeedQuery, isoToday } from "./app/gig-queries.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
+    import { availabilityPauseActive } from "./app/availability-pause.js";
     import { derivePerformerTier, describeTierProgress } from "./app/performer-tier.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
@@ -1816,7 +1817,7 @@
       document.getElementById('dashStage').textContent    = p.stageName || meta.label;
       document.getElementById('dashLocation').textContent = p.location  || '';
       const pill = document.getElementById('dashAvailPill');
-      const open = p.available !== false;
+      const open = !availabilityPauseActive(p);
       pill.innerHTML = `
         <div class="avail-pill ${open ? 'open' : 'closed'}">
           <div class="avail-dot ${open ? 'open' : 'closed'}"></div>
@@ -2051,7 +2052,7 @@
 
     // Returns a match descriptor with a percent score (Uber-style confidence ranking).
     function matchScore(gig, profile, useFallback) {
-      if (!profile || profile.available === false) return null;
+      if (!profile || availabilityPauseActive(profile)) return null;
       if (!performerTypeMatch(gig, profile)) return null;
       if (!genreMatch(gig, profile)) return null;
       const skill = skillMatch(gig, profile);
@@ -2117,6 +2118,22 @@
       if (!dateStr) return 9999;
       const [y,m,d] = dateStr.split('-').map(Number);
       return Math.round((new Date(y,m-1,d) - new Date()) / 86400000);
+    }
+
+    // Gig dates are stored as date-only values today, so a conflict means the
+    // same listed calendar date, not a verified time overlap. Show the
+    // viewer's device timezone and make that limitation explicit in the alert.
+    function conflictTimezoneLabel() {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'local device time';
+      } catch (_) {
+        return 'local device time';
+      }
+    }
+    function escapeConflictLabel(value) {
+      return String(value).replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[character]);
     }
 
     // ── Open Requests Feed ────────────────────────────────────────────
@@ -2206,7 +2223,7 @@
               <div class="matched-gig-tags">
                 <span class="matched-gig-tag">${match.percent}% match</span>
                 ${(match.reasons || []).slice(0, 3).map((reason) => `<span class="matched-gig-tag">${reason}</span>`).join('')}
-                ${hasConflict ? '<span class="matched-gig-tag warn">Date conflict</span>' : ''}
+                ${hasConflict ? `<span class="matched-gig-tag warn" title="Same listed calendar date; confirm event time and venue timezone. Device timezone: ${escapeConflictLabel(conflictTimezoneLabel())}">Date conflict · ${escapeConflictLabel(conflictTimezoneLabel())} (confirm event time)</span>` : ''}
               </div>
             </div>
             <div class="matched-gig-actions">
@@ -2254,7 +2271,7 @@
         if (hasConflict) card.style.borderColor = '#6e3a00';
 
         const conflictChip = hasConflict
-          ? `<span class="conflict-chip">⚠ Date Conflict</span>`
+          ? `<span class="conflict-chip" title="Same listed calendar date; confirm event time and venue timezone. Device timezone: ${escapeConflictLabel(conflictTimezoneLabel())}">⚠ Date conflict · ${escapeConflictLabel(conflictTimezoneLabel())} (confirm event time)</span>`
           : '';
 
         const dateLabel = (() => {

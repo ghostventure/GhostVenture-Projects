@@ -1091,6 +1091,7 @@
     import { buildAcceptedGigQuery, buildOpenGigFeedQuery, isoToday } from "./app/gig-queries.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { approximateGigDistanceLabel } from "./app/gig-distance.js";
+    import { availabilityPauseActive } from "./app/availability-pause.js";
     import { buildOpenStreetMapEmbedUrl, isValidGigMapPoint } from "./app/gig-radar-map.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
@@ -1762,7 +1763,7 @@
     }
 
     function isProfileRadarReady(profile) {
-      if (!profile || profile.available === false) return false;
+      if (!profile || availabilityPauseActive(profile)) return false;
       const hasIdentity = !!(profile.stageName || profile.firstName || profile.lastName);
       const hasGenres = Array.isArray(profile.genres) && profile.genres.length > 0;
       return hasIdentity && hasGenres;
@@ -1834,7 +1835,7 @@
       document.getElementById('dashStage').textContent    = p.stageName || meta.label;
       document.getElementById('dashLocation').textContent = p.location  || '';
       const pill = document.getElementById('dashAvailPill');
-      const open = p.available !== false;
+      const open = !availabilityPauseActive(p);
       pill.innerHTML = `
         <div class="avail-pill ${open ? 'open' : 'closed'}">
           <div class="avail-dot ${open ? 'open' : 'closed'}"></div>
@@ -2064,7 +2065,7 @@
 
     // Returns a match descriptor with a percent score (Uber-style confidence ranking).
     function matchScore(gig, profile, useFallback) {
-      if (profile.available === false) return null;
+      if (availabilityPauseActive(profile)) return null;
       if (!performerTypeMatch(gig, profile)) return null;
       if (!genreMatch(gig, profile)) return null;
       const skill = skillMatch(gig, profile);

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="description" content="Privately prepare venue accessibility details for CLTCH.NTWRK events.">
+  <link rel="stylesheet" href="cltch-boilerplate.css">
+  <script src="site-init.js" defer></script>
+  <title>Venue Accessibility | CLTCH.NTWRK</title>
+  <style>
+    body { min-height:100vh; background:#0a0a0a; color:#f0f0f0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+    header { padding:18px 24px; border-bottom:1px solid #1e1e1e; }
+    a { color:#9edcff; }
+    main { width:min(760px,calc(100% - 32px)); margin:32px auto 60px; }
+    .intro,.checklist { padding:18px; border:1px solid #24394b; border-radius:14px; background:#101923; }
+    h1 { margin:0 0 8px; font-size:clamp(24px,5vw,34px); }
+    .intro p,.checklist p { color:#b8c7d8; line-height:1.6; }
+    #accessChecklist { margin-top:16px; }
+    #accessChecklist fieldset { display:grid; gap:12px; padding:14px; border:1px solid #2a4054; border-radius:10px; }
+    #accessChecklist legend { padding:0 6px; font-weight:700; }
+    #accessChecklist label { display:flex; align-items:flex-start; gap:10px; line-height:1.5; cursor:pointer; }
+    #accessChecklist input { width:18px; height:18px; margin:2px 0 0; accent-color:#f5a623; }
+    #accessChecklist input:focus-visible,a:focus-visible { outline:3px solid #9edcff; outline-offset:3px; }
+    [role="status"] { min-height:1.5em; }
+    footer { padding:20px; text-align:center; color:#8290a0; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header><a href="host.html">← Back to Host Workspace</a></header>
+  <main>
+    <section class="intro"><h1>Venue accessibility checklist</h1><p>Confirm practical access information with each venue before event day. Checklist ticks are saved only in this browser for the signed-in host account. They do not sync or get sent to CLTCH.</p></section>
+    <p id="accessStatus" role="status" aria-live="polite">Checking host sign-in…</p>
+    <a id="accessSignIn" href="auth.html?next=venue-accessibility.html" hidden>Sign in to use the venue checklist</a>
+    <section id="accessChecklist" class="checklist" aria-label="Venue accessibility checklist" hidden></section>
+  </main>
+  <footer>CLTCH.NTWRK · Do not record anyone’s diagnosis or private accommodation details here.</footer>
+  <script type="module">
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    import { auth, db } from "./app/firebase-client.js";
+    import { mountVenueAccessibilityChecklist } from "./app/venue-accessibility-checklist.js";
+
+    const status = document.getElementById('accessStatus');
+    const signIn = document.getElementById('accessSignIn');
+    const checklist = document.getElementById('accessChecklist');
+    onAuthStateChanged(auth, async (user) => {
+      checklist.hidden = true;
+      signIn.hidden = true;
+      if (!user) {
+        status.textContent = 'Sign in with a host account to use this private checklist.';
+        signIn.hidden = false;
+        return;
+      }
+      status.textContent = 'Checking host workspace…';
+      try {
+        const host = await getDoc(doc(db, 'hosts', user.uid));
+        if (!host.exists()) {
+          status.textContent = 'This checklist is available to accounts with a host profile.';
+          return;
+        }
+        checklist.hidden = false;
+        mountVenueAccessibilityChecklist(checklist, { userId: user.uid });
+        status.textContent = 'Your host checklist is ready.';
+      } catch (error) {
+        console.error('Could not verify host workspace for accessibility checklist.', error);
+        status.textContent = 'Could not verify your host workspace. Refresh the page or try again later.';
+      }
+    }, (error) => {
+      console.error('Could not verify sign-in for venue accessibility checklist.', error);
+      status.textContent = 'Sign-in could not be verified. Refresh the page and sign in again.';
+      signIn.hidden = false;
+    });
+  </script>
+</body>
+</html>

@@ -186,6 +186,7 @@
     }
     .stat-val { font-size: 24px; font-weight: 800; line-height: 1; margin-bottom: 5px; }
     .stat-lbl { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+    .stat-note { display:block; margin-top:6px; color:#777; font-size:10px; line-height:1.35; }
     .analytics-panel {
       margin-bottom: 36px;
       background: #101010;
@@ -871,6 +872,7 @@
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { bookingsToCalendar, filterUpcomingBookings, formatAgendaText } from "./app/performer-agenda.js";
+    import { availabilityPauseActive } from "./app/availability-pause.js";
     import { renderStaleBookingRecovery } from "./app/stale-booking-recovery.js";
 
     async function refreshUserVerification(user) {
@@ -966,7 +968,10 @@
       acceptedCount: 0,
       passedCount: 0,
       acceptanceRate: 0,
-      upcomingEarnings: 0
+      upcomingEarnings: 0,
+      acceptanceResponseMedianMinutes: null,
+      acceptanceResponseSampleCount: 0,
+      acceptanceResponseUnavailable: false
     };
     const BOOKING_CACHE_LIMIT = 120;
     const BOOKING_CACHE_PAST_DAYS = 30;
@@ -1168,11 +1173,22 @@
     async function refreshPerformanceAnalytics() {
       try {
         const acceptedQ = buildAcceptedGigQuery(db, MUSICIAN_ID, { today: isoToday() });
+        const responseSpeedQ = query(
+          collection(db, 'gigs'),
+          where('acceptedBy', '==', MUSICIAN_ID),
+          where('status', '==', 'accepted'),
+          orderBy('acceptedAt', 'desc'),
+          limit(50)
+        );
         const passedQ = query(
           collection(db, 'gigs'),
           where('passedBy', 'array-contains', MUSICIAN_ID)
         );
-        const [acceptedSnap, passedSnap] = await Promise.all([getDocs(acceptedQ), getDocs(passedQ)]);
+        const [acceptedSnap, passedSnap, responseSpeedResult] = await Promise.all([
+          getDocs(acceptedQ),
+          getDocs(passedQ),
+          getDocs(responseSpeedQ).then((snapshot) => ({ snapshot })).catch((error) => ({ error }))
+        ]);
 
         const acceptedCount = acceptedSnap.size;
         const passedCount = passedSnap.size;
@@ -1187,11 +1203,36 @@
           if (amount != null) upcomingTotal += amount;
         });
 
+        if (responseSpeedResult.snapshot) {
+          const responseMinutes = [];
+          responseSpeedResult.snapshot.forEach((docSnap) => {
+            const gig = docSnap.data();
+            const postedAt = gig.createdAt?.toMillis?.();
+            const acceptedAt = gig.acceptedAt?.toMillis?.();
+            if (!Number.isFinite(postedAt) || !Number.isFinite(acceptedAt) || acceptedAt < postedAt) return;
+            responseMinutes.push((acceptedAt - postedAt) / 60000);
+          });
+          responseMinutes.sort((a, b) => a - b);
+          analyticsState.acceptanceResponseSampleCount = responseMinutes.length;
+          analyticsState.acceptanceResponseMedianMinutes = responseMinutes.length
+            ? (responseMinutes.length % 2
+              ? responseMinutes[Math.floor(responseMinutes.length / 2)]
+              : (responseMinutes[responseMinutes.length / 2 - 1] + responseMinutes[responseMinutes.length / 2]) / 2)
+            : null;
+          analyticsState.acceptanceResponseUnavailable = false;
+        } else {
+          console.error('Acceptance response-speed lookup failed:', responseSpeedResult.error);
+          analyticsState.acceptanceResponseUnavailable = true;
+          analyticsState.acceptanceResponseSampleCount = 0;
+          analyticsState.acceptanceResponseMedianMinutes = null;
+        }
+
         analyticsState.acceptedCount = acceptedCount;
         analyticsState.passedCount = passedCount;
         analyticsState.acceptanceRate = decisions > 0 ? Math.round((acceptedCount / decisions) * 100) : 0;
         analyticsState.upcomingEarnings = Math.round(upcomingTotal);
         updateAnalyticsPanel();
+        updateAcceptanceResponseMetric();
         renderMusicianChecklist();
         renderMusicianBookingGuide();
       } catch (err) {
@@ -1281,7 +1322,7 @@
       document.getElementById('dashStage').textContent    = p.stageName || meta.label;
       document.getElementById('dashLocation').textContent = p.location  || '';
       const pill = document.getElementById('dashAvailPill');
-      const open = p.available !== false;
+      const open = !availabilityPauseActive(p);
       pill.innerHTML = `
         <div class="avail-pill ${open ? 'open' : 'closed'}">
           <div class="avail-dot ${open ? 'open' : 'closed'}"></div>
@@ -1312,7 +1353,41 @@
         <div class="stat-box">
           <div class="stat-val" style="font-size:18px;">${summary.tier}</div>
           <div class="stat-lbl">Tier</div>
+        </div>
+        <div class="stat-box" aria-describedby="statAcceptanceResponseNote">
+          <div class="stat-val" id="statAcceptanceResponse">—</div>
+          <div class="stat-lbl">Median post-to-accept time</div>
+          <span class="stat-note" id="statAcceptanceResponseNote" role="status" aria-live="polite">Loading accepted booking history…</span>
         </div>`;
+      updateAcceptanceResponseMetric();
+    }
+
+    function updateAcceptanceResponseMetric() {
+      const value = document.getElementById('statAcceptanceResponse');
+      const note = document.getElementById('statAcceptanceResponseNote');
+      if (!value || !note) return;
+      const count = analyticsState.acceptanceResponseSampleCount;
+      if (analyticsState.acceptanceResponseUnavailable) {
+        value.textContent = '—';
+        note.textContent = 'Accepted booking history is unavailable right now.';
+        return;
+      }
+      if (count < 5 || !Number.isFinite(analyticsState.acceptanceResponseMedianMinutes)) {
+        value.textContent = '—';
+        note.textContent = `Available after 5 timestamped acceptances; ${count} of 5 recorded. This covers accepted gigs only; passes and declines are not timed.`;
+        return;
+      }
+      const rawMinutes = analyticsState.acceptanceResponseMedianMinutes;
+      const minutes = Math.round(rawMinutes);
+      const duration = rawMinutes < 1
+        ? '<1 min'
+        : minutes < 60
+        ? `${minutes} min`
+        : minutes < 1440
+          ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+          : `${Math.floor(minutes / 1440)}d ${Math.floor((minutes % 1440) / 60)}h`;
+      value.textContent = duration;
+      note.textContent = `Median from gig post to acceptance across ${count} of up to 50 latest accepted gigs. Passes and declines are not timed.`;
     }
 
     // ── Upcoming Booked Gigs ───────────────────────────────────────────

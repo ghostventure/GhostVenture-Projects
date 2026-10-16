@@ -422,6 +422,16 @@ function parseAmountCents(value) {
   return Math.round(amount * 100);
 }
 
+function requirePositiveAmountCents(value, label) {
+  const amountCents = parseAmountCents(value);
+  if (amountCents <= 0) {
+    const err = new Error(`Invalid ${label}.`);
+    err.status = 400;
+    throw err;
+  }
+  return amountCents;
+}
+
 async function readDocumentData(collection, id) {
   const snap = await db.collection(collection).doc(id).get();
   return snap.exists ? snap.data() : null;
@@ -794,11 +804,60 @@ exports.stripeCreateHostCheckoutIntent = onRequest({ region: 'us-central1' }, as
       respond(res, 403, { error: 'Only the host for this gig can start checkout.' });
       return;
     }
+    if (gig.status !== 'accepted' || gig.acceptedBy !== performerId) {
+      respond(res, 409, { error: 'Checkout is available only for the performer currently assigned to an accepted booking.' });
+      return;
+    }
 
     const stripe = getStripeClient();
     const connectedAccountId = await getConnectedAccountId(performerId, 'musician');
-    const totalAmountCents = parseAmountCents(gig.totalChargeAmount || gig.lockedTotalChargeAmount);
-    const feeAmountCents = parseAmountCents(gig.processingFeeAmount || gig.lockedProcessingFeeAmount || 0);
+    const account = await stripe.accounts.retrieve(connectedAccountId);
+    const accountReadiness = {
+      chargesEnabled: !!account.charges_enabled,
+      payoutsEnabled: !!account.payouts_enabled,
+      detailsSubmitted: !!account.details_submitted,
+      transfersActive: account.capabilities?.transfers === 'active'
+    };
+    await stripeConnectedAccountRef(performerId, 'musician').set({
+      ...accountReadiness,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    if (!accountReadiness.chargesEnabled || !accountReadiness.payoutsEnabled || !accountReadiness.detailsSubmitted || !accountReadiness.transfersActive) {
+      respond(res, 409, { error: 'The performer payout account is not currently ready for checkout.' });
+      return;
+    }
+
+    const totalAmount = gig.lockedHostTotalCharge ?? gig.hostTotalCharge;
+    const feeAmount = gig.lockedProcessingFeeAmount ?? gig.processingFeeAmount ?? 0;
+    const totalAmountCents = requirePositiveAmountCents(totalAmount, 'booking total');
+    const feeAmountCents = parseAmountCents(feeAmount);
+    if (feeAmountCents > totalAmountCents) {
+      respond(res, 409, { error: 'The stored booking fee exceeds the booking total.' });
+      return;
+    }
+
+    if (gig.stripePaymentIntentId) {
+      const existingIntent = await stripe.paymentIntents.retrieve(gig.stripePaymentIntentId);
+      if (existingIntent.metadata?.gigId !== gigId
+        || existingIntent.metadata?.hostId !== uid
+        || existingIntent.metadata?.performerId !== performerId
+        || existingIntent.amount !== totalAmountCents
+        || existingIntent.application_fee_amount !== feeAmountCents
+        || existingIntent.currency !== 'usd') {
+        respond(res, 409, { error: 'The existing payment record does not match this booking. Contact support before retrying.' });
+        return;
+      }
+      if (existingIntent.status === 'canceled' || existingIntent.status === 'succeeded') {
+        respond(res, 409, { error: 'This booking payment is already closed.' });
+        return;
+      }
+      respond(res, 200, {
+        clientSecret: existingIntent.client_secret,
+        paymentIntentId: existingIntent.id,
+        reused: true
+      });
+      return;
+    }
 
     const intent = await stripe.paymentIntents.create({
       amount: totalAmountCents,
@@ -814,6 +873,8 @@ exports.stripeCreateHostCheckoutIntent = onRequest({ region: 'us-central1' }, as
         hostId: uid,
         performerId
       }
+    }, {
+      idempotencyKey: `cltch-host-checkout-${gigId}`
     });
 
     await db.collection('gigs').doc(gigId).set({

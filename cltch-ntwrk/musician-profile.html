@@ -876,6 +876,11 @@
           <button type="button" class="avail-btn" id="availNo" onclick="setAvail(false)">Not Available</button>
         </div>
       </div>
+      <div class="form-group" id="availabilityResumeGroup" hidden>
+        <label for="availabilityResumeDate">Resume availability on (optional)</label>
+        <input type="date" id="availabilityResumeDate">
+        <p class="section-copy">Your profile will return to matching on this local calendar date. Leave blank to stay paused until you change availability.</p>
+      </div>
 
       <!-- ── Availability Calendar ────────────────────────── -->
       <div style="border-top:1px solid #1e1e1e; margin:28px 0 24px;"></div>
@@ -980,13 +985,14 @@
 
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script type="module">
-    import { doc, setDoc, getDoc, updateDoc, serverTimestamp, collection, getDocs, query, orderBy, limit }
+    import { doc, setDoc, getDoc, updateDoc, deleteField, serverTimestamp, collection, getDocs, query, orderBy, limit }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { initProfileDrafts } from "./app/profile-drafts.js";
+    import { localAvailabilityDate } from "./app/availability-pause.js";
     import { createAccountExport, downloadAccountExport } from "./app/account-export.js";
     import { derivePerformerTier, isBusinessClassEligible } from "./app/performer-tier.js";
     import { getStripeConfig, startStripeOnboarding } from "./app/stripe-connect.js";
@@ -1299,7 +1305,8 @@
 
       const availabilityEl = document.getElementById('dashAvailability');
       if (availabilityEl) {
-        availabilityEl.textContent = available ? 'Available' : 'Paused';
+        const resumeDate = document.getElementById('availabilityResumeDate')?.value || '';
+        availabilityEl.textContent = available ? 'Available' : (resumeDate ? `Paused until ${resumeDate}` : 'Paused');
         availabilityEl.className = 'dash-value ' + (available ? 'ok' : 'warn');
       }
 
@@ -1704,10 +1711,15 @@
     // Availability toggle
     window.setAvail = (val) => {
       available = val;
+      const resumeInput = document.getElementById('availabilityResumeDate');
+      const resumeGroup = document.getElementById('availabilityResumeGroup');
+      if (val && resumeInput) resumeInput.value = '';
+      if (resumeGroup) resumeGroup.hidden = val;
       document.getElementById('availYes').classList.toggle('active', val);
       document.getElementById('availNo').classList.toggle('active', !val);
       renderProfileDashboard();
     };
+    document.getElementById('availabilityResumeDate')?.addEventListener('input', renderProfileDashboard);
 
     // Load existing profile
     async function loadProfile() {
@@ -1737,6 +1749,19 @@
         verifiedPerformerRequestedAt = d.verifiedPerformerRequestedAt || null;
         available = d.available !== false;
         window.setAvail(available);
+        const savedResumeDate = typeof d.availabilityResumeDate === 'string' ? d.availabilityResumeDate : '';
+        if (!available && savedResumeDate && savedResumeDate <= localAvailabilityDate()) {
+          available = true;
+          window.setAvail(true);
+          updateDoc(profileRef, {
+            available: true,
+            availabilityResumeDate: deleteField(),
+            updatedAt: serverTimestamp()
+          }).catch((error) => console.warn('Could not persist scheduled availability resume.', error));
+        } else if (!available) {
+          document.getElementById('availabilityResumeDate').value = savedResumeDate;
+          document.getElementById('availabilityResumeGroup').hidden = false;
+        }
         window.setType(d.performerType || 'musician');
         selectedGenres = d.genres || [];
         document.querySelectorAll('.genre-chip').forEach(chip => {
@@ -1854,6 +1879,15 @@
       }
 
       const profileRef = doc(db, 'musicians', MUSICIAN_ID);
+      const resumeDate = document.getElementById('availabilityResumeDate').value;
+      if (resumeDate && (!/^\d{4}-\d{2}-\d{2}$/.test(resumeDate) || resumeDate < localAvailabilityDate())) {
+        statusMsg.className = 'status error';
+        statusMsg.textContent = 'Choose today or a future date to resume availability.';
+        document.getElementById('availabilityResumeDate').focus();
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Profile';
+        return;
+      }
       const profile = {
         firstName: document.getElementById('firstName').value.trim(),
         lastName: document.getElementById('lastName').value.trim(),
@@ -1870,6 +1904,7 @@
         experience: document.getElementById('experience').value,
         bio: document.getElementById('bio').value.trim(),
         available,
+        availabilityResumeDate: !available && resumeDate ? resumeDate : deleteField(),
         performerType,
         payoutMethod,
         payoutHandle: payoutHandle,
@@ -2043,7 +2078,8 @@
           { id: 'zipCode' }, { id: 'instruments' }, { id: 'rate' }, { id: 'experience' },
           { id: 'bio' }, { id: 'payoutMethod' }, { id: 'payoutHandle' },
           { id: 'genreGrid', read: () => selectedGenres, write: (_, value) => { selectedGenres = Array.isArray(value) ? value : []; } },
-          { id: 'availYes', read: () => available, write: (_, value) => { setAvail(!!value); } }
+          { id: 'availYes', read: () => available, write: (_, value) => { setAvail(!!value); } },
+          { id: 'availabilityResumeDate' }
         ],
         onStatus(message) {
           document.getElementById('draftRestoreText').textContent = message;

@@ -7,6 +7,7 @@ export function normalizeGigSearch(search = {}) {
   const type = String(search.performerType || "any");
   return {
     phrase: String(search.phrase || "").trim().slice(0, 80),
+    location: String(search.location || "").trim().slice(0, 80),
     performerType: VALID_TYPES.has(type) ? type : "any",
     fromDate: /^\d{4}-\d{2}-\d{2}$/.test(search.fromDate || "") ? search.fromDate : "",
     toDate: /^\d{4}-\d{2}-\d{2}$/.test(search.toDate || "") ? search.toDate : "",
@@ -36,6 +37,7 @@ export function matchesGigSearch(gig, search) {
   const date = String(gig?.date || "");
   const pay = parsePay(gig?.pay);
   const haystack = [gig?.venue, gig?.location, gig?.genre, gig?.notes].filter(Boolean).join(" ").toLocaleLowerCase();
+  if (filters.location && !String(gig?.location || "").toLocaleLowerCase().includes(filters.location.toLocaleLowerCase())) return false;
   if (filters.phrase && !haystack.includes(filters.phrase.toLocaleLowerCase())) return false;
   if (filters.performerType !== "any" && (gig?.performerType || "musician") !== filters.performerType) return false;
   if (filters.fromDate && date < filters.fromDate) return false;

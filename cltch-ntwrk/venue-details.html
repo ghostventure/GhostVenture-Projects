@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="description" content="Keep private venue capacity and equipment details for CLTCH.NTWRK event planning.">
+  <link rel="stylesheet" href="cltch-boilerplate.css">
+  <script src="site-init.js" defer></script>
+  <title>Venue Details | CLTCH.NTWRK</title>
+  <style>
+    body { min-height:100vh; background:#0a0a0a; color:#f0f0f0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+    header { padding:18px 24px; border-bottom:1px solid #1e1e1e; }
+    a { color:#9edcff; }
+    main { width:min(760px,calc(100% - 32px)); margin:32px auto 60px; }
+    .intro,.venue-form { padding:18px; border:1px solid #24394b; border-radius:14px; background:#101923; }
+    h1 { margin:0 0 8px; font-size:clamp(24px,5vw,34px); }
+    .intro p,.venue-form p { color:#b8c7d8; line-height:1.6; }
+    #venueDetailsForm { margin-top:16px; }
+    #venueDetailsForm form { display:grid; gap:16px; }
+    #venueDetailsForm fieldset { display:grid; gap:12px; padding:14px; border:1px solid #2a4054; border-radius:10px; }
+    #venueDetailsForm legend { padding:0 6px; font-weight:700; }
+    #venueDetailsForm fieldset:first-child label { display:grid; gap:6px; }
+    #venueDetailsForm label { line-height:1.5; }
+    #venueDetailsForm input[type="number"] { width:min(100%,320px); min-height:42px; padding:8px 10px; border:1px solid #46576b; border-radius:8px; background:#0b1118; color:#fff; font:inherit; }
+    #venueDetailsForm fieldset:nth-child(2) label { display:flex; align-items:flex-start; gap:10px; cursor:pointer; }
+    #venueDetailsForm input[type="checkbox"] { width:18px; height:18px; margin:2px 0 0; accent-color:#f5a623; flex:0 0 auto; }
+    #venueDetailsForm button { min-height:44px; padding:0 16px; border:1px solid #f5a623; border-radius:9px; background:#f5a623; color:#111; font:inherit; font-weight:700; cursor:pointer; }
+    #venueDetailsForm button[type="button"] { background:#172331; color:#f2c0c3; border-color:#8c525c; }
+    #venueDetailsForm input:focus-visible,#venueDetailsForm button:focus-visible,a:focus-visible { outline:3px solid #9edcff; outline-offset:3px; }
+    [role="status"] { min-height:1.5em; }
+    footer { padding:20px; text-align:center; color:#8290a0; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header><a href="host.html">← Back to Host Workspace</a></header>
+  <main>
+    <section class="intro"><h1>Venue capacity and equipment</h1><p>Keep an event-planning reference for your venue. Capacity and equipment details are saved only in this browser for the signed-in host account; they are not published, shared with performers, or sent to CLTCH.</p></section>
+    <p id="venueDetailsAccessStatus" role="status" aria-live="polite">Checking host sign-in…</p>
+    <a id="venueDetailsSignIn" href="auth.html?next=venue-details.html" hidden>Sign in to manage venue details</a>
+    <section id="venueDetailsForm" class="venue-form" aria-label="Venue capacity and equipment details" hidden></section>
+  </main>
+  <footer>CLTCH.NTWRK · Review details locally before sharing event requirements.</footer>
+  <script type="module">
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    import { auth, db } from "./app/firebase-client.js";
+    import { mountVenueDetailsForm } from "./app/venue-details.js";
+
+    const status = document.getElementById('venueDetailsAccessStatus');
+    const signIn = document.getElementById('venueDetailsSignIn');
+    const form = document.getElementById('venueDetailsForm');
+    onAuthStateChanged(auth, async (user) => {
+      form.hidden = true;
+      signIn.hidden = true;
+      if (!user) {
+        status.textContent = 'Sign in with a host account to manage these private venue details.';
+        signIn.hidden = false;
+        return;
+      }
+      status.textContent = 'Checking host workspace…';
+      try {
+        const host = await getDoc(doc(db, 'hosts', user.uid));
+        if (!host.exists()) {
+          status.textContent = 'Venue details are available to accounts with a host profile.';
+          return;
+        }
+        form.hidden = false;
+        mountVenueDetailsForm(form, { userId: user.uid });
+        status.textContent = 'Your host venue details are ready.';
+      } catch (error) {
+        console.error('Could not verify host workspace for venue details.', error);
+        status.textContent = 'Could not verify your host workspace. Refresh the page or try again later.';
+      }
+    }, (error) => {
+      console.error('Could not verify sign-in for venue details.', error);
+      status.textContent = 'Sign-in could not be verified. Refresh the page and sign in again.';
+      signIn.hidden = false;
+    });
+  </script>
+</body>
+</html>

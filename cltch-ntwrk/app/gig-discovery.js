@@ -8,6 +8,7 @@ import { formatListedPay } from "./gig-discovery-pay.js";
 const form = document.getElementById("searchForm");
 const fields = {
   phrase: document.getElementById("phrase"),
+  location: document.getElementById("manualLocation"),
   performerType: document.getElementById("performerType"),
   fromDate: document.getElementById("fromDate"),
   toDate: document.getElementById("toDate"),

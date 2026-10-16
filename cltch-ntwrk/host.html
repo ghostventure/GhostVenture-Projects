@@ -695,7 +695,7 @@
     <form id="gigForm">
       <div class="form-group">
         <label>Venue / Event Name</label>
-        <input type="text" id="venue" placeholder="e.g. The Blue Room" required>
+        <input type="text" id="venue" placeholder="e.g. The Blue Room" maxlength="100" required>
       </div>
 
       <div class="row">
@@ -724,6 +724,20 @@
         </div>
       </div>
       <p class="fee-note">Repeated dates create separate gig posts with the same details in one all-or-nothing batch. Maximum 12 dates.</p>
+      <section aria-labelledby="venueRepeatPreferenceTitle" style="margin:12px 0 18px;padding:14px;border:1px solid #2b3b4c;border-radius:10px;background:#10161d;">
+        <h2 id="venueRepeatPreferenceTitle" style="font-size:15px;margin:0 0 6px;">Recurring venue preferences</h2>
+        <p class="fee-note" style="margin:0 0 10px;">Save a weekly or biweekly cadence and number of dates for a venue. Applying it sets the repeat controls in this form; you still choose the start date and review the gig details.</p>
+        <div class="row" style="align-items:end;">
+          <div class="form-group" style="flex:1;">
+            <label for="venueRepeatPreferenceSelect">Saved venue schedule</label>
+            <select id="venueRepeatPreferenceSelect"><option value="">No saved schedule selected</option></select>
+          </div>
+          <button class="ghost-btn" type="button" id="applyVenueRepeatPreferenceBtn" disabled>Apply schedule</button>
+          <button class="ghost-btn" type="button" id="saveVenueRepeatPreferenceBtn">Save current schedule</button>
+          <button class="ghost-btn" type="button" id="deleteVenueRepeatPreferenceBtn" disabled>Delete selected</button>
+        </div>
+        <p id="venueRepeatPreferenceStatus" class="fee-note" role="status" aria-live="polite" style="margin:8px 0 0;">Preferences are saved only in this browser for your signed-in host account. Up to 20 venues.</p>
+      </section>
 
       <div class="form-group">
         <label>Location</label>
@@ -885,6 +899,7 @@
     import { buildBookingHealth } from "./app/booking-health.js";
     import { buildBookingIncidentReport } from "./app/booking-incident-report.js";
     import { mountVenueSafetyChecklist } from "./app/venue-safety-checklist.js";
+    import { deleteVenuePreference, findVenuePreference, normalizeVenuePreferenceName, readVenuePreferences, saveVenuePreference } from "./app/venue-preferences.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -966,6 +981,12 @@
     const form = document.getElementById('gigForm');
     const seriesCadenceSelect = document.getElementById('gigSeriesCadence');
     const seriesCountInput = document.getElementById('gigSeriesCount');
+    const venueInput = document.getElementById('venue');
+    const venuePreferenceSelect = document.getElementById('venueRepeatPreferenceSelect');
+    const venuePreferenceStatus = document.getElementById('venueRepeatPreferenceStatus');
+    const applyVenuePreferenceBtn = document.getElementById('applyVenueRepeatPreferenceBtn');
+    const saveVenuePreferenceBtn = document.getElementById('saveVenueRepeatPreferenceBtn');
+    const deleteVenuePreferenceBtn = document.getElementById('deleteVenueRepeatPreferenceBtn');
     const savedGigTemplateSelect = document.getElementById('savedGigTemplate');
     const gigTemplateStatus = document.getElementById('gigTemplateStatus');
     const templateFields = ['venue', 'location', 'genre', 'performerType', 'pay', 'skillNeed', 'notes'];
@@ -975,6 +996,32 @@
       savedGigTemplateSelect.replaceChildren(new Option('Select a saved template', ''));
       templates.forEach((template) => savedGigTemplateSelect.add(new Option(template.name, template.id)));
       return templates;
+    }
+    function getVenuePreferenceStorage() {
+      try { return window.localStorage; } catch { return null; }
+    }
+    function readHostVenuePreferences() {
+      return HOST_ID ? readVenuePreferences(getVenuePreferenceStorage(), HOST_ID) : { items: [], persistent: false, recovered: false };
+    }
+    function refreshVenuePreferenceOptions() {
+      if (!venuePreferenceSelect) return [];
+      const saved = readHostVenuePreferences();
+      venuePreferenceSelect.replaceChildren(new Option('Select a saved venue schedule', ''));
+      saved.items.forEach((preference) => {
+        const cadenceLabel = preference.cadenceDays === 7 ? 'Weekly' : 'Every two weeks';
+        venuePreferenceSelect.add(new Option(`${preference.venue} — ${cadenceLabel}, ${preference.repeatCount} dates`, preference.key));
+      });
+      const currentName = normalizeVenuePreferenceName(venueInput?.value || '');
+      const matching = saved.items.find((preference) => preference.key === currentName);
+      if (matching) venuePreferenceSelect.value = matching.key;
+      applyVenuePreferenceBtn.disabled = !venuePreferenceSelect.value;
+      deleteVenuePreferenceBtn.disabled = !venuePreferenceSelect.value;
+      saveVenuePreferenceBtn.disabled = !venueInput?.value.trim() || Number(seriesCadenceSelect?.value) === 0 || Number(seriesCountInput?.value) < 2;
+      if (!saved.persistent) venuePreferenceStatus.textContent = 'Browser storage is unavailable. Venue schedule preferences cannot be saved on this device.';
+      else if (saved.recovered) venuePreferenceStatus.textContent = 'Some saved venue schedules were invalid and have been ignored.';
+      else if (saved.items.length === 0) venuePreferenceStatus.textContent = 'Preferences are saved only in this browser for your signed-in host account. Up to 20 venues.';
+      else venuePreferenceStatus.textContent = `${saved.items.length} venue schedule preference${saved.items.length === 1 ? '' : 's'} saved only in this browser for your host account.`;
+      return saved.items;
     }
     const syncSeriesCountState = () => {
       const repeating = Number(seriesCadenceSelect?.value || 0) > 0;
@@ -986,6 +1033,56 @@
       renderPayEstimate();
     };
     seriesCadenceSelect?.addEventListener('change', syncSeriesCountState);
+    venueInput?.addEventListener('input', refreshVenuePreferenceOptions);
+    seriesCadenceSelect?.addEventListener('change', refreshVenuePreferenceOptions);
+    seriesCountInput?.addEventListener('input', refreshVenuePreferenceOptions);
+    venuePreferenceSelect?.addEventListener('change', () => {
+      applyVenuePreferenceBtn.disabled = !venuePreferenceSelect.value;
+      deleteVenuePreferenceBtn.disabled = !venuePreferenceSelect.value;
+    });
+    applyVenuePreferenceBtn?.addEventListener('click', () => {
+      const preference = findVenuePreference(readHostVenuePreferences().items, venuePreferenceSelect.value);
+      if (!preference) {
+        venuePreferenceStatus.textContent = 'Choose a saved venue schedule first.';
+        return;
+      }
+      venueInput.value = preference.venue;
+      venueInput.dispatchEvent(new Event('input', { bubbles: true }));
+      seriesCadenceSelect.value = String(preference.cadenceDays);
+      seriesCadenceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      seriesCountInput.value = String(preference.repeatCount);
+      seriesCountInput.dispatchEvent(new Event('input', { bubbles: true }));
+      seriesCountInput.dispatchEvent(new Event('change', { bubbles: true }));
+      venuePreferenceStatus.textContent = `Applied ${preference.cadenceDays === 7 ? 'weekly' : 'biweekly'} scheduling for ${preference.venue}. Choose a start date and review all gig details before posting.`;
+    });
+    saveVenuePreferenceBtn?.addEventListener('click', () => {
+      const result = saveVenuePreference(getVenuePreferenceStorage(), HOST_ID, venueInput.value, Number(seriesCadenceSelect.value), Number(seriesCountInput.value));
+      if (result.saved) {
+        refreshVenuePreferenceOptions();
+        venuePreferenceSelect.value = result.preference.key;
+        applyVenuePreferenceBtn.disabled = false;
+        deleteVenuePreferenceBtn.disabled = false;
+        venuePreferenceStatus.textContent = `Saved ${result.preference.cadenceDays === 7 ? 'weekly' : 'biweekly'} scheduling for ${result.preference.venue} (${result.preference.repeatCount} dates) in this browser.`;
+      } else if (result.reason === 'limit') {
+        venuePreferenceStatus.textContent = 'You have 20 saved venue schedules. Delete one before saving another venue.';
+      } else if (result.reason === 'storage') {
+        venuePreferenceStatus.textContent = 'Could not access browser storage. This schedule was not saved.';
+      } else {
+        venuePreferenceStatus.textContent = 'Enter a venue, choose weekly or every two weeks, and set 2 to 12 dates before saving.';
+      }
+    });
+    deleteVenuePreferenceBtn?.addEventListener('click', () => {
+      const preference = findVenuePreference(readHostVenuePreferences().items, venuePreferenceSelect.value);
+      if (!preference) return;
+      if (!window.confirm(`Delete the saved repeat schedule for ${preference.venue} from this browser?`)) return;
+      if (deleteVenuePreference(getVenuePreferenceStorage(), HOST_ID, preference.venue)) {
+        refreshVenuePreferenceOptions();
+        venuePreferenceStatus.textContent = `Deleted the saved repeat schedule for ${preference.venue} from this browser.`;
+      } else {
+        venuePreferenceStatus.textContent = 'Could not delete that saved venue schedule from browser storage.';
+      }
+    });
+    form?.addEventListener('reset', () => setTimeout(refreshVenuePreferenceOptions, 0));
     form?.addEventListener('reset', () => setTimeout(syncSeriesCountState, 0));
     const statusMsg = document.getElementById('statusMsg');
     const submitBtn = document.getElementById('submitBtn');
@@ -1822,6 +1919,7 @@
 
     function startApp() {
     refreshGigTemplateOptions();
+    refreshVenuePreferenceOptions();
     applyRebookDraftIfPresent();
     form.addEventListener('submit', async (e) => {
       e.preventDefault();

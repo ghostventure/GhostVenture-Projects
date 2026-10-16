@@ -59,6 +59,13 @@ service cloud.firestore {
             && request.resource.data[field].matches('^[0-9+()\\-\\.\\s]{7,20}$'));
     }
 
+    function validOptionalAvailabilityResumeDate() {
+      return !has('availabilityResumeDate')
+        || (request.resource.data.availabilityResumeDate is string
+            && request.resource.data.availabilityResumeDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+            && request.resource.data.available == false);
+    }
+
     function isOptionalUrl(field) {
       return !has(field)
         || (request.resource.data[field] is string
@@ -261,7 +268,8 @@ service cloud.firestore {
           'stageName', 'instruments', 'rate', 'bio', 'payoutHandle',
           'blackoutDates', 'bookedDates', 'type', 'available',
           'city', 'state', 'lat', 'lng', 'genres', 'experience',
-          'performerType', 'updatedAt', 'businessClassRequestedAt', 'businessClassActive'
+          'performerType', 'updatedAt', 'businessClassRequestedAt', 'businessClassActive',
+          'availabilityResumeDate'
         ])
         && isString('firstName', 50)
         && isString('lastName', 50)
@@ -286,7 +294,8 @@ service cloud.firestore {
         && (!has('businessClassRequestedAt') || request.resource.data.businessClassRequestedAt is timestamp)
         && (!has('businessClassActive') || request.resource.data.businessClassActive == false)
         && request.resource.data.type == 'musician'
-        && request.resource.data.available is bool;
+        && request.resource.data.available is bool
+        && validOptionalAvailabilityResumeDate();
 
       allow update: if isOwner(userId)
         && hasOnlyKeys([
@@ -294,7 +303,8 @@ service cloud.firestore {
           'stageName', 'instruments', 'rate', 'bio', 'payoutHandle',
           'blackoutDates', 'bookedDates', 'type', 'available',
           'city', 'state', 'lat', 'lng', 'genres', 'experience',
-          'performerType', 'updatedAt', 'overallGrade', 'reviewCount', 'businessClassRequestedAt', 'businessClassActive'
+          'performerType', 'updatedAt', 'overallGrade', 'reviewCount', 'businessClassRequestedAt', 'businessClassActive',
+          'availabilityResumeDate'
         ])
         && isString('firstName', 50)
         && isString('lastName', 50)
@@ -319,6 +329,7 @@ service cloud.firestore {
         && (!has('businessClassRequestedAt') || request.resource.data.businessClassRequestedAt is timestamp)
         && isUnchanged('type')
         && request.resource.data.available is bool
+        && validOptionalAvailabilityResumeDate()
         && sameOrAbsent('overallGrade')
         && sameOrAbsent('reviewCount')
         && sameOrAbsent('businessClassActive');

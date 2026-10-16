@@ -33,7 +33,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 021. Browser-local saved gig templates scoped by host UID (up to 8; not synced across devices) — `host.html`, `app/gig-templates.js`; `npm run smoke:gig-templates`
 - [x] 022. Weekly or biweekly repeat-post batch (up to 12 separate gig documents, atomic Firestore write) — `host.html`, `app/gig-series.js`; `npm run smoke:gig-series`
 - [x] 023. Per-event and aggregate host cost estimate for repeated gigs — `host.html`, `app/gig-budget.js`; `npm run smoke:gig-budget`
-- [ ] 024. Venue contact roster with scoped visibility
+- [x] 024. Host-only browser-local venue contact roster (up to 12; not shared or used for notifications) — `venue-contacts.html`, `app/venue-contact-roster.js`
 - [x] 025. Browser-local booking preparation checklist scoped per booking, with explicit private/not-confirmed status — `scripts/platform-components.js`, `booking.html`; Chromium isolation smoke
 - [ ] 026. Rider and stage plan attachments with access controls
 - [x] 027. Advisory duplicate gig detection by host, venue, route, date, and time before geocoding/posting — `host.html`, `app/duplicate-gig.js`; `npm run smoke:duplicate-gig`
@@ -44,14 +44,14 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Host team and scheduling
 
 - [ ] 031. Host approval roles
-- [ ] 032. Venue accessibility and accommodation checklist
-- [ ] 033. Recurring venue preferences
+- [x] 032. Host-gated browser-local venue accessibility checklist; avoids storing diagnoses or private accommodation details — `venue-accessibility.html`, `app/venue-accessibility-checklist.js`
+- [x] 033. Host-scoped browser-local weekly/biweekly venue schedules applied to existing repeat-date and batch-post controls — `host.html`, `app/venue-preferences.js`
 - [ ] 034. Booking approval roles for venue teams
 - [ ] 035. Venue document expiry reminders
 - [ ] 036. Duplicate booking merge flow
 - [ ] 037. Host booking analytics export
 - [x] 038. Filter confirmed bookings by date and export a bounded, escaped .ics file with explicit floating-time and one-hour defaults — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
-- [ ] 039. Venue capacity and equipment details
+- [x] 039. Host-gated browser-local venue capacity and equipment reference (not published or shared) — `venue-details.html`, `app/venue-details.js`
 - [x] 040. Venue-specific safety checklist
 
 ## Performer profile and media
@@ -74,7 +74,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 053. Earnings history with fee and payout state
 - [ ] 054. Tax document vault and annual download
 - [x] 055. Gig preparation checklist
-- [ ] 056. Availability pause with resume date
+- [x] 056. Performer availability pause with optional local-date resume; resumed profiles re-enter Gig Radar and Matched Gigs — `musician-profile.html`, `app/availability-pause.js`, `firestore.rules`
 - [x] 057. Safe portfolio URL manager — blocks scripts, credentials, duplicates, and oversized input; caps saved links at 20. Verified in scripts/smoke-portfolio-links.mjs.
 - [ ] 058. Review response and correction request
 - [x] 059. Copy a date-filtered upcoming booking itinerary with line-break sanitization — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
@@ -88,7 +88,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 064. Save and restore one account-scoped combined open-gig search, reapplying phrase, performer type, date bounds, and minimum pay to live results — `gig-discovery.html`, `app/gig-discovery.js`, `app/gig-discovery-filters.js`; `npm run smoke:gig-discovery`
 - [x] 065. Accessible map and list view — `gig-radar.html`, `app/gig-radar-map.js`; `npm run smoke:gig-radar-map-list`
 - [x] 066. Stale listing suppression reason
-- [ ] 067. Availability conflict warning with timezone
+- [x] 067. Same-date conflict advisory displays device timezone and states that event-time overlap is not verified — `musician-matched-gigs.html`
 - [x] 068. Search relevance controls and reset
 - [x] 069. Match feedback reason codes
 - [x] 070. Clear browser-local CLTCH preferences, drafts, and named caches without removing Firebase auth or account data — `app/local-data.js`, `privacy.html`; `npm run smoke:local-data`
@@ -96,11 +96,11 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Matching and marketplace trust
 
 - [x] 071. Stable paginated search results
-- [ ] 072. Manual location override
+- [x] 072. Manual location substring filter over loaded Gig Discovery results; does not use device location or alter profile location — `gig-discovery.html`, `app/gig-discovery-filters.js`
 - [x] 073. Approximate distance disclosure
 - [ ] 074. Blocked-user exclusion from matching
 - [x] 075. Filter-aware empty-state recovery
-- [ ] 076. Response speed with sample-size threshold
+- [x] 076. Private median post-to-accept time from up to 50 accepted gigs, shown after five timestamped acceptances; excludes passes/declines — `musician-dashboard.html`, `firestore.indexes.json`
 - [ ] 077. Host reliability with denominator
 - [x] 078. Keyboard and screen-reader search results
 - [ ] 079. Accessible performer comparison table
@@ -134,7 +134,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 ## Messaging and collaboration
 
-- [ ] 101. Booking messages protected by Firestore rules
+- [x] 101. Firestore rules restrict message access to verified host/accepted performer on accepted bookings and bound sender writes — `firestore.rules` (rules are in source; emulator authorization not exercised)
 - [ ] 102. Message delivery and read state
 - [ ] 103. Attachment scanning and short-lived links
 - [x] 104. Booking messages and metadata render untrusted text safely; history loads only latest 100 — `booking.html`; `npm run smoke:quick-replies`
@@ -175,7 +175,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [ ] 131. Provider webhook reconciliation
 - [ ] 132. Idempotency for financial mutations
-- [ ] 133. Server-only payment secrets
+- [x] 133. Stripe/Plaid secrets are read by Functions only; client responses expose readiness/public key, not secret keys — `functions/index.js`
 - [ ] 134. Immutable financial audit log
 - [ ] 135. Two-party manual payment confirmation
 - [ ] 136. Cancellation fee by policy version
