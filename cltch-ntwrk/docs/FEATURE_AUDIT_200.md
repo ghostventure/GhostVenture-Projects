@@ -234,7 +234,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 177. Custom-claim-backed admin access
 - [ ] 178. Authorized live-data operations dashboard
 - [ ] 179. Public status page
-- [ ] 180. Release manifest linking commit, Hosting version, and smoke evidence
+- [x] 180. Release manifest linking source commit, finalized Hosting version, and live smoke evidence — `scripts/release-manifest.mjs`; `npm run smoke:release-manifest`
 
 ## Payments compliance and communication
 
