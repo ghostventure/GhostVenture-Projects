@@ -863,10 +863,11 @@
       var stored = JSON.parse(window.localStorage.getItem(A11Y_KEY) || "{}");
       return {
         scale: stored.scale === "lg" || stored.scale === "xl" ? stored.scale : "md",
-        contrast: stored.contrast === "high" ? "high" : "normal"
+        contrast: stored.contrast === "high" ? "high" : "normal",
+        motion: stored.motion === "reduce" ? "reduce" : "system"
       };
     } catch (error) {
-      return { scale: "md", contrast: "normal" };
+      return { scale: "md", contrast: "normal", motion: "system" };
     }
   }
 
@@ -874,6 +875,8 @@
     var next = prefs || getA11yPrefs();
     document.documentElement.setAttribute("data-text-scale", next.scale || "md");
     document.documentElement.setAttribute("data-contrast", next.contrast || "normal");
+    if (next.motion === "reduce") document.documentElement.setAttribute("data-motion", "reduce");
+    else document.documentElement.removeAttribute("data-motion");
     if (persist) {
       try {
         window.localStorage.setItem(A11Y_KEY, JSON.stringify(next));
@@ -897,8 +900,16 @@
     syncA11yPanelState();
   }
 
+  function toggleA11yMotion() {
+    var prefs = getA11yPrefs();
+    prefs.motion = prefs.motion === "reduce" ? "system" : "reduce";
+    applyA11yPrefs(prefs, true);
+    showDexterityToast("Motion: " + (prefs.motion === "reduce" ? "reduced" : "system preference"), 1800);
+    syncA11yPanelState();
+  }
+
   function resetA11yPrefs() {
-    var prefs = { scale: "md", contrast: "normal" };
+    var prefs = { scale: "md", contrast: "normal", motion: "system" };
     applyA11yPrefs(prefs, true);
     showDexterityToast("Accessibility options reset", 1800);
     syncA11yPanelState();
@@ -917,6 +928,12 @@
       contrastBtn.classList.toggle("active", prefs.contrast === "high");
       contrastBtn.setAttribute("aria-pressed", prefs.contrast === "high" ? "true" : "false");
       contrastBtn.textContent = prefs.contrast === "high" ? "High Contrast: On" : "High Contrast: Off";
+    }
+    var motionBtn = panel.querySelector("[data-a11y-motion]");
+    if (motionBtn) {
+      motionBtn.classList.toggle("active", prefs.motion === "reduce");
+      motionBtn.setAttribute("aria-pressed", prefs.motion === "reduce" ? "true" : "false");
+      motionBtn.textContent = prefs.motion === "reduce" ? "Reduce Motion: On" : "Reduce Motion: System";
     }
   }
 
@@ -965,6 +982,7 @@
           '</div>' +
           '<div class="cltch-access-row">' +
             '<button type="button" class="cltch-access-btn" data-a11y-contrast="true" aria-pressed="false">High Contrast: Off</button>' +
+            '<button type="button" class="cltch-access-btn" data-a11y-motion="true" aria-pressed="false">Reduce Motion: System</button>' +
             '<button type="button" class="cltch-access-btn" data-a11y-reset="true">Reset</button>' +
           '</div>' +
         '</div>' +
@@ -1001,6 +1019,8 @@
     });
     var contrastBtn = panel.querySelector("[data-a11y-contrast]");
     if (contrastBtn) contrastBtn.addEventListener("click", toggleA11yContrast);
+    var motionBtn = panel.querySelector("[data-a11y-motion]");
+    if (motionBtn) motionBtn.addEventListener("click", toggleA11yMotion);
     var resetBtn = panel.querySelector("[data-a11y-reset]");
     if (resetBtn) resetBtn.addEventListener("click", resetA11yPrefs);
 

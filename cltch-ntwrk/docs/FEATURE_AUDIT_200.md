@@ -190,7 +190,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 142. Screen-reader host gig posting
 - [ ] 143. Screen-reader performer acceptance
 - [x] 144. Keyboard-managed accessibility dialog: initial focus, Tab trap, Escape close, and focus return — `site-init.js`
-- [ ] 145. Reduced-motion verification across pages
+- [x] 145. User-selectable, persisted reduced-motion override alongside system preference — `site-init.js`, `cltch-boilerplate.css`; Chromium accessibility smoke
 - [ ] 146. Zoom and text resize without overflow
 - [ ] 147. Form errors announced and linked
 - [ ] 148. Non-color status indicators
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 18.
-- Remaining checklist items: 182.
+- Implemented and verified in this change: 19.
+- Remaining checklist items: 181.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

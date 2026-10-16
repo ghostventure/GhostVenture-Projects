@@ -27,7 +27,8 @@
     "smoke:dispatch-catalog": "node scripts/smoke-dispatch-catalog.mjs",
     "smoke:host-readiness": "node scripts/smoke-host-readiness.mjs",
     "smoke:local-data": "node scripts/smoke-local-data.mjs",
-    "smoke:travel-fee": "node scripts/smoke-travel-fee.mjs"
+    "smoke:travel-fee": "node scripts/smoke-travel-fee.mjs",
+    "smoke:a11y-motion": "node scripts/smoke-a11y-motion.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

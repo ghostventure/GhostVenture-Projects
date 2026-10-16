@@ -1635,6 +1635,18 @@ body.cltch-dexterity button {
   }
 }
 
+html[data-motion='reduce'] {
+  scroll-behavior: auto !important;
+}
+
+html[data-motion='reduce'] *,
+html[data-motion='reduce'] *::before,
+html[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
 @media (hover: none) {
   button:hover,
   .btn:hover,
