@@ -253,7 +253,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [ ] 191. Per-account language selection
 - [ ] 192. Timezone discovery and override
-- [ ] 193. Accessible currency formatting
+- [x] 193. Accessible currency formatting
 - [ ] 194. Referral attribution with consent
 - [ ] 195. Invite links with expiry and revocation
 - [ ] 196. Onboarding progress saved to account
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 56.
-- Remaining checklist items: 144.
+- Implemented and verified in this change: 57.
+- Remaining checklist items: 143.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

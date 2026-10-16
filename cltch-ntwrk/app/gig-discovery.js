@@ -2,6 +2,7 @@ import { collection, onSnapshot, query, where, orderBy, limit } from "https://ww
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { auth, db } from "./firebase-client.js";
 import { matchesGigSearch, normalizeGigSearch, readGigSearch, saveGigSearch } from "./gig-discovery-filters.js";
+import { formatListedPay } from "./gig-discovery-pay.js";
 
 const form = document.getElementById("searchForm");
 const fields = {
@@ -54,7 +55,16 @@ function render() {
     article.className = "gig";
     addText(article, "h2", data.venue || "Open opportunity");
     addText(article, "p", [data.date || "Date pending", data.time, data.location || "Location pending"].filter(Boolean).join(" · "));
-    addText(article, "p", [data.genre, data.performerType || "musician", data.pay || "Pay not listed"].filter(Boolean).join(" · "));
+    const payLine = document.createElement("p");
+    const gigKind = [data.genre, data.performerType || "musician"].filter(Boolean).join(" · ");
+    payLine.append(document.createTextNode(`${gigKind ? `${gigKind} · ` : ""}Pay: `));
+    const pay = formatListedPay(data.pay || "Pay not listed");
+    const payText = document.createElement("span");
+    payText.className = "pay-amount";
+    payText.textContent = pay.text;
+    if (pay.locale) payText.lang = pay.locale;
+    payLine.append(payText);
+    article.append(payLine);
     const link = document.createElement("a");
     link.href = `booking.html?id=${encodeURIComponent(id)}`;
     link.textContent = "View booking details";
