@@ -203,7 +203,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 152. Same-origin PWA shortcuts for Post a Gig, Find Gigs, and My Bookings — `manifest.webmanifest`; `npm run smoke:pwa-shortcuts` checks every target exists
 - [ ] 153. Safe offline behavior for authenticated workflows
 - [ ] 154. Native biometric unlock after review
-- [ ] 155. Screen privacy for payout and contact values
+- [x] 155. Payout handles masked by default and re-masked when the document is hidden or window loses focus — `app/sensitive-fields.js`, both profile pages; `npm run smoke:sensitive-fields`
 - [ ] 156. Abuse report and block flows on mobile
 - [ ] 157. CSP nonce migration
 - [ ] 158. CSP report endpoint with minimization
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 19.
-- Remaining checklist items: 181.
+- Implemented and verified in this change: 20.
+- Remaining checklist items: 180.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

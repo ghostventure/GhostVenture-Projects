@@ -406,7 +406,10 @@
 
         <div class="form-group" id="payHandleGroup" style="display:none; margin-bottom:0;">
           <label id="payHandleLabel">Payment Handle</label>
-          <input type="text" id="payHandle" placeholder="">
+          <div class="sensitive-field-row">
+            <input type="password" id="payHandle" placeholder="" autocomplete="off">
+            <button type="button" class="sensitive-field-toggle" aria-controls="payHandle" aria-pressed="false">Show payout details</button>
+          </div>
         </div>
 
         <div class="form-group" id="plaidConnectGroup" style="display:none; margin-top:12px; margin-bottom:0;">
@@ -946,6 +949,10 @@
         profileDraftApi?.clear();
       });
     }
+  </script>
+  <script type="module">
+    import { bindSensitiveFieldToggle } from './app/sensitive-fields.js';
+    bindSensitiveFieldToggle(document.getElementById('payHandle'), document.querySelector('#payHandleGroup .sensitive-field-toggle'));
   </script>
 
 </body>

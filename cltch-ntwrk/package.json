@@ -28,7 +28,8 @@
     "smoke:host-readiness": "node scripts/smoke-host-readiness.mjs",
     "smoke:local-data": "node scripts/smoke-local-data.mjs",
     "smoke:travel-fee": "node scripts/smoke-travel-fee.mjs",
-    "smoke:a11y-motion": "node scripts/smoke-a11y-motion.mjs"
+    "smoke:a11y-motion": "node scripts/smoke-a11y-motion.mjs",
+    "smoke:sensitive-fields": "node scripts/smoke-sensitive-fields.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

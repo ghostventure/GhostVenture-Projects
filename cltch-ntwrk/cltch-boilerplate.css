@@ -53,6 +53,11 @@ body {
   gap: 24px;
 }
 
+.sensitive-field-row { display: flex; align-items: stretch; gap: 8px; }
+.sensitive-field-row input { flex: 1 1 auto; min-width: 0; }
+.sensitive-field-toggle { flex: 0 0 auto; min-height: 42px; padding: 0 12px; border: 1px solid var(--cltch-line); border-radius: 10px; color: var(--cltch-text); background: var(--cltch-surface-soft); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.sensitive-field-toggle:focus-visible { outline: 3px solid var(--cltch-brand-strong); outline-offset: 2px; }
+
 html[data-theme='dark'] {
   --cltch-bg: #0d1016;
   --cltch-bg-soft: #141821;

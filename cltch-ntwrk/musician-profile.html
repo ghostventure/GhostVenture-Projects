@@ -940,7 +940,10 @@
         </div>
         <div class="form-group" id="payoutHandleGroup" style="display:none; margin-bottom:0;">
           <label id="payoutHandleLabel">Payout Handle</label>
-          <input type="text" id="payoutHandle" placeholder="">
+          <div class="sensitive-field-row">
+            <input type="password" id="payoutHandle" placeholder="" autocomplete="off">
+            <button type="button" class="sensitive-field-toggle" aria-controls="payoutHandle" aria-pressed="false">Show payout details</button>
+          </div>
         </div>
         <div class="form-group" id="plaidConnectGroup" style="display:none; margin-top:12px; margin-bottom:0;">
           <button type="button" class="btn-plaid blaze-disabled" id="connectPlaidBtn" disabled aria-disabled="true">Plaid Connect (Blaze required)</button>
@@ -1990,6 +1993,10 @@
   <script src="scripts/legal-components.js"></script>
   <script src="scripts/host-performer-enhancements.js"></script>
   <script src="scripts/platform-components.js"></script>
+  <script type="module">
+    import { bindSensitiveFieldToggle } from './app/sensitive-fields.js';
+    bindSensitiveFieldToggle(document.getElementById('payoutHandle'), document.querySelector('#payoutHandleGroup .sensitive-field-toggle'));
+  </script>
   <script type="module">
     import { estimateTravelFee } from './app/travel-fee.js';
     const button = document.getElementById('estimateTravelFeeButton');
