@@ -52,7 +52,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 037. Host booking analytics export
 - [x] 038. Filter confirmed bookings by date and export a bounded, escaped .ics file with explicit floating-time and one-hour defaults — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
 - [ ] 039. Venue capacity and equipment details
-- [ ] 040. Venue-specific safety checklist
+- [x] 040. Venue-specific safety checklist
 
 ## Performer profile and media
 
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 63.
-- Remaining checklist items: 137.
+- Implemented and verified in this change: 64.
+- Remaining checklist items: 136.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

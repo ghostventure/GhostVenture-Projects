@@ -805,6 +805,11 @@
         <textarea id="notes" placeholder="Set length, equipment provided, vibe, dress code, etc."></textarea>
       </div>
 
+      <section id="venueSafetyChecklist" aria-label="Venue safety checklist" style="margin:16px 0;padding:16px;border:1px solid #364250;border-radius:12px;background:#10161d;">
+        <h2>Venue safety checklist</h2>
+        <p>Loading safety reminders…</p>
+      </section>
+
       <button class="btn-post" type="submit" id="submitBtn">Post Gig &rarr;</button>
     </form>
 
@@ -879,6 +884,7 @@
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { buildBookingHealth } from "./app/booking-health.js";
     import { buildBookingIncidentReport } from "./app/booking-incident-report.js";
+    import { mountVenueSafetyChecklist } from "./app/venue-safety-checklist.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -923,6 +929,7 @@
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
       const profileSnap = await getDoc(doc(db, 'hosts', freshUser.uid));
       HOST_ID = freshUser.uid;
+      mountVenueSafetyChecklist(document.getElementById('venueSafetyChecklist'), { userId: HOST_ID });
       hostProfileReady = profileSnap.exists();
       const profileData = profileSnap.exists() ? profileSnap.data() : {};
       hostProfile = profileData;
