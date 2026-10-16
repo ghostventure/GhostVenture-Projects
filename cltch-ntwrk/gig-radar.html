@@ -778,6 +778,17 @@
     .grade-bar-track { flex: 1; height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
     .grade-bar-fill  { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
     .grade-bar-count { width: 20px; color: #444; flex-shrink: 0; }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     @media (max-width: 640px) {
       .analytics-grid,
       .radar-summary,
@@ -893,13 +904,13 @@
           <span id="gigMinimumPayHelp">Gigs without a listed pay amount are hidden when this is above $0.</span>
         </div>
         <div class="command-grid-bottom">
-          <div class="filter-row" id="gigFilterRow">
-            <button class="filter-chip active" type="button" data-filter="all">All</button>
-            <button class="filter-chip" type="button" data-filter="top">Top Match</button>
-            <button class="filter-chip" type="button" data-filter="urgent">Urgent</button>
-            <button class="filter-chip" type="button" data-filter="actionable">Actionable</button>
-            <button class="filter-chip" type="button" data-filter="saved">Saved</button>
-            <button class="filter-chip" type="button" data-filter="week">This Week</button>
+          <div class="filter-row" id="gigFilterRow" role="group" aria-label="Filter gigs">
+            <button class="filter-chip active" type="button" data-filter="all" aria-pressed="true">All</button>
+            <button class="filter-chip" type="button" data-filter="top" aria-pressed="false">Top Match</button>
+            <button class="filter-chip" type="button" data-filter="urgent" aria-pressed="false">Urgent</button>
+            <button class="filter-chip" type="button" data-filter="actionable" aria-pressed="false">Actionable</button>
+            <button class="filter-chip" type="button" data-filter="saved" aria-pressed="false">Saved</button>
+            <button class="filter-chip" type="button" data-filter="week" aria-pressed="false">This Week</button>
           </div>
           <div class="intent-filter">
             <label for="intentFilter">Intent</label>
@@ -1009,9 +1020,13 @@
     <div class="dash-section workspace-pane" id="gig-radar">
       <div class="section-hdr">
         <span class="section-title">Gig Radar</span>
-        <div class="badge" id="newBadge" aria-live="polite">NEW</div>
+        <div class="badge" id="newBadge" aria-live="off">NEW</div>
       </div>
       <p class="section-sub">Incoming gigs that match your style and availability. Move fast when the fit is strong.</p>
+      <section id="matchAlertPanel" aria-label="New match alerts" style="margin:12px 0;padding:14px;border:1px solid #2a3d50;border-radius:12px;background:#111923;">
+        <h2>New match alerts</h2>
+        <p>Sign in to manage local alerts for new matching gigs.</p>
+      </section>
       <div id="gigList">
         <div class="empty"><span>🎵</span>Looking for gigs&hellip;</div>
       </div>
@@ -1019,6 +1034,7 @@
         <p id="staleListingNoticeText" style="margin:0 0 10px;"></p>
         <button type="button" id="resetStaleLiveFilters" style="min-height:36px;padding:0 12px;border:1px solid #7a5b11;border-radius:8px;background:#2b220c;color:#ffe39c;font-weight:700;cursor:pointer;">Reset live-gig filters</button>
       </div>
+      <p class="visually-hidden" id="gigSearchResultsStatus" role="status" aria-live="polite" aria-atomic="true"></p>
     </div>
 
     <!-- My Reviews -->
@@ -1051,6 +1067,7 @@
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { meetsMinimumGigPay, readMinimumGigPay, saveMinimumGigPay } from "./app/gig-radar-filters.js";
+    import { readMatchAlerts, setMatchAlertsEnabled, addNewMatchAlerts, clearMatchAlerts, renderMatchAlertPanel } from "./app/match-alerts.js";
     import { mountMatchFeedback } from "./app/match-feedback.js";
 
     async function refreshUserVerification(user) {
@@ -1073,6 +1090,8 @@
     let MUSICIAN_ID     = null;
     let musicianProfile = null;
     let matchedGigFeed  = [];
+    let previousMatchedIds = null;
+    let matchAlertState = null;
     let staleOpenListingDocs = [];
     let staleListingState = 'loading';
     let staleListingLimitReached = false;
@@ -1088,6 +1107,8 @@
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
       const profileSnap = await getDoc(doc(db, 'musicians', user.uid));
       MUSICIAN_ID     = user.uid;
+      matchAlertState = readMatchAlerts(safeLocalStorage(), MUSICIAN_ID);
+      renderNewMatchAlerts();
       loadSavedGigIds();
       musicianProfile = profileSnap.exists() ? profileSnap.data() : {};
       writeUserSummary(db, user.uid, {
@@ -1114,6 +1135,24 @@
       handleWorkspaceNavigation();
       window.CLTCHLoading?.done();
     });
+
+    function safeLocalStorage() {
+      try { return window.localStorage; } catch { return null; }
+    }
+
+    function renderNewMatchAlerts() {
+      renderMatchAlertPanel(document.getElementById('matchAlertPanel'), matchAlertState, {
+        documentRef: document,
+        onEnabledChange(enabled) {
+          matchAlertState = setMatchAlertsEnabled(safeLocalStorage(), MUSICIAN_ID, matchAlertState, enabled);
+          renderNewMatchAlerts();
+        },
+        onClear() {
+          matchAlertState = clearMatchAlerts(safeLocalStorage(), MUSICIAN_ID, matchAlertState);
+          renderNewMatchAlerts();
+        }
+      });
+    }
 
     document.getElementById('signOutLink').addEventListener('click', async (e) => {
       e.preventDefault();
@@ -1459,9 +1498,7 @@
         if (gigSearchInput) gigSearchInput.value = '';
         if (gigMinimumPay) gigMinimumPay.value = '0';
         try { localStorage.setItem('cltch_gig_filter_v1', activeGigFilter); } catch {}
-        gigFilterRow?.querySelectorAll('[data-filter]').forEach((chip) => {
-          chip.classList.toggle('active', chip.dataset.filter === activeGigFilter);
-        });
+        syncGigFilterButtons();
         renderQueues();
       });
       resetStaleLiveFilters?.addEventListener('click', () => resetGigFilters?.click());
@@ -1474,20 +1511,45 @@
         });
       }
       gigFilterRow?.querySelectorAll('[data-filter]').forEach((button) => {
-        button.classList.toggle('active', button.dataset.filter === activeGigFilter);
         button.addEventListener('click', () => {
           activeGigFilter = button.dataset.filter || 'all';
           localStorage.setItem('cltch_gig_filter_v1', activeGigFilter);
-          gigFilterRow.querySelectorAll('[data-filter]').forEach((chip) => {
-            chip.classList.toggle('active', chip.dataset.filter === activeGigFilter);
-          });
+          syncGigFilterButtons();
           renderQueues();
         });
+      });
+      syncGigFilterButtons();
+    }
+
+    function syncGigFilterButtons() {
+      gigFilterRow?.querySelectorAll('[data-filter]').forEach((chip) => {
+        const selected = chip.dataset.filter === activeGigFilter;
+        chip.classList.toggle('active', selected);
+        chip.setAttribute('aria-pressed', String(selected));
       });
     }
 
     function getVisibleMatches() {
       return matchedGigFeed.filter(matchesFeedControls).sort(compareGigItems);
+    }
+
+    function announceVisibleGigResults(count) {
+      const status = document.getElementById('gigSearchResultsStatus');
+      if (!status) return;
+      const criteria = [];
+      const searchText = (gigSearchInput?.value || '').trim();
+      if (searchText) criteria.push(`search “${searchText}”`);
+      if (activeGigFilter !== 'all') {
+        const selectedChip = [...(gigFilterRow?.querySelectorAll('[data-filter]') || [])]
+          .find((chip) => chip.dataset.filter === activeGigFilter);
+        criteria.push(`${selectedChip?.textContent.trim() || activeGigFilter} filter`);
+      }
+      if (minimumGigPay > 0) criteria.push(`minimum pay $${minimumGigPay}`);
+      const context = criteria.length ? ` Current criteria: ${criteria.join('; ')}.` : '';
+      const message = count === 0
+        ? `${criteria.length ? 'No gigs match the active queue criteria.' : 'No matching gigs are currently available.'}${context}`
+        : `${count} gig${count === 1 ? '' : 's'} match the current queue.${context}`;
+      if (status.textContent !== message) status.textContent = message;
     }
 
     function renderQueues() {
@@ -2003,7 +2065,7 @@
           ? Math.round(matched.reduce((sum, item) => sum + (item.match.percent || 0), 0) / matched.length)
           : 0;
         updateAnalyticsPanel();
-        matchedGigFeed = matched.map(({ docSnap, match }) => {
+        const nextMatchedGigFeed = matched.map(({ docSnap, match }) => {
           const g = docSnap.data();
           const gigId = docSnap.id;
           const daysAway = daysUntil(g.date);
@@ -2020,6 +2082,16 @@
             searchText: normalizeText([g.venue, g.location, g.genre, g.pay, g.notes].join(' '))
           };
         });
+        const currentMatchedIds = new Set(nextMatchedGigFeed.map((item) => item.gigId));
+        if (previousMatchedIds !== null && matchAlertState?.enabled) {
+          const newIds = [...currentMatchedIds].filter((gigId) => !previousMatchedIds.has(gigId));
+          if (newIds.length) {
+            matchAlertState = addNewMatchAlerts(safeLocalStorage(), MUSICIAN_ID, matchAlertState, newIds);
+            renderNewMatchAlerts();
+          }
+        }
+        previousMatchedIds = currentMatchedIds;
+        matchedGigFeed = nextMatchedGigFeed;
         renderRadarSummary();
         renderQueues();
       }));
@@ -2100,6 +2172,7 @@
       const gigList  = document.getElementById('gigList');
       const newBadge = document.getElementById('newBadge');
       const visibleMatches = getVisibleMatches();
+      announceVisibleGigResults(visibleMatches.length);
 
       if (matchedGigFeed.length === 0) {
         newBadge.style.display = 'none';

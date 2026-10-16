@@ -89,7 +89,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 065. Accessible map and list view
 - [x] 066. Stale listing suppression reason
 - [ ] 067. Availability conflict warning with timezone
-- [ ] 068. Search relevance controls and reset
+- [x] 068. Search relevance controls and reset
 - [x] 069. Match feedback reason codes
 - [x] 070. Clear browser-local CLTCH preferences, drafts, and named caches without removing Firebase auth or account data — `app/local-data.js`, `privacy.html`; `npm run smoke:local-data`
 
@@ -102,9 +102,9 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 075. Filter-aware empty-state recovery
 - [ ] 076. Response speed with sample-size threshold
 - [ ] 077. Host reliability with denominator
-- [ ] 078. Keyboard and screen-reader search results
+- [x] 078. Keyboard and screen-reader search results
 - [ ] 079. Accessible performer comparison table
-- [ ] 080. Alerts for new matching opportunities
+- [x] 080. Alerts for new matching opportunities
 
 ## Booking lifecycle
 
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 66.
-- Remaining checklist items: 134.
+- Implemented and verified in this change: 69.
+- Remaining checklist items: 131.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

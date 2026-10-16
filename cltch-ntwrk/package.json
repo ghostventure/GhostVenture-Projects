@@ -61,7 +61,10 @@
     "smoke:gig-radar-distance": "node scripts/smoke-gig-radar-distance.mjs",
     "smoke:venue-safety-checklist": "node scripts/smoke-venue-safety-checklist.mjs",
     "smoke:gig-discovery-pagination": "node scripts/smoke-gig-discovery-pagination.mjs",
-    "smoke:match-feedback": "node scripts/smoke-match-feedback.mjs"
+    "smoke:match-feedback": "node scripts/smoke-match-feedback.mjs",
+    "smoke:gig-discovery-relevance": "node scripts/smoke-gig-discovery-relevance.mjs",
+    "smoke:match-alerts": "node scripts/smoke-match-alerts.mjs",
+    "smoke:gig-radar-search-a11y": "node scripts/smoke-gig-radar-search-a11y.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",
