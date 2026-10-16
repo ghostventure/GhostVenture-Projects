@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="description" content="Prepare for accepted CLTCH.NTWRK bookings with a private checklist saved on this device.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/cltch-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="cltch-boilerplate.css">
+  <script src="site-init.js" defer></script>
+  <title>Gig Preparation | CLTCH.NTWRK</title>
+  <style>
+    body { background:#0a0a0a; color:#f0f0f0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; min-height:100vh; }
+    .prep-header { padding:20px 24px; border-bottom:1px solid #1e1e1e; }
+    .prep-header a, .prep-card a { color:#9edcff; }
+    .prep-main { width:min(860px, calc(100% - 32px)); margin:0 auto; padding:32px 0 64px; }
+    .prep-intro, .prep-card { border:1px solid #24394b; border-radius:14px; background:#101923; padding:18px; }
+    .prep-intro h1 { margin:0 0 8px; font-size:clamp(24px,5vw,34px); }
+    .prep-intro p { margin:0; color:#a9bbce; line-height:1.6; }
+    .prep-status { min-height:1.5em; margin:14px 0; color:#c8d7e8; line-height:1.5; }
+    .prep-storage-status { margin:-4px 0 14px; color:#f0d69b; font-size:13px; line-height:1.5; }
+    .prep-list { display:grid; gap:14px; }
+    .prep-card h2 { margin:0 0 6px; font-size:19px; overflow-wrap:anywhere; }
+    .prep-card > p { margin:0 0 10px; color:#9fb2c5; font-size:13px; }
+    .prep-card > a { display:inline-block; margin-bottom:12px; }
+    .prep-tasks { margin:0; padding:12px; border:1px solid #2a4054; border-radius:10px; display:grid; gap:10px; }
+    .prep-tasks legend { padding:0 6px; color:#dceafa; font-size:13px; font-weight:700; }
+    .prep-tasks label { display:flex; align-items:flex-start; gap:10px; color:#d5e2ee; font-size:14px; line-height:1.5; cursor:pointer; }
+    .prep-tasks input { width:18px; height:18px; margin:1px 0 0; flex:0 0 auto; accent-color:#f5a623; }
+    .prep-tasks input:focus-visible, .prep-retry:focus-visible, .prep-header a:focus-visible, .prep-card a:focus-visible { outline:3px solid #9edcff; outline-offset:3px; }
+    .prep-retry { min-height:42px; padding:0 14px; border:1px solid #f5a623; border-radius:9px; background:#f5a623; color:#111; font-weight:800; cursor:pointer; }
+    .prep-empty { padding:18px; border:1px solid #24394b; border-radius:12px; color:#a9bbce; background:#101923; }
+    .prep-footer { padding:20px 16px 40px; text-align:center; color:#748399; font-size:12px; }
+    @media (max-width:520px) { .prep-main { padding-top:20px; } .prep-intro,.prep-card { padding:14px; } }
+  </style>
+</head>
+<body>
+  <header class="prep-header"><a href="musician-dashboard.html">← Back to Performer Agenda</a></header>
+  <main class="prep-main">
+    <section class="prep-intro" aria-labelledby="prepTitle">
+      <h1 id="prepTitle">Gig preparation</h1>
+      <p>Track the practical steps for each upcoming accepted booking. Checked items are stored only in this browser under your signed-in account; they do not sync to another device or get sent to CLTCH.</p>
+    </section>
+    <p class="prep-status" id="prepStatus" role="status" aria-live="polite">Checking sign-in…</p>
+    <p class="prep-storage-status" id="prepStorageStatus" role="status" aria-live="polite" hidden></p>
+    <a id="prepSignIn" href="auth.html?next=gig-prep.html" hidden>Sign in to view assigned bookings</a>
+    <button class="prep-retry" id="prepRetry" type="button" hidden>Retry loading bookings</button>
+    <div class="prep-list" id="prepList"></div>
+  </main>
+  <footer class="prep-footer">CLTCH.NTWRK · Gig preparation is private to this browser account.</footer>
+
+  <script type="module">
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    import { auth, db } from "./app/firebase-client.js";
+    import { buildAcceptedGigQuery, isoToday } from "./app/gig-queries.js";
+    import { subscribeWhenVisible } from "./app/visible-snapshot.js";
+    import {
+      persistGigPrepState,
+      readGigPrepState,
+      renderGigPrepChecklists,
+      selectUpcomingAcceptedBookings,
+      updateGigPrepState
+    } from "./app/gig-prep-checklist.js";
+
+    const status = document.getElementById('prepStatus');
+    const storageStatus = document.getElementById('prepStorageStatus');
+    const signIn = document.getElementById('prepSignIn');
+    const retry = document.getElementById('prepRetry');
+    const list = document.getElementById('prepList');
+    let userId = '';
+    let prepState = { checkedByBooking: Object.create(null), persisted: true, recovered: false };
+    let stopBookings = null;
+
+    function setStorageMessage(message) {
+      storageStatus.textContent = message;
+      storageStatus.hidden = !message;
+    }
+
+    function startBookingsListener(user) {
+      if (stopBookings) stopBookings();
+      retry.hidden = true;
+      status.textContent = 'Loading your upcoming accepted bookings…';
+      list.replaceChildren();
+      try {
+        const q = buildAcceptedGigQuery(db, user.uid, { today: isoToday() });
+        stopBookings = subscribeWhenVisible(() => onSnapshot(q, (snapshot) => {
+          if (userId !== user.uid) return;
+          const records = [];
+          snapshot.forEach((docSnap) => records.push({ id: docSnap.id, ...docSnap.data() }));
+          const bookings = selectUpcomingAcceptedBookings(records, user.uid, isoToday());
+          renderGigPrepChecklists(list, bookings, prepState.checkedByBooking, (bookingId, taskId, checked) => {
+            prepState.checkedByBooking = updateGigPrepState(prepState.checkedByBooking, bookingId, taskId, checked);
+            prepState.persisted = persistGigPrepState(user.uid, prepState.checkedByBooking);
+            setStorageMessage(prepState.persisted
+              ? 'Checklist progress is saved locally for this signed-in account.'
+              : 'Browser storage is unavailable. Checklist progress will last only until this page closes.');
+          });
+          status.textContent = bookings.length
+            ? `${bookings.length} upcoming accepted booking${bookings.length === 1 ? '' : 's'} with private preparation checklists.`
+            : 'No upcoming accepted bookings are assigned to this performer account yet.';
+        }, (error) => {
+          if (userId !== user.uid) return;
+          console.error('Unable to load assigned upcoming bookings.', error);
+          list.replaceChildren();
+          status.textContent = 'Could not load your upcoming accepted bookings. Your locally saved checklist progress remains on this device.';
+          retry.hidden = false;
+        }));
+      } catch (error) {
+        console.error('Unable to start booking checklist feed.', error);
+        status.textContent = 'Could not start the booking feed. Your locally saved checklist progress remains on this device.';
+        retry.hidden = false;
+      }
+    }
+
+    retry.addEventListener('click', () => {
+      if (userId) startBookingsListener({ uid: userId });
+    });
+
+    onAuthStateChanged(auth, (user) => {
+      if (stopBookings) { stopBookings(); stopBookings = null; }
+      list.replaceChildren();
+      retry.hidden = true;
+      if (!user) {
+        userId = '';
+        prepState = { checkedByBooking: Object.create(null), persisted: false, recovered: false };
+        status.textContent = 'Sign in to view preparation checklists for your assigned bookings.';
+        signIn.hidden = false;
+        setStorageMessage('');
+        return;
+      }
+      signIn.hidden = true;
+      userId = user.uid;
+      prepState = readGigPrepState(userId);
+      setStorageMessage(prepState.recovered
+        ? 'Saved checklist data could not be read. A fresh private checklist has been started for this account.'
+        : prepState.persisted
+          ? 'Checklist progress is saved locally for this signed-in account.'
+          : 'Browser storage is unavailable. Checklist progress will last only until this page closes.');
+      startBookingsListener(user);
+    }, (error) => {
+      if (stopBookings) { stopBookings(); stopBookings = null; }
+      userId = '';
+      list.replaceChildren();
+      retry.hidden = true;
+      signIn.hidden = false;
+      status.textContent = 'Sign-in could not be verified. Sign in again to load your assigned booking checklists.';
+      setStorageMessage('Previously saved checklist progress remains in this browser for your account.');
+      console.error('Unable to verify checklist page sign-in.', error);
+    });
+  </script>
+</body>
+</html>

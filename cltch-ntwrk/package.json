@@ -55,7 +55,8 @@
     "smoke:gig-discovery-currency": "node scripts/smoke-gig-discovery-currency.mjs",
     "smoke:stale-listing-reason": "node scripts/smoke-stale-listing-reason.mjs",
     "smoke:hosting-rollback": "node scripts/smoke-hosting-rollback.mjs",
-    "smoke:gig-discovery-recovery": "node scripts/smoke-gig-discovery-recovery.mjs"
+    "smoke:gig-discovery-recovery": "node scripts/smoke-gig-discovery-recovery.mjs",
+    "smoke:gig-prep-checklist": "node scripts/smoke-gig-prep-checklist.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

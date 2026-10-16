@@ -73,7 +73,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 052. Team representative permissions
 - [ ] 053. Earnings history with fee and payout state
 - [ ] 054. Tax document vault and annual download
-- [ ] 055. Gig preparation checklist
+- [x] 055. Gig preparation checklist
 - [ ] 056. Availability pause with resume date
 - [x] 057. Safe portfolio URL manager — blocks scripts, credentials, duplicates, and oversized input; caps saved links at 20. Verified in scripts/smoke-portfolio-links.mjs.
 - [ ] 058. Review response and correction request
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 60.
-- Remaining checklist items: 140.
+- Implemented and verified in this change: 61.
+- Remaining checklist items: 139.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.
