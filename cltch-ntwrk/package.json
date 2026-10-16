@@ -48,7 +48,8 @@
     "smoke:matched-gigs-availability": "node scripts/smoke-matched-gigs-availability.mjs",
     "smoke:profile-calendar-a11y": "node scripts/smoke-profile-calendar-a11y.mjs",
     "smoke:stale-booking-recovery": "node scripts/smoke-stale-booking-recovery.mjs",
-    "smoke:booking-health": "node scripts/smoke-booking-health.mjs"
+    "smoke:booking-health": "node scripts/smoke-booking-health.mjs",
+    "smoke:booking-incident-report": "node scripts/smoke-booking-incident-report.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

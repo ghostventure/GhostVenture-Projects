@@ -828,6 +828,7 @@
     <div id="gigList">
       <div class="queue-empty"><strong>No gigs posted yet.</strong>Once you publish your first opportunity, it will show up here with status, payout summary, and review follow-up.</div>
     </div>
+    <p id="incidentReportStatus" role="status" aria-live="polite" style="font-size:12px;line-height:1.5;color:#9fb5ca;"></p>
   </div>
   <div class="ops-panel" id="assurance-pack-panel">
     <div class="ops-kicker">Assurance Pack</div>
@@ -877,6 +878,7 @@
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { buildBookingHealth } from "./app/booking-health.js";
+    import { buildBookingIncidentReport } from "./app/booking-incident-report.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -981,6 +983,7 @@
     const statusMsg = document.getElementById('statusMsg');
     const submitBtn = document.getElementById('submitBtn');
     const gigList = document.getElementById('gigList');
+    const incidentReportStatus = document.getElementById('incidentReportStatus');
     const payInput = document.getElementById('pay');
     const payEstimate = document.getElementById('payEstimate');
     const gigSearch = document.getElementById('gigSearch');
@@ -1386,6 +1389,33 @@
       return haystack.includes(searchTerm);
     }
 
+    function downloadBookingIncidentReport(gigId) {
+      const entry = hostGigCache.find((item) => item.gigId === gigId);
+      if (!entry || entry.g?.status !== 'accepted' || typeof entry.g?.acceptedBy !== 'string' || !entry.g.acceptedBy) {
+        if (incidentReportStatus) incidentReportStatus.textContent = 'A report is available only for an accepted booking with an assigned performer.';
+        return;
+      }
+      const notes = window.prompt('Private incident notes (up to 2,000 characters). This report is downloaded on this device and is not sent to CLTCH or Support.', '');
+      if (notes === null) return;
+      try {
+        const report = buildBookingIncidentReport({ bookingId: entry.gigId, booking: entry.g, notes });
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const safeId = entry.gigId.replace(/[^a-z0-9_-]/gi, '').slice(0, 48) || 'booking';
+        link.href = objectUrl;
+        link.download = `cltch-private-incident-${safeId}.json`;
+        link.hidden = true;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+        if (incidentReportStatus) incidentReportStatus.textContent = 'Private incident report downloaded on this device. It was not sent to CLTCH or Support.';
+      } catch (error) {
+        if (incidentReportStatus) incidentReportStatus.textContent = error.message || 'Could not prepare the private report.';
+      }
+    }
+
     function renderHostGigList() {
       const gigs = hostGigCache.filter(matchesGigFilter);
       if (!gigs.length) {
@@ -1447,7 +1477,7 @@
         const bookingLink = `<a href="booking.html?id=${gigId}" style="font-size:13px; color:#9edcff; text-decoration:none; display:inline-block; margin-top:8px;">View Booking Details →</a>`;
         const isFutureGig = !g.date || g.date >= new Date().toISOString().slice(0, 10);
         const actionButtons = `
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+          <div class="gig-actions-row" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
             <button type="button" onclick="duplicateGigToForm('${gigId}')" style="min-height:34px;padding:0 12px;border-radius:10px;border:1px solid #335169;background:#101923;color:#d8ecff;font-size:12px;font-weight:700;cursor:pointer;">Duplicate</button>
             ${g.status === 'cancelled'
               ? `<button type="button" onclick="reopenGig('${gigId}')" style="min-height:34px;padding:0 12px;border-radius:10px;border:1px solid #355e4e;background:#15261f;color:#c7f0d7;font-size:12px;font-weight:700;cursor:pointer;">Reopen Gig</button>`
@@ -1481,9 +1511,24 @@
           ${actionButtons}
           ${reviewSection}
         `;
+        if (g.status === 'accepted' && typeof g.acceptedBy === 'string' && g.acceptedBy) {
+          const reportButton = document.createElement('button');
+          reportButton.type = 'button';
+          reportButton.dataset.bookingIncident = gigId;
+          reportButton.textContent = 'Download Private Incident Report';
+          reportButton.setAttribute('aria-label', `Download a private incident report for ${typeof g.venue === 'string' ? g.venue.slice(0, 100) : 'accepted booking'}`);
+          reportButton.style.cssText = 'min-height:34px;padding:0 12px;border-radius:10px;border:1px solid #5b4930;background:#211b12;color:#f5d59d;font-size:12px;font-weight:700;cursor:pointer;';
+          card.querySelector('.gig-actions-row')?.appendChild(reportButton);
+        }
         gigList.appendChild(card);
       });
     }
+
+    gigList?.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-booking-incident]');
+      if (!button || !gigList.contains(button)) return;
+      downloadBookingIncidentReport(button.dataset.bookingIncident);
+    });
 
     function calculateChargeFromAmount(baseAmount) {
       if (!baseAmount) return null;
