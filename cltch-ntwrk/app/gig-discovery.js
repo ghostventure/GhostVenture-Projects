@@ -2,6 +2,7 @@ import { collection, onSnapshot, query, where, orderBy, limit } from "https://ww
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { auth, db } from "./firebase-client.js";
 import { matchesGigSearch, normalizeGigSearch, readGigSearch, saveGigSearch } from "./gig-discovery-filters.js";
+import { activeGigSearchCriteria, clearOneGigSearchCriterion } from "./gig-discovery-recovery.js";
 import { formatListedPay } from "./gig-discovery-pay.js";
 
 const form = document.getElementById("searchForm");
@@ -38,6 +39,7 @@ function addText(parent, tag, value, className) {
 function render() {
   const filtered = gigs.filter((item) => matchesGigSearch(item.data, readForm()))
     .sort((a, b) => String(a.data.date || "").localeCompare(String(b.data.date || "")));
+  const filters = readForm();
   results.replaceChildren();
   if (!gigs.length) {
     status.dataset.state = "";
@@ -47,7 +49,33 @@ function render() {
   status.dataset.state = "";
   status.textContent = `${filtered.length} of ${gigs.length} open gigs match this combined search.`;
   if (!filtered.length) {
-    addText(results, "p", "No gigs match all of these filters. Edit the search or restore your saved criteria.");
+    addText(results, "h2", "No gigs match this search.");
+    const criteria = activeGigSearchCriteria(filters);
+    if (!criteria.length) {
+      addText(results, "p", "No search filters are active to relax. The open gig feed currently has no matching results.");
+      return;
+    }
+    addText(results, "p", "Try removing one filter at a time. Each option keeps your other search criteria in place.");
+    const recoveryOptions = document.createElement("ul");
+    recoveryOptions.setAttribute("aria-label", "Search filters you can remove individually");
+    for (const criterion of criteria) {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `Remove ${criterion.label}: ${criterion.value}`;
+      button.setAttribute("aria-label", `Remove ${criterion.label} filter, currently ${criterion.value}`);
+      button.addEventListener("click", () => {
+        const relaxed = clearOneGigSearchCriterion(readForm(), criterion.key);
+        if (!relaxed) return;
+        writeForm(relaxed);
+        fields[criterion.key].setCustomValidity("");
+        render();
+        fields[criterion.key].focus();
+      });
+      item.append(button);
+      recoveryOptions.append(item);
+    }
+    results.append(recoveryOptions);
     return;
   }
   for (const { id, data } of filtered) {

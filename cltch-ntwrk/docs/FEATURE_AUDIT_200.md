@@ -99,7 +99,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 072. Manual location override
 - [ ] 073. Approximate distance disclosure
 - [ ] 074. Blocked-user exclusion from matching
-- [ ] 075. Filter-aware empty-state recovery
+- [x] 075. Filter-aware empty-state recovery
 - [ ] 076. Response speed with sample-size threshold
 - [ ] 077. Host reliability with denominator
 - [ ] 078. Keyboard and screen-reader search results
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 59.
-- Remaining checklist items: 141.
+- Implemented and verified in this change: 60.
+- Remaining checklist items: 140.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.
