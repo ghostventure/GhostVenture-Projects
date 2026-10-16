@@ -39,6 +39,7 @@
 35. **Performer calendar agenda** — Filter upcoming bookings by 7, 30, 90 days, or all dates and export valid entries in an escaped, folded .ics file. Events use entered floating wall-clock times and a one-hour duration; the interface states those assumptions.
 36. **Copyable performer itinerary** — Copy a date-filtered text itinerary with line-break sanitization and live success/failure status.
 37. **Gig Radar minimum-pay filter** — Set a bounded USD threshold, reset queue filters, preserve the threshold locally when storage permits, and report an accurate no-match state.
+38. **Host-private cancellation reason** — Hosts can enter an optional reason up to 160 characters and review it on the cancelled booking. The workflow explicitly states that no performer notification is sent.
 
 ## Operational catalog accuracy
 
@@ -63,6 +64,7 @@
 - `npm run smoke:quick-replies` — checks account isolation, bounds, explicit insertion, safe message rendering, and bounded history.
 - `npm run smoke:performer-agenda` — checks date windows across DST, invalid date/time filtering, ICS escaping/folding/duration, and sanitized itinerary text.
 - `npm run smoke:gig-radar-filters` — checks pay bounds, persistence fallback, unknown-pay behavior, reset control, and empty-state status.
+- `npm run smoke:cancellation-reason` — checks reason bounds, host-private copy, and no-notification disclosure.
 - `npm run smoke:plugz` — passed.
 - `npm run smoke:draft-protection` — passed; confirms UID isolation, seven-day expiry, and blocked-storage recovery.
 - `npm run smoke:account-export` — passed; confirms UID-scoped reads, timestamp conversion, file download behavior, and object-URL cleanup.
@@ -81,7 +83,7 @@
 
 ## Feature target and current status
 
-The user requested 200 additional mixed features. This change currently delivers **45** distinct capabilities, including account workflows, host templates, repeat posting and cost preview, FAQ and matched-gig accessibility, performer agenda/calendar export, public profile safety and sharing, minimum-pay discovery filters, saved booking replies, safer bounded message history, app installation and shortcuts, payout detail screen privacy, portable saved-search presets, booking-specific preparation checklists, browser-local privacy controls, travel estimates, cache policy, and portfolio URL safety. The 5,000 generated Ops placeholders and 145 proposed feature concepts were not counted. The remaining target is not complete; the feature roadmap in `docs/FEATURE_AUDIT_200.md` separates the implemented evidence from candidate work and should not be read as a claim that unchecked items ship.
+The user requested 200 additional mixed features. This change currently delivers **46** distinct capabilities, including account workflows, host templates, repeat posting and cost preview, host cancellation reason, FAQ and matched-gig accessibility, performer agenda/calendar export, public profile safety and sharing, minimum-pay discovery filters, saved booking replies, safer bounded message history, app installation and shortcuts, payout detail screen privacy, portable saved-search presets, booking-specific preparation checklists, browser-local privacy controls, travel estimates, cache policy, and portfolio URL safety. The 5,000 generated Ops placeholders and 145 proposed feature concepts were not counted. The remaining target is not complete; the feature roadmap in `docs/FEATURE_AUDIT_200.md` separates the implemented evidence from candidate work and should not be read as a claim that unchecked items ship.
 
 ## Deployment and publishing boundary
 

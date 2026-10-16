@@ -860,6 +860,7 @@
     import { findPotentialDuplicateGig } from "./app/duplicate-gig.js";
     import { generateGigDates } from "./app/gig-series.js";
     import { calculateGigSeriesBudget } from "./app/gig-budget.js";
+    import { MAX_CANCELLATION_REASON_LENGTH, normalizeCancellationReason } from "./app/cancellation-reason.js";
     import { deleteGigTemplate, readGigTemplates, saveGigTemplate } from "./app/gig-templates.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
@@ -1602,18 +1603,25 @@
         ? 'Cancel this booking as a whole? It will be removed from the active booking flow.'
         : 'Cancel this gig as a whole and remove it from the live matching feed?';
       if (!window.confirm(message)) return;
+      const reasonInput = window.prompt('Optional reason for your private booking record (up to 160 characters). This does not notify the performer.', currentGig.cancelReason || '');
+      if (reasonInput === null) return;
+      if (String(reasonInput).trim().length > MAX_CANCELLATION_REASON_LENGTH) {
+        window.alert(`Keep the cancellation reason to ${MAX_CANCELLATION_REASON_LENGTH} characters or fewer.`);
+        return;
+      }
+      const cancelReason = normalizeCancellationReason(reasonInput);
       try {
-        const cancelReason = localStorage.getItem('cltch_last_cancel_reason_v1') || '';
         const payload = { status: 'cancelled' };
         if (currentGig.acceptedBy) payload.acceptedBy = deleteField();
         if (currentGig.checkedInAt) payload.checkedInAt = deleteField();
         if (cancelReason) payload.cancelReason = String(cancelReason).slice(0, 160);
+        else if (currentGig.cancelReason) payload.cancelReason = deleteField();
         payload.cancelledAt = serverTimestamp();
         await updateDoc(doc(db, 'gigs', gigId), payload);
         statusMsg.className = 'status success';
         statusMsg.textContent = currentGig.status === 'accepted'
-          ? 'Gig cancelled. It is no longer active in the booking flow and no performer remains attached.'
-          : 'Gig cancelled and removed from the live matching feed.';
+          ? 'Gig cancelled. It is no longer active in the booking flow and no performer remains attached. No performer notification was sent.'
+          : 'Gig cancelled and removed from the live matching feed. No performer notification was sent.';
       } catch (err) {
         console.error(err);
         statusMsg.className = 'status error';

@@ -38,7 +38,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 026. Rider and stage plan attachments with access controls
 - [x] 027. Advisory duplicate gig detection by host, venue, route, date, and time before geocoding/posting — `host.html`, `app/duplicate-gig.js`; `npm run smoke:duplicate-gig`
 - [ ] 028. Event change history
-- [ ] 029. Cancellation reason and performer notice workflow
+- [x] 029. Host-private cancellation reason prompt with bounded storage and explicit no-notification status — `host.html`, `booking.html`, `app/cancellation-reason.js`; `npm run smoke:cancellation-reason`
 - [ ] 030. Venue profile verification with evidence
 
 ## Host team and scheduling
@@ -137,7 +137,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 101. Booking messages protected by Firestore rules
 - [ ] 102. Message delivery and read state
 - [ ] 103. Attachment scanning and short-lived links
-- [x] 104. Booking message history safely renders user content and loads only the latest 100 entries — `booking.html`; `npm run smoke:quick-replies`
+- [x] 104. Booking messages and metadata render untrusted text safely; history loads only latest 100 — `booking.html`; `npm run smoke:quick-replies`
 - [ ] 105. Private host team notes
 - [x] 106. Per-user quick replies stored locally and inserted only after user selection — `booking.html`, `app/quick-replies.js`; `npm run smoke:quick-replies`
 - [ ] 107. Per-channel notification preferences
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 45.
-- Remaining checklist items: 155.
+- Implemented and verified in this change: 46.
+- Remaining checklist items: 154.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

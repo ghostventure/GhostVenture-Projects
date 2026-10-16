@@ -309,6 +309,10 @@
       return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
     }
 
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[char]);
+    }
+
     function routeForRole(role) {
       return role === "host" ? "host.html" : "musician-matched-gigs.html";
     }
@@ -466,13 +470,15 @@
       titleEl.textContent = gig.venue || "Booking";
       subtitleEl.textContent = gig.status === "accepted"
         ? "This booking is active. Use the timeline and details below to keep both sides aligned."
-        : "This request is still open. Review the details before accepting or sharing it.";
+        : gig.status === "cancelled"
+          ? "This booking was cancelled and is no longer active."
+          : "This request is still open. Review the details before accepting or sharing it.";
 
       metaEl.innerHTML = [
-        gig.genre ? `<span>${gig.genre}</span>` : "",
-        gig.pay ? `<span>${gig.pay}</span>` : "",
-        gig.location ? `<span>${gig.location}</span>` : "",
-        gig.performerType && gig.performerType !== "any" ? `<span>${gig.performerType}</span>` : "<span>Any performer</span>"
+        gig.genre ? `<span>${escapeHtml(gig.genre)}</span>` : "",
+        gig.pay ? `<span>${escapeHtml(gig.pay)}</span>` : "",
+        gig.location ? `<span>${escapeHtml(gig.location)}</span>` : "",
+        gig.performerType && gig.performerType !== "any" ? `<span>${escapeHtml(gig.performerType)}</span>` : "<span>Any performer</span>"
       ].filter(Boolean).join("");
 
       renderTimeline(gig);
@@ -496,7 +502,7 @@
       const checkIn = checkInState(gig);
       actionsEl.innerHTML = [
         `<a class="btn" href="${backHref}">Back to Workspace</a>`,
-        isHostOwner && gig.acceptedBy ? `<a class="btn" href="performer-view.html?id=${gig.acceptedBy}">View Performer</a>` : "",
+        isHostOwner && gig.acceptedBy ? `<a class="btn" href="performer-view.html?id=${encodeURIComponent(gig.acceptedBy)}">View Performer</a>` : "",
         summary?.role === "musician" && isAcceptedPerformer ? `<button class="btn" id="checkInBtn" ${checkIn.allowed ? "" : "disabled"}>${checkIn.label}</button>` : "",
         `<a class="btn primary" href="${summary?.role === "host" ? "host-profile.html" : "musician-profile.html"}">Open Profile</a>`
       ].filter(Boolean).join("");
@@ -521,7 +527,12 @@
         ? "This booking already has review follow-up completed."
         : gig.status === "accepted"
           ? (checkIn.reason || "Booking is active. Review submission unlocks after the event is complete.")
+          : gig.status === "cancelled"
+            ? "This booking is cancelled. The host-only reason is recorded privately; no performer notification was sent."
           : "Booking is still open and waiting for a performer response.";
+      if (isHostOwner && gig.status === "cancelled" && gig.cancelReason) {
+        statusEl.textContent += ` Reason: ${gig.cancelReason}`;
+      }
 
       bindMessages(gig, user, summary);
     }
