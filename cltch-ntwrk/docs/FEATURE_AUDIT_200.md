@@ -179,7 +179,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 134. Immutable financial audit log
 - [ ] 135. Two-party manual payment confirmation
 - [ ] 136. Cancellation fee by policy version
-- [ ] 137. Currency and locale-aware amounts
+- [x] 137. Locale-aware formatting for structured host estimates and fees (USD only; raw free-text pay is unchanged)
 - [ ] 138. Host cost and performer earnings reconciliation
 - [ ] 139. Failed payment notification and retry
 - [ ] 140. Permission-checked finance export

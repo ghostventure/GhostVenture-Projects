@@ -899,6 +899,7 @@
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
+    import { formatUsd } from "./app/usd-format.js";
     import { AVAILABLE_MUSICIAN_QUERY_LIMIT, buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
     import { buildPerformerComparison, renderPerformerComparison } from "./app/performer-comparison.js";
     import { findPotentialDuplicateGig } from "./app/duplicate-gig.js";
@@ -1177,10 +1178,6 @@
       if (!match) return null;
       const n = Number(match[0]);
       return Number.isFinite(n) && n > 0 ? n : null;
-    }
-
-    function formatUsd(amount) {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
     }
 
     function readDraft() {
