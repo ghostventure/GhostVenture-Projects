@@ -155,6 +155,7 @@
       <div class="label">Booking Messages</div>
       <div class="small" id="messageSubtitle">Messages stay tied to this booking and are only for the host and assigned performer.</div>
       <div class="message-note" style="margin-top:6px;">For faster loading, this thread shows up to the latest 100 messages in chronological order.</div>
+      <div class="message-note" id="messageSyncStatus" role="status" aria-live="polite">Thread sync status appears for booking participants. It does not indicate whether a recipient read a message.</div>
       <div class="message-note">Same-message retries reuse an ID only while this page stays open. If delivery is uncertain, check the thread before refreshing; this is not durable idempotency.</div>
       <div class="message-note" style="margin:10px 0 14px;">Trust note: only use the names, booking details, and payout method shown inside CLTCH.NTWRK. Do not trust off-platform payment demands, login requests, or last-minute identity changes made outside the booking thread.</div>
       <div class="message-list" id="messageList">
@@ -261,6 +262,7 @@
     const messageFormEl = document.getElementById("messageForm");
     const messageInputEl = document.getElementById("messageInput");
     const messageStatusEl = document.getElementById("messageStatus");
+    const messageSyncStatusEl = document.getElementById("messageSyncStatus");
     const messageSendBtn = document.getElementById("messageSendBtn");
     const quickReplySelect = document.getElementById("quickReplySelect");
     const quickReplyStatus = document.getElementById("quickReplyStatus");
@@ -427,14 +429,24 @@
       }
       renderMessageState(gig, user);
       if (!canUseMessages(gig, user)) {
+        messageSyncStatusEl.textContent = "Thread sync status is available only to the host and assigned performer. It does not indicate whether a recipient read a message.";
         messageListEl.innerHTML = `<div class="empty">${gig.status === "accepted" ? "This thread is private to the host and assigned performer." : "A private booking thread appears after a performer accepts the gig."}</div>`;
         return;
       }
 
       const q = query(collection(db, "gigs", gig.id, "messages"), orderBy("createdAt", "desc"), limit(100));
-      stopMessages = subscribeWhenVisible(() => onSnapshot(q, (snapshot) => {
+      stopMessages = subscribeWhenVisible(() => onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
         const items = [];
         snapshot.forEach((docSnap) => items.push({ id: docSnap.id, ...docSnap.data() }));
+        if (snapshot.metadata.fromCache) {
+          messageSyncStatusEl.textContent = "Showing a cache-only thread snapshot; it may be out of date. This does not confirm whether the recipient read a message.";
+        } else if (snapshot.metadata.hasPendingWrites) {
+          messageSyncStatusEl.textContent = "The server is reachable, but a local message write is still pending sync. This does not confirm whether the recipient read a message.";
+        } else if (items[0]?.senderId === user.uid) {
+          messageSyncStatusEl.textContent = "Thread snapshot synced with the server and includes your latest message. This confirms thread sync only; it does not mean the recipient read it.";
+        } else {
+          messageSyncStatusEl.textContent = "Thread snapshot synced with the server. This confirms thread sync only; it does not mean the recipient read any message.";
+        }
         if (!items.length) {
           messageListEl.innerHTML = `<div class="empty">No messages yet. Use this thread for event details, arrival updates, or quick coordination.</div>`;
           return;
@@ -453,6 +465,9 @@
           card.append(meta, body);
           messageListEl.append(card);
         });
+      }, (error) => {
+        console.error(error);
+        messageSyncStatusEl.textContent = "Unable to confirm whether the thread is synced. This does not confirm whether the recipient read a message.";
       }));
     }
 
