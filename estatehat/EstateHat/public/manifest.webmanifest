@@ -1,0 +1,17 @@
+{
+  "name": "EstateHat",
+  "short_name": "EstateHat",
+  "description": "Verified peer-to-peer real estate management across web, mobile, and desktop.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F3EFE8",
+  "theme_color": "#2A2520",
+  "icons": [
+    {
+      "src": "/icons/estatehat-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

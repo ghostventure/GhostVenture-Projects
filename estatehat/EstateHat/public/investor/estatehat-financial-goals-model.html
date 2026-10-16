@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EstateHat Financial Goals and Model</title>
+  <style>
+    :root {
+      --navy: #0e2c33;
+      --gold: #cb9c4b;
+      --cream: #f4eee3;
+      --paper: #fffdf9;
+      --ink: #17323a;
+      --muted: #5a6d72;
+      --line: #ddd4c6;
+      --soft: #f2eadc;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--cream); color: var(--ink); font-family: Arial, sans-serif; }
+    .page {
+      width: 8.5in;
+      min-height: 11in;
+      margin: 0 auto;
+      background: linear-gradient(180deg, #fffdf9 0%, #f8f2e8 100%);
+      padding: 0.58in;
+    }
+    .hero {
+      border-radius: 20px;
+      background: var(--navy);
+      color: white;
+      padding: 24px 26px;
+      margin-bottom: 16px;
+    }
+    .hero .eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #d9cca9;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .hero h1 {
+      font-size: 30px;
+      font-family: Georgia, serif;
+      line-height: 1.08;
+      margin: 0 0 10px;
+    }
+    .hero p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #edf2ef;
+    }
+    .section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 17px;
+    }
+    .section p, .section li, .section td, .section th {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .two {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 14px;
+    }
+    .goal {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .goal:last-child { border-bottom: 0; }
+    .goal .label {
+      color: var(--muted);
+    }
+    .goal .value {
+      color: var(--ink);
+      font-weight: 700;
+      text-align: right;
+    }
+    .soft {
+      background: var(--soft);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 4px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--gold);
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .note {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <div class="eyebrow">EstateHat Financial Goals and Model</div>
+      <h1>Planning targets built around transaction-fee revenue and trust-led subscriptions</h1>
+      <p>
+        This summary frames the current EstateHat planning model for early investor conversations. It reflects target outcomes rather than historical financial performance and should be read as an operating plan, not audited reporting.
+      </p>
+    </div>
+
+    <div class="two">
+      <div class="section">
+        <h2>Core revenue drivers</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Driver</th>
+              <th>Current model</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Platform transaction fee</td>
+              <td>1.50% of completed transaction sale price</td>
+            </tr>
+            <tr>
+              <td>Verified User subscription</td>
+              <td>$20 per month</td>
+            </tr>
+            <tr>
+              <td>Escrow and wire line items</td>
+              <td>Shown in product flows but excluded from core software targets unless clearly retained by EstateHat</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          The financial lens used here is intentionally conservative: transaction-fee revenue and subscription revenue are emphasized, while any pass-through partner economics are excluded from core planning until confirmed.
+        </div>
+      </div>
+      <div class="section soft">
+        <h2>Planning guardrails</h2>
+        <ul>
+          <li>Focus on software-margin revenue.</li>
+          <li>Avoid relying on pass-through fees for core performance targets.</li>
+          <li>Preserve at least 12 months of runway after financing.</li>
+          <li>Expand GTM only after compliance and billing hardening.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Model assumptions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Assumption area</th>
+            <th>Planning posture</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Average transaction mix</td>
+            <td>Built around GMV targets rather than a published average home-price assumption</td>
+          </tr>
+          <tr>
+            <td>Revenue recognition lens</td>
+            <td>Counts only transaction-fee and subscription revenue clearly attributable to EstateHat software economics</td>
+          </tr>
+          <tr>
+            <td>Growth pacing</td>
+            <td>Assumes disciplined scaling after compliance and billing hardening, not pure top-of-funnel expansion</td>
+          </tr>
+          <tr>
+            <td>Margin posture</td>
+            <td>Targets software-like economics by avoiding reliance on direct fund custody or principal risk</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Headline financial goals</h2>
+      <div class="goal">
+        <div class="label">12-month completed transaction target</div>
+        <div class="value">100 transactions</div>
+      </div>
+      <div class="goal">
+        <div class="label">12-month gross merchandise volume target</div>
+        <div class="value">$35M GMV</div>
+      </div>
+      <div class="goal">
+        <div class="label">12-month modeled software revenue target</div>
+        <div class="value">$669k</div>
+      </div>
+      <div class="goal">
+        <div class="label">24-month completed transaction target</div>
+        <div class="value">300 transactions</div>
+      </div>
+      <div class="goal">
+        <div class="label">24-month gross merchandise volume target</div>
+        <div class="value">$105M GMV</div>
+      </div>
+      <div class="goal">
+        <div class="label">24-month modeled software revenue target</div>
+        <div class="value">$1.935M</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Modeled revenue build</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>12 months</th>
+            <th>24 months</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Completed transactions</td>
+            <td>100</td>
+            <td>300</td>
+          </tr>
+          <tr>
+            <td>Platform GMV</td>
+            <td>$35M</td>
+            <td>$105M</td>
+          </tr>
+          <tr>
+            <td>Transaction-fee revenue</td>
+            <td>$525k</td>
+            <td>$1.575M</td>
+          </tr>
+          <tr>
+            <td>Average paid Verified Users</td>
+            <td>600</td>
+            <td>1,500</td>
+          </tr>
+          <tr>
+            <td>Annualized subscription revenue</td>
+            <td>$144k</td>
+            <td>$360k</td>
+          </tr>
+          <tr>
+            <td>Total modeled software revenue</td>
+            <td>$669k</td>
+            <td>$1.935M</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="two">
+      <div class="section">
+        <h2>Sensitivity drivers</h2>
+        <ul>
+          <li>Closed-transaction count is the biggest near-term driver of modeled revenue.</li>
+          <li>GMV quality matters because the 1.50% fee scales directly with sale value.</li>
+          <li>Paid Verified User adoption affects recurring revenue stability and quality of cohorts.</li>
+          <li>Conversion improvements can move outcomes materially without requiring reckless top-of-funnel spend.</li>
+        </ul>
+      </div>
+      <div class="section">
+        <h2>What would improve confidence</h2>
+        <ul>
+          <li>Live billing and payout integrations.</li>
+          <li>Reliable KPI cadence with cohort and funnel reporting.</li>
+          <li>Clearer evidence that trust-first positioning improves user progression.</li>
+          <li>Formal finance and compliance artifacts in the diligence package.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="two">
+      <div class="section">
+        <h2>Operating goals</h2>
+        <ul>
+          <li>Keep burn disciplined enough to maintain financing flexibility.</li>
+          <li>Improve reporting maturity before broad institutional fundraising.</li>
+          <li>Target contribution-margin-positive mature cohorts.</li>
+          <li>Aim for an operating break-even path after integrations and controlled GTM scale-up.</li>
+        </ul>
+      </div>
+      <div class="section">
+        <h2>Important note</h2>
+        <p>
+          These goals are planning assumptions derived from the current product model in the repository. They are not forecasts backed by audited statements, and they should be revised as live conversion, retention, and pricing data mature.
+        </p>
+        <p>
+          Investors should read this model as a directional planning tool that frames how EstateHat expects capital, operations, and trust posture to convert into software revenue over time.
+        </p>
+      </div>
+    </div>
+
+    <div class="note">
+      Informational planning document only. Not a securities offering, solicitation, legal opinion, or financial advice.
+    </div>
+  </div>
+</body>
+</html>

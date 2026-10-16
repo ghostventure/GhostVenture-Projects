@@ -1,0 +1,1237 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isPrivilegedEmail() {
+      return signedIn() && (
+        request.auth.token.email == "administrator@estatehat.com" ||
+        request.auth.token.email == "webmaster@estatehat.com" ||
+        request.auth.token.email == "webmaster.login@estatehat.com"
+      );
+    }
+
+    function optionalTimestamp(value) {
+      return value == null || value is timestamp;
+    }
+
+    function validAccountType() {
+      return request.resource.data.accountType in [
+        "buyer",
+        "seller",
+        "corp_buyer",
+        "corp_seller",
+        "attorney",
+        "agent",
+        "inspector",
+        "lender",
+        "admin",
+        "webmaster",
+        "gov_township",
+        "gov_city",
+        "gov_county",
+        "gov_borough",
+        "gov_parish",
+        "gov_state",
+        "gov_federal"
+      ];
+    }
+
+    function validSelfServiceCreateRole() {
+      return isPrivilegedEmail() || request.resource.data.accountType in [
+        "buyer",
+        "seller",
+        "corp_buyer",
+        "corp_seller"
+      ];
+    }
+
+    function validAccountTypeTransition() {
+      return (
+        resource.data.accountType in ["buyer", "seller"] &&
+        request.resource.data.accountType in ["buyer", "seller"]
+      ) || (
+        resource.data.accountType in ["corp_buyer", "corp_seller"] &&
+        request.resource.data.accountType in ["corp_buyer", "corp_seller"]
+      ) || (
+        resource.data.accountType in [
+          "attorney",
+          "agent",
+          "inspector",
+          "lender",
+          "admin",
+          "webmaster",
+          "gov_township",
+          "gov_city",
+          "gov_county",
+          "gov_borough",
+          "gov_parish",
+          "gov_state",
+          "gov_federal"
+        ] &&
+        request.resource.data.accountType == resource.data.accountType
+      );
+    }
+
+    function validSecurityShape() {
+      return request.resource.data.security is map
+        && request.resource.data.security.keys().hasOnly([
+          "twoFactorEnabled",
+          "loginAlerts",
+          "trustedDevice",
+          "documentShield",
+          "sessionTimeoutMinutes"
+        ])
+        && request.resource.data.security.twoFactorEnabled is bool
+        && request.resource.data.security.loginAlerts is bool
+        && request.resource.data.security.trustedDevice is bool
+        && request.resource.data.security.documentShield is bool
+        && request.resource.data.security.sessionTimeoutMinutes is int
+        && request.resource.data.security.sessionTimeoutMinutes >= 15
+        && request.resource.data.security.sessionTimeoutMinutes <= 240;
+    }
+
+    function validVerificationShape() {
+      return request.resource.data.verification is map
+        && request.resource.data.verification.keys().hasOnly([
+          "stepStatus",
+          "stepDocuments",
+          "citizenshipStatus",
+          "homeownerVerified",
+          "review"
+        ])
+        && request.resource.data.verification.stepStatus is map
+        && request.resource.data.verification.stepStatus.keys().hasOnly([
+          "identity",
+          "selfie",
+          "address",
+          "citizenship",
+          "ssn",
+          "homeowner",
+          "license",
+          "background",
+          "entity_docs",
+          "ein",
+          "domestic_entity",
+          "good_standing",
+          "operating_agreement",
+          "auth_resolution",
+          "auth_signer_id",
+          "auth_signer_selfie",
+          "signer_citizenship",
+          "registered_agent",
+          "background_entity",
+          "background_signers",
+          "proof_of_funds"
+        ])
+        && (!("identity" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.identity is bool)
+        && (!("selfie" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.selfie is bool)
+        && (!("address" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.address is bool)
+        && (!("citizenship" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.citizenship is bool)
+        && (!("ssn" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.ssn is bool)
+        && (!("homeowner" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.homeowner is bool)
+        && (!("license" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.license is bool)
+        && (!("background" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.background is bool)
+        && (!("entity_docs" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.entity_docs is bool)
+        && (!("ein" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.ein is bool)
+        && (!("domestic_entity" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.domestic_entity is bool)
+        && (!("good_standing" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.good_standing is bool)
+        && (!("operating_agreement" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.operating_agreement is bool)
+        && (!("auth_resolution" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.auth_resolution is bool)
+        && (!("auth_signer_id" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.auth_signer_id is bool)
+        && (!("auth_signer_selfie" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.auth_signer_selfie is bool)
+        && (!("signer_citizenship" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.signer_citizenship is bool)
+        && (!("registered_agent" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.registered_agent is bool)
+        && (!("background_entity" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.background_entity is bool)
+        && (!("background_signers" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.background_signers is bool)
+        && (!("proof_of_funds" in request.resource.data.verification.stepStatus) || request.resource.data.verification.stepStatus.proof_of_funds is bool)
+        && request.resource.data.verification.stepDocuments is map
+        && request.resource.data.verification.stepDocuments.keys().hasOnly([
+          "identity",
+          "selfie",
+          "address",
+          "citizenship",
+          "ssn",
+          "homeowner",
+          "license",
+          "background",
+          "entity_docs",
+          "ein",
+          "domestic_entity",
+          "good_standing",
+          "operating_agreement",
+          "auth_resolution",
+          "auth_signer_id",
+          "auth_signer_selfie",
+          "signer_citizenship",
+          "registered_agent",
+          "background_entity",
+          "background_signers",
+          "proof_of_funds"
+        ])
+        && (!("identity" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.identity is list && request.resource.data.verification.stepDocuments.identity.size() <= 12))
+        && (!("selfie" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.selfie is list && request.resource.data.verification.stepDocuments.selfie.size() <= 12))
+        && (!("address" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.address is list && request.resource.data.verification.stepDocuments.address.size() <= 12))
+        && (!("citizenship" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.citizenship is list && request.resource.data.verification.stepDocuments.citizenship.size() <= 12))
+        && (!("ssn" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.ssn is list && request.resource.data.verification.stepDocuments.ssn.size() <= 12))
+        && (!("homeowner" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.homeowner is list && request.resource.data.verification.stepDocuments.homeowner.size() <= 12))
+        && (!("license" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.license is list && request.resource.data.verification.stepDocuments.license.size() <= 12))
+        && (!("background" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.background is list && request.resource.data.verification.stepDocuments.background.size() <= 12))
+        && (!("entity_docs" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.entity_docs is list && request.resource.data.verification.stepDocuments.entity_docs.size() <= 12))
+        && (!("ein" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.ein is list && request.resource.data.verification.stepDocuments.ein.size() <= 12))
+        && (!("domestic_entity" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.domestic_entity is list && request.resource.data.verification.stepDocuments.domestic_entity.size() <= 12))
+        && (!("good_standing" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.good_standing is list && request.resource.data.verification.stepDocuments.good_standing.size() <= 12))
+        && (!("operating_agreement" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.operating_agreement is list && request.resource.data.verification.stepDocuments.operating_agreement.size() <= 12))
+        && (!("auth_resolution" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.auth_resolution is list && request.resource.data.verification.stepDocuments.auth_resolution.size() <= 12))
+        && (!("auth_signer_id" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.auth_signer_id is list && request.resource.data.verification.stepDocuments.auth_signer_id.size() <= 12))
+        && (!("auth_signer_selfie" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.auth_signer_selfie is list && request.resource.data.verification.stepDocuments.auth_signer_selfie.size() <= 12))
+        && (!("signer_citizenship" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.signer_citizenship is list && request.resource.data.verification.stepDocuments.signer_citizenship.size() <= 12))
+        && (!("registered_agent" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.registered_agent is list && request.resource.data.verification.stepDocuments.registered_agent.size() <= 12))
+        && (!("background_entity" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.background_entity is list && request.resource.data.verification.stepDocuments.background_entity.size() <= 12))
+        && (!("background_signers" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.background_signers is list && request.resource.data.verification.stepDocuments.background_signers.size() <= 12))
+        && (!("proof_of_funds" in request.resource.data.verification.stepDocuments) || (request.resource.data.verification.stepDocuments.proof_of_funds is list && request.resource.data.verification.stepDocuments.proof_of_funds.size() <= 12))
+        && (
+          request.resource.data.verification.stepStatus.identity != true ||
+          ("identity" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.identity.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.selfie != true ||
+          ("selfie" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.selfie.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.address != true ||
+          ("address" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.address.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.citizenship != true ||
+          ("citizenship" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.citizenship.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.ssn != true ||
+          ("ssn" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.ssn.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.homeowner != true ||
+          ("homeowner" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.homeowner.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.license != true ||
+          ("license" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.license.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.entity_docs != true ||
+          ("entity_docs" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.entity_docs.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.ein != true ||
+          ("ein" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.ein.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.domestic_entity != true ||
+          ("domestic_entity" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.domestic_entity.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.good_standing != true ||
+          ("good_standing" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.good_standing.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.operating_agreement != true ||
+          ("operating_agreement" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.operating_agreement.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.auth_resolution != true ||
+          ("auth_resolution" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.auth_resolution.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.auth_signer_id != true ||
+          ("auth_signer_id" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.auth_signer_id.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.auth_signer_selfie != true ||
+          ("auth_signer_selfie" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.auth_signer_selfie.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.signer_citizenship != true ||
+          ("signer_citizenship" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.signer_citizenship.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.registered_agent != true ||
+          ("registered_agent" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.registered_agent.size() > 0)
+        )
+        && (
+          request.resource.data.verification.stepStatus.proof_of_funds != true ||
+          ("proof_of_funds" in request.resource.data.verification.stepDocuments && request.resource.data.verification.stepDocuments.proof_of_funds.size() > 0)
+        )
+        && (
+          request.resource.data.verification.homeownerVerified != true ||
+          request.resource.data.verification.stepStatus.homeowner == true
+        )
+        && request.resource.data.verification.citizenshipStatus is string
+        && request.resource.data.verification.citizenshipStatus.size() <= 40
+        && request.resource.data.verification.homeownerVerified is bool
+        && request.resource.data.verification.review is map
+        && request.resource.data.verification.review.keys().hasOnly([
+          "status",
+          "lastSubmittedAt",
+          "lastReviewedAt",
+          "queueLabel",
+          "notes"
+        ])
+        && request.resource.data.verification.review.status is string
+        && request.resource.data.verification.review.status.size() <= 40
+        && optionalTimestamp(request.resource.data.verification.review.lastSubmittedAt)
+        && optionalTimestamp(request.resource.data.verification.review.lastReviewedAt)
+        && request.resource.data.verification.review.queueLabel is string
+        && request.resource.data.verification.review.queueLabel.size() <= 80
+        && request.resource.data.verification.review.notes is string
+        && request.resource.data.verification.review.notes.size() <= 240;
+    }
+
+    function validTrustShape() {
+      return request.resource.data.trust is map
+        && request.resource.data.trust.keys().hasOnly([
+          "verifiedProfileActive",
+          "verifiedProfileVisibility",
+          "verifiedProfilePlan",
+          "verifiedProfilePriceCents",
+          "verifiedProfileBadgeColor",
+          "verifiedProfileSince"
+        ])
+        && request.resource.data.trust.verifiedProfileActive is bool
+        && request.resource.data.trust.verifiedProfileVisibility is bool
+        && request.resource.data.trust.verifiedProfilePlan is string
+        && request.resource.data.trust.verifiedProfilePlan.size() <= 64
+        && request.resource.data.trust.verifiedProfilePriceCents is int
+        && request.resource.data.trust.verifiedProfilePriceCents == 2000
+        && request.resource.data.trust.verifiedProfileBadgeColor is string
+        && request.resource.data.trust.verifiedProfileBadgeColor == "green"
+        && optionalTimestamp(request.resource.data.trust.verifiedProfileSince);
+    }
+
+    function validReputationShape() {
+      return request.resource.data.reputation is map
+        && request.resource.data.reputation.keys().hasOnly([
+          "grade",
+          "score",
+          "reviewCount",
+          "testimonialCount",
+          "visibility",
+          "lastReviewedAt",
+          "summary",
+          "feedback"
+        ])
+        && request.resource.data.reputation.grade in ["AA", "A", "B", "C", "D", "F"]
+        && request.resource.data.reputation.score is int
+        && request.resource.data.reputation.score >= 0
+        && request.resource.data.reputation.score <= 100
+        && request.resource.data.reputation.reviewCount is int
+        && request.resource.data.reputation.reviewCount >= 0
+        && request.resource.data.reputation.reviewCount <= 9999
+        && request.resource.data.reputation.testimonialCount is int
+        && request.resource.data.reputation.testimonialCount >= 0
+        && request.resource.data.reputation.testimonialCount <= 9999
+        && request.resource.data.reputation.visibility is bool
+        && (request.resource.data.reputation.lastReviewedAt == null || request.resource.data.reputation.lastReviewedAt is timestamp || request.resource.data.reputation.lastReviewedAt is string)
+        && request.resource.data.reputation.summary is string
+        && request.resource.data.reputation.summary.size() <= 220
+        && request.resource.data.reputation.feedback is list
+        && request.resource.data.reputation.feedback.size() <= 20;
+    }
+
+    function validUserDatabaseShape() {
+      return request.resource.data.userDatabase is map
+        && request.resource.data.userDatabase.keys().hasOnly([
+          "status",
+          "leadSource",
+          "preferredContact",
+          "preferredLanguage",
+          "timezone",
+          "supportTier",
+          "riskLevel",
+          "transactionIntent",
+          "stageOwner",
+          "targetMarket",
+          "budgetBand",
+          "timelineBand",
+          "fraudWatch",
+          "marketingOptIn",
+          "marketingConsentAt",
+          "marketingConsentMethod",
+          "marketingConsentVersion",
+          "marketingConsentIpHash",
+          "marketingRevokedAt",
+          "tags",
+          "notes",
+          "profileDepthScore",
+          "lastKycAt",
+          "lastContactAt"
+        ])
+        && request.resource.data.userDatabase.status in [
+          "lead",
+          "onboarding",
+          "active",
+          "transacting",
+          "closed",
+          "dormant"
+        ]
+        && request.resource.data.userDatabase.leadSource is string
+        && request.resource.data.userDatabase.leadSource.size() <= 60
+        && request.resource.data.userDatabase.preferredContact in [
+          "email",
+          "phone",
+          "sms",
+          "in_app"
+        ]
+        && request.resource.data.userDatabase.preferredLanguage is string
+        && request.resource.data.userDatabase.preferredLanguage.size() <= 40
+        && request.resource.data.userDatabase.timezone is string
+        && request.resource.data.userDatabase.timezone.size() <= 60
+        && request.resource.data.userDatabase.supportTier in [
+          "standard",
+          "priority",
+          "white_glove"
+        ]
+        && request.resource.data.userDatabase.riskLevel in ["low", "medium", "high"]
+        && request.resource.data.userDatabase.transactionIntent in [
+          "buy",
+          "sell",
+          "buy_sell",
+          "invest",
+          "browse",
+          "service"
+        ]
+        && request.resource.data.userDatabase.stageOwner is string
+        && request.resource.data.userDatabase.stageOwner.size() <= 60
+        && request.resource.data.userDatabase.targetMarket is string
+        && request.resource.data.userDatabase.targetMarket.size() <= 80
+        && request.resource.data.userDatabase.budgetBand in [
+          "under_250k",
+          "250k_500k",
+          "500k_1m",
+          "1m_2m",
+          "2m_plus",
+          "undisclosed"
+        ]
+        && request.resource.data.userDatabase.timelineBand in [
+          "immediate",
+          "30_days",
+          "90_days",
+          "6_months",
+          "12_months_plus",
+          "undisclosed"
+        ]
+        && request.resource.data.userDatabase.fraudWatch is bool
+        && request.resource.data.userDatabase.marketingOptIn is bool
+        && optionalTimestamp(request.resource.data.userDatabase.marketingConsentAt)
+        && request.resource.data.userDatabase.marketingConsentMethod is string
+        && request.resource.data.userDatabase.marketingConsentMethod.size() <= 40
+        && request.resource.data.userDatabase.marketingConsentVersion is string
+        && request.resource.data.userDatabase.marketingConsentVersion.size() <= 40
+        && request.resource.data.userDatabase.marketingConsentIpHash is string
+        && request.resource.data.userDatabase.marketingConsentIpHash.size() <= 96
+        && optionalTimestamp(request.resource.data.userDatabase.marketingRevokedAt)
+        && (
+          request.resource.data.userDatabase.marketingOptIn != true
+          || (
+            request.resource.data.userDatabase.marketingConsentAt is timestamp
+            && request.resource.data.userDatabase.marketingConsentMethod in [
+              "checkbox",
+              "double_opt_in",
+              "support_confirmed",
+              "imported"
+            ]
+            && request.resource.data.userDatabase.marketingConsentVersion.size() >= 4
+            && request.resource.data.userDatabase.marketingRevokedAt == null
+          )
+        )
+        && (
+          request.resource.data.userDatabase.marketingOptIn == true
+          || (
+            request.resource.data.userDatabase.marketingConsentAt == null
+            && request.resource.data.userDatabase.marketingConsentMethod == ""
+            && request.resource.data.userDatabase.marketingConsentVersion == ""
+            && request.resource.data.userDatabase.marketingConsentIpHash == ""
+          )
+        )
+        && request.resource.data.userDatabase.tags is list
+        && request.resource.data.userDatabase.tags.size() <= 14
+        && request.resource.data.userDatabase.notes is string
+        && request.resource.data.userDatabase.notes.size() <= 400
+        && request.resource.data.userDatabase.profileDepthScore is int
+        && request.resource.data.userDatabase.profileDepthScore >= 0
+        && request.resource.data.userDatabase.profileDepthScore <= 100
+        && optionalTimestamp(request.resource.data.userDatabase.lastKycAt)
+        && optionalTimestamp(request.resource.data.userDatabase.lastContactAt);
+    }
+
+    function validComplianceShape() {
+      return request.resource.data.compliance is map
+        && request.resource.data.compliance.keys().hasOnly([
+          "jurisdiction",
+          "regulatoryProfile",
+          "legalHold",
+          "incidents",
+          "policy",
+          "outlierFlags",
+          "supportPacket",
+          "auditTrail"
+        ])
+        && request.resource.data.compliance.jurisdiction is map
+        && request.resource.data.compliance.jurisdiction.keys().hasOnly([
+          "country",
+          "state",
+          "county",
+          "city",
+          "municipality"
+        ])
+        && request.resource.data.compliance.jurisdiction.country is string
+        && request.resource.data.compliance.jurisdiction.country.size() <= 40
+        && request.resource.data.compliance.jurisdiction.state is string
+        && request.resource.data.compliance.jurisdiction.state.size() <= 60
+        && request.resource.data.compliance.jurisdiction.county is string
+        && request.resource.data.compliance.jurisdiction.county.size() <= 80
+        && request.resource.data.compliance.jurisdiction.city is string
+        && request.resource.data.compliance.jurisdiction.city.size() <= 80
+        && request.resource.data.compliance.jurisdiction.municipality is string
+        && request.resource.data.compliance.jurisdiction.municipality.size() <= 120
+        && request.resource.data.compliance.regulatoryProfile is map
+        && request.resource.data.compliance.regulatoryProfile.keys().hasOnly([
+          "federalEnabled",
+          "stateEnabled",
+          "countyEnabled",
+          "cityEnabled",
+          "baselineProfile",
+          "outlierReviewRequired",
+          "outlierLastReviewedAt",
+          "lastJurisdictionReviewAt"
+        ])
+        && request.resource.data.compliance.regulatoryProfile.federalEnabled is bool
+        && request.resource.data.compliance.regulatoryProfile.stateEnabled is bool
+        && request.resource.data.compliance.regulatoryProfile.countyEnabled is bool
+        && request.resource.data.compliance.regulatoryProfile.cityEnabled is bool
+        && request.resource.data.compliance.regulatoryProfile.baselineProfile in ["strict_us_51", "state_specific"]
+        && request.resource.data.compliance.regulatoryProfile.outlierReviewRequired is bool
+        && optionalTimestamp(request.resource.data.compliance.regulatoryProfile.outlierLastReviewedAt)
+        && optionalTimestamp(request.resource.data.compliance.regulatoryProfile.lastJurisdictionReviewAt)
+        && request.resource.data.compliance.legalHold is map
+        && request.resource.data.compliance.legalHold.keys().hasOnly([
+          "active",
+          "matterId",
+          "reason",
+          "initiatedAt",
+          "releasedAt"
+        ])
+        && request.resource.data.compliance.legalHold.active is bool
+        && request.resource.data.compliance.legalHold.matterId is string
+        && request.resource.data.compliance.legalHold.matterId.size() <= 80
+        && request.resource.data.compliance.legalHold.reason is string
+        && request.resource.data.compliance.legalHold.reason.size() <= 240
+        && optionalTimestamp(request.resource.data.compliance.legalHold.initiatedAt)
+        && optionalTimestamp(request.resource.data.compliance.legalHold.releasedAt)
+        && request.resource.data.compliance.incidents is map
+        && request.resource.data.compliance.incidents.keys().hasOnly([
+          "openCount",
+          "lastIncidentAt",
+          "escalationLevel"
+        ])
+        && request.resource.data.compliance.incidents.openCount is int
+        && request.resource.data.compliance.incidents.openCount >= 0
+        && request.resource.data.compliance.incidents.openCount <= 999
+        && optionalTimestamp(request.resource.data.compliance.incidents.lastIncidentAt)
+        && request.resource.data.compliance.incidents.escalationLevel in ["none", "watch", "critical"]
+        && request.resource.data.compliance.policy is map
+        && request.resource.data.compliance.policy.keys().hasOnly([
+          "termsVersion",
+          "privacyVersion",
+          "disclosuresVersion",
+          "lastPolicyReviewAt"
+        ])
+        && request.resource.data.compliance.policy.termsVersion is string
+        && request.resource.data.compliance.policy.termsVersion.size() <= 40
+        && request.resource.data.compliance.policy.privacyVersion is string
+        && request.resource.data.compliance.policy.privacyVersion.size() <= 40
+        && request.resource.data.compliance.policy.disclosuresVersion is string
+        && request.resource.data.compliance.policy.disclosuresVersion.size() <= 40
+        && optionalTimestamp(request.resource.data.compliance.policy.lastPolicyReviewAt)
+        && request.resource.data.compliance.outlierFlags is map
+        && request.resource.data.compliance.outlierFlags.keys().hasOnly([
+          "territoryOutlier",
+          "privacyOutlier",
+          "marketingOutlier",
+          "fairHousingOutlier",
+          "recordingOutlier",
+          "federalOutlier",
+          "counselReviewRequired"
+        ])
+        && request.resource.data.compliance.outlierFlags.territoryOutlier is bool
+        && request.resource.data.compliance.outlierFlags.privacyOutlier is bool
+        && request.resource.data.compliance.outlierFlags.marketingOutlier is bool
+        && request.resource.data.compliance.outlierFlags.fairHousingOutlier is bool
+        && request.resource.data.compliance.outlierFlags.recordingOutlier is bool
+        && request.resource.data.compliance.outlierFlags.federalOutlier is bool
+        && request.resource.data.compliance.outlierFlags.counselReviewRequired is bool
+        && request.resource.data.compliance.supportPacket is map
+        && request.resource.data.compliance.supportPacket.keys().hasOnly([
+          "ready",
+          "generatedAt",
+          "generatedBy",
+          "packetVersion",
+          "jurisdictionSummary",
+          "notes"
+        ])
+        && request.resource.data.compliance.supportPacket.ready is bool
+        && optionalTimestamp(request.resource.data.compliance.supportPacket.generatedAt)
+        && request.resource.data.compliance.supportPacket.generatedBy is string
+        && request.resource.data.compliance.supportPacket.generatedBy.size() <= 160
+        && request.resource.data.compliance.supportPacket.packetVersion is string
+        && request.resource.data.compliance.supportPacket.packetVersion.size() <= 40
+        && request.resource.data.compliance.supportPacket.jurisdictionSummary is string
+        && request.resource.data.compliance.supportPacket.jurisdictionSummary.size() <= 360
+        && request.resource.data.compliance.supportPacket.notes is string
+        && request.resource.data.compliance.supportPacket.notes.size() <= 600
+        && (
+          request.resource.data.compliance.supportPacket.ready != true
+          || (
+            request.resource.data.compliance.supportPacket.generatedAt is timestamp
+            && request.resource.data.compliance.supportPacket.generatedBy.size() >= 6
+            && request.resource.data.compliance.supportPacket.jurisdictionSummary.size() >= 20
+          )
+        )
+        && request.resource.data.compliance.auditTrail is list
+        && request.resource.data.compliance.auditTrail.size() <= 200
+        && (
+          request.resource.data.compliance.legalHold.active != true ||
+          request.resource.data.trust.verifiedProfileActive == false
+        )
+        && (
+          request.resource.data.compliance.legalHold.active != true ||
+          request.resource.data.payoutFramework.status != "active"
+        )
+        && (
+          request.resource.data.compliance.legalHold.active != true ||
+          request.resource.data.verifiedBilling.status != "active"
+        )
+        && (
+          request.resource.data.legal.acceptedTermsAt == null ||
+          request.resource.data.compliance.policy.termsVersion.size() > 0
+        )
+        && (
+          request.resource.data.legal.acceptedPrivacyAt == null ||
+          request.resource.data.compliance.policy.privacyVersion.size() > 0
+        )
+        && (
+          request.resource.data.legal.acceptedLegalDisclosuresAt == null ||
+          request.resource.data.compliance.policy.disclosuresVersion.size() > 0
+        );
+    }
+
+    function validLegalComponentEntry(componentKey) {
+      return !(componentKey in request.resource.data.legal.components) || (
+        request.resource.data.legal.components[componentKey] is map
+        && request.resource.data.legal.components[componentKey].keys().hasOnly([
+          "complete",
+          "completedAt",
+          "evidenceType",
+          "notes",
+          "attested",
+          "attestedAt"
+        ])
+        && request.resource.data.legal.components[componentKey].complete is bool
+        && optionalTimestamp(request.resource.data.legal.components[componentKey].completedAt)
+        && request.resource.data.legal.components[componentKey].evidenceType is string
+        && request.resource.data.legal.components[componentKey].evidenceType.size() <= 80
+        && request.resource.data.legal.components[componentKey].notes is string
+        && request.resource.data.legal.components[componentKey].notes.size() <= 180
+        && request.resource.data.legal.components[componentKey].attested is bool
+        && optionalTimestamp(request.resource.data.legal.components[componentKey].attestedAt)
+        && (
+          request.resource.data.legal.components[componentKey].attested == true ||
+          request.resource.data.legal.components[componentKey].attestedAt == null
+        )
+        && (
+          request.resource.data.legal.components[componentKey].complete != true ||
+          (
+            request.resource.data.legal.components[componentKey].completedAt is timestamp
+            && request.resource.data.legal.components[componentKey].evidenceType.size() > 0
+            && request.resource.data.legal.components[componentKey].notes.size() >= 8
+            && request.resource.data.legal.components[componentKey].attested == true
+            && request.resource.data.legal.components[componentKey].attestedAt is timestamp
+          )
+        )
+      );
+    }
+
+    function validLegalShape() {
+
+      return request.resource.data.legal is map
+        && request.resource.data.legal.keys().hasOnly([
+          "components",
+          "acceptedTermsAt",
+          "acceptedPrivacyAt",
+          "acceptedLegalDisclosuresAt",
+          "review"
+        ])
+        && request.resource.data.legal.components is map
+        && request.resource.data.legal.components.keys().hasOnly([
+          "terms_ack",
+          "privacy_ack",
+          "disclosures_ack",
+          "electronic_records_consent",
+          "non_brokerage_ack",
+          "fair_housing_attestation",
+          "support_scope_attestation",
+          "marketing_consent_attestation",
+          "platform_fee_disclosure_ack",
+          "funds_custody_boundary_ack",
+          "identity_attestation",
+          "sanctions_screening",
+          "anti_fraud_ack",
+          "license_in_good_standing",
+          "entity_authority",
+          "funds_source_attestation",
+          "property_disclosure_ack",
+          "aml_policy_ack",
+          "government_authority",
+          "records_officer_attestation",
+          "ethics_attestation"
+        ])
+        && validLegalComponentEntry("terms_ack")
+        && validLegalComponentEntry("privacy_ack")
+        && validLegalComponentEntry("disclosures_ack")
+        && validLegalComponentEntry("electronic_records_consent")
+        && validLegalComponentEntry("non_brokerage_ack")
+        && validLegalComponentEntry("fair_housing_attestation")
+        && validLegalComponentEntry("support_scope_attestation")
+        && validLegalComponentEntry("marketing_consent_attestation")
+        && validLegalComponentEntry("platform_fee_disclosure_ack")
+        && validLegalComponentEntry("funds_custody_boundary_ack")
+        && validLegalComponentEntry("identity_attestation")
+        && validLegalComponentEntry("sanctions_screening")
+        && validLegalComponentEntry("anti_fraud_ack")
+        && validLegalComponentEntry("license_in_good_standing")
+        && validLegalComponentEntry("entity_authority")
+        && validLegalComponentEntry("funds_source_attestation")
+        && validLegalComponentEntry("property_disclosure_ack")
+        && validLegalComponentEntry("aml_policy_ack")
+        && validLegalComponentEntry("government_authority")
+        && validLegalComponentEntry("records_officer_attestation")
+        && validLegalComponentEntry("ethics_attestation")
+        && (
+          !("terms_ack" in request.resource.data.legal.components) ||
+          request.resource.data.legal.components.terms_ack.complete != true ||
+          request.resource.data.legal.acceptedTermsAt is timestamp
+        )
+        && (
+          !("privacy_ack" in request.resource.data.legal.components) ||
+          request.resource.data.legal.components.privacy_ack.complete != true ||
+          request.resource.data.legal.acceptedPrivacyAt is timestamp
+        )
+        && (
+          !("disclosures_ack" in request.resource.data.legal.components) ||
+          request.resource.data.legal.components.disclosures_ack.complete != true ||
+          request.resource.data.legal.acceptedLegalDisclosuresAt is timestamp
+        )
+        && optionalTimestamp(request.resource.data.legal.acceptedTermsAt)
+        && optionalTimestamp(request.resource.data.legal.acceptedPrivacyAt)
+        && optionalTimestamp(request.resource.data.legal.acceptedLegalDisclosuresAt)
+        && request.resource.data.legal.review is map
+        && request.resource.data.legal.review.keys().hasOnly([
+          "status",
+          "lastReviewedAt",
+          "notes"
+        ])
+        && request.resource.data.legal.review.status in [
+          "in_progress",
+          "ready",
+          "needs_info",
+          "approved",
+          "rejected"
+        ]
+        && optionalTimestamp(request.resource.data.legal.review.lastReviewedAt)
+        && request.resource.data.legal.review.notes is string
+        && request.resource.data.legal.review.notes.size() <= 240;
+    }
+
+    function validPayoutFrameworkShape() {
+      return request.resource.data.payoutFramework is map
+        && request.resource.data.payoutFramework.keys().hasOnly([
+          "providerPrimary",
+          "providerFallback",
+          "payoutMethod",
+          "payoutSchedule",
+          "minimumPayoutCents",
+          "reserveRateBps",
+          "instantPayoutEnabled",
+          "status",
+          "lastPayoutAt",
+          "nextPayoutAt",
+          "compliance",
+          "accounts",
+          "queue"
+        ])
+        && request.resource.data.payoutFramework.providerPrimary in [
+          "stripe_connect",
+          "square",
+          "paypal",
+          "adyen",
+          "none"
+        ]
+        && request.resource.data.payoutFramework.providerFallback in [
+          "stripe_connect",
+          "square",
+          "paypal",
+          "adyen",
+          "none"
+        ]
+        && request.resource.data.payoutFramework.payoutMethod in [
+          "ach_standard",
+          "ach_same_day",
+          "instant_card"
+        ]
+        && request.resource.data.payoutFramework.payoutSchedule in [
+          "manual",
+          "daily",
+          "weekly",
+          "biweekly",
+          "monthly"
+        ]
+        && request.resource.data.payoutFramework.minimumPayoutCents is int
+        && request.resource.data.payoutFramework.minimumPayoutCents >= 500
+        && request.resource.data.payoutFramework.minimumPayoutCents <= 100000000
+        && request.resource.data.payoutFramework.reserveRateBps is int
+        && request.resource.data.payoutFramework.reserveRateBps >= 0
+        && request.resource.data.payoutFramework.reserveRateBps <= 2000
+        && request.resource.data.payoutFramework.instantPayoutEnabled is bool
+        && request.resource.data.payoutFramework.status in [
+          "setup",
+          "ready",
+          "active",
+          "paused"
+        ]
+        && optionalTimestamp(request.resource.data.payoutFramework.lastPayoutAt)
+        && optionalTimestamp(request.resource.data.payoutFramework.nextPayoutAt)
+        && request.resource.data.payoutFramework.compliance is map
+        && request.resource.data.payoutFramework.compliance.keys().hasOnly([
+          "kycComplete",
+          "tosAccepted",
+          "bankAccountLinked",
+          "riskReviewComplete",
+          "profileEligible",
+          "lastCheckedAt"
+        ])
+        && request.resource.data.payoutFramework.compliance.kycComplete is bool
+        && request.resource.data.payoutFramework.compliance.tosAccepted is bool
+        && request.resource.data.payoutFramework.compliance.bankAccountLinked is bool
+        && request.resource.data.payoutFramework.compliance.riskReviewComplete is bool
+        && request.resource.data.payoutFramework.compliance.profileEligible is bool
+        && optionalTimestamp(request.resource.data.payoutFramework.compliance.lastCheckedAt)
+        && request.resource.data.payoutFramework.accounts is map
+        && request.resource.data.payoutFramework.accounts.keys().hasOnly([
+          "stripeConnectAccountId",
+          "stripeOnboardingComplete",
+          "squareMerchantId",
+          "paypalPayoutsEmail",
+          "adyenAccountCode"
+        ])
+        && request.resource.data.payoutFramework.accounts.stripeConnectAccountId is string
+        && request.resource.data.payoutFramework.accounts.stripeConnectAccountId.size() <= 64
+        && request.resource.data.payoutFramework.accounts.stripeOnboardingComplete is bool
+        && request.resource.data.payoutFramework.accounts.squareMerchantId is string
+        && request.resource.data.payoutFramework.accounts.squareMerchantId.size() <= 64
+        && request.resource.data.payoutFramework.accounts.paypalPayoutsEmail is string
+        && request.resource.data.payoutFramework.accounts.paypalPayoutsEmail.size() <= 160
+        && request.resource.data.payoutFramework.accounts.adyenAccountCode is string
+        && request.resource.data.payoutFramework.accounts.adyenAccountCode.size() <= 64
+        && request.resource.data.payoutFramework.queue is list
+        && request.resource.data.payoutFramework.queue.size() <= 20;
+    }
+
+    function validVerifiedBillingShape() {
+      return request.resource.data.verifiedBilling is map
+        && request.resource.data.verifiedBilling.keys().hasOnly([
+          "provider",
+          "interval",
+          "planId",
+          "priceCents",
+          "status",
+          "autoRenew",
+          "customerId",
+          "subscriptionId",
+          "lastChargeAt",
+          "nextChargeAt",
+          "compliance"
+        ])
+        && request.resource.data.verifiedBilling.provider in [
+          "stripe_connect",
+          "square",
+          "paypal",
+          "adyen",
+          "none"
+        ]
+        && request.resource.data.verifiedBilling.interval in ["monthly", "yearly"]
+        && request.resource.data.verifiedBilling.planId is string
+        && request.resource.data.verifiedBilling.planId.size() <= 80
+        && request.resource.data.verifiedBilling.priceCents is int
+        && request.resource.data.verifiedBilling.priceCents == 2000
+        && request.resource.data.verifiedBilling.status in [
+          "setup",
+          "ready",
+          "active",
+          "paused"
+        ]
+        && request.resource.data.verifiedBilling.autoRenew is bool
+        && request.resource.data.verifiedBilling.customerId is string
+        && request.resource.data.verifiedBilling.customerId.size() <= 80
+        && request.resource.data.verifiedBilling.subscriptionId is string
+        && request.resource.data.verifiedBilling.subscriptionId.size() <= 80
+        && optionalTimestamp(request.resource.data.verifiedBilling.lastChargeAt)
+        && optionalTimestamp(request.resource.data.verifiedBilling.nextChargeAt)
+        && request.resource.data.verifiedBilling.compliance is map
+        && request.resource.data.verifiedBilling.compliance.keys().hasOnly([
+          "profileEligible",
+          "legalReady",
+          "paymentMethodSaved",
+          "fraudReviewClear",
+          "lastCheckedAt"
+        ])
+        && request.resource.data.verifiedBilling.compliance.profileEligible is bool
+        && request.resource.data.verifiedBilling.compliance.legalReady is bool
+        && request.resource.data.verifiedBilling.compliance.paymentMethodSaved is bool
+        && request.resource.data.verifiedBilling.compliance.fraudReviewClear is bool
+        && optionalTimestamp(request.resource.data.verifiedBilling.compliance.lastCheckedAt);
+    }
+
+    function validUserProfileShape() {
+      return request.resource.data.keys().hasOnly([
+        "uid",
+        "oneEstateHatId",
+        "name",
+        "email",
+        "phone",
+        "accountType",
+        "security",
+        "verification",
+        "trust",
+        "reputation",
+        "legal",
+        "compliance",
+        "userDatabase",
+        "payoutFramework",
+        "verifiedBilling",
+        "address",
+        "schemaVersion",
+        "createdAt",
+        "updatedAt"
+      ])
+      && request.resource.data.uid == request.auth.uid
+      && (!("oneEstateHatId" in request.resource.data) || (request.resource.data.oneEstateHatId is string && request.resource.data.oneEstateHatId.size() <= 32))
+      && request.resource.data.email == request.auth.token.email
+      && request.resource.data.schemaVersion == 14
+      && request.resource.data.name is string
+      && request.resource.data.name.size() >= 2
+      && request.resource.data.name.size() <= 80
+      && request.resource.data.email is string
+      && request.resource.data.email.size() <= 160
+      && request.resource.data.phone is string
+      && request.resource.data.phone.size() <= 30
+      && request.resource.data.address is string
+      && request.resource.data.address.size() <= 180
+      && request.resource.data.createdAt is timestamp
+      && request.resource.data.updatedAt is timestamp
+      && validAccountType()
+      && validSecurityShape()
+      && validVerificationShape()
+      && validTrustShape()
+      && validReputationShape()
+      && validUserDatabaseShape()
+      && validComplianceShape()
+      && validLegalShape()
+      && validPayoutFrameworkShape()
+      && validVerifiedBillingShape()
+      && reservedRoleProtected();
+    }
+
+    function reservedRoleProtected() {
+      return (
+        request.resource.data.accountType != "admin" &&
+        request.resource.data.accountType != "webmaster"
+      ) || isPrivilegedEmail();
+    }
+
+    function complianceAdminFieldsProtected() {
+      return !resource.data.keys().hasAll(["compliance"])
+        || isPrivilegedEmail()
+        || (
+          request.resource.data.compliance.jurisdiction == resource.data.compliance.jurisdiction
+          && request.resource.data.compliance.regulatoryProfile == resource.data.compliance.regulatoryProfile
+          && request.resource.data.compliance.legalHold == resource.data.compliance.legalHold
+          && request.resource.data.compliance.incidents == resource.data.compliance.incidents
+          && request.resource.data.compliance.policy == resource.data.compliance.policy
+          && request.resource.data.compliance.outlierFlags == resource.data.compliance.outlierFlags
+          && request.resource.data.compliance.supportPacket == resource.data.compliance.supportPacket
+          && request.resource.data.compliance.auditTrail == resource.data.compliance.auditTrail
+        );
+    }
+
+    function legalHoldConsistency() {
+      return request.resource.data.compliance.legalHold.active != true
+        || (
+          request.resource.data.compliance.legalHold.initiatedAt is timestamp
+          && request.resource.data.compliance.legalHold.releasedAt == null
+          && request.resource.data.compliance.legalHold.reason.size() >= 8
+          && request.resource.data.compliance.legalHold.matterId.size() >= 3
+        );
+    }
+
+    function activationRiskGatesSatisfied() {
+      return (
+        request.resource.data.trust.verifiedProfileActive != true ||
+        (
+          request.resource.data.compliance.legalHold.active == false
+          && request.resource.data.legal.review.status in ["ready", "approved"]
+          && request.resource.data.verification.review.status == "ready"
+          && request.resource.data.verifiedBilling.status in ["ready", "active"]
+          && request.resource.data.verifiedBilling.compliance.profileEligible == true
+          && request.resource.data.verifiedBilling.compliance.legalReady == true
+          && request.resource.data.verifiedBilling.compliance.paymentMethodSaved == true
+          && request.resource.data.verifiedBilling.compliance.fraudReviewClear == true
+          && request.resource.data.legal.components.non_brokerage_ack.complete == true
+          && request.resource.data.legal.components.fair_housing_attestation.complete == true
+          && request.resource.data.legal.components.electronic_records_consent.complete == true
+          && request.resource.data.legal.components.support_scope_attestation.complete == true
+          && request.resource.data.legal.components.platform_fee_disclosure_ack.complete == true
+          && request.resource.data.legal.components.funds_custody_boundary_ack.complete == true
+        )
+      )
+      && (
+        request.resource.data.payoutFramework.status != "active" ||
+        (
+          request.resource.data.compliance.legalHold.active == false
+          && request.resource.data.payoutFramework.compliance.kycComplete == true
+          && request.resource.data.payoutFramework.compliance.tosAccepted == true
+          && request.resource.data.payoutFramework.compliance.bankAccountLinked == true
+          && request.resource.data.payoutFramework.compliance.riskReviewComplete == true
+          && request.resource.data.payoutFramework.compliance.profileEligible == true
+          && request.resource.data.legal.components.non_brokerage_ack.complete == true
+          && request.resource.data.legal.components.fair_housing_attestation.complete == true
+          && request.resource.data.legal.components.electronic_records_consent.complete == true
+          && request.resource.data.legal.components.support_scope_attestation.complete == true
+          && request.resource.data.legal.components.platform_fee_disclosure_ack.complete == true
+          && request.resource.data.legal.components.funds_custody_boundary_ack.complete == true
+        )
+      )
+      && (
+        request.resource.data.verifiedBilling.status != "active" ||
+        (
+          request.resource.data.compliance.legalHold.active == false
+          && request.resource.data.verifiedBilling.compliance.profileEligible == true
+          && request.resource.data.verifiedBilling.compliance.legalReady == true
+          && request.resource.data.verifiedBilling.compliance.paymentMethodSaved == true
+          && request.resource.data.verifiedBilling.compliance.fraudReviewClear == true
+          && request.resource.data.legal.components.non_brokerage_ack.complete == true
+          && request.resource.data.legal.components.fair_housing_attestation.complete == true
+          && request.resource.data.legal.components.electronic_records_consent.complete == true
+          && request.resource.data.legal.components.support_scope_attestation.complete == true
+          && request.resource.data.legal.components.platform_fee_disclosure_ack.complete == true
+          && request.resource.data.legal.components.funds_custody_boundary_ack.complete == true
+        )
+      );
+    }
+
+    function marketingConsentConsistency() {
+      return request.resource.data.userDatabase.marketingOptIn != true
+        || request.resource.data.legal.components.marketing_consent_attestation.complete == true;
+    }
+
+    function currentUserProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function canSubmitListing() {
+      return signedIn() && (
+        isPrivilegedEmail() ||
+        (
+          currentUserProfile().data.accountType in ["seller", "corp_seller"] &&
+          currentUserProfile().data.uid == request.auth.uid
+        )
+      );
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && validUserProfileShape()
+        && validSelfServiceCreateRole()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && validUserProfileShape()
+        && complianceAdminFieldsProtected()
+        && legalHoldConsistency()
+        && activationRiskGatesSatisfied()
+        && marketingConsentConsistency()
+        && (
+          !resource.data.keys().hasAll(["uid"]) ||
+          request.resource.data.uid == resource.data.uid
+        )
+        && (
+          !resource.data.keys().hasAll(["email"]) ||
+          request.resource.data.email == resource.data.email
+        )
+        && (
+          !resource.data.keys().hasAll(["createdAt"]) ||
+          request.resource.data.createdAt == resource.data.createdAt
+        )
+        && (
+          !resource.data.keys().hasAll(["accountType"]) ||
+          validAccountTypeTransition()
+        )
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /listings/{listingId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isPrivilegedEmail();
+    }
+
+    match /listingSubmissions/{submissionId} {
+      allow read: if signedIn() && (
+        isPrivilegedEmail() ||
+        request.auth.uid == resource.data.userId
+      );
+      allow create: if canSubmitListing()
+        && request.resource.data.keys().hasOnly([
+          "schemaVersion",
+          "status",
+          "reviewStatus",
+          "submissionType",
+          "listingId",
+          "userId",
+          "sellerName",
+          "sellerEmail",
+          "sellerAccountType",
+          "title",
+          "address",
+          "city",
+          "state",
+          "county",
+          "municipality",
+          "zip",
+          "price",
+          "beds",
+          "baths",
+          "sqft",
+          "type",
+          "description",
+          "jurisdiction",
+          "addressVerified",
+          "exteriorPhotoCount",
+          "interiorPhotoCount",
+          "documentCount",
+          "exteriorPhotos",
+          "interiorPhotos",
+          "documents",
+          "sellerFeeLines",
+          "createdAt",
+          "updatedAt",
+          "submittedAt"
+        ])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.status == "pending_review"
+        && request.resource.data.reviewStatus == "queued"
+        && request.resource.data.submissionType == "listing"
+        && request.resource.data.listingId == submissionId
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.address is string
+        && request.resource.data.address.size() > 0
+        && request.resource.data.city is string
+        && request.resource.data.state is string
+        && request.resource.data.zip is string
+        && request.resource.data.price is int
+        && request.resource.data.price > 0
+        && request.resource.data.beds is int
+        && request.resource.data.baths is int
+        && request.resource.data.sqft is int
+        && request.resource.data.type is string
+        && request.resource.data.description is string
+        && request.resource.data.jurisdiction is map
+        && request.resource.data.addressVerified is bool
+        && request.resource.data.exteriorPhotoCount is int
+        && request.resource.data.interiorPhotoCount is int
+        && request.resource.data.documentCount is int
+        && request.resource.data.exteriorPhotos is list
+        && request.resource.data.interiorPhotos is list
+        && request.resource.data.documents is list
+        && request.resource.data.sellerFeeLines is list
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.submittedAt == request.time;
+      allow update, delete: if isPrivilegedEmail();
+    }
+
+    match /featuredPlacements/{placementId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /deals/{dealId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          "propertyId",
+          "propertyAddress",
+          "buyerId",
+          "buyerName",
+          "amount",
+          "status",
+          "timestamp"
+        ])
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyAddress is string
+        && request.resource.data.buyerName is string
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.amount < 100000000
+        && request.resource.data.status == "Offer Pending";
+      allow update, delete: if isPrivilegedEmail();
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          "convId",
+          "from",
+          "uid",
+          "text",
+          "timestamp",
+          "userName",
+          "attachments"
+        ])
+        && request.resource.data.convId is string
+        && request.resource.data.convId.size() <= 120
+        && request.resource.data.from == "me"
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 4000
+        && request.resource.data.userName is string
+        && request.resource.data.userName.size() <= 80
+        && (
+          !request.resource.data.keys().hasAny(["attachments"]) ||
+          (
+            request.resource.data.attachments is list &&
+            request.resource.data.attachments.size() <= 5
+          )
+        );
+      allow update, delete: if false;
+    }
+  }
+}

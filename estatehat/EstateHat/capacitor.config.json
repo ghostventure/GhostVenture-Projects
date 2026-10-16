@@ -1,0 +1,10 @@
+{
+  "appId": "com.estatehat.app",
+  "appName": "EstateHat",
+  "webDir": "out",
+  "backgroundColor": "#F3EFE8",
+  "ios": {
+    "contentInset": "always",
+    "allowsLinkPreview": false
+  }
+}

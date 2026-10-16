@@ -1,0 +1,32 @@
+{
+  "lastUpdated": "2026-04-11",
+  "baselineProfile": "strict_us_51",
+  "tiers": {
+    "A": [
+      { "state": "NY", "county": "New York", "city": "New York", "notes": "NYC borough county" },
+      { "state": "NY", "county": "Kings", "city": "Brooklyn", "notes": "NYC borough county" },
+      { "state": "NY", "county": "Queens", "city": "Queens", "notes": "NYC borough county" },
+      { "state": "NY", "county": "Bronx", "city": "Bronx", "notes": "NYC borough county" },
+      { "state": "NY", "county": "Richmond", "city": "Staten Island", "notes": "NYC borough county" },
+      { "state": "CA", "county": "Los Angeles", "city": "Los Angeles", "notes": "Recording + fair-housing complexity" },
+      { "state": "CA", "county": "San Francisco", "city": "San Francisco", "notes": "City-county recording/tax complexity" },
+      { "state": "IL", "county": "Cook", "city": "Chicago", "notes": "Human Rights + Just Housing" },
+      { "state": "WA", "county": "King", "city": "Seattle", "notes": "Source-of-income / fair-housing posture" },
+      { "state": "FL", "county": "Miami-Dade", "city": "Miami", "notes": "Recorder + local rights enforcement" }
+    ],
+    "B": [
+      { "state": "FL", "county": "Broward", "city": "Fort Lauderdale", "notes": "County human-rights enforcement" },
+      { "state": "MD", "county": "Montgomery", "city": "Rockville", "notes": "County fair-housing/source-of-income posture" },
+      { "state": "CA", "county": "Alameda", "city": "Oakland", "notes": "Major metro local overlay" },
+      { "state": "CA", "county": "Santa Clara", "city": "San Jose", "notes": "Major metro local overlay" },
+      { "state": "CA", "county": "San Diego", "city": "San Diego", "notes": "Major metro local overlay" },
+      { "state": "PR", "county": "San Juan", "city": "San Juan", "notes": "Territory outlier" },
+      { "state": "GU", "county": "Guam", "city": "Hagatna", "notes": "Territory outlier" },
+      { "state": "VI", "county": "St. Thomas", "city": "Charlotte Amalie", "notes": "Territory outlier" }
+    ]
+  },
+  "majorityPattern": {
+    "strategy": "state baseline + county recording overlay + federal baseline",
+    "requiresCustomCountyEngine": false
+  }
+}

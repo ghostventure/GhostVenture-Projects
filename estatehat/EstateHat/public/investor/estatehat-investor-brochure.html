@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EstateHat Investor Brochure</title>
+  <style>
+    :root {
+      --navy: #0d2b31;
+      --gold: #c99a4a;
+      --cream: #f5efe5;
+      --ink: #17323a;
+      --muted: #5d6e73;
+      --line: #d9d1c2;
+      --card: #fffdfa;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      color: var(--ink);
+      background: var(--cream);
+    }
+    .page {
+      width: 8.5in;
+      min-height: 11in;
+      margin: 0 auto;
+      padding: 0.65in;
+      background: linear-gradient(180deg, #f8f3ea 0%, #f4ede2 100%);
+    }
+    .hero {
+      background: var(--navy);
+      color: white;
+      border-radius: 20px;
+      padding: 28px 30px;
+      margin-bottom: 22px;
+    }
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #d7c7a9;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    h1 {
+      font-size: 34px;
+      line-height: 1.05;
+      margin: 0 0 12px;
+      font-family: Georgia, serif;
+      font-weight: 700;
+    }
+    .sub {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #ecf2ef;
+      max-width: 6.4in;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 18px 16px;
+      box-shadow: 0 10px 24px rgba(13, 43, 49, 0.06);
+    }
+    .card h2 {
+      font-size: 18px;
+      margin: 0 0 10px;
+    }
+    .card p, .card li {
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .stat {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .stat:last-child { border-bottom: 0; }
+    .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--gold);
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .value {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--ink);
+      font-weight: 700;
+    }
+    .banner {
+      margin: 18px 0;
+      width: 100%;
+      border-radius: 16px;
+      display: block;
+      border: 1px solid var(--line);
+    }
+    .three {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      margin-top: 6px;
+    }
+    .pill {
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(201, 154, 74, 0.08);
+      padding: 14px;
+    }
+    .pill h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+    .footer {
+      margin-top: 22px;
+      font-size: 11px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <div class="eyebrow">EstateHat Investor Brochure</div>
+      <h1>Real estate workflow, trust, and transaction coordination in one platform.</h1>
+      <div class="sub">
+        EstateHat is a Raleigh-based software company building a trust-first operating layer for peer-to-peer real estate transactions. The product brings listing discovery, identity readiness, messaging, forms, and closing coordination into one workflow.
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>What EstateHat does</h2>
+        <p>
+          EstateHat is built for users who need a guided transaction flow instead of a patchwork of disconnected tools. The platform is structured around verified identities, role-aware controls, and clearer progression from discovery through closing readiness.
+        </p>
+        <p>
+          Current live surfaces include authenticated onboarding, Hat Board status views, listings and watchlists, transaction and messaging workflows, legal and FAQ pages, investor materials, and public company information routes.
+        </p>
+      </div>
+      <div class="card">
+        <div class="stat">
+          <div class="label">Entity</div>
+          <div class="value">EstateHat LLC, North Carolina</div>
+        </div>
+        <div class="stat">
+          <div class="label">Headquarters</div>
+          <div class="value">Raleigh, North Carolina</div>
+        </div>
+        <div class="stat">
+          <div class="label">Live Product</div>
+          <div class="value">estatehat.web.app</div>
+        </div>
+        <div class="stat">
+          <div class="label">Revenue Model</div>
+          <div class="value">1.50% platform fee plus $20/month Verified User subscription</div>
+        </div>
+        <div class="stat">
+          <div class="label">Operating Posture</div>
+          <div class="value">Software coordination layer; licensed third parties handle escrow and money movement</div>
+        </div>
+      </div>
+    </div>
+
+    <img class="banner" src="../landing/estatehat-intro-workflow.png" alt="EstateHat workflow illustration" />
+
+    <div class="three">
+      <div class="pill">
+        <h3>Why now</h3>
+        <p>Real estate workflows remain fragmented, high-friction, and difficult for non-expert users to navigate confidently.</p>
+      </div>
+      <div class="pill">
+        <h3>Trust posture</h3>
+        <p>EstateHat centers verification, role boundaries, and operational gating before transactions are allowed to progress.</p>
+      </div>
+      <div class="pill">
+        <h3>Model</h3>
+        <p>EstateHat focuses on software coordination and workflow revenue while licensed third parties handle escrow and money movement.</p>
+      </div>
+    </div>
+
+    <div class="two">
+      <div class="card">
+        <h2>What matters to investors</h2>
+        <ul>
+          <li>EstateHat is pursuing a software-margin model tied to transaction activity rather than direct principal exposure.</li>
+          <li>The public product posture already reflects trust, compliance boundaries, and workflow clarity as core differentiation.</li>
+          <li>Near-term value creation depends on deeper integrations, stronger reporting cadence, and disciplined funnel conversion.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>Trust and governance signals</h2>
+        <ul>
+          <li>Identity and role controls are part of the product narrative, not an afterthought.</li>
+          <li>Legal, privacy, accessibility, FAQ, press, and investor pages are publicly available.</li>
+          <li>Capital is being framed around product credibility, compliance hardening, and measured scaling instead of hype-led growth.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top: 18px;">
+      <div class="card">
+        <h2>Current monetization snapshot</h2>
+        <ul>
+          <li>1.50% platform fee on completed transaction sale price.</li>
+          <li>Buyer-paid by default unless the seller elects to absorb the fee.</li>
+          <li>Verified User subscription shown in product at $20 per month.</li>
+          <li>Escrow and wire amounts are modeled in-product but may be partner pass-through depending on transaction setup.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>Near-term focus</h2>
+        <ul>
+          <li>Finish billing and payout integrations.</li>
+          <li>Improve KPI reporting and investor-update cadence.</li>
+          <li>Harden compliance and operational readiness for broader fundraising.</li>
+          <li>Optimize trust and transaction funnel conversion.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top: 18px;">
+      <div class="card">
+        <h2>Investor contact</h2>
+        <p>
+          investors@estatehat.com<br />
+          EstateHat LLC<br />
+          421 Fayetteville Street, Suite 1100<br />
+          Raleigh, NC 27601<br />
+          (919) 555-0100
+        </p>
+      </div>
+      <div class="card">
+        <h2>Diligence path</h2>
+        <p>
+          EstateHat’s investor process is designed to move from public materials into direct diligence requests, follow-up calls, and data-room-style document review. This brochure is an entry point, not the end of the conversation.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top: 18px;">
+      <div class="card">
+        <h2>Current monetization note</h2>
+        <p>
+          Revenue references in public materials reflect the current product model and investor planning posture. They are not audited financial statements and should be reviewed alongside formal diligence materials before any financing decision.
+        </p>
+      </div>
+      <div class="card">
+        <h2>Investor contact</h2>
+        <p>Additional materials available on request include the business plan, financial goals and model summary, and the investor packet linked from the live `/invest` page.</p>
+      </div>
+    </div>
+
+    <div class="footer">
+      Informational company material only. Not an offer to sell securities or a solicitation to buy securities. Financing discussions should be handled directly with EstateHat and appropriate professional advisors.
+    </div>
+  </div>
+</body>
+</html>

@@ -1,5 +1,9 @@
 # OverHead
 
+## EstateHat project
+
+EstateHat's Next.js and Firebase project is maintained in [`estatehat/EstateHat`](estatehat/EstateHat/README.md). Its [200-item implemented capability inventory](estatehat/EstateHat/docs/IMPLEMENTED_FEATURE_INVENTORY_2026-10-16.md) and [modernization handoff](estatehat/EstateHat/docs/MODERNIZATION_HANDOFF_2026-10-16.md) document the product surface, reliability updates, and validation status.
+
 Current packaged release: **0.3.2** for standard desktop and **0.3.4** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
 
 OverHead is a desktop-first admin cleanup framework for small businesses. It focuses on admin-overload pain points that happen after the customer reaches the business:

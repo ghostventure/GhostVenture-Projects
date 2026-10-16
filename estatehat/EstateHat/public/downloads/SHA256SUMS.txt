@@ -1,0 +1,3 @@
+a7c966eda2e34e85828fa88d519b6c7f4c70365f59ad0a5d8a44ef8940997a02  public/downloads/EstateHat-Windows-Installer.zip
+e2d61a2470062fa61abc243d9c6c8772bfb033b23f5e013c17f0d0dc5be996fb  public/downloads/EstateHat-Windows-Desktop.zip
+f8ffa9601abecdb4c5a43f9b565f9d195c2179c2000b986a5e3d42b68b09312f  release/EstateHat-Setup-1.0.0.exe

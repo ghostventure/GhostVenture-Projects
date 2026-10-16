@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EstateHat Business Plan</title>
+  <style>
+    :root {
+      --navy: #0c2930;
+      --gold: #ca9b4a;
+      --cream: #f6f0e7;
+      --paper: #fffdfa;
+      --ink: #18333b;
+      --muted: #586c71;
+      --line: #ddd4c6;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--cream); color: var(--ink); }
+    .page {
+      width: 8.5in;
+      min-height: 11in;
+      margin: 0 auto;
+      background: var(--paper);
+      padding: 0.58in;
+    }
+    h1, h2 { margin: 0; }
+    .top {
+      background: var(--navy);
+      color: white;
+      border-radius: 18px;
+      padding: 24px 26px;
+      margin-bottom: 18px;
+    }
+    .top .eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #dacaa9;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .top h1 {
+      font-size: 30px;
+      font-family: Georgia, serif;
+      margin-bottom: 10px;
+    }
+    .top p {
+      font-size: 14px;
+      line-height: 1.7;
+      color: #edf2ef;
+      margin: 0;
+      max-width: 6.6in;
+    }
+    .section {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 16px 14px;
+      margin-bottom: 14px;
+      background: #fffefa;
+    }
+    .section h2 {
+      font-size: 17px;
+      margin-bottom: 10px;
+    }
+    .section p, .section li, .section td, .section th {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--gold);
+    }
+    .note {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 10px;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="top">
+      <div class="eyebrow">EstateHat Business Plan</div>
+      <h1>Operating plan for a trust-first real estate workflow platform</h1>
+      <p>
+        This business-plan summary is intended for early investor and strategic-partner review. It reflects the current public product posture in the EstateHat repository and frames how the company expects to scale software revenue and transaction coordination capabilities.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>Executive summary</h2>
+      <p>
+        EstateHat is building a software platform for peer-to-peer real estate transactions. The product focuses on reducing workflow fragmentation, improving trust signals, and giving non-expert users a more guided operating surface across readiness, documents, messaging, and closing coordination.
+      </p>
+      <p>
+        The business is being framed around software coordination revenue, trust-first workflow design, and a measured expansion path that prioritizes compliance, reporting quality, and product credibility before aggressive growth spending.
+      </p>
+    </div>
+
+    <div class="two">
+      <div class="section">
+        <h2>Problem and thesis</h2>
+        <ul>
+          <li>Residential transaction workflows remain fragmented across too many tools and handoffs.</li>
+          <li>Trust, compliance steps, and process confusion can slow conversion and increase user error.</li>
+          <li>A unified, guided, verification-aware platform can reduce friction and improve execution quality.</li>
+        </ul>
+      </div>
+      <div class="section">
+        <h2>Current product posture</h2>
+        <ul>
+          <li>Live web product at estatehat.web.app.</li>
+          <li>Public company, FAQ, legal, and investor pages.</li>
+          <li>Authenticated app shell with listing, profile, messaging, and transaction surfaces.</li>
+          <li>Native wrappers maintained for iOS, Android, and Windows packaging paths.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="two">
+      <div class="section">
+        <h2>Target user posture</h2>
+        <ul>
+          <li>Users who want clearer transaction guidance, stronger trust signals, and fewer disconnected handoffs.</li>
+          <li>Buyers and sellers who value workflow clarity over a purely listing-centric experience.</li>
+          <li>Professionals and partners who can operate inside clearer readiness and coordination boundaries.</li>
+        </ul>
+      </div>
+      <div class="section">
+        <h2>Core differentiation</h2>
+        <ul>
+          <li>Verification-aware product framing.</li>
+          <li>Role separation and trust language embedded in the public narrative.</li>
+          <li>One-surface workflow spanning discovery, messaging, forms, and closing readiness.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Business model</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Revenue stream</th>
+            <th>Current model</th>
+            <th>Role in plan</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Platform fee</td>
+            <td>1.50% of completed transaction sale price</td>
+            <td>Primary revenue driver tied to closed transaction volume</td>
+          </tr>
+          <tr>
+            <td>Verified User subscription</td>
+            <td>$20 per month</td>
+            <td>Recurring trust and readiness revenue layer</td>
+          </tr>
+          <tr>
+            <td>Escrow and wire amounts</td>
+            <td>$500 escrow and $35 wire shown in product flows</td>
+            <td>Treated cautiously in planning because some or all may be pass-through to partners</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        EstateHat is intentionally treating software revenue as the central performance lens. Pass-through partner costs and any ambiguous fee retention should not be relied on as core revenue until they are operationally confirmed.
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Go-to-market posture</h2>
+      <ul>
+        <li>Build credibility through trust-first positioning rather than broad undifferentiated marketplace spend.</li>
+        <li>Use the public site, legal posture, and guided product narrative to convert early users who value process clarity.</li>
+        <li>Expand GTM only after compliance hardening, reporting cadence, and live billing/payout integrations are in place.</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Execution priorities and milestones</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Window</th>
+            <th>Priority</th>
+            <th>Why it matters</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Now</td>
+            <td>Investor packet, public investor page, and diligence entry points</td>
+            <td>Creates a cleaner starting point for capital conversations</td>
+          </tr>
+          <tr>
+            <td>Next 12 months</td>
+            <td>Billing/payout integrations, KPI cadence, conversion work, compliance hardening</td>
+            <td>Raises confidence in operational readiness and monetization quality</td>
+          </tr>
+          <tr>
+            <td>Next 24 months</td>
+            <td>Transaction growth, stronger cohort economics, mature reporting</td>
+            <td>Supports broader fundraising and more disciplined scale</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>24-month planning model</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>12 months</th>
+            <th>24 months</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Completed transactions</td>
+            <td>100</td>
+            <td>300</td>
+          </tr>
+          <tr>
+            <td>Platform GMV</td>
+            <td>$35M</td>
+            <td>$105M</td>
+          </tr>
+          <tr>
+            <td>Transaction-fee revenue at 1.50%</td>
+            <td>$525k</td>
+            <td>$1.575M</td>
+          </tr>
+          <tr>
+            <td>Paid Verified Users</td>
+            <td>600</td>
+            <td>1,500</td>
+          </tr>
+          <tr>
+            <td>Annualized subscription revenue</td>
+            <td>$144k</td>
+            <td>$360k</td>
+          </tr>
+          <tr>
+            <td>Total modeled software revenue</td>
+            <td>$669k</td>
+            <td>$1.935M</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        Model values above are planning assumptions for investor discussion only. They are not audited financials, and they exclude any revenue not clearly retained by EstateHat as software revenue.
+      </div>
+    </div>
+
+    <div class="two">
+      <div class="section">
+        <h2>Operating priorities</h2>
+        <ul>
+          <li>Complete live payout and billing integrations.</li>
+          <li>Strengthen KPI and investor reporting cadence.</li>
+          <li>Formalize compliance posture for broader market expansion.</li>
+          <li>Continue UX and trust-funnel conversion improvements.</li>
+        </ul>
+      </div>
+      <div class="section">
+        <h2>Near-term financing use</h2>
+        <ul>
+          <li>Compliance and legal hardening.</li>
+          <li>Core integration work for payments and operational tooling.</li>
+          <li>Measured GTM testing and conversion optimization.</li>
+          <li>Security, reporting, and operational maturity.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Key risks investors should understand</h2>
+      <ul>
+        <li>Current public materials describe the product model and planning posture, not audited operating history.</li>
+        <li>Compliance, jurisdiction, and partner-integration execution remain important gating items for scale.</li>
+        <li>Transaction-growth outcomes depend on funnel performance, product trust, and measured GTM discipline rather than simple traffic acquisition.</li>
+      </ul>
+    </div>
+
+    <div class="note">
+      Informational planning document only. Not a securities offering. Financing discussions should be handled directly with EstateHat and appropriate advisors.
+    </div>
+  </div>
+</body>
+</html>

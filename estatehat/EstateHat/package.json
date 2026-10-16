@@ -1,0 +1,67 @@
+{
+  "name": "estatehat",
+  "version": "1.0.0",
+  "description": "EstateHat desktop, web, and mobile real estate platform",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test:compliance": "node --test tests/*.test.mjs",
+    "test": "npm run test:compliance",
+    "build:hosting": "next build",
+    "deploy:functions": "npx firebase-tools deploy --only functions --project estatehat",
+    "deploy:backend": "node scripts/guard-deploy.mjs && npm run build:hosting && npx firebase-tools deploy --only functions,hosting --project estatehat",
+    "build:android": "next build",
+    "sync:android": "npm run build:android && npx cap sync android",
+    "deploy:hosting": "node scripts/guard-deploy.mjs && npm run build:hosting && npx firebase-tools deploy --only hosting --project estatehat",
+    "build:ios": "next build",
+    "sync:ios": "npm run build:ios && npx cap sync ios",
+    "open:ios": "npx cap open ios",
+    "dev:desktop": "concurrently -k \"next dev\" \"wait-on http://127.0.0.1:3000 && electron .\"",
+    "build:desktop": "next build",
+    "build:windows": "npm run build:desktop",
+    "dist:win": "npm run build:desktop && electron-builder --win nsis",
+    "pack:win": "npm run build:desktop && electron-builder --dir --win"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "^8.3.0",
+    "firebase": "^12.11.0",
+    "next": "^14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.3.0",
+    "concurrently": "^9.2.1",
+    "electron": "^41.1.0",
+    "electron-builder": "^26.8.1",
+    "puppeteer-core": "^24.42.0",
+    "wait-on": "^9.0.4"
+  },
+  "build": {
+    "appId": "com.estatehat.desktop",
+    "productName": "EstateHat",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "EstateHat-Setup-${version}.${ext}"
+    }
+  }
+}
