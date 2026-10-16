@@ -734,8 +734,25 @@
       <p class="fee-note">Repeated dates create separate gig posts with the same details in one all-or-nothing batch. Maximum 12 dates.</p>
 
       <div class="form-group">
-        <label>Location</label>
+        <label for="location">Location</label>
         <input type="text" id="location" placeholder="City, State" required>
+        <div id="gigLocationResolution" style="margin-top:10px;padding:12px;border:1px solid #354352;border-radius:10px;background:#101820;">
+          <p style="font-size:13px;line-height:1.5;color:#c8d7ea;">Optional coordinate correction: for this lookup, CLTCH sends the text in Location to the public Nominatim service only after you check consent and click Resolve. No device location is used. Confirming a result affects distance matching and map coordinates; the visible Location text stays as entered. If you post without a confirmed result, the existing posting flow may look up this text to find coordinates.</p>
+          <label for="gigLocationGeocodeConsent" style="display:flex;gap:9px;align-items:flex-start;margin:10px 0;font-size:13px;line-height:1.45;color:#c8d7ea;text-transform:none;letter-spacing:0;">
+            <input id="gigLocationGeocodeConsent" type="checkbox" style="margin-top:3px;">
+            <span>I agree to send this Location text to public Nominatim for coordinate lookup.</span>
+          </label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <button type="button" id="resolveGigLocationBtn" disabled style="min-height:40px;padding:8px 12px;border:1px solid #425263;border-radius:9px;background:#13202d;color:#f4f7fb;font-weight:700;">Resolve location</button>
+            <button type="button" id="cancelGigLocationResolutionBtn" style="min-height:40px;padding:8px 12px;border:1px solid #425263;border-radius:9px;background:transparent;color:#f4f7fb;">Cancel</button>
+          </div>
+          <p id="gigLocationResolutionStatus" role="status" aria-live="polite" style="font-size:12px;line-height:1.5;color:#9fb5ca;margin-top:8px;">No coordinate override selected. Gig posting will use the existing location lookup.</p>
+          <div id="gigLocationCandidatePanel" hidden style="margin-top:10px;padding:10px;border:1px solid #354352;border-radius:8px;">
+            <p id="gigLocationCandidateLabel" style="font-size:13px;line-height:1.5;color:#f4f7fb;"></p>
+            <p style="font-size:12px;line-height:1.5;color:#9fb5ca;margin:6px 0;">Review the candidate. Its coordinates are used only if you confirm.</p>
+            <button type="button" id="useGigLocationCandidateBtn" style="min-height:40px;padding:8px 12px;border:1px solid #355e4e;border-radius:9px;background:#15261f;color:#c7f0d7;font-weight:700;">Use these coordinates</button>
+          </div>
+        </div>
       </div>
 
       <div class="form-group">
@@ -1799,6 +1816,68 @@
       return null;
     }
 
+    let confirmedGigCoordinates = null;
+    let gigLocationCandidate = null;
+    let gigLocationResolutionSequence = 0;
+    const gigLocationInput = document.getElementById('location');
+    const gigLocationConsent = document.getElementById('gigLocationGeocodeConsent');
+    const resolveGigLocationBtn = document.getElementById('resolveGigLocationBtn');
+    const cancelGigLocationResolutionBtn = document.getElementById('cancelGigLocationResolutionBtn');
+    const gigLocationResolutionStatus = document.getElementById('gigLocationResolutionStatus');
+    const gigLocationCandidatePanel = document.getElementById('gigLocationCandidatePanel');
+    const gigLocationCandidateLabel = document.getElementById('gigLocationCandidateLabel');
+    const useGigLocationCandidateBtn = document.getElementById('useGigLocationCandidateBtn');
+
+    gigLocationConsent.addEventListener('change', () => {
+      resolveGigLocationBtn.disabled = !gigLocationConsent.checked;
+    });
+    gigLocationInput.addEventListener('input', () => {
+      gigLocationResolutionSequence += 1;
+      confirmedGigCoordinates = null;
+      gigLocationCandidate = null;
+      gigLocationCandidatePanel.hidden = true;
+      gigLocationResolutionStatus.textContent = 'Location text changed. Resolve and confirm coordinates again if you want an override.';
+    });
+    resolveGigLocationBtn.addEventListener('click', async () => {
+      const location = gigLocationInput.value.trim();
+      if (!gigLocationConsent.checked || !location) {
+        gigLocationResolutionStatus.textContent = 'Check the consent box and enter a Location before resolving. No request was sent.';
+        return;
+      }
+      const sequence = ++gigLocationResolutionSequence;
+      confirmedGigCoordinates = null;
+      gigLocationCandidate = null;
+      gigLocationCandidatePanel.hidden = true;
+      resolveGigLocationBtn.disabled = true;
+      gigLocationResolutionStatus.textContent = 'Sending the entered Location text to Nominatim for a coordinate candidate…';
+      const result = await resolveGigLocationCandidate({ location, consentGiven: true });
+      if (sequence !== gigLocationResolutionSequence || location !== gigLocationInput.value.trim()) return;
+      resolveGigLocationBtn.disabled = !gigLocationConsent.checked;
+      if (!result.ok) {
+        gigLocationResolutionStatus.textContent = 'No valid coordinate candidate was returned. The normal gig location lookup remains available when you post.';
+        return;
+      }
+      gigLocationCandidate = result.candidate;
+      gigLocationCandidateLabel.textContent = result.candidate.label;
+      gigLocationCandidatePanel.hidden = false;
+      gigLocationResolutionStatus.textContent = 'Candidate ready. Confirm it to override the coordinates used for matching and maps.';
+    });
+    useGigLocationCandidateBtn.addEventListener('click', () => {
+      if (!gigLocationCandidate || !isValidGigCoordinatePoint(gigLocationCandidate)) return;
+      confirmedGigCoordinates = { lat: gigLocationCandidate.lat, lng: gigLocationCandidate.lng };
+      gigLocationResolutionStatus.textContent = 'Coordinate override confirmed for this gig only. The visible Location text is unchanged.';
+      gigLocationCandidatePanel.hidden = true;
+    });
+    cancelGigLocationResolutionBtn.addEventListener('click', () => {
+      gigLocationResolutionSequence += 1;
+      confirmedGigCoordinates = null;
+      gigLocationCandidate = null;
+      gigLocationConsent.checked = false;
+      resolveGigLocationBtn.disabled = true;
+      gigLocationCandidatePanel.hidden = true;
+      gigLocationResolutionStatus.textContent = 'Location coordinate lookup canceled. No override is selected.';
+    });
+
     // Haversine distance in miles
     function miles(lat1, lng1, lat2, lng2) {
       const R = 3958.8;
@@ -1905,7 +1984,9 @@
 
       // Geocode gig location before posting
       submitBtn.textContent = 'Locating…';
-      const coords = await geocode(location);
+      const coords = confirmedGigCoordinates && isValidGigCoordinatePoint(confirmedGigCoordinates)
+        ? confirmedGigCoordinates
+        : await geocode(location);
 
       const gig = {
         ...baseGig,

@@ -78,7 +78,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 057. Safe portfolio URL manager — blocks scripts, credentials, duplicates, and oversized input; caps saved links at 20. Verified in scripts/smoke-portfolio-links.mjs.
 - [ ] 058. Review response and correction request
 - [x] 059. Copy a date-filtered upcoming booking itinerary with line-break sanitization — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
-- [ ] 060. Business profile verification checklist
+- [x] 060. Owner-local self-attested business readiness checklist with explicit non-verification notice — `host-profile.html`, `app/business-profile-checklist.js`; `npm run smoke:business-profile-checklist`
 
 ## Discovery and search
 
@@ -96,7 +96,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Matching and marketplace trust
 
 - [x] 071. Stable paginated search results
-- [ ] 072. Manual location override
+- [x] 072. Explicit Nominatim location resolution and confirmed in-memory coordinate override, preserving the entered location string — `host.html`, `app/gig-location-resolution.js`; `npm run smoke:gig-location-resolution`
 - [x] 073. Approximate distance disclosure
 - [ ] 074. Blocked-user exclusion from matching
 - [x] 075. Filter-aware empty-state recovery

@@ -55,6 +55,8 @@
     "smoke:booking-offline": "node scripts/smoke-booking-offline.mjs",
     "smoke:checkin-consent": "node scripts/smoke-checkin-consent.mjs",
     "smoke:host-analytics-export": "node scripts/smoke-host-analytics-export.mjs",
+    "smoke:business-profile-checklist": "node scripts/smoke-business-profile-checklist.mjs",
+    "smoke:gig-location-resolution": "node scripts/smoke-gig-location-resolution.mjs",
     "smoke:booking-walkthrough": "node scripts/smoke-booking-walkthrough.mjs",
     "smoke:booking-incident-report": "node scripts/smoke-booking-incident-report.mjs",
     "smoke:deploy-guard": "node scripts/smoke-deploy-guard.mjs",
