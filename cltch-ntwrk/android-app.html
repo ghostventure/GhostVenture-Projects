@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#090b10">
   <meta name="description" content="CLTCH.NTWRK Android app preview and install page.">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/cltch-icon.svg" type="image/svg+xml">
   <title>CLTCH Android</title>
   <style>
@@ -501,7 +502,7 @@
           <button class="mini-card" type="button" data-jump="auth"><span class="icon">+</span><strong>Create profile</strong><span>Start shared CLTCH account setup.</span></button>
           <button class="mini-card" type="button" data-jump="work"><span class="icon">◎</span><strong>Open radar</strong><span>See performer and host work lanes.</span></button>
           <button class="mini-card" type="button" data-jump="security"><span class="icon">▣</span><strong>Check sync</strong><span>Review user and role database path.</span></button>
-          <button class="mini-card" type="button" data-jump="install"><span class="icon">↓</span><strong>Install</strong><span>Get the Android package.</span></button>
+          <button class="mini-card" type="button" data-jump="install"><span class="icon">↓</span><strong>Install</strong><span>Add web access to your home screen.</span></button>
         </div>
       </article>
 
@@ -587,12 +588,17 @@
 
       <article class="screen" id="screen-install">
         <p class="kicker">Install</p>
-        <h1>Android package is ready.</h1>
-        <p class="copy">The public page stays app-native. The native package remains a zipped APK while Capacitor stays the underlying Android build path.</p>
+        <h1>Open CLTCH.NTWRK on Android</h1>
+        <p class="copy">A native Android package is not currently available. You can open CLTCH.NTWRK in your browser and add a home-screen shortcut for app-like access.</p>
         <div class="install-card">
-          <strong>CLTCH Android package</strong>
-          <span>Direct site-hosted zipped APK for internal Android install testing.</span>
-          <a href="downloads/CLTCH-NTWRK-Android-Debug-1.0.0.apk.zip" download>Download Android Package</a>
+          <strong>Use the browser version</strong>
+          <ol>
+            <li>Open CLTCH.NTWRK in Chrome on your Android device.</li>
+            <li>Open the browser menu and choose <strong>Install app</strong>, or choose <strong>Add to Home screen</strong> if that is the option shown.</li>
+            <li>Launch CLTCH.NTWRK from the new home-screen icon. An internet connection is required.</li>
+          </ol>
+          <p class="copy" id="nativePackageStatus" role="status">The native Android package download is unavailable. This browser shortcut is not an APK and does not provide offline use.</p>
+          <a href="index.html" id="openWebAppLink">Open CLTCH.NTWRK</a>
         </div>
       </article>
     </section>

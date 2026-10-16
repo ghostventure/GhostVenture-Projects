@@ -199,7 +199,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 ## Mobile and safeguarding
 
-- [ ] 151. Installed-release update guidance and supported-version notice
+- [x] 151. Android install fallback replaces the dead APK link with accessible PWA setup guidance and an accurate native-package-unavailable notice — `android-app.html`; `npm run smoke:android-install-guidance`
 - [x] 152. Same-origin PWA shortcuts for Post a Gig, Find Gigs, and My Bookings — `manifest.webmanifest`; `npm run smoke:pwa-shortcuts` checks every target exists
 - [ ] 153. Safe offline behavior for authenticated workflows
 - [ ] 154. Native biometric unlock after review
@@ -220,7 +220,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 166. Privacy-reviewed real user metrics
 - [ ] 167. Error reporting with PII scrubbing
 - [ ] 168. Separate deployment preview environment
-- [ ] 169. Firebase account/project guard tests
+- [x] 169. Firebase Hosting guard regression tests reject the wrong working directory, package identity, and Hosting site — `scripts/smoke-deploy-guard.mjs`; `npm run smoke:deploy-guard`
 - [ ] 170. Hosting rollback runbook and smoke automation
 
 ## Release and supply chain
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 54.
-- Remaining checklist items: 146.
+- Implemented and verified in this change: 56.
+- Remaining checklist items: 144.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.
