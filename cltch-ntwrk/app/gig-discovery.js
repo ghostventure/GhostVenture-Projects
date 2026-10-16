@@ -1,4 +1,4 @@
-import { collection, onSnapshot, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { collection, getDocs, query, where, orderBy, startAfter, limit } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { auth, db } from "./firebase-client.js";
 import { matchesGigSearch, normalizeGigSearch, readGigSearch, saveGigSearch } from "./gig-discovery-filters.js";
@@ -16,8 +16,19 @@ const fields = {
 const status = document.getElementById("feedStatus");
 const results = document.getElementById("results");
 const savedState = document.getElementById("savedState");
+const refreshGigs = document.getElementById("refreshGigs");
+const loadMoreGigs = document.getElementById("loadMoreGigs");
+const paginationStatus = document.getElementById("paginationStatus");
+const PAGE_SIZE = 40;
 let currentUser = null;
 let gigs = [];
+let lastDoc = null;
+let hasMore = false;
+let feedLoading = false;
+let feedLoadMode = "";
+let feedErrorMode = "";
+let feedGeneration = 0;
+let queryWindow = null;
 
 function readForm() {
   return normalizeGigSearch(Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, field.value])));
@@ -37,25 +48,38 @@ function addText(parent, tag, value, className) {
 }
 
 function render() {
-  const filtered = gigs.filter((item) => matchesGigSearch(item.data, readForm()))
-    .sort((a, b) => String(a.data.date || "").localeCompare(String(b.data.date || "")));
+  const filtered = gigs.filter((item) => matchesGigSearch(item.data, readForm()));
   const filters = readForm();
   results.replaceChildren();
   if (!gigs.length) {
-    status.dataset.state = "";
-    status.textContent = "No open gigs are available in the current feed.";
+    if (feedLoading) {
+      status.dataset.state = "loading";
+      status.textContent = "Loading open gigs…";
+    } else if (feedErrorMode) {
+      status.dataset.state = "error";
+      status.textContent = "Open gigs could not load. Use the retry control below.";
+    } else {
+      status.dataset.state = "";
+      status.textContent = "No open gigs are available in the current feed.";
+    }
     return;
   }
   status.dataset.state = "";
-  status.textContent = `${filtered.length} of ${gigs.length} open gigs match this combined search.`;
+  status.textContent = `${filtered.length} of ${gigs.length} loaded open gigs match this combined search.${hasMore ? " More results may be available." : " All current results are loaded."}`;
   if (!filtered.length) {
-    addText(results, "h2", "No gigs match this search.");
+    addText(results, "h2", hasMore ? "No loaded gigs match this search yet." : "No gigs match this search.");
     const criteria = activeGigSearchCriteria(filters);
     if (!criteria.length) {
-      addText(results, "p", "No search filters are active to relax. The open gig feed currently has no matching results.");
+      addText(results, "p", hasMore
+        ? "No search filters are active to relax. Load more open gigs to check additional results."
+        : "No search filters are active to relax. The open gig feed has no matching results.");
+      if (hasMore) addText(results, "p", "More gigs may match after loading the next page.");
       return;
     }
-    addText(results, "p", "Try removing one filter at a time. Each option keeps your other search criteria in place.");
+    addText(results, "p", hasMore
+      ? "Try removing one filter at a time, or load more gigs. Each filter option keeps your other search criteria in place."
+      : "Try removing one filter at a time. Each option keeps your other search criteria in place.");
+    if (hasMore) addText(results, "p", "More gigs may match after loading the next page.");
     const recoveryOptions = document.createElement("ul");
     recoveryOptions.setAttribute("aria-label", "Search filters you can remove individually");
     for (const criterion of criteria) {
@@ -101,12 +125,91 @@ function render() {
   }
 }
 
-let unsubscribe = null;
+function updatePaginationControls() {
+  paginationStatus.dataset.state = feedErrorMode ? "error" : feedLoading ? "loading" : "";
+  refreshGigs.disabled = !currentUser || feedLoading;
+  refreshGigs.textContent = feedErrorMode === "refresh"
+    ? (gigs.length ? "Retry refresh" : "Retry loading gigs")
+    : "Refresh gigs";
+  loadMoreGigs.hidden = !currentUser || !hasMore;
+  loadMoreGigs.disabled = !currentUser || feedLoading || !hasMore;
+  loadMoreGigs.textContent = feedErrorMode === "more" ? "Retry loading more gigs" : "Load more open gigs";
+
+  if (!currentUser) paginationStatus.textContent = "";
+  else if (feedLoading) paginationStatus.textContent = feedLoadMode === "more" ? "Loading more open gigs…" : (gigs.length ? "Refreshing open gigs…" : "");
+  else if (feedErrorMode === "more") paginationStatus.textContent = `${gigs.length} gigs remain available above. More could not load; retry to continue.`;
+  else if (feedErrorMode === "refresh") paginationStatus.textContent = gigs.length
+    ? `${gigs.length} previously loaded gigs are still available. Refresh failed; retry when ready.`
+    : "Gigs could not load. Retry to try again.";
+  else if (hasMore) paginationStatus.textContent = `${gigs.length} gigs loaded. More results may be available; load another page or refresh for newer results.`;
+  else if (gigs.length) paginationStatus.textContent = `All ${gigs.length} current feed results are loaded. Refresh to check for updates.`;
+  else paginationStatus.textContent = "";
+}
+
+function createQueryWindow() {
+  const today = new Date().toISOString().slice(0, 10);
+  const throughDate = new Date();
+  throughDate.setDate(throughDate.getDate() + 180);
+  return { today, through: throughDate.toISOString().slice(0, 10) };
+}
+
+async function loadGigPage({ reset = false } = {}) {
+  if (!currentUser || feedLoading) return;
+  const generation = feedGeneration;
+  const pageCursor = reset ? null : lastDoc;
+  const pageWindow = reset || !queryWindow ? createQueryWindow() : queryWindow;
+  feedLoading = true;
+  feedLoadMode = reset ? "refresh" : "more";
+  feedErrorMode = "";
+  updatePaginationControls();
+  if (!gigs.length) render();
+
+  try {
+    const constraints = [
+      where("status", "==", "open"),
+      where("date", ">=", pageWindow.today),
+      where("date", "<=", pageWindow.through),
+      orderBy("date", "asc"),
+      orderBy("createdAt", "desc")
+    ];
+    if (pageCursor) constraints.push(startAfter(pageCursor));
+    constraints.push(limit(PAGE_SIZE));
+    const snapshot = await getDocs(query(collection(db, "gigs"), ...constraints));
+    if (generation !== feedGeneration) return;
+    const page = snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+    if (reset) gigs = page;
+    else {
+      const knownIds = new Set(gigs.map((item) => item.id));
+      gigs.push(...page.filter((item) => !knownIds.has(item.id)));
+    }
+    lastDoc = snapshot.docs.at(-1) || pageCursor;
+    queryWindow = pageWindow;
+    hasMore = snapshot.docs.length === PAGE_SIZE;
+  } catch (error) {
+    if (generation === feedGeneration) {
+      console.error("Gig discovery page load failed:", error);
+      feedErrorMode = reset ? "refresh" : "more";
+    }
+  } finally {
+    if (generation === feedGeneration) {
+      feedLoading = false;
+      feedLoadMode = "";
+      updatePaginationControls();
+      render();
+    }
+  }
+}
+
 onAuthStateChanged(auth, (user) => {
+  feedGeneration += 1;
   currentUser = user || null;
-  unsubscribe?.();
-  unsubscribe = null;
+  feedLoading = false;
+  feedLoadMode = "";
+  feedErrorMode = "";
   gigs = [];
+  lastDoc = null;
+  hasMore = false;
+  queryWindow = null;
   results.replaceChildren();
   if (!user) {
     status.dataset.state = "";
@@ -117,26 +220,18 @@ onAuthStateChanged(auth, (user) => {
     status.append(link);
     document.getElementById("saveSearch").disabled = true;
     document.getElementById("restoreSearch").disabled = true;
+    updatePaginationControls();
     return;
   }
   document.getElementById("saveSearch").disabled = false;
   document.getElementById("restoreSearch").disabled = false;
-  const today = new Date().toISOString().slice(0, 10);
-  const throughDate = new Date();
-  throughDate.setDate(throughDate.getDate() + 180);
   status.textContent = "Loading open gigs…";
   status.dataset.state = "loading";
-  const feed = query(collection(db, "gigs"), where("status", "==", "open"), where("date", ">=", today), where("date", "<=", throughDate.toISOString().slice(0, 10)), orderBy("date", "asc"), orderBy("createdAt", "desc"), limit(120));
-  unsubscribe = onSnapshot(feed, (snapshot) => {
-    gigs = snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
-    render();
-  }, () => {
-    gigs = [];
-    results.replaceChildren();
-    status.dataset.state = "error";
-    status.textContent = "Open gigs could not load. Check your connection and try again.";
-  });
+  loadGigPage({ reset: true });
 });
+
+refreshGigs.addEventListener("click", () => loadGigPage({ reset: true }));
+loadMoreGigs.addEventListener("click", () => loadGigPage());
 
 form.addEventListener("submit", (event) => event.preventDefault());
 form.addEventListener("input", render);

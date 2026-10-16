@@ -90,12 +90,12 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 066. Stale listing suppression reason
 - [ ] 067. Availability conflict warning with timezone
 - [ ] 068. Search relevance controls and reset
-- [ ] 069. Match feedback reason codes
+- [x] 069. Match feedback reason codes
 - [x] 070. Clear browser-local CLTCH preferences, drafts, and named caches without removing Firebase auth or account data — `app/local-data.js`, `privacy.html`; `npm run smoke:local-data`
 
 ## Matching and marketplace trust
 
-- [ ] 071. Stable paginated search results
+- [x] 071. Stable paginated search results
 - [ ] 072. Manual location override
 - [x] 073. Approximate distance disclosure
 - [ ] 074. Blocked-user exclusion from matching
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 64.
-- Remaining checklist items: 136.
+- Implemented and verified in this change: 66.
+- Remaining checklist items: 134.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

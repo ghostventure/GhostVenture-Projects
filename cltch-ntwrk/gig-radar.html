@@ -1051,6 +1051,7 @@
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { meetsMinimumGigPay, readMinimumGigPay, saveMinimumGigPay } from "./app/gig-radar-filters.js";
+    import { mountMatchFeedback } from "./app/match-feedback.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -2176,6 +2177,10 @@
             <button class="btn btn-pass"   onclick="respond('${gigId}','pass')">Pass</button>
           </div>
           <div class="radar-foot"><span>${daysUntil(g.date) <= 2 ? 'Moves fast' : 'Still open'}</span><span>${isSaved ? 'Saved in radar' : 'Live in radar now'}</span></div>`;
+        const feedbackContainer = document.createElement('div');
+        feedbackContainer.style.marginTop = '12px';
+        mountMatchFeedback(feedbackContainer, { userId: MUSICIAN_ID, gigId, documentRef: document });
+        card.appendChild(feedbackContainer);
         gigList.appendChild(card);
         addSwipeGesture(card, gigId);
       });

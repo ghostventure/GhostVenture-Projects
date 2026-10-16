@@ -29,6 +29,9 @@
     button:disabled { opacity:.55; cursor:wait; }
     #feedStatus { min-height:28px; margin:18px 0 10px; color:var(--muted); }
     #feedStatus[data-state="error"] { color:#ff9eaa; }
+    #paginationStatus { min-height:24px; color:var(--muted); }
+    #paginationStatus[data-state="error"] { color:#ff9eaa; }
+    .pagination-actions { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
     .gig { padding:16px 0; border-top:1px solid #293746; }
     .gig:first-child { border-top:0; }
     .gig h2 { font-size:19px; margin:0; }
@@ -56,6 +59,11 @@
     </form>
     <p id="feedStatus" role="status" aria-live="polite">Sign in to load open gigs.</p>
     <section class="result" aria-label="Matching open gigs"><div id="results"></div></section>
+    <div class="pagination-actions" role="group" aria-label="Gig feed controls">
+      <button type="button" id="refreshGigs" disabled>Refresh gigs</button>
+      <button type="button" id="loadMoreGigs" hidden>Load more open gigs</button>
+    </div>
+    <p id="paginationStatus" role="status" aria-live="polite" aria-atomic="true"></p>
   </main>
   <script type="module" src="./app/gig-discovery.js"></script>
 </body>
