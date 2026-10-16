@@ -71,6 +71,10 @@
   </header>
 
   <main class="page-shell container">
+    <aside id="connectionStatus" class="card" role="status" aria-live="polite" hidden data-connection="offline" style="margin-bottom:16px;border-color:#7f5a28;background:#2b2112;color:#ffe1a6;">
+      <span data-connection-copy></span>
+      <button id="dismissConnectionStatus" type="button" class="btn" hidden aria-label="Dismiss connection status">Dismiss</button>
+    </aside>
     <section class="hero">
       <div class="eyebrow">Booking Details</div>
       <div class="title" id="bookingTitle">Loading booking…</div>
@@ -228,6 +232,7 @@
     import { readUserSummary, recordAuthEvent } from "./app/user-db.js";
     import { deleteQuickReply, readQuickReplies, saveQuickReply } from "./app/quick-replies.js";
     import { downloadBookingReceipt } from "./app/booking-receipt.js";
+    import { installBookingOfflineStatus, isBrowserOffline } from "./app/booking-offline.js";
 
     const bookingId = new URL(window.location.href).searchParams.get("id") || "";
     const titleEl = document.getElementById("bookingTitle");
@@ -243,10 +248,27 @@
     const messageSendBtn = document.getElementById("messageSendBtn");
     const quickReplySelect = document.getElementById("quickReplySelect");
     const quickReplyStatus = document.getElementById("quickReplyStatus");
+    const connectionStatusEl = document.getElementById("connectionStatus");
+    const dismissConnectionStatusBtn = document.getElementById("dismissConnectionStatus");
     let stopMessages = null;
     let activeBooking = null;
     let activeSummary = null;
     let activeUser = null;
+    let checkInAllowed = false;
+
+    function applyConnectionState(isOffline) {
+      if (activeBooking && activeUser) renderMessageState(activeBooking, activeUser);
+      const checkInBtn = document.getElementById('checkInBtn');
+      if (checkInBtn) checkInBtn.disabled = !checkInAllowed || isOffline;
+    }
+
+    const removeOfflineStatus = installBookingOfflineStatus({
+      navigatorRef: navigator,
+      windowRef: window,
+      banner: connectionStatusEl,
+      dismissButton: dismissConnectionStatusBtn,
+      onChange: applyConnectionState
+    });
 
     function refreshQuickReplies() {
       const replies = activeUser ? readQuickReplies(activeUser.uid) : [];
@@ -358,14 +380,17 @@
       const participant = canUseMessages(gig, user);
       const open = isMessagingOpen(gig);
       const enabled = participant && open;
+      const offline = isBrowserOffline(navigator);
       messageInputEl.disabled = !enabled;
-      messageSendBtn.disabled = !enabled;
+      messageSendBtn.disabled = !enabled || offline;
       if (!participant) {
         messageStatusEl.textContent = gig.status === "accepted"
           ? "Only the host and assigned performer can use this thread."
           : "Messages open once a performer has accepted this booking.";
       } else if (!open) {
         messageStatusEl.textContent = "Messaging is locked because the event day has passed.";
+      } else if (offline) {
+        messageStatusEl.textContent = "Your browser reports no network. You can keep editing this draft; sending is paused until you reconnect and press Send Message.";
       } else {
         messageStatusEl.textContent = "Messages stay open through the event day and lock the following day.";
       }
@@ -501,6 +526,7 @@
 
       const backHref = routeForRole(summary?.role);
       const checkIn = checkInState(gig);
+      checkInAllowed = checkIn.allowed && isAcceptedPerformer;
       actionsEl.innerHTML = [
         `<a class="btn" href="${backHref}">Back to Workspace</a>`,
         isHostOwner && gig.acceptedBy ? `<a class="btn" href="performer-view.html?id=${encodeURIComponent(gig.acceptedBy)}">View Performer</a>` : "",
@@ -511,6 +537,7 @@
 
       const checkInBtn = document.getElementById("checkInBtn");
       const receiptBtn = document.getElementById("downloadBookingReceiptBtn");
+      applyConnectionState(isBrowserOffline(navigator));
       if (receiptBtn) {
         receiptBtn.addEventListener("click", () => {
           try {
@@ -525,13 +552,17 @@
 
       if (checkInBtn && checkIn.allowed) {
         checkInBtn.addEventListener("click", async () => {
+          if (isBrowserOffline(navigator)) {
+            statusEl.textContent = "Check-in was not started because your browser reports no network. Reconnect, review the booking, then choose Check In again.";
+            return;
+          }
           try {
             await updateDoc(doc(db, "gigs", bookingId), { checkedInAt: serverTimestamp() });
             statusEl.textContent = "Checked in. The host can now see that you confirmed attendance.";
             await renderBooking(user);
           } catch (error) {
             console.error(error);
-            statusEl.textContent = "Unable to confirm check-in right now.";
+            statusEl.textContent = "Unable to confirm whether check-in completed. Reload the booking after reconnecting before trying again.";
           }
         });
       }
@@ -574,6 +605,7 @@
 
     document.getElementById("signOutLink").addEventListener("click", async (event) => {
       event.preventDefault();
+      removeOfflineStatus();
       if (stopMessages) {
         stopMessages();
         stopMessages = null;
@@ -591,9 +623,14 @@
         renderMessageState(activeBooking, activeUser);
         return;
       }
+      if (isBrowserOffline(navigator)) {
+        messageStatusEl.textContent = "Message not sent: your browser reports no network. Your draft remains here; reconnect and press Send Message to try again.";
+        return;
+      }
       const text = messageInputEl.value.trim();
       if (!text) return;
       messageSendBtn.disabled = true;
+      let sendUnconfirmed = false;
       try {
         await addDoc(collection(db, "gigs", activeBooking.id, "messages"), {
           senderId: activeUser.uid,
@@ -601,12 +638,13 @@
           text,
           createdAt: serverTimestamp()
         });
-        messageInputEl.value = "";
+        if (messageInputEl.value.trim() === text) messageInputEl.value = "";
       } catch (error) {
         console.error(error);
-        messageStatusEl.textContent = "Unable to send this message right now.";
+        sendUnconfirmed = true;
       }
       renderMessageState(activeBooking, activeUser);
+      if (sendUnconfirmed) messageStatusEl.textContent = "Unable to confirm whether the message was sent. Check the thread before trying again.";
     });
   </script>
   <script src="scripts/legal-components.js"></script>

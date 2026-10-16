@@ -201,7 +201,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [x] 151. Android install fallback replaces the dead APK link with accessible PWA setup guidance and an accurate native-package-unavailable notice — `android-app.html`; `npm run smoke:android-install-guidance`
 - [x] 152. Same-origin PWA shortcuts for Post a Gig, Find Gigs, and My Bookings — `manifest.webmanifest`; `npm run smoke:pwa-shortcuts` checks every target exists
-- [ ] 153. Safe offline behavior for authenticated workflows
+- [x] 153. Booking-details offline guard: connection banner, paused message/check-in actions, preserved drafts, no app-managed replay, and in-flight status guidance — `booking.html`, `app/booking-offline.js`; `npm run smoke:booking-offline`
 - [ ] 154. Native biometric unlock after review
 - [x] 155. Payout handles masked by default and re-masked when the document is hidden or window loses focus — `app/sensitive-fields.js`, both profile pages; `npm run smoke:sensitive-fields`
 - [x] 156. Matched Gigs filters expose pressed state and live result updates — `app/matched-gigs-accessibility.js`; `npm run smoke:matched-gigs-accessibility`

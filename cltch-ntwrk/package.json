@@ -52,6 +52,7 @@
     "smoke:profile-calendar-a11y": "node scripts/smoke-profile-calendar-a11y.mjs",
     "smoke:stale-booking-recovery": "node scripts/smoke-stale-booking-recovery.mjs",
     "smoke:booking-health": "node scripts/smoke-booking-health.mjs",
+    "smoke:booking-offline": "node scripts/smoke-booking-offline.mjs",
     "smoke:host-analytics-export": "node scripts/smoke-host-analytics-export.mjs",
     "smoke:booking-incident-report": "node scripts/smoke-booking-incident-report.mjs",
     "smoke:deploy-guard": "node scripts/smoke-deploy-guard.mjs",
