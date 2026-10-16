@@ -8,18 +8,20 @@ Date: 2026-10-16
 - Made the main navigation horizontally scrollable on smaller screens so links remain reachable without squeezing the header.
 - Reworked the Android page into an interactive website companion preview. Address/search launches HTTP(S) destinations or Startpage searches in a new tab; appearance presets and sample cookie choices persist in page-scoped local storage; reset clears only those preview settings. Back navigation, grid/compact appearance, and settings/help controls now work.
 - Labeled the preview's counters and cookie choices as sample data, and stated that the site does not provide an Android app/APK or intercept traffic, manage website cookies, or block trackers. Disabled the nonfunctional Launch, Speed, and Grid controls in the homepage browser illustration.
-- Tightened the Firebase Content Security Policy with explicit same-origin connection/font rules and disabled embedded frames. Kept the policy compatible with the current static site, which loads its assets from the same origin; the Android preview uses same-origin JavaScript.
+- Tightened the Firebase Content Security Policy with explicit same-origin connection/font rules and disabled embedded frames. Kept the policy compatible with the current static site, which loads its assets from the same origin and does not use JavaScript.
 - Removed the HSTS `preload` directive, which should only be used as an intentional domain-wide preload commitment. Kept a one-year HSTS policy with subdomains.
 - Changed the existing smoke checker to hash the large Windows ZIP as a stream instead of loading the entire 184 MB file into memory. It now also checks local relative file links and HTML fragments during local checks.
 - Preserved the Windows ZIP, published SHA-256 values, changelog, project target, and existing download URLs.
 
 ## Static Inspection
 
-- `npm run check` passed for this source on 2026-10-16.
-- The Windows ZIP's current SHA-256 was independently read as `9de59f30c6074dbd37ab17fa69530dc96b51d1c0ea486aef0b7ec1083f04e5c0`, matching the existing published ZIP checksum. The ZIP and EXE were not rebuilt or modified.
-- The Firebase Hosting site returned HTTP 200 to a HEAD request on 2026-10-16. This confirms reachability only; it does not verify the October source changes.
-- No deployment was attempted. The live site has not been updated with this October source.
+- Local validation passed with `npm run check` before deployment.
+- The source and documentation are published in `ghostventure/GhostVenture-Projects`, under `ghost-surfer-browser/`, branch `codex/ghost-surfer-source-sync-2026-10-16`. The large Windows ZIP is intentionally excluded from GitHub; its local SHA-256 is `9de59f30c6074dbd37ab17fa69530dc96b51d1c0ea486aef0b7ec1083f04e5c0`, matching the published checksum. The ZIP and EXE were not rebuilt or modified.
 
-## Deployment Handoff
+## Deployment and Live Verification
 
-Before deploying, stage the verified Windows ZIP in `public/downloads/` (it is intentionally excluded from this GitHub repository), run the documented checks, and deploy only to the `ghost-surfer-browser` project. After deployment, verify the live page headers, keyboard navigation, mobile layout, download response, and published checksum. No deploy was made as part of this source publication.
+- Local validation passed with `npm run check` before deployment.
+- Deployed the complete configured `public/` directory to Firebase Hosting site `ghost-surfer-browser` in project `ghost-surfer-browser` under `solidartentertainment@gmail.com` on 2026-10-16. Firebase finalized Hosting version `3ceb2ea65c9323bc` and released it to the live channel as release `1792173901026000` at `2026-10-16T18:05:01.026Z`.
+- The live homepage returned HTTP 200. All 15 required public HTML pages returned HTTP 200 and contained an HTML doctype when checked with `curl`.
+- The homepage response includes the configured CSP, frame, referrer, permissions, and content-type security headers. Firebase's live response also includes `preload` in its HSTS header even though the deployed Hosting config explicitly sets `max-age=31536000; includeSubDomains` without `preload`; this is a Firebase response behavior and differs from the configured header value.
+- The built-in `npm run check:live` could not complete because Node's `fetch` timed out connecting to Firebase in this environment. `curl` could reach the site and was used for the page checks. The streamed live ZIP checksum verification was started separately and is still in progress; no claim is made here that the live archive checksum was verified.
