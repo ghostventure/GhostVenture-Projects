@@ -14,7 +14,7 @@ assert.match(app, /lastDoc = snapshot\.docs\.at\(-1\) \|\| pageCursor/);
 assert.match(app, /hasMore = snapshot\.docs\.length === PAGE_SIZE/);
 assert.match(app, /if \(reset\) gigs = page/);
 assert.match(app, /gigs\.push\(\.\.\.page\.filter\(\(item\) => !knownIds\.has\(item\.id\)\)\)/);
-assert.match(app, /matchesGigSearch\(item\.data, readForm\(\)\)/);
+assert.match(app, /const filters = readForm\(\);\s*const filtered = sortGigSearchResults\(gigs\.filter\(\(item\) => matchesGigSearch\(item\.data, filters\)\), filters\.phrase/);
 assert.match(app, /feedErrorMode = reset \? "refresh" : "more"/);
 assert.match(app, /Retry loading more gigs/);
 assert.match(app, /Retry loading gigs/);

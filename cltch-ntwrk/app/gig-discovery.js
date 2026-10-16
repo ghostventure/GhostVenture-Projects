@@ -4,6 +4,7 @@ import { auth, db } from "./firebase-client.js";
 import { matchesGigSearch, normalizeGigSearch, readGigSearch, saveGigSearch } from "./gig-discovery-filters.js";
 import { activeGigSearchCriteria, clearOneGigSearchCriterion } from "./gig-discovery-recovery.js";
 import { formatListedPay } from "./gig-discovery-pay.js";
+import { sortGigSearchResults } from "./gig-search-relevance.js";
 
 const form = document.getElementById("searchForm");
 const fields = {
@@ -19,6 +20,7 @@ const savedState = document.getElementById("savedState");
 const refreshGigs = document.getElementById("refreshGigs");
 const loadMoreGigs = document.getElementById("loadMoreGigs");
 const paginationStatus = document.getElementById("paginationStatus");
+const resultOrder = document.getElementById("resultOrder");
 const PAGE_SIZE = 40;
 let currentUser = null;
 let gigs = [];
@@ -48,8 +50,8 @@ function addText(parent, tag, value, className) {
 }
 
 function render() {
-  const filtered = gigs.filter((item) => matchesGigSearch(item.data, readForm()));
   const filters = readForm();
+  const filtered = sortGigSearchResults(gigs.filter((item) => matchesGigSearch(item.data, filters)), filters.phrase, resultOrder.value);
   results.replaceChildren();
   if (!gigs.length) {
     if (feedLoading) {
@@ -236,7 +238,17 @@ loadMoreGigs.addEventListener("click", () => loadGigPage());
 form.addEventListener("submit", (event) => event.preventDefault());
 form.addEventListener("input", render);
 form.addEventListener("change", render);
-form.addEventListener("reset", () => queueMicrotask(render));
+resultOrder.addEventListener("change", render);
+form.addEventListener("reset", () => queueMicrotask(() => {
+  feedGeneration += 1;
+  feedLoading = false;
+  feedLoadMode = "";
+  feedErrorMode = "";
+  resultOrder.value = "soonest";
+  updatePaginationControls();
+  render();
+  loadGigPage({ reset: true });
+}));
 document.getElementById("saveSearch").addEventListener("click", () => {
   if (!currentUser) return;
   const filters = readForm();

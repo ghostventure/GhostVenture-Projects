@@ -37,6 +37,7 @@
     .gig h2 { font-size:19px; margin:0; }
     .gig p { margin:5px 0; color:#c3cfdb; }
     .pay-amount { color:#fff; font-weight:750; }
+    .relevance-control { margin:0 0 12px; }
     .pill { display:inline-block; margin:5px 6px 0 0; border:1px solid #425263; border-radius:999px; padding:2px 9px; font-size:13px; }
     @media (max-width:520px) { header { align-items:flex-start; flex-direction:column; } form,.result { padding:14px; } }
   </style>
@@ -55,6 +56,8 @@
         <label for="minimumPay">Minimum listed pay (USD)<input id="minimumPay" type="number" min="0" max="100000" step="25" inputmode="numeric" value="0"></label>
       </div>
       <p class="hint" id="savedState" aria-live="polite">Your saved search stays in this browser.</p>
+      <label class="relevance-control" for="resultOrder">Result order<select id="resultOrder"><option value="soonest">Soonest</option><option value="best-match">Best text match</option></select></label>
+      <p class="hint" id="relevanceHint">Best text match ranks only the gigs currently loaded. Load more gigs to include them in the ranking.</p>
       <div class="actions"><button class="primary" type="button" id="saveSearch">Save combined search</button><button type="button" id="restoreSearch">Restore saved search</button><button type="reset">Clear filters</button></div>
     </form>
     <p id="feedStatus" role="status" aria-live="polite">Sign in to load open gigs.</p>

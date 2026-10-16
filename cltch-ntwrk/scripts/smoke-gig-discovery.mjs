@@ -43,7 +43,7 @@ const app = await readFile(new URL("../app/gig-discovery.js", import.meta.url), 
 assert.match(page, /id="saveSearch"/);
 assert.match(page, /id="restoreSearch"/);
 assert.match(page, /aria-live="polite"/);
-assert.match(app, /gigs\.filter\(\(item\) => matchesGigSearch\(item\.data, readForm\(\)\)\)/);
+assert.match(app, /const filters = readForm\(\);\s*const filtered = sortGigSearchResults\(gigs\.filter\(\(item\) => matchesGigSearch\(item\.data, filters\)\), filters\.phrase/);
 assert.match(app, /readGigSearch\(undefined, currentUser\.uid\)/);
 assert.match(app, /writeForm\(saved\)/);
 
