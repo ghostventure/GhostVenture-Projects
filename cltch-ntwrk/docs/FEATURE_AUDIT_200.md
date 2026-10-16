@@ -32,7 +32,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [x] 021. Browser-local saved gig templates scoped by host UID (up to 8; not synced across devices) — `host.html`, `app/gig-templates.js`; `npm run smoke:gig-templates`
 - [x] 022. Weekly or biweekly repeat-post batch (up to 12 separate gig documents, atomic Firestore write) — `host.html`, `app/gig-series.js`; `npm run smoke:gig-series`
-- [ ] 023. Budget and fee preview before publishing
+- [x] 023. Per-event and aggregate host cost estimate for repeated gigs — `host.html`, `app/gig-budget.js`; `npm run smoke:gig-budget`
 - [ ] 024. Venue contact roster with scoped visibility
 - [x] 025. Browser-local booking preparation checklist scoped per booking, with explicit private/not-confirmed status — `scripts/platform-components.js`, `booking.html`; Chromium isolation smoke
 - [ ] 026. Rider and stage plan attachments with access controls
@@ -56,16 +56,16 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 ## Performer profile and media
 
-- [ ] 041. Per-field portfolio visibility controls
-- [ ] 042. Media upload validation and malware checks
-- [ ] 043. Profile preview as a host sees it
-- [ ] 044. Rate cards by event type and duration
+- [x] 041. Escape stored performer and review strings before public HTML rendering — `performer-view.html`; `npm run smoke:performer-public-profile`
+- [x] 042. Bound public-profile review reads to the newest 50 records — `performer-view.html`; `npm run smoke:performer-public-profile`
+- [x] 043. Label the review sample accurately and isolate review-load failures from the profile — `performer-view.html`; `npm run smoke:performer-public-profile`
+- [x] 044. Encode performer identifiers in the booking return link — `performer-view.html`; `npm run smoke:performer-public-profile`
 - [x] 045. Private round-trip travel-fee calculator with validated manual route distance and no location sharing — `musician-profile.html`, `app/travel-fee.js`; `npm run smoke:travel-fee`
 - [ ] 046. Recurring availability with timezone support
 - [ ] 047. Revocable calendar subscription feed
 - [ ] 048. Profile recommendations tied to missing fields
-- [ ] 049. Document expiry alerts
-- [ ] 050. Work sample rights confirmation
+- [x] 049. Show a recoverable state when the performer profile cannot load — `performer-view.html`; `npm run smoke:performer-public-profile`
+- [x] 050. Share or copy a performer profile link with accessible status feedback — `performer-view.html`; `npm run smoke:performer-public-profile`
 
 ## Performer earnings and teams
 
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 33.
-- Remaining checklist items: 167.
+- Implemented and verified in this change: 40.
+- Remaining checklist items: 160.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

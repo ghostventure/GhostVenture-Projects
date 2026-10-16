@@ -859,6 +859,7 @@
     import { buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
     import { findPotentialDuplicateGig } from "./app/duplicate-gig.js";
     import { generateGigDates } from "./app/gig-series.js";
+    import { calculateGigSeriesBudget } from "./app/gig-budget.js";
     import { deleteGigTemplate, readGigTemplates, saveGigTemplate } from "./app/gig-templates.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
@@ -962,6 +963,7 @@
         if (!repeating) seriesCountInput.value = '1';
         else if (Number(seriesCountInput.value) <= 1) seriesCountInput.value = '4';
       }
+      renderPayEstimate();
     };
     seriesCadenceSelect?.addEventListener('change', syncSeriesCountState);
     form?.addEventListener('reset', () => setTimeout(syncSeriesCountState, 0));
@@ -1448,14 +1450,29 @@
         payEstimate.innerHTML = '';
         return;
       }
+      const cadence = Number(seriesCadenceSelect?.value || 0);
+      const dates = cadence ? Number(seriesCountInput?.value) : 1;
+      let seriesBudget;
+      try {
+        seriesBudget = calculateGigSeriesBudget(parsed, dates, PROCESSING_FEE_RATE);
+      } catch (error) {
+        payEstimate.style.display = 'block';
+        payEstimate.textContent = `${formatUsd(calc.totalAmount)} estimated per event. ${error.message}`;
+        return;
+      }
       payEstimate.style.display = 'block';
       payEstimate.innerHTML =
         `Performer pay: <strong>${formatUsd(calc.baseAmount)}</strong><br>` +
         `Processing fee (2%): <strong>${formatUsd(calc.feeAmount)}</strong><br>` +
-        `Host total charge: <strong>${formatUsd(calc.totalAmount)}</strong>`;
+        `Host total per event: <strong>${formatUsd(calc.totalAmount)}</strong>` +
+        (seriesBudget.count > 1
+          ? `<br><strong>${seriesBudget.count}-event estimate:</strong> ${formatUsd(seriesBudget.totalPay)} performer pay + ${formatUsd(seriesBudget.totalFees)} fees = <strong>${formatUsd(seriesBudget.totalHostCost)}</strong>`
+          : '');
     }
 
     payInput.addEventListener('input', renderPayEstimate);
+    seriesCountInput?.addEventListener('input', renderPayEstimate);
+    seriesCountInput?.addEventListener('change', renderPayEstimate);
     renderPayEstimate();
     restoreDraft();
     syncGenreOptionsForType(true);

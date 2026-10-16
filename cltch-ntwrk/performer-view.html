@@ -302,6 +302,10 @@
       transition: background 0.2s;
     }
     .btn-book:hover { background: #e09510; }
+    .profile-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px; }
+    .btn-share { min-height:44px; border:1px solid #353535; border-radius:9px; padding:0 14px; background:#171717; color:#f0f0f0; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+    .btn-share:hover { border-color:#f5a623; }
+    .share-status { color:#9fb4c9; font-size:12px; min-height:1.4em; }
 
     footer {
       text-align: center;
@@ -348,6 +352,15 @@
     const params = new URLSearchParams(window.location.search);
     const performerId = params.get('id');
 
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[char]);
+    }
+
+    function reviewDateLabel(value) {
+      const date = value && typeof value.toDate === 'function' ? value.toDate() : value instanceof Date ? value : null;
+      return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) : '';
+    }
+
     function requiresVerifiedEmail(user) {
       return !!(user && user.providerData && user.providerData.some((provider) => provider?.providerId === 'password') && !user.emailVerified);
     }
@@ -376,7 +389,11 @@
         window.CLTCHLoading?.done();
         return;
       }
-      loadProfile(performerId);
+      loadProfile(performerId).catch((error) => {
+        console.error('Could not load performer profile', error);
+        document.getElementById('profileContainer').innerHTML = '<section class="section"><h1>Profile unavailable</h1><p class="bio-text">We could not load this performer profile. Check your connection and try again.</p><a href="index.html">Return to CLTCH.NTWRK</a></section>';
+        window.CLTCHLoading?.done();
+      });
     });
 
     document.getElementById('signOutLink').addEventListener('click', async (e) => {
@@ -399,7 +416,7 @@
       }
 
       const d = snap.data();
-      const displayName = d.stageName || `${d.firstName} ${d.lastName}`;
+      const displayName = d.stageName || [d.firstName, d.lastName].filter(Boolean).join(' ') || 'Performer';
       const performerMeta = {
         musician: { label: 'Musician', icon: '🎸', badge: 'type-musician', skillHeading: 'Instruments / Skills' },
         dj: { label: 'DJ', icon: '🎧', badge: 'type-dj', skillHeading: 'Equipment / Setup' },
@@ -419,9 +436,15 @@
 
       // Load reviews
       const reviewsRef = collection(db, 'musicians', id, 'reviews');
-      const reviewsSnap = await getDocs(query(reviewsRef, orderBy('createdAt', 'desc')));
-      const reviews = [];
-      reviewsSnap.forEach(r => reviews.push(r.data()));
+      let reviews = [];
+      let reviewLoadFailed = false;
+      try {
+        const reviewsSnap = await getDocs(query(reviewsRef, orderBy('createdAt', 'desc'), limit(50)));
+        reviewsSnap.forEach(r => reviews.push(r.data()));
+      } catch (error) {
+        console.error('Could not load performer reviews', error);
+        reviewLoadFailed = true;
+      }
       const reviewCount = reviews.length;
 
       // Grade tally
@@ -440,7 +463,7 @@
         <div class="grade-breakdown">
           ${GRADES_V.map(g => `
             <div class="grade-bar-row">
-              <div class="grade-bar-label" style="color:${GRADE_COLORS_V[g]}">${g}</div>
+              <div class="grade-bar-label" style="color:${GRADE_COLORS_V[g]}">${escapeHtml(g)}</div>
               <div class="grade-bar-track">
                 <div class="grade-bar-fill" style="width:${Math.round((tally[g]/maxTally)*100)}%; background:${GRADE_COLORS_V[g]};"></div>
               </div>
@@ -452,11 +475,11 @@
         <div class="profile-header">
           <div class="avatar">${meta.icon}</div>
           <div class="profile-info">
-            <div class="profile-name">${d.firstName} ${d.lastName}</div>
-            ${d.stageName ? `<div class="profile-stage">${d.stageName}</div>` : ''}
+            <div class="profile-name">${escapeHtml([d.firstName, d.lastName].filter(Boolean).join(' ') || d.stageName || 'Performer')}</div>
+            ${d.stageName ? `<div class="profile-stage">${escapeHtml(d.stageName)}</div>` : ''}
             <div class="profile-meta">
-              <span>📍 ${d.location || '—'}</span>
-              ${d.experience ? `<span>⏱ ${d.experience} yrs experience</span>` : ''}
+              <span>📍 ${escapeHtml(d.location || '—')}</span>
+              ${d.experience ? `<span>⏱ ${escapeHtml(d.experience)} yrs experience</span>` : ''}
             </div>
             <span class="performer-type-badge ${meta.badge}">
               ${meta.label}
@@ -466,20 +489,21 @@
             <div class="grade-summary">
               <div class="grade-big" style="color:${overall ? GRADE_COLORS_V[overall] : '#333'}">${overall || '—'}</div>
               ${overall ? `<div class="grade-label">${GRADE_LABELS_V[overall]}</div>` : ''}
-              <div class="grade-count">${reviewCount > 0 ? `${reviewCount} review${reviewCount !== 1 ? 's' : ''}` : 'No reviews yet'}</div>
+              <div class="grade-count">${reviewLoadFailed ? 'Recent reviews unavailable' : reviewCount > 0 ? `${reviewCount} recent review${reviewCount !== 1 ? 's' : ''}${reviewCount === 50 ? ' (latest 50)' : ''}` : 'No reviews yet'}</div>
             </div>
             <div class="tier-pill">${tierSummary.tier}</div>
             <div class="tier-note">${describeTierProgress(tierSummary)}</div>
             <div class="avail-pill ${d.available ? 'avail-open' : 'avail-closed'}">
               ${d.available ? 'Available for Gigs' : 'Not Available'}
             </div>
+            <div class="profile-actions"><button type="button" class="btn-share" id="shareProfileBtn">Share profile</button><span class="share-status" id="shareStatus" role="status" aria-live="polite"></span></div>
           </div>
         </div>
 
         ${d.bio ? `
         <div class="section">
           <h2>About</h2>
-          <p class="bio-text">${d.bio}</p>
+          <p class="bio-text">${escapeHtml(d.bio)}</p>
         </div>` : ''}
 
         <div class="section">
@@ -491,14 +515,14 @@
             </div>
             <div class="stat-box">
               <div class="val">${reviewCount}</div>
-              <div class="lbl">Gigs Reviewed</div>
+              <div class="lbl">Recent Reviews</div>
             </div>
             <div class="stat-box">
               <div class="val" style="font-size:18px;">${tierSummary.tier}</div>
               <div class="lbl">Performer Tier</div>
             </div>
             <div class="stat-box">
-              <div class="val">${d.experience || '—'}</div>
+              <div class="val">${escapeHtml(d.experience || '—')}</div>
               <div class="lbl">Yrs Experience</div>
             </div>
           </div>
@@ -508,14 +532,14 @@
         <div class="section">
           <h2>Styles / Genres</h2>
           <div class="genre-chips">
-            ${d.genres.map(g => `<div class="chip">${g}</div>`).join('')}
+            ${d.genres.map(g => `<div class="chip">${escapeHtml(g)}</div>`).join('')}
           </div>
         </div>` : ''}
 
         ${d.instruments ? `
         <div class="section">
           <h2>${meta.skillHeading}</h2>
-          <p class="bio-text">${d.instruments}</p>
+          <p class="bio-text">${escapeHtml(d.instruments)}</p>
         </div>` : ''}
 
         ${d.blackoutDates && d.blackoutDates.length ? `
@@ -525,26 +549,28 @@
             ${d.blackoutDates.sort().map(date => {
               const [y,m,day] = date.split('-');
               const label = new Date(+y,+m-1,+day).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-              return `<div class="chip" style="background:#2e0d0d; border-color:#5c1a1a; color:#cf6679;">${label}</div>`;
+              return `<div class="chip" style="background:#2e0d0d; border-color:#5c1a1a; color:#cf6679;">${escapeHtml(label)}</div>`;
             }).join('')}
           </div>
         </div>` : ''}
 
         <div class="section">
           <h2>Testimonials</h2>
-          ${reviews.length === 0
+          ${reviewLoadFailed
+            ? '<p class="no-reviews">Reviews could not be loaded right now. You can still review the performer profile and request a booking.</p>'
+            : reviews.length === 0
             ? '<p class="no-reviews">No reviews yet — be the first to book and review.</p>'
             : gradeBreakdown + reviews.slice(0,10).map(r => {
                 const color = GRADE_COLORS_V[r.grade] || '#555';
-                const date  = r.createdAt ? new Date(r.createdAt.toDate()).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}) : '';
+                const date = reviewDateLabel(r.createdAt);
                 return `
               <div class="review-card">
                 <div class="review-top">
-                  <div class="review-host">${r.hostName || 'Host'}</div>
-                  <div class="review-grade-pill" style="color:${color}; border-color:${color}; background:${color}18;">${r.grade || '—'}</div>
+                  <div class="review-host">${escapeHtml(r.hostName || 'Host')}</div>
+                  <div class="review-grade-pill" style="color:${color}; border-color:${color}; background:${color}18;">${escapeHtml(r.grade || '—')}</div>
                 </div>
                 <div class="review-date">${date}</div>
-                ${r.feedback ? `<div class="review-text">"${r.feedback}"</div>` : ''}
+                ${r.feedback ? `<div class="review-text">"${escapeHtml(r.feedback)}"</div>` : ''}
               </div>`;}).join('')
           }
         </div>
@@ -555,8 +581,18 @@
       document.getElementById('rateDisplay').textContent = d.rate || 'Negotiable';
       document.getElementById('bookBar').style.display = d.available ? 'flex' : 'none';
       document.getElementById('bookBtn').onclick = () => {
-        window.location.href = `host.html?performer=${id}`;
+        window.location.href = `host.html?performer=${encodeURIComponent(id)}`;
       };
+      document.getElementById('shareProfileBtn').addEventListener('click', async () => {
+        const status = document.getElementById('shareStatus');
+        const shareData = { title: `${displayName} | CLTCH.NTWRK`, text: `View ${displayName}'s performer profile`, url: window.location.href };
+        try {
+          if (navigator.share) { await navigator.share(shareData); status.textContent = 'Profile share opened.'; }
+          else { await navigator.clipboard.writeText(window.location.href); status.textContent = 'Profile link copied.'; }
+        } catch (error) {
+          if (error?.name !== 'AbortError') status.textContent = 'Sharing is unavailable in this browser. Copy the page address to share it.';
+        }
+      });
     }
   </script>
 

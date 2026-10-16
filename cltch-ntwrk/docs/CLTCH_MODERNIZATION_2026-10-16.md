@@ -25,10 +25,15 @@
 21. **Duplicate gig warning** — Before geocoding and posting, hosts see a confirmation if an existing open/accepted gig has the same host, venue, location, date, and time. Canceled/expired/completed gigs do not trigger the warning; the host may continue if the duplicate is intentional.
 22. **Weekly/biweekly repeat-post batch** — Hosts can create up to 12 separate gig posts with weekly or two-week cadence in one atomic Firestore batch. Date generation validates real calendar dates and leap/year boundaries. The page explains that entries are separate posts, not a shared series record.
 23. **Saved host gig templates** — Hosts can save and reuse up to eight gig detail templates scoped to their signed-in UID in this browser. Templates omit event date/time and do not sync across devices. Storage limits and malformed data are handled without treating a local save as a server backup.
-24. **FAQ keyboard access** — Public FAQ navigation has a skip link; accordion questions are native buttons with exposed expanded state; reduced-motion and visible-focus styles cover the page controls.
-25. **FAQ search and bulk controls** — Search covers question and answer text, hides empty groups, announces match counts/no-results, and offers expand-all and collapse-all controls.
-26. **Matched Gigs keyboard search** — The queue search has a descriptive label and shortcut; Escape clears a focused query, and the clear button restores focus to search.
-27. **Matched Gigs live status and mobile controls** — Result counts update as queue cards change, filters expose pressed state, and controls retain visible focus with a 44px mobile clear target.
+24. **Repeat-post cost preview** — The host composer calculates performer pay, rounded per-event processing fees, and the aggregate total for the selected 1–12 dates before posting.
+25. **FAQ keyboard access** — Public FAQ navigation has a skip link; accordion questions are native buttons with exposed expanded state; reduced-motion and visible-focus styles cover the page controls.
+26. **FAQ search and bulk controls** — Search covers question and answer text, hides empty groups, announces match counts/no-results, and offers expand-all and collapse-all controls.
+27. **Matched Gigs keyboard search** — The queue search has a descriptive label and shortcut; Escape clears a focused query, and the clear button restores focus to search.
+28. **Matched Gigs live status and mobile controls** — Result counts update as queue cards change, filters expose pressed state, and controls retain visible focus with a 44px mobile clear target.
+29. **Public performer profile safety** — Profile and review strings are escaped before HTML rendering, and booking links encode performer IDs.
+30. **Bounded review history** — Public profiles fetch at most 50 newest reviews and label the sample accurately.
+31. **Profile loading recovery** — Review failures leave the profile usable with a clear review error; profile fetch failures show a separate recovery state.
+32. **Profile sharing** — Users can share through the device share sheet or copy the current link, with an accessible status message.
 
 ## Operational catalog accuracy
 
@@ -48,6 +53,8 @@
 - `npm run smoke:gig-templates` — checks host UID isolation, eight-template limit, malformed storage recovery, and UI wiring.
 - `npm run smoke:faq-accessibility` — checks skip navigation, responsive controls, reduced motion, labeled search, live results, and keyboard-operable disclosures.
 - `npm run smoke:matched-gigs-accessibility` — checks labels, live results, filter state, clear/search keyboard paths, focus, and mobile target size.
+- `npm run smoke:gig-budget` — checks fee rounding, aggregate multi-date totals, valid counts, and host preview wiring.
+- `npm run smoke:performer-public-profile` — checks output escaping, review bounds, error states, link sharing, and encoded booking targets.
 - `npm run smoke:plugz` — passed.
 - `npm run smoke:draft-protection` — passed; confirms UID isolation, seven-day expiry, and blocked-storage recovery.
 - `npm run smoke:account-export` — passed; confirms UID-scoped reads, timestamp conversion, file download behavior, and object-URL cleanup.
@@ -66,7 +73,7 @@
 
 ## Feature target and current status
 
-The user requested 200 additional mixed features. This change currently delivers **33** distinct capabilities, including account workflows, host templates and repeat posting, FAQ and matched-gig accessibility, app installation and shortcuts, payout detail screen privacy, portable saved-search presets, booking-specific preparation checklists, browser-local privacy controls, travel estimates, cache policy, and portfolio URL safety. The 5,000 generated Ops placeholders and 145 proposed feature concepts were not counted. The remaining target is not complete; the feature roadmap in `docs/FEATURE_AUDIT_200.md` separates the implemented evidence from candidate work and should not be read as a claim that unchecked items ship.
+The user requested 200 additional mixed features. This change currently delivers **40** distinct capabilities, including account workflows, host templates, repeat posting and cost preview, FAQ and matched-gig accessibility, public profile safety and sharing, app installation and shortcuts, payout detail screen privacy, portable saved-search presets, booking-specific preparation checklists, browser-local privacy controls, travel estimates, cache policy, and portfolio URL safety. The 5,000 generated Ops placeholders and 145 proposed feature concepts were not counted. The remaining target is not complete; the feature roadmap in `docs/FEATURE_AUDIT_200.md` separates the implemented evidence from candidate work and should not be read as a claim that unchecked items ship.
 
 ## Deployment and publishing boundary
 
