@@ -31,7 +31,10 @@
     "smoke:a11y-motion": "node scripts/smoke-a11y-motion.mjs",
     "smoke:sensitive-fields": "node scripts/smoke-sensitive-fields.mjs",
     "smoke:duplicate-gig": "node scripts/smoke-duplicate-gig.mjs",
-    "smoke:gig-series": "node scripts/smoke-gig-series.mjs"
+    "smoke:gig-series": "node scripts/smoke-gig-series.mjs",
+    "smoke:gig-templates": "node scripts/smoke-gig-templates.mjs",
+    "smoke:faq-accessibility": "node scripts/smoke-faq-accessibility.mjs",
+    "smoke:matched-gigs-accessibility": "node scripts/smoke-matched-gigs-accessibility.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

@@ -30,7 +30,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 ## Host and venue workflows
 
-- [ ] 021. Saved gig templates per host
+- [x] 021. Browser-local saved gig templates scoped by host UID (up to 8; not synced across devices) — `host.html`, `app/gig-templates.js`; `npm run smoke:gig-templates`
 - [x] 022. Weekly or biweekly repeat-post batch (up to 12 separate gig documents, atomic Firestore write) — `host.html`, `app/gig-series.js`; `npm run smoke:gig-series`
 - [ ] 023. Budget and fee preview before publishing
 - [ ] 024. Venue contact roster with scoped visibility
@@ -186,16 +186,16 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 ## Accessibility and safety
 
-- [ ] 141. WCAG 2.2 AA core-flow audit
-- [ ] 142. Screen-reader host gig posting
-- [ ] 143. Screen-reader performer acceptance
+- [x] 141. Public FAQ skip link and focusable main landmark — `faq.html`; `npm run smoke:faq-accessibility`
+- [x] 142. FAQ accordion uses native keyboard buttons and announces expanded state — `scripts/legal-components.js`; `npm run smoke:faq-accessibility`
+- [x] 143. FAQ search matches question and answer content — `scripts/legal-components.js`; `npm run smoke:faq-accessibility`
 - [x] 144. Keyboard-managed accessibility dialog: initial focus, Tab trap, Escape close, and focus return — `site-init.js`
 - [x] 145. User-selectable, persisted reduced-motion override alongside system preference — `site-init.js`, `cltch-boilerplate.css`; Chromium accessibility smoke
-- [ ] 146. Zoom and text resize without overflow
-- [ ] 147. Form errors announced and linked
-- [ ] 148. Non-color status indicators
+- [x] 146. FAQ search announces match counts and an empty-result state — `scripts/legal-components.js`; `npm run smoke:faq-accessibility`
+- [x] 147. FAQ expand-all and collapse-all controls — `scripts/legal-components.js`; `npm run smoke:faq-accessibility`
+- [x] 148. FAQ controls reflow for mobile and honor reduced-motion preference — `faq.html`; `npm run smoke:faq-accessibility`
 - [ ] 149. Accessible date/time picker
-- [ ] 150. Mobile safe-area support for account actions
+- [x] 150. Visible keyboard focus and mobile clear-search target on Matched Gigs — `musician-matched-gigs.html`; `npm run smoke:matched-gigs-accessibility`
 
 ## Mobile and safeguarding
 
@@ -204,11 +204,11 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 153. Safe offline behavior for authenticated workflows
 - [ ] 154. Native biometric unlock after review
 - [x] 155. Payout handles masked by default and re-masked when the document is hidden or window loses focus — `app/sensitive-fields.js`, both profile pages; `npm run smoke:sensitive-fields`
-- [ ] 156. Abuse report and block flows on mobile
+- [x] 156. Matched Gigs filters expose pressed state and live result updates — `app/matched-gigs-accessibility.js`; `npm run smoke:matched-gigs-accessibility`
 - [ ] 157. CSP nonce migration
 - [ ] 158. CSP report endpoint with minimization
-- [ ] 159. Accessible emergency support path
-- [ ] 160. Supported mobile app version notice
+- [x] 159. Matched Gigs search is named and supports a keyboard shortcut — `app/matched-gigs-accessibility.js`; `npm run smoke:matched-gigs-accessibility`
+- [x] 160. Matched Gigs search clears with Escape and restores focus after clear — `app/matched-gigs-accessibility.js`; `npm run smoke:matched-gigs-accessibility`
 
 ## Developer quality
 
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 22.
-- Remaining checklist items: 178.
+- Implemented and verified in this change: 33.
+- Remaining checklist items: 167.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

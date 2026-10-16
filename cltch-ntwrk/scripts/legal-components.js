@@ -102,26 +102,62 @@
       }
     ];
     target.innerHTML = '';
-    groups.forEach(function (group) {
+    var toolbar = createElement('div', { className: 'faq-tools', role: 'search', 'aria-label': 'Search frequently asked questions' });
+    var search = createElement('input', { type: 'search', className: 'faq-search', placeholder: 'Search questions and answers', 'aria-label': 'Search questions and answers' });
+    var expand = createElement('button', { type: 'button', className: 'faq-tool-button', text: 'Expand all' });
+    var collapse = createElement('button', { type: 'button', className: 'faq-tool-button', text: 'Collapse all' });
+    var status = createElement('p', { className: 'faq-search-status', role: 'status', 'aria-live': 'polite' });
+    toolbar.appendChild(search); toolbar.appendChild(expand); toolbar.appendChild(collapse);
+    target.appendChild(toolbar); target.appendChild(status);
+    var allItems = [];
+    groups.forEach(function (group, groupIndex) {
       var wrapper = createElement('div', { className: 'faq-group' });
-      wrapper.appendChild(createElement('div', { className: 'section-label', text: group.label }));
-      group.items.forEach(function (item) {
-        var faqItem = createElement('div', { className: 'faq-item' });
-        var question = createElement('div', { className: 'faq-q' });
-        var arrow = createElement('span', { className: 'faq-chevron', html: '&#8964;' });
-        question.appendChild(createElement('span', { text: item.q }));
-        question.appendChild(arrow);
+      wrapper.setAttribute('data-faq-group', '');
+      wrapper.appendChild(createElement('h2', { className: 'section-label', text: group.label }));
+      group.items.forEach(function (item, itemIndex) {
+        var faqItem = createElement('article', { className: 'faq-item' });
+        var answerId = 'faq-answer-' + groupIndex + '-' + itemIndex;
+        var question = createElement('button', { type: 'button', className: 'faq-q', 'aria-expanded': 'false', 'aria-controls': answerId });
+        var questionText = createElement('span', { text: item.q });
+        var arrow = createElement('span', { className: 'faq-chevron', 'aria-hidden': 'true', text: '⌄' });
+        question.appendChild(questionText); question.appendChild(arrow);
+        var answer = createElement('div', { className: 'faq-a', id: answerId, hidden: '' });
+        answer.textContent = item.a;
         question.addEventListener('click', function () {
-          faqItem.classList.toggle('open');
+          var isOpen = question.getAttribute('aria-expanded') === 'true';
+          question.setAttribute('aria-expanded', String(!isOpen));
+          answer.hidden = isOpen;
+          faqItem.classList.toggle('open', !isOpen);
         });
         faqItem.appendChild(question);
-        var answer = createElement('div', { className: 'faq-a' });
-        answer.textContent = item.a;
         faqItem.appendChild(answer);
         wrapper.appendChild(faqItem);
+        allItems.push({ item: faqItem, question: question, answer: answer, text: (group.label + ' ' + item.q + ' ' + item.a).toLocaleLowerCase() });
       });
       target.appendChild(wrapper);
     });
+    function setExpanded(entry, open) {
+      entry.question.setAttribute('aria-expanded', String(open));
+      entry.answer.hidden = !open;
+      entry.item.classList.toggle('open', open);
+    }
+    expand.addEventListener('click', function () { allItems.forEach(function (entry) { if (!entry.item.hidden) setExpanded(entry, true); }); });
+    collapse.addEventListener('click', function () { allItems.forEach(function (entry) { setExpanded(entry, false); }); });
+    search.addEventListener('input', function () {
+      var query = search.value.trim().toLocaleLowerCase();
+      var visible = 0;
+      allItems.forEach(function (entry) {
+        var show = !query || entry.text.indexOf(query) !== -1;
+        entry.item.hidden = !show;
+        if (!show) setExpanded(entry, false);
+        if (show) visible += 1;
+      });
+      target.querySelectorAll('[data-faq-group]').forEach(function (group) {
+        group.hidden = !group.querySelector('.faq-item:not([hidden])');
+      });
+      status.textContent = query ? (visible ? visible + ' matching question' + (visible === 1 ? '' : 's') + '.' : 'No questions match that search.') : allItems.length + ' questions. Search or choose a category.';
+    });
+    search.dispatchEvent(new Event('input'));
   }
 
   function showAccessibilityBanner(targetId) {

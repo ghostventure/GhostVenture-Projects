@@ -1134,9 +1134,38 @@
       .workspace-rail {
         grid-template-columns: 1fr !important;
       }
+
+      .matched-gigs-clear-search {
+        min-height: 44px;
+        margin: 8px 0;
+      }
+    }
+
+    .matched-gigs-clear-search {
+      border: 1px solid #45586b;
+      border-radius: 8px;
+      background: #101923;
+      color: #f0f0f0;
+      padding: 9px 12px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .matched-gigs-clear-search:focus-visible,
+    .filter-chip:focus-visible,
+    .command-search:focus-visible {
+      outline: 3px solid #f5a623;
+      outline-offset: 3px;
+    }
+    .matched-gigs-status {
+      grid-column: 1 / -1;
+      min-height: 1.4em;
+      color: #cfd7e2;
+      font-size: 13px;
     }
   </style>
   <script src="site-init.js" defer></script>
+  <script src="app/matched-gigs-accessibility.js" defer></script>
 </head>
 <body class="cltch-workspace-page">
 

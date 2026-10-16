@@ -665,6 +665,16 @@
             <button class="preset-chip" type="button" onclick="applyHostPreset('brandFilm')">Brand Film</button>
             <button class="preset-chip" type="button" onclick="applyHostPreset('modelCall')">Model Call</button>
           </div>
+          <div class="row" style="align-items:end;margin-top:14px;">
+            <div class="form-group" style="flex:1;">
+              <label for="savedGigTemplate">Your saved templates</label>
+              <select id="savedGigTemplate"><option value="">Select a saved template</option></select>
+            </div>
+            <button class="ghost-btn" type="button" id="saveGigTemplateBtn">Save current details</button>
+            <button class="ghost-btn" type="button" id="applyGigTemplateBtn">Apply</button>
+            <button class="ghost-btn" type="button" id="deleteGigTemplateBtn">Delete</button>
+          </div>
+          <p class="fee-note" id="gigTemplateStatus" aria-live="polite">Saved templates stay in this browser and are scoped to your signed-in host. Up to 8.</p>
 
           <div class="draft-row">
             <div class="draft-note" id="draftStatus">Draft sync is on for this form.</div>
@@ -849,6 +859,7 @@
     import { buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
     import { findPotentialDuplicateGig } from "./app/duplicate-gig.js";
     import { generateGigDates } from "./app/gig-series.js";
+    import { deleteGigTemplate, readGigTemplates, saveGigTemplate } from "./app/gig-templates.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { installUnsavedChangesGuard } from "./app/unsaved-changes.js";
@@ -934,6 +945,16 @@
     const form = document.getElementById('gigForm');
     const seriesCadenceSelect = document.getElementById('gigSeriesCadence');
     const seriesCountInput = document.getElementById('gigSeriesCount');
+    const savedGigTemplateSelect = document.getElementById('savedGigTemplate');
+    const gigTemplateStatus = document.getElementById('gigTemplateStatus');
+    const templateFields = ['venue', 'location', 'genre', 'performerType', 'pay', 'skillNeed', 'notes'];
+    function refreshGigTemplateOptions() {
+      if (!savedGigTemplateSelect) return [];
+      const templates = HOST_ID ? readGigTemplates(HOST_ID) : [];
+      savedGigTemplateSelect.replaceChildren(new Option('Select a saved template', ''));
+      templates.forEach((template) => savedGigTemplateSelect.add(new Option(template.name, template.id)));
+      return templates;
+    }
     const syncSeriesCountState = () => {
       const repeating = Number(seriesCadenceSelect?.value || 0) > 0;
       if (seriesCountInput) {
@@ -1449,6 +1470,53 @@
     gigSearch?.addEventListener('input', renderHostGigList);
     gigStatusFilter?.addEventListener('change', renderHostGigList);
     clearDraftBtn?.addEventListener('click', clearDraft);
+    document.getElementById('saveGigTemplateBtn')?.addEventListener('click', () => {
+      if (!HOST_ID) return;
+      const name = window.prompt('Name this template (saved only in this browser):');
+      if (!name?.trim()) return;
+      const fields = Object.fromEntries(templateFields.map((field) => [field, document.getElementById(field)?.value || '']));
+      try {
+        const saved = saveGigTemplate(HOST_ID, name, fields);
+        refreshGigTemplateOptions();
+        savedGigTemplateSelect.value = saved.id;
+        gigTemplateStatus.textContent = 'Template saved in this browser for your signed-in host.';
+      } catch (error) {
+        gigTemplateStatus.textContent = error?.message || 'Browser storage is unavailable; the template was not saved.';
+      }
+    });
+    document.getElementById('applyGigTemplateBtn')?.addEventListener('click', () => {
+      const template = refreshGigTemplateOptions().find((item) => item.id === savedGigTemplateSelect?.value);
+      if (!template) {
+        gigTemplateStatus.textContent = 'Choose one of your saved templates first.';
+        return;
+      }
+      for (const field of templateFields) {
+        if (field === 'performerType' || field === 'genre') continue;
+        const input = document.getElementById(field);
+        if (input) input.value = template.fields[field];
+      }
+      performerTypeSelect.value = template.fields.performerType || 'any';
+      syncGenreOptionsForType(true);
+      genreSelect.value = template.fields.genre || '';
+      renderPayEstimate();
+      saveDraft();
+      gigTemplateStatus.textContent = `“${template.name}” applied. Set the date and time before posting.`;
+    });
+    document.getElementById('deleteGigTemplateBtn')?.addEventListener('click', () => {
+      const id = savedGigTemplateSelect?.value;
+      if (!HOST_ID || !id) {
+        gigTemplateStatus.textContent = 'Choose one of your saved templates first.';
+        return;
+      }
+      try {
+        deleteGigTemplate(HOST_ID, id);
+        refreshGigTemplateOptions();
+        gigTemplateStatus.textContent = 'Saved template deleted from this browser.';
+      } catch {
+        gigTemplateStatus.textContent = 'Browser storage is unavailable; the template could not be deleted.';
+      }
+    });
+    refreshGigTemplateOptions();
     window.setHostStatusFilter = setHostStatusFilter;
     window.resetHostQueueView = () => {
       if (gigSearch) gigSearch.value = '';
@@ -1610,6 +1678,7 @@
     }
 
     function startApp() {
+    refreshGigTemplateOptions();
     applyRebookDraftIfPresent();
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
