@@ -645,6 +645,15 @@
           <div id="hostQueueShortcuts" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
           <div id="hostQueueSummary" style="font-size:13px;line-height:1.65;color:#c8d7ea;">Loading your queue controls…</div>
         </section>
+        <section class="ops-detail-card" aria-labelledby="bookingHealthTitle" style="grid-column:1/-1;">
+          <div class="ops-detail-card-top">
+            <strong id="bookingHealthTitle" style="font-size:14px;">Booking Health</strong>
+            <span id="bookingHealthStatus" role="status" aria-live="polite" style="font-size:12px;color:#9fb5ca;">Loading your host bookings…</span>
+          </div>
+          <p style="font-size:12px;line-height:1.5;color:#9fb5ca;margin:0 0 12px;">Counts use bookings already loaded for this host: accepted past events without a completed review, open listings dated before today, and accepted events from today through the next 7 days. Details are capped at 20.</p>
+          <div id="bookingHealthCounts" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;" aria-label="Booking health counts"></div>
+          <div id="bookingHealthList" style="font-size:13px;line-height:1.55;color:#c8d7ea;"></div>
+        </section>
       </div>
     </section>
 
@@ -867,6 +876,7 @@
     import { installUnsavedChangesGuard } from "./app/unsaved-changes.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
+    import { buildBookingHealth } from "./app/booking-health.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1197,6 +1207,62 @@
       renderHostChecklist({ open, accepted, cancelled, pendingReview });
       renderHostBookingGuide({ open, accepted, cancelled, pendingReview });
       renderHostQueueControls({ open, accepted, cancelled, pendingReview, thisWeek });
+    }
+
+    function renderBookingHealth(records) {
+      const status = document.getElementById('bookingHealthStatus');
+      const countsRoot = document.getElementById('bookingHealthCounts');
+      const list = document.getElementById('bookingHealthList');
+      if (!status || !countsRoot || !list) return;
+      const summary = buildBookingHealth(records);
+      countsRoot.replaceChildren();
+      list.replaceChildren();
+      const labels = [
+        ['acceptedPastNeedsReview', 'Past accepted · review pending'],
+        ['openPastDate', 'Open · past date'],
+        ['acceptedNext7Days', 'Accepted · next 7 days']
+      ];
+      labels.forEach(([key, label]) => {
+        const item = document.createElement('div');
+        item.style.cssText = 'padding:8px 11px;border:1px solid #27425b;border-radius:10px;background:#101923;color:#d8ecff;font-size:12px;';
+        item.textContent = `${label}: ${summary.counts[key]}`;
+        countsRoot.appendChild(item);
+      });
+      if (!summary.items.length) {
+        list.textContent = 'No bookings meet these date and status checks.';
+      } else {
+        const rows = document.createElement('ul');
+        rows.style.cssText = 'list-style:none;padding:0;margin:0;display:grid;gap:8px;';
+        summary.items.forEach((item) => {
+          const row = document.createElement('li');
+          row.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 10px;border:1px solid #253746;border-radius:8px;';
+          const details = document.createElement('span');
+          details.textContent = `${item.venue} · ${item.date} · ${item.reason}`;
+          const link = document.createElement('a');
+          link.href = `booking.html?id=${encodeURIComponent(item.gigId)}`;
+          link.textContent = 'View booking';
+          link.style.cssText = 'color:#9edcff;white-space:nowrap;';
+          row.append(details, link);
+          rows.appendChild(row);
+        });
+        list.appendChild(rows);
+        if (summary.totalFlagged > summary.detailLimit) {
+          const note = document.createElement('p');
+          note.textContent = `Showing ${summary.detailLimit} of ${summary.totalFlagged} flagged bookings.`;
+          note.style.cssText = 'font-size:12px;color:#9fb5ca;margin:8px 0 0;';
+          list.appendChild(note);
+        }
+      }
+      status.textContent = 'Updated from your host booking feed';
+    }
+
+    function clearBookingHealthOnError() {
+      const status = document.getElementById('bookingHealthStatus');
+      const counts = document.getElementById('bookingHealthCounts');
+      const list = document.getElementById('bookingHealthList');
+      if (status) status.textContent = 'Could not load booking health. Counts and details cleared; try reloading this page.';
+      if (counts) counts.replaceChildren();
+      if (list) list.replaceChildren();
     }
 
     function renderHostNotifications(stats = {}) {
@@ -1822,7 +1888,8 @@
       hostGigCache = nextHostGigCache;
       updateHostOpsStats(hostGigCache.map((item) => item.g));
       renderHostGigList();
-    }));
+      renderBookingHealth(hostGigCache);
+    }, () => clearBookingHealthOnError()));
 
     // ── Grade system ──────────────────────────────────────────────────
     const GRADES       = ['AA','A','B','C','D','F','N'];

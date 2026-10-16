@@ -123,7 +123,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [ ] 091. Opt-out booking reminders and quiet hours
 - [x] 092. Bounded past accepted-booking recovery panel, with an isolated retry state and safe details route — `musician-dashboard.html`, `app/stale-booking-recovery.js`; `npm run smoke:stale-booking-recovery`
-- [ ] 093. Bounded booking health dashboard
+- [x] 093. Host booking health panel with explicit status/date counts, a 20-record detail bound, and isolated feed-error state — `host.html`, `app/booking-health.js`; `npm run smoke:booking-health`
 - [ ] 094. Private booking incident report
 - [ ] 095. Evidence attachment retention controls
 - [ ] 096. Event-day emergency contact action
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 52.
-- Remaining checklist items: 148.
+- Implemented and verified in this change: 53.
+- Remaining checklist items: 147.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.
