@@ -258,7 +258,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 195. Invite links with expiry and revocation
 - [ ] 196. Onboarding progress saved to account
 - [x] 197. Resumable four-step first-booking walkthrough with contextual links, progress, skip/restart, and UID-scoped browser-local state — `musician-dashboard.html`, `app/booking-walkthrough.js`; `npm run smoke:booking-walkthrough`
-- [ ] 198. Seasonal marketplace insights using aggregate data
+- [x] 198. Privacy-safe upcoming open-gig supply snapshot by calendar quarter with five-distinct-host suppression, explicit 180-day/120-listing sample coverage, and no historical-seasonality or forecast claim — `gig-radar.html`, `app/marketplace-insights.js`; `npm run smoke:marketplace-insights`
 - [ ] 199. Service outage banner with recovery guidance
 - [ ] 200. Feature rollout percentage with server-side kill switch
 

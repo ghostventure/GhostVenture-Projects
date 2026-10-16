@@ -898,6 +898,17 @@
       </div>
     </section>
 
+    <section class="command-bar workspace-scope" id="marketplaceInsights" aria-labelledby="marketplaceInsightsTitle">
+      <div class="command-top">
+        <h2 class="command-title" id="marketplaceInsightsTitle">Upcoming supply snapshot</h2>
+      </div>
+      <p style="font-size:12px;line-height:1.55;color:#9fb5ca;margin:0 0 10px;">A privacy-safe count of open listings by calendar quarter. No host, performer, or venue details are shown.</p>
+      <div id="marketplaceInsightsCoverage" style="font-size:12px;line-height:1.55;color:#cfd7e2;">Waiting for the current open-gig feed…</div>
+      <ul id="marketplaceInsightsList" aria-label="Open listing counts by quarter" style="margin:8px 0;padding-left:20px;color:#cfd7e2;"></ul>
+      <p id="marketplaceInsightsPrivacy" style="font-size:12px;line-height:1.55;color:#9fb5ca;margin:0 0 6px;">Quarter groups are shown only when at least five distinct hosts are represented.</p>
+      <p id="marketplaceInsightsLimitations" style="font-size:12px;line-height:1.55;color:#9fb5ca;margin:0;">This current snapshot uses the upcoming 180-day open-gig feed (up to 120 listings) and may contain partial calendar quarters. It describes only the currently loaded feed; it is not historical seasonality and is not a forecast.</p>
+    </section>
+
     <section class="command-bar workspace-scope" id="queueControlsBar">
       <div class="command-top">
         <span class="command-title">Queue Controls</span>
@@ -1092,6 +1103,7 @@
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { approximateGigDistanceLabel } from "./app/gig-distance.js";
     import { buildOpenStreetMapEmbedUrl, isValidGigMapPoint } from "./app/gig-radar-map.js";
+    import { describeUpcomingSupply, summarizeUpcomingSupply } from "./app/marketplace-insights.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
@@ -1418,6 +1430,36 @@
       passedEl.textContent = String(analyticsState.passedCount || 0);
       upcomingEarningsEl.textContent = formatUsd(analyticsState.upcomingEarnings || 0);
       renderMusicianNotifications();
+    }
+
+    function renderUpcomingSupplySnapshot(gigRecords, hasError = false) {
+      const coverageEl = document.getElementById('marketplaceInsightsCoverage');
+      const listEl = document.getElementById('marketplaceInsightsList');
+      const privacyEl = document.getElementById('marketplaceInsightsPrivacy');
+      const limitationsEl = document.getElementById('marketplaceInsightsLimitations');
+      if (!coverageEl || !listEl || !privacyEl || !limitationsEl) return;
+      if (hasError) {
+        coverageEl.textContent = 'The current open-gig feed is unavailable. Reload the page to try again.';
+        listEl.replaceChildren();
+        return;
+      }
+      const snapshot = summarizeUpcomingSupply(gigRecords);
+      const copy = describeUpcomingSupply(snapshot);
+      coverageEl.textContent = copy.coverage;
+      privacyEl.textContent = copy.privacy;
+      limitationsEl.textContent = copy.limitations;
+      listEl.replaceChildren();
+      if (snapshot.visibleQuarters.length) {
+        for (const quarter of snapshot.visibleQuarters) {
+          const item = document.createElement('li');
+          item.textContent = `${quarter.label}: ${quarter.listingCount} open listings`;
+          listEl.appendChild(item);
+        }
+      } else {
+        const item = document.createElement('li');
+        item.textContent = copy.empty;
+        listEl.appendChild(item);
+      }
     }
 
     function renderMusicianNotifications() {
@@ -2143,6 +2185,12 @@
       const q = buildOpenGigFeedQuery(db, { today });
 
       subscribeWhenVisible(() => onSnapshot(q, (snapshot) => {
+        const docs = [];
+        snapshot.forEach(d => docs.push(d));
+        renderUpcomingSupplySnapshot(docs.map((docSnap) => {
+          const gig = docSnap.data();
+          return { date: gig.date, hostId: gig.hostId };
+        }));
         if (!isProfileRadarReady(musicianProfile)) {
           matchedGigFeed = [];
           analyticsState.activeMatches = 0;
@@ -2152,8 +2200,6 @@
           renderQueues();
           return;
         }
-        const docs = [];
-        snapshot.forEach(d => docs.push(d));
 
         // Hard filters: already-passed, already-accepted, blocked date, booked date, or self-booking
         const eligible = docs.filter(d => {
@@ -2216,7 +2262,7 @@
         matchedGigFeed = nextMatchedGigFeed;
         renderRadarSummary();
         renderQueues();
-      }));
+      }, () => renderUpcomingSupplySnapshot([], true)));
 
       if (!isProfileRadarReady(musicianProfile)) {
         staleListingState = 'ready';

@@ -58,6 +58,7 @@
     "smoke:business-profile-checklist": "node scripts/smoke-business-profile-checklist.mjs",
     "smoke:gig-location-resolution": "node scripts/smoke-gig-location-resolution.mjs",
     "smoke:booking-walkthrough": "node scripts/smoke-booking-walkthrough.mjs",
+    "smoke:marketplace-insights": "node scripts/smoke-marketplace-insights.mjs",
     "smoke:booking-incident-report": "node scripts/smoke-booking-incident-report.mjs",
     "smoke:deploy-guard": "node scripts/smoke-deploy-guard.mjs",
     "smoke:android-install-guidance": "node scripts/smoke-android-install-guidance.mjs",
