@@ -64,7 +64,8 @@
     "smoke:match-feedback": "node scripts/smoke-match-feedback.mjs",
     "smoke:gig-discovery-relevance": "node scripts/smoke-gig-discovery-relevance.mjs",
     "smoke:match-alerts": "node scripts/smoke-match-alerts.mjs",
-    "smoke:gig-radar-search-a11y": "node scripts/smoke-gig-radar-search-a11y.mjs"
+    "smoke:gig-radar-search-a11y": "node scripts/smoke-gig-radar-search-a11y.mjs",
+    "smoke:gig-radar-map-list": "node scripts/smoke-gig-radar-map-list.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

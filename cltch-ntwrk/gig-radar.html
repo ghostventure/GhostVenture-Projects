@@ -710,6 +710,19 @@
     .swipe-hint.accept { left: 20px;  color: #4caf82; border-color: #4caf82; }
     .swipe-hint.pass   { right: 20px; color: #cf6679; border-color: #cf6679; }
     .gig-card .venue { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+    .map-list-controls { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+    .map-list-controls button,.map-gig-choice,.map-load-button,.map-return-button { min-height:44px; border:1px solid #425263; border-radius:9px; padding:9px 13px; color:#f4f7fb; background:#13202d; font:inherit; font-weight:700; cursor:pointer; }
+    .map-list-controls button[aria-pressed="true"] { border-color:#f5a623; color:#111; background:#f5a623; }
+    .gig-map-view { border:1px solid #293746; border-radius:12px; padding:16px; margin-bottom:14px; background:#101820; }
+    .gig-map-view h3 { margin:0 0 8px; }
+    .map-location-list { display:grid; gap:8px; padding-left:22px; }
+    .map-location-list button { text-align:left; }
+    .map-consent { margin:14px 0; padding:12px; border:1px solid #72561c; border-radius:10px; background:#211b12; color:#f3e3c1; }
+    .map-embed-frame { display:block; width:100%; min-height:360px; border:1px solid #425263; border-radius:10px; background:#080c10; }
+    .map-frame-host { margin-top:12px; }
+    .map-attribution { font-size:13px; }
+    .map-status { min-height:24px; color:#c3cfdb; }
+    .map-list-controls button:focus-visible,.map-gig-choice:focus-visible,.map-load-button:focus-visible,.map-return-button:focus-visible { outline:3px solid #ffd078; outline-offset:2px; }
     .gig-notes { font-size: 13px; color: #666; margin-bottom: 16px; line-height: 1.5; }
     .actions { display: flex; gap: 12px; }
     .btn {
@@ -1027,9 +1040,24 @@
         <h2>New match alerts</h2>
         <p>Sign in to manage local alerts for new matching gigs.</p>
       </section>
+      <div class="map-list-controls" role="group" aria-label="Gig display mode">
+        <button type="button" id="gigListMode" aria-pressed="true">List view</button>
+        <button type="button" id="gigMapMode" aria-pressed="false">Map view</button>
+      </div>
       <div id="gigList">
         <div class="empty"><span>🎵</span>Looking for gigs&hellip;</div>
       </div>
+      <section id="gigMapView" class="gig-map-view" aria-label="Gig map view" hidden>
+        <h3>Choose a gig to view on a map</h3>
+        <p>Only gigs with a stored location coordinate can be shown. Your performer profile location is never sent to the map provider.</p>
+        <ul class="map-location-list" id="gigMapLocations" aria-label="Gigs with map coordinates"></ul>
+        <p class="map-consent" id="gigMapConsent">The map stays unloaded until you request it. Loading it sends the selected gig’s coordinates and your network address to OpenStreetMap.</p>
+        <button type="button" class="map-load-button" id="loadGigMap" disabled>Choose a gig first</button>
+        <button type="button" class="map-return-button" id="returnGigList">Return to list view</button>
+        <p class="map-status" id="gigMapStatus" role="status" aria-live="polite" aria-atomic="true"></p>
+        <p class="map-attribution">Map data and tiles by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>. <a href="https://operations.osmfoundation.org/policies/tiles/" target="_blank" rel="noopener">Tile use and privacy policy</a>.</p>
+        <div id="gigMapFrameHost" class="map-frame-host"></div>
+      </section>
       <div id="staleListingNotice" role="status" aria-live="polite" hidden style="margin-top:12px;padding:12px 14px;border:1px solid #654f2b;border-radius:10px;background:#211b12;color:#f0ddb5;font-size:13px;line-height:1.55;">
         <p id="staleListingNoticeText" style="margin:0 0 10px;"></p>
         <button type="button" id="resetStaleLiveFilters" style="min-height:36px;padding:0 12px;border:1px solid #7a5b11;border-radius:8px;background:#2b220c;color:#ffe39c;font-weight:700;cursor:pointer;">Reset live-gig filters</button>
@@ -1063,6 +1091,7 @@
     import { buildAcceptedGigQuery, buildOpenGigFeedQuery, isoToday } from "./app/gig-queries.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { approximateGigDistanceLabel } from "./app/gig-distance.js";
+    import { buildOpenStreetMapEmbedUrl, isValidGigMapPoint } from "./app/gig-radar-map.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
@@ -1200,6 +1229,15 @@
     const gigMinimumPay = document.getElementById('gigMinimumPay');
     const resetGigFilters = document.getElementById('resetGigFilters');
     const resetStaleLiveFilters = document.getElementById('resetStaleLiveFilters');
+    const gigListMode = document.getElementById('gigListMode');
+    const gigMapMode = document.getElementById('gigMapMode');
+    const gigMapView = document.getElementById('gigMapView');
+    const gigMapLocations = document.getElementById('gigMapLocations');
+    const loadGigMap = document.getElementById('loadGigMap');
+    const gigMapStatus = document.getElementById('gigMapStatus');
+    const gigMapFrameHost = document.getElementById('gigMapFrameHost');
+    let selectedMapGigId = '';
+    let gigDisplayMode = 'list';
     const workspaceTabs = [...document.querySelectorAll('[data-workspace-tab]')];
     const workspaceViewLabel = document.getElementById('workspaceViewLabel');
     const SAVED_GIGS_STORAGE_KEY = 'cltch_saved_gigs_v1';
@@ -1532,6 +1570,90 @@
     function getVisibleMatches() {
       return matchedGigFeed.filter(matchesFeedControls).sort(compareGigItems);
     }
+
+    function clearGigMapEmbed() {
+      gigMapFrameHost?.replaceChildren();
+      loadGigMap.disabled = !selectedMapGigId;
+      loadGigMap.textContent = selectedMapGigId ? 'Load map from OpenStreetMap' : 'Choose a gig first';
+    }
+
+    function setGigDisplayMode(mode) {
+      gigDisplayMode = mode === 'map' ? 'map' : 'list';
+      const showingMap = gigDisplayMode === 'map';
+      document.getElementById('gigList').hidden = showingMap;
+      gigMapView.hidden = !showingMap;
+      gigListMode.setAttribute('aria-pressed', String(!showingMap));
+      gigMapMode.setAttribute('aria-pressed', String(showingMap));
+      if (!showingMap && gigMapFrameHost.childElementCount) {
+        clearGigMapEmbed();
+        gigMapStatus.textContent = 'Map unloaded. Load it again if you return to map view.';
+      }
+    }
+
+    function renderGigMapLocations(visibleMatches) {
+      const mappable = visibleMatches.filter((item) => isValidGigMapPoint(item.g));
+      gigMapLocations.replaceChildren();
+      if (selectedMapGigId && !mappable.some((item) => item.gigId === selectedMapGigId)) {
+        selectedMapGigId = '';
+        clearGigMapEmbed();
+      }
+      for (const item of mappable) {
+        const listItem = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'map-gig-choice';
+        button.textContent = `${item.g.venue || 'Open opportunity'} — ${item.g.location || 'Location pending'} — ${item.g.date || 'Date pending'}`;
+        button.setAttribute('aria-pressed', String(item.gigId === selectedMapGigId));
+        button.addEventListener('click', () => {
+          if (selectedMapGigId !== item.gigId) {
+            selectedMapGigId = item.gigId;
+            clearGigMapEmbed();
+            gigMapStatus.textContent = `Selected ${item.g.venue || 'open opportunity'}. The map is still unloaded; activate the load button to send this gig’s coordinates to OpenStreetMap.`;
+            renderGigMapLocations(getVisibleMatches());
+          }
+        });
+        listItem.append(button);
+        gigMapLocations.append(listItem);
+      }
+      if (!mappable.length) {
+        gigMapStatus.textContent = visibleMatches.length
+          ? 'No gigs in this filtered list have stored map coordinates. The list view still shows every matching gig.'
+          : 'No gigs match the current queue controls. Return to list view to review the search state.';
+        selectedMapGigId = '';
+        clearGigMapEmbed();
+      } else if (!selectedMapGigId) {
+        gigMapStatus.textContent = `${mappable.length} gig${mappable.length === 1 ? '' : 's'} with saved coordinates. Select one, then explicitly load its map.`;
+      }
+    }
+
+    gigListMode.addEventListener('click', () => setGigDisplayMode('list'));
+    gigMapMode.addEventListener('click', () => {
+      setGigDisplayMode('map');
+      renderGigMapLocations(getVisibleMatches());
+    });
+    document.getElementById('returnGigList').addEventListener('click', () => {
+      setGigDisplayMode('list');
+      gigListMode.focus();
+    });
+    loadGigMap.addEventListener('click', () => {
+      const selected = getVisibleMatches().find((item) => item.gigId === selectedMapGigId);
+      const mapUrl = selected && buildOpenStreetMapEmbedUrl(selected.g);
+      if (!mapUrl) {
+        clearGigMapEmbed();
+        gigMapStatus.textContent = 'This gig no longer has valid saved coordinates. The list view is still available.';
+        return;
+      }
+      const frame = document.createElement('iframe');
+      frame.className = 'map-embed-frame';
+      frame.title = `OpenStreetMap showing ${selected.g.venue || 'the selected gig'} near ${selected.g.location || 'its saved location'}`;
+      frame.loading = 'lazy';
+      frame.referrerPolicy = 'strict-origin-when-cross-origin';
+      frame.src = mapUrl;
+      gigMapFrameHost.replaceChildren(frame);
+      loadGigMap.disabled = true;
+      loadGigMap.textContent = 'Map loaded';
+      gigMapStatus.textContent = `Map requested for ${selected.g.venue || 'the selected gig'}. If it is unavailable, return to the unchanged list view.`;
+    });
 
     function announceVisibleGigResults(count) {
       const status = document.getElementById('gigSearchResultsStatus');
@@ -2173,6 +2295,7 @@
       const newBadge = document.getElementById('newBadge');
       const visibleMatches = getVisibleMatches();
       announceVisibleGigResults(visibleMatches.length);
+      if (gigDisplayMode === 'map') renderGigMapLocations(visibleMatches);
 
       if (matchedGigFeed.length === 0) {
         newBadge.style.display = 'none';
