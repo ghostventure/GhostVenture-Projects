@@ -729,6 +729,10 @@
         <a class="dash-link" href="#profileForm">Edit Profile Fields</a>
         <a class="dash-link" href="support.html">Support</a>
       </div>
+      <section id="profileRecommendations" aria-live="polite" aria-atomic="true" aria-label="Profile recommendations" style="flex:1 1 100%;padding:16px;border:1px solid #333;border-radius:14px;">
+        <h2 style="margin:0 0 8px;font-size:18px;">Profile recommendations</h2>
+        <p>Checking profile fields…</p>
+      </section>
       <div class="profile-note-row">
         <div id="draftRestoreText">Profile drafts save locally while you work.</div>
         <div id="authActivityText">Auth activity will appear here once available.</div>
@@ -989,6 +993,7 @@
     import { installUnsavedChangesGuard } from "./app/unsaved-changes.js";
     import { activatePlugzMembershipForCurrentCltchUser, finishPendingPlugzProfileActivation } from "./app/plugz-bridge.js";
     import { buildOneId, readUserSummary, recordAuthEvent, writeUserSummary } from "./app/user-db.js";
+    import { renderProfileRecommendations } from "./app/profile-recommendations.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1088,6 +1093,16 @@
       const fill = document.getElementById('dashCompletionFill');
       if (text) text.textContent = `${completion}%`;
       if (fill) fill.style.width = `${completion}%`;
+      renderProfileRecommendations(document.getElementById('profileRecommendations'), {
+        firstName: document.getElementById('firstName')?.value,
+        lastName: document.getElementById('lastName')?.value,
+        zipCode: document.getElementById('zipCode')?.value,
+        genres: selectedGenres,
+        rate: document.getElementById('rate')?.value,
+        bio: document.getElementById('bio')?.value,
+        payoutMethod: document.getElementById('payoutMethod')?.value,
+        payoutHandle: document.getElementById('payoutHandle')?.value
+      });
     }
 
     async function refreshAccountActivity() {

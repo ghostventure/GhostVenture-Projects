@@ -63,7 +63,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 045. Private round-trip travel-fee calculator with validated manual route distance and no location sharing — `musician-profile.html`, `app/travel-fee.js`; `npm run smoke:travel-fee`
 - [ ] 046. Recurring availability with timezone support
 - [ ] 047. Revocable calendar subscription feed
-- [ ] 048. Profile recommendations tied to missing fields
+- [x] 048. Profile recommendations tied to missing fields
 - [x] 049. Show a recoverable state when the performer profile cannot load — `performer-view.html`; `npm run smoke:performer-public-profile`
 - [x] 050. Share or copy a performer profile link with accessible status feedback — `performer-view.html`; `npm run smoke:performer-public-profile`
 
@@ -97,7 +97,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [ ] 071. Stable paginated search results
 - [ ] 072. Manual location override
-- [ ] 073. Approximate distance disclosure
+- [x] 073. Approximate distance disclosure
 - [ ] 074. Blocked-user exclusion from matching
 - [x] 075. Filter-aware empty-state recovery
 - [ ] 076. Response speed with sample-size threshold
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 61.
-- Remaining checklist items: 139.
+- Implemented and verified in this change: 63.
+- Remaining checklist items: 137.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

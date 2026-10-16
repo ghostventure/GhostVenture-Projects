@@ -1046,6 +1046,7 @@
     import { auth, db } from "./app/firebase-client.js";
     import { buildAcceptedGigQuery, buildOpenGigFeedQuery, isoToday } from "./app/gig-queries.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
+    import { approximateGigDistanceLabel } from "./app/gig-distance.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
@@ -1903,19 +1904,19 @@
         if (dist <= 5) {
           percent += 32;
           css = 'match-perfect';
-          detail = 'Perfect distance · ' + Math.round(dist) + ' mi';
+          detail = 'Perfect distance';
         } else if (dist <= 20) {
           percent += 26;
           css = 'match-close';
-          detail = (skill.detail ? skill.detail + ' · ' : '') + 'Close by · ' + Math.round(dist) + ' mi';
+          detail = (skill.detail ? skill.detail + ' · ' : '') + 'Close by';
         } else if (dist <= 40) {
           percent += 18;
           css = 'match-near';
-          detail = (skill.detail ? skill.detail + ' · ' : '') + 'Nearby · ' + Math.round(dist) + ' mi';
+          detail = (skill.detail ? skill.detail + ' · ' : '') + 'Nearby';
         } else if (dist <= 65 && useFallback) {
           percent += 10;
           css = 'match-expanded';
-          detail = (skill.detail ? skill.detail + ' · ' : '') + 'Expanded radius · ' + Math.round(dist) + ' mi';
+          detail = (skill.detail ? skill.detail + ' · ' : '') + 'Expanded radius';
         } else {
           return null;
         }
@@ -1929,8 +1930,8 @@
       reasons.push((gig.genre || '') === 'Open / Any' ? 'Flexible genre request' : `Genre fit: ${gig.genre || 'Open / Any'}`);
       if (skill.detail) reasons.push(skill.detail);
       if (hasCoords) {
-        const dist = miles(gig.lat, gig.lng, profile.lat, profile.lng);
-        reasons.push(`${Math.round(dist)} miles away`);
+        const distanceLabel = approximateGigDistanceLabel(gig, profile);
+        if (distanceLabel) reasons.push(distanceLabel);
       } else {
         reasons.push('Profile details filled in');
       }

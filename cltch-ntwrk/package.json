@@ -56,7 +56,9 @@
     "smoke:stale-listing-reason": "node scripts/smoke-stale-listing-reason.mjs",
     "smoke:hosting-rollback": "node scripts/smoke-hosting-rollback.mjs",
     "smoke:gig-discovery-recovery": "node scripts/smoke-gig-discovery-recovery.mjs",
-    "smoke:gig-prep-checklist": "node scripts/smoke-gig-prep-checklist.mjs"
+    "smoke:gig-prep-checklist": "node scripts/smoke-gig-prep-checklist.mjs",
+    "smoke:profile-recommendations": "node scripts/smoke-profile-recommendations.mjs",
+    "smoke:gig-radar-distance": "node scripts/smoke-gig-radar-distance.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",
