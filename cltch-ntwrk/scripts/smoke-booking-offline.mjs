@@ -63,8 +63,11 @@ const offlineGuardAt = booking.indexOf('&& !isBrowserOffline(navigator)', confir
 const confirmedHelperAt = booking.indexOf('await confirmArrivalWithConsent(', confirmAt);
 const writeAt = booking.indexOf('updateDoc(doc(db, "gigs", bookingId), { checkedInAt: serverTimestamp() })', confirmAt);
 assert.ok(confirmAt >= 0 && offlineGuardAt > confirmAt && confirmedHelperAt > offlineGuardAt && writeAt > confirmedHelperAt, 'the guarded confirmation precedes its only check-in write');
-assert.match(booking, /if \(isBrowserOffline\(navigator\)\) \{[\s\S]{0,240}draft remains here[\s\S]{0,200}return;\s*\}\s*const text[\s\S]{0,300}await addDoc/);
-assert.ok(booking.indexOf('await addDoc(') < booking.indexOf('messageInputEl.value = ""'), 'composer clears only after Firestore write resolves');
+const messageSubmitAt = booking.indexOf('messageFormEl.addEventListener("submit", async (event) => {');
+const messageOfflineAt = booking.indexOf('if (isBrowserOffline(navigator)) {', messageSubmitAt);
+const guardedMessageSendAt = booking.indexOf('await messageRetryGuard.send(', messageSubmitAt);
+assert.ok(messageSubmitAt >= 0 && messageOfflineAt > messageSubmitAt && booking.indexOf('draft remains here', messageOfflineAt) < guardedMessageSendAt && booking.indexOf('return;', messageOfflineAt) < guardedMessageSendAt, 'offline message submit retains the draft and returns before the guarded remote send');
+assert.ok(booking.indexOf('if (result.status === \'sent\' || result.status === \'already-created\')', guardedMessageSendAt) < booking.indexOf('messageInputEl.value = ""', guardedMessageSendAt), 'composer clears only after a confirmed or already-created message');
 assert.match(rules, /get\([^\n]*gigs\/\$\(gigId\)[^\n]*\.data\.status == 'accepted'/);
 assert.match(rules, /request\.resource\.data\.senderId == request\.auth\.uid/);
 assert.match(rules, /resource\.data\.acceptedBy == request\.auth\.uid[\s\S]{0,200}request\.resource\.data\.checkedInAt is timestamp/);

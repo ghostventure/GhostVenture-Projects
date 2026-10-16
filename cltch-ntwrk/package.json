@@ -65,6 +65,7 @@
     "smoke:android-install-guidance": "node scripts/smoke-android-install-guidance.mjs",
     "smoke:gig-discovery-currency": "node scripts/smoke-gig-discovery-currency.mjs",
     "smoke:host-usd-format": "node scripts/smoke-host-usd-format.mjs",
+    "smoke:message-retry-guard": "node scripts/smoke-message-retry-guard.mjs",
     "smoke:stale-listing-reason": "node scripts/smoke-stale-listing-reason.mjs",
     "smoke:hosting-rollback": "node scripts/smoke-hosting-rollback.mjs",
     "smoke:gig-discovery-recovery": "node scripts/smoke-gig-discovery-recovery.mjs",

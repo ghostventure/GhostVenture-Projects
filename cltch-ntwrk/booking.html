@@ -155,6 +155,7 @@
       <div class="label">Booking Messages</div>
       <div class="small" id="messageSubtitle">Messages stay tied to this booking and are only for the host and assigned performer.</div>
       <div class="message-note" style="margin-top:6px;">For faster loading, this thread shows up to the latest 100 messages in chronological order.</div>
+      <div class="message-note">Same-message retries reuse an ID only while this page stays open. If delivery is uncertain, check the thread before refreshing; this is not durable idempotency.</div>
       <div class="message-note" style="margin:10px 0 14px;">Trust note: only use the names, booking details, and payout method shown inside CLTCH.NTWRK. Do not trust off-platform payment demands, login requests, or last-minute identity changes made outside the booking thread.</div>
       <div class="message-list" id="messageList">
         <div class="empty">Loading booking messages…</div>
@@ -237,7 +238,7 @@
   <footer style="padding:24px 18px 40px;text-align:center;color:#556272;font-size:12px;">&copy; 2026 CLTCH.NTWRK</footer>
 
   <script type="module">
-    import { doc, getDoc, updateDoc, serverTimestamp, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    import { doc, getDoc, getDocFromServer, updateDoc, serverTimestamp, collection, setDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, reload, signOut } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
@@ -247,6 +248,7 @@
     import { downloadBookingReceipt } from "./app/booking-receipt.js";
     import { installBookingOfflineStatus, isBrowserOffline } from "./app/booking-offline.js";
     import { confirmArrivalWithConsent } from "./app/checkin-consent.js";
+    import { createMessageRetryGuard } from "./app/message-retry-guard.js";
 
     const bookingId = new URL(window.location.href).searchParams.get("id") || "";
     const titleEl = document.getElementById("bookingTitle");
@@ -269,6 +271,7 @@
     let activeSummary = null;
     let activeUser = null;
     let checkInAllowed = false;
+    const messageRetryGuard = createMessageRetryGuard();
 
     function applyConnectionState(isOffline) {
       if (activeBooking && activeUser) renderMessageState(activeBooking, activeUser);
@@ -693,21 +696,35 @@
       const text = messageInputEl.value.trim();
       if (!text) return;
       messageSendBtn.disabled = true;
-      let sendUnconfirmed = false;
-      try {
-        await addDoc(collection(db, "gigs", activeBooking.id, "messages"), {
-          senderId: activeUser.uid,
-          senderRole: activeSummary.role === "host" ? "host" : "musician",
-          text,
+      const payload = {
+        gigId: activeBooking.id,
+        senderId: activeUser.uid,
+        senderRole: activeSummary.role === "host" ? "host" : "musician",
+        text
+      };
+      const result = await messageRetryGuard.send(payload, {
+        createRef: () => doc(collection(db, "gigs", activeBooking.id, "messages")),
+        read: async (ref) => {
+          const snapshot = await getDocFromServer(ref);
+          return snapshot.exists() ? snapshot.data() : null;
+        },
+        create: (ref, message) => setDoc(ref, {
+          senderId: message.senderId,
+          senderRole: message.senderRole,
+          text: message.text,
           createdAt: serverTimestamp()
-        });
+        })
+      });
+      if (result.status === 'sent' || result.status === 'already-created') {
         if (messageInputEl.value.trim() === text) messageInputEl.value = "";
-      } catch (error) {
-        console.error(error);
-        sendUnconfirmed = true;
       }
       renderMessageState(activeBooking, activeUser);
-      if (sendUnconfirmed) messageStatusEl.textContent = "Unable to confirm whether the message was sent. Check the thread before trying again.";
+      if (result.status === 'unknown') messageStatusEl.textContent = "Delivery is still unknown. This page will reuse the same message ID for this exact text; check the thread before retrying, and keep this page open.";
+      else if (result.status === 'pending-different-payload') messageStatusEl.textContent = "An earlier message still has unknown delivery. Check the thread before editing it or sending a different message; this page will not create another message yet.";
+      else if (result.status === 'already-created') messageStatusEl.textContent = "This exact message is already in the thread; no duplicate was created.";
+      else if (result.status === 'sent') messageStatusEl.textContent = "Message sent.";
+      else if (result.status === 'busy') messageStatusEl.textContent = "A message attempt is already being checked.";
+      else if (result.status === 'invalid') messageStatusEl.textContent = "Message not sent. Check the booking and message text, then try again.";
     });
   </script>
   <script src="scripts/legal-components.js"></script>
