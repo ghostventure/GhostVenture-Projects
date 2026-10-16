@@ -9,7 +9,10 @@
     "start": "next start",
     "build:mobile": "node scripts/sync-mobile-web.mjs",
     "clean": "rm -rf .next mobile-web android/app/build release",
+    "sbom:generate": "node scripts/generate-sbom.mjs",
+    "smoke:sbom": "node scripts/smoke-sbom.mjs",
     "deploy:hosting": "node scripts/guard-deploy.mjs && npx firebase-tools deploy --only hosting --project cltch-ntwrk-social --account blacklionmediastudio@gmail.com",
+    "scan:secrets": "node scripts/scan-secrets.mjs",
     "sync:mobile": "npm run build:mobile && npx cap sync",
     "sync:ios": "npm run build:mobile && npx cap sync ios",
     "sync:android": "npm run build:mobile && npx cap sync android",
@@ -49,6 +52,7 @@
     "smoke:profile-calendar-a11y": "node scripts/smoke-profile-calendar-a11y.mjs",
     "smoke:stale-booking-recovery": "node scripts/smoke-stale-booking-recovery.mjs",
     "smoke:booking-health": "node scripts/smoke-booking-health.mjs",
+    "smoke:host-analytics-export": "node scripts/smoke-host-analytics-export.mjs",
     "smoke:booking-incident-report": "node scripts/smoke-booking-incident-report.mjs",
     "smoke:deploy-guard": "node scripts/smoke-deploy-guard.mjs",
     "smoke:android-install-guidance": "node scripts/smoke-android-install-guidance.mjs",
@@ -65,7 +69,8 @@
     "smoke:gig-discovery-relevance": "node scripts/smoke-gig-discovery-relevance.mjs",
     "smoke:match-alerts": "node scripts/smoke-match-alerts.mjs",
     "smoke:gig-radar-search-a11y": "node scripts/smoke-gig-radar-search-a11y.mjs",
-    "smoke:gig-radar-map-list": "node scripts/smoke-gig-radar-map-list.mjs"
+    "smoke:gig-radar-map-list": "node scripts/smoke-gig-radar-map-list.mjs",
+    "smoke:secret-scan": "node scripts/smoke-secret-scan.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

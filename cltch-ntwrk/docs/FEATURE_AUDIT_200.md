@@ -49,7 +49,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 034. Booking approval roles for venue teams
 - [ ] 035. Venue document expiry reminders
 - [ ] 036. Duplicate booking merge flow
-- [ ] 037. Host booking analytics export
+- [x] 037. Host activity CSV with status/month counts and posted-pay average denominators; explicitly limited to the 200 newest host-owned feed records — `host.html`, `app/host-analytics-export.js`; `npm run smoke:host-analytics-export`
 - [x] 038. Filter confirmed bookings by date and export a bounded, escaped .ics file with explicit floating-time and one-hour defaults — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
 - [ ] 039. Venue capacity and equipment details
 - [x] 040. Venue-specific safety checklist
@@ -227,8 +227,8 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [ ] 171. GitHub CI for lint, smoke, build, and security
 - [x] 172. Weekly Dependabot updates scoped to the Cltch npm workspace and GitHub Actions, with a review and vulnerability-triage policy — `.github/dependabot.yml`, `docs/DEPENDENCY_POLICY.md`
-- [ ] 173. SBOM generation and vulnerability triage
-- [ ] 174. Secret scanning and artifact publication guard
+- [x] 173. Deterministic production SBOM and documented vulnerability triage (unknown licenses marked NOASSERTION)
+- [x] 174. Secret scanning and Hosting deploy guard (working tree + staged Git index blobs)
 - [ ] 175. Data migration dry-run and verification
 - [ ] 176. Production backup and restore drill
 - [ ] 177. Custom-claim-backed admin access

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { spawnSync } from 'node:child_process';
 
 const repoRoot = path.resolve(path.dirname(decodeURIComponent(new URL(import.meta.url).pathname)), '..');
 const cwd = process.cwd();
@@ -42,4 +43,17 @@ if (firebaseJson?.hosting?.public !== '.') {
   fail(`firebase.json hosting.public must be ".", got "${firebaseJson?.hosting?.public ?? 'missing'}".`);
 }
 
-console.log('[deploy-guard] CLTCH.NTWRK repo verified. Safe to deploy.');
+const scannerPath = path.join(repoRoot, 'scripts', 'scan-secrets.mjs');
+if (!fs.existsSync(scannerPath)) fail('Secret scanner is missing. Refusing Hosting deploy.');
+const scan = spawnSync(process.execPath, [scannerPath], { cwd: repoRoot, encoding: 'utf8' });
+if (scan.error) fail(`Secret scanner could not run (${scan.error.message}). Refusing Hosting deploy.`);
+const scanDetails = `${scan.stderr || ''}${scan.stdout || ''}`.trim();
+if (scan.status === 1 && scanDetails.includes('[secret-scan] Blocked:')) {
+  const details = scanDetails;
+  fail(`Secret scan found possible credentials. Refusing Hosting deploy. ${details}`);
+}
+if (scan.status !== 0) {
+  fail(`Secret scanner errored or exited unexpectedly (status ${scan.status}). Refusing Hosting deploy. ${scanDetails}`);
+}
+
+console.log('[deploy-guard] CLTCH.NTWRK repo verified and local secret scan passed. Safe to deploy.');

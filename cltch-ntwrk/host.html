@@ -654,6 +654,14 @@
           <div id="bookingHealthCounts" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;" aria-label="Booking health counts"></div>
           <div id="bookingHealthList" style="font-size:13px;line-height:1.55;color:#c8d7ea;"></div>
         </section>
+        <section class="ops-detail-card" aria-labelledby="hostAnalyticsTitle" style="grid-column:1/-1;">
+          <div class="ops-detail-card-top">
+            <strong id="hostAnalyticsTitle" style="font-size:14px;">Booking Analytics Export</strong>
+            <button type="button" id="downloadHostAnalytics" disabled style="padding:8px 12px;border-radius:999px;border:1px solid #27425b;background:#111a24;color:#d8ecff;font-size:12px;font-weight:700;cursor:pointer;">Download CSV</button>
+          </div>
+          <p style="font-size:12px;line-height:1.5;color:#9fb5ca;margin:0 0 8px;">Exports aggregate counts by status and event month plus average posted performer pay. It uses only this host's currently loaded feed (up to the 200 newest gigs); older gigs may be omitted. Denominators and unavailable dates/pay are included. This is activity and posted-pay data, not transaction, payout, or reliability history.</p>
+          <div id="hostAnalyticsStatus" role="status" aria-live="polite" style="font-size:12px;color:#9fb5ca;">Waiting for your host booking feed…</div>
+        </section>
       </div>
     </section>
 
@@ -883,6 +891,7 @@
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { buildBookingHealth } from "./app/booking-health.js";
+    import { HOST_ANALYTICS_FEED_LIMIT, buildHostAnalyticsCsv, downloadHostAnalyticsCsv } from "./app/host-analytics-export.js";
     import { buildBookingIncidentReport } from "./app/booking-incident-report.js";
     import { mountVenueSafetyChecklist } from "./app/venue-safety-checklist.js";
 
@@ -991,6 +1000,7 @@
     const submitBtn = document.getElementById('submitBtn');
     const gigList = document.getElementById('gigList');
     const incidentReportStatus = document.getElementById('incidentReportStatus');
+    const hostAnalyticsButton = document.getElementById('downloadHostAnalytics');
     const payInput = document.getElementById('pay');
     const payEstimate = document.getElementById('payEstimate');
     const gigSearch = document.getElementById('gigSearch');
@@ -1011,6 +1021,20 @@
     const HOST_DRAFT_KEY = 'cltch_host_gig_draft_v1';
     const PROCESSING_FEE_RATE = 0.02;
     let hostGigCache = [];
+    let hostAnalyticsFeedState = 'loading';
+
+    function setHostAnalyticsFeedState(state) {
+      hostAnalyticsFeedState = state;
+      if (hostAnalyticsButton) hostAnalyticsButton.disabled = state !== 'ready';
+      const status = document.getElementById('hostAnalyticsStatus');
+      if (status) {
+        status.textContent = state === 'ready'
+          ? `Live host feed ready. Export summarizes up to ${HOST_ANALYTICS_FEED_LIMIT} newest gigs currently loaded.`
+          : state === 'error'
+            ? 'Could not load your host booking feed. Analytics export is disabled until the feed reconnects.'
+            : 'Waiting for your host booking feed…';
+      }
+    }
     const HOST_STYLE_OPTIONS = {
       any: {
         label: 'Style / Genre',
@@ -1422,6 +1446,21 @@
         if (incidentReportStatus) incidentReportStatus.textContent = error.message || 'Could not prepare the private report.';
       }
     }
+
+    hostAnalyticsButton?.addEventListener('click', () => {
+      const status = document.getElementById('hostAnalyticsStatus');
+      if (hostAnalyticsFeedState !== 'ready' || !HOST_ID) {
+        if (status) status.textContent = 'Analytics export is unavailable until the signed-in host feed finishes loading.';
+        return;
+      }
+      try {
+        const csv = buildHostAnalyticsCsv(hostGigCache, HOST_ID);
+        downloadHostAnalyticsCsv(csv);
+        if (status) status.textContent = 'Aggregate analytics CSV downloaded to this device. Figures cover the currently loaded host feed, up to the 200 newest gigs.';
+      } catch {
+        if (status) status.textContent = 'Could not prepare the analytics CSV. Reload the host workspace and try again.';
+      }
+    });
 
     function renderHostGigList() {
       const gigs = hostGigCache.filter(matchesGigFilter);
@@ -1938,10 +1977,14 @@
         nextHostGigCache.push({ gigId: docSnap.id, g: docSnap.data() });
       });
       hostGigCache = nextHostGigCache;
+      setHostAnalyticsFeedState('ready');
       updateHostOpsStats(hostGigCache.map((item) => item.g));
       renderHostGigList();
       renderBookingHealth(hostGigCache);
-    }, () => clearBookingHealthOnError()));
+    }, () => {
+      setHostAnalyticsFeedState('error');
+      clearBookingHealthOnError();
+    }));
 
     // ── Grade system ──────────────────────────────────────────────────
     const GRADES       = ['AA','A','B','C','D','F','N'];

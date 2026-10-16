@@ -980,7 +980,7 @@
 
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script type="module">
-    import { doc, setDoc, getDoc, updateDoc, serverTimestamp, collection, getDocs, query, orderBy, limit }
+    import { doc, setDoc, getDoc, updateDoc, serverTimestamp, collection, getDocs, query, orderBy, limit, documentId, startAfter, where }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
@@ -994,6 +994,26 @@
     import { activatePlugzMembershipForCurrentCltchUser, finishPendingPlugzProfileActivation } from "./app/plugz-bridge.js";
     import { buildOneId, readUserSummary, recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { renderProfileRecommendations } from "./app/profile-recommendations.js";
+
+    async function readAllPages(ref, filters = []) {
+      const rows = [];
+      let cursor = null;
+      while (true) {
+        const constraints = [...filters, orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(100)];
+        const page = await getDocs(query(ref, ...constraints));
+        rows.push(...page.docs.map((item) => ({ id: item.id, data: item.data() })));
+        if (page.size < 100) return rows;
+        cursor = page.docs[page.docs.length - 1];
+      }
+    }
+
+    async function readExportMessages(uid, gigId, gig) {
+      const current = await getDoc(doc(db, 'gigs', gigId));
+      if (!current.exists()) throw new Error('Booking is no longer available');
+      const latest = current.data();
+      if (latest.status !== 'accepted' || (latest.hostId !== uid && latest.acceptedBy !== uid)) throw new Error('Booking participant access is no longer available');
+      return readAllPages(collection(db, 'gigs', gigId, 'messages'));
+    }
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1050,7 +1070,7 @@
       const button = document.getElementById('downloadAccountCopy');
       const status = document.getElementById('accountCopyStatus');
       if (!MUSICIAN_ID || !auth.currentUser) return;
-      if (!window.confirm('Download your account and profile records, including payout contact details, to this device?')) return;
+      if (!window.confirm('Download an account copy to this device? It includes your account/profile records (including payout contact details), your host and assigned-performer booking history, messages for accepted bookings you participate in, and reviews on your performer profile or authored for your hosted bookings with an assigned performer. Manager-only data, unscoped portfolio highlights, and media files are excluded; this build has no owner-scoped media metadata.')) return;
       button.disabled = true;
       status.textContent = 'Preparing your account copy…';
       try {
@@ -1059,10 +1079,17 @@
           readDocument: async (collection, uid) => {
             const result = await getDoc(doc(db, collection, uid));
             return result.exists() ? result.data() : null;
-          }
+          },
+          readGigsByHost: (uid) => readAllPages(collection(db, 'gigs'), [where('hostId', '==', uid)]),
+          readGigsByPerformer: (uid) => readAllPages(collection(db, 'gigs'), [where('acceptedBy', '==', uid)]),
+          readBookingMessages: readExportMessages,
+          readPerformerReviews: (uid) => readAllPages(collection(db, 'musicians', uid, 'reviews')),
+          readReviewsForBooking: (uid, gigId, performerId) => readAllPages(collection(db, 'musicians', performerId, 'reviews'), [where('gigId', '==', gigId)])
         });
         downloadAccountExport(snapshot);
-        status.textContent = 'Account copy downloaded. Store the file somewhere private.';
+        status.textContent = snapshot.completeness.status === 'incomplete'
+          ? 'Account copy downloaded, but one or more permitted record groups could not be read. See the completeness section in the file. Media metadata is unavailable and media files are not included. Store the file privately.'
+          : 'Available account records downloaded. This build has no owner-scoped media metadata; media files are not included. Store the file privately.';
       } catch (error) {
         console.error('Account export failed:', error);
         status.textContent = 'Could not prepare the account copy. Try again when your connection is available.';
