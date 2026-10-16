@@ -24,3 +24,10 @@ Commit `b09b452e8fa128799e8cf774acc0edd656bbe46b` adds six feature paths: `app/g
 - Commit `b09b452e8fa128799e8cf774acc0edd656bbe46b`, the map/list implementation and CSP change, and `docs/FEATURE_AUDIT_200.md`.
 - `npm run smoke:gig-radar-map-list`; live page/module HTTP checks; Firebase Hosting deploy result for the map/list source commit.
 - Existing deployment and modernization records: `docs/DEPLOY_CLTCH_NTWRK_SOCIAL_2026-06-21.md` and `docs/CLTCH_MODERNIZATION_2026-10-16.md`.
+
+## Venue, discovery, and availability batch — 2026-10-16
+
+- Commit `e175e38` adds host-local venue contacts, accessibility prompts, venue capacity/equipment notes, recurring venue schedules, a manual Gig Discovery location filter, timezone-aware date-conflict wording, a private accepted-booking response-time metric, and performer availability pauses with a resume date. These local-only features are labeled as such in the UI. The feature audit now records 80 implemented items; 120 remain unchecked.
+- `npm run build` completed successfully. Firebase Hosting deployed to site `cltch-ntwrk-social`; Firestore rules and indexes also deployed. The 076 response-time query depends on the deployed composite index.
+- A targeted deployment of `stripeCreateHostCheckoutIntent` was attempted and rejected because the Firebase project is not on the Blaze plan. The Functions source change is committed but not deployed; the app's payment backend remains disabled. Firebase also warned that the configured Node.js 20 runtime is scheduled for decommissioning on 2026-10-30.
+- No smoke tests or authenticated interactive checks were run in this batch. Hosting deployment success confirms publication, not authenticated user-flow behavior.
