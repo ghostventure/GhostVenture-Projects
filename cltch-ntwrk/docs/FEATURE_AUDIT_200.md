@@ -36,7 +36,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 024. Venue contact roster with scoped visibility
 - [x] 025. Browser-local booking preparation checklist scoped per booking, with explicit private/not-confirmed status — `scripts/platform-components.js`, `booking.html`; Chromium isolation smoke
 - [ ] 026. Rider and stage plan attachments with access controls
-- [ ] 027. Duplicate gig detection
+- [x] 027. Advisory duplicate gig detection by host, venue, route, date, and time before geocoding/posting — `host.html`, `app/duplicate-gig.js`; `npm run smoke:duplicate-gig`
 - [ ] 028. Event change history
 - [ ] 029. Cancellation reason and performer notice workflow
 - [ ] 030. Venue profile verification with evidence
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 20.
-- Remaining checklist items: 180.
+- Implemented and verified in this change: 21.
+- Remaining checklist items: 179.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

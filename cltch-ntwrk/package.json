@@ -29,7 +29,8 @@
     "smoke:local-data": "node scripts/smoke-local-data.mjs",
     "smoke:travel-fee": "node scripts/smoke-travel-fee.mjs",
     "smoke:a11y-motion": "node scripts/smoke-a11y-motion.mjs",
-    "smoke:sensitive-fields": "node scripts/smoke-sensitive-fields.mjs"
+    "smoke:sensitive-fields": "node scripts/smoke-sensitive-fields.mjs",
+    "smoke:duplicate-gig": "node scripts/smoke-duplicate-gig.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

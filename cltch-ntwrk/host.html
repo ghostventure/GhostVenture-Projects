@@ -831,6 +831,7 @@
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
     import { buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
+    import { findPotentialDuplicateGig } from "./app/duplicate-gig.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { installUnsavedChangesGuard } from "./app/unsaved-changes.js";
@@ -1595,17 +1596,28 @@
 
       const location = document.getElementById('location').value.trim();
       const genre    = document.getElementById('genre').value;
+      const baseGig = {
+        hostId: HOST_ID,
+        venue: document.getElementById('venue').value.trim(),
+        date: document.getElementById('date').value,
+        time: document.getElementById('time').value,
+        location
+      };
+      const duplicate = findPotentialDuplicateGig(baseGig, hostGigCache.map((item) => item.g));
+      if (duplicate && !window.confirm(`Possible duplicate: ${duplicate.venue} is already ${duplicate.status} for ${duplicate.date} at ${duplicate.time}. Post another one anyway?`)) {
+        statusMsg.className = 'status';
+        statusMsg.textContent = 'Posting canceled. Review the existing booking or change its details.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Post Gig →';
+        return;
+      }
 
       // Geocode gig location before posting
       submitBtn.textContent = 'Locating…';
       const coords = await geocode(location);
 
       const gig = {
-        hostId:        HOST_ID,
-        venue:         document.getElementById('venue').value.trim(),
-        date:          document.getElementById('date').value,
-        time:          document.getElementById('time').value,
-        location,
+        ...baseGig,
         genre,
         performerType: document.getElementById('performerType').value,
         pay:           document.getElementById('pay').value.trim(),

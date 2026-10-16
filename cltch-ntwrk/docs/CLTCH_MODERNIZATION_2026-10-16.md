@@ -22,6 +22,7 @@
 18. **Private travel-fee estimate** — Performers can calculate a round-trip USD estimate from manually entered route miles and a fee rate; it validates bounds, rounds to cents, and does not store or send the values.
 19. **Reduced-motion control** — Accessibility settings can enable a persistent app-level reduced-motion override or return to the operating-system preference. It covers scrolling, transitions, and animations.
 20. **Payout detail screen privacy** — Host and performer payout handles are masked by default and are re-masked when the page loses focus or becomes hidden; users can temporarily reveal them with an accessible control.
+21. **Duplicate gig warning** — Before geocoding and posting, hosts see a confirmation if an existing open/accepted gig has the same host, venue, location, date, and time. Canceled/expired/completed gigs do not trigger the warning; the host may continue if the duplicate is intentional.
 
 ## Operational catalog accuracy
 
@@ -36,6 +37,7 @@
 - `npm run smoke:travel-fee` — verifies round-trip calculation, cent rounding, and invalid input bounds.
 - `npm run smoke:a11y-motion` — checks the system default, stored override, and reduced-motion CSS path are present.
 - `npm run smoke:sensitive-fields` — checks default masking, deliberate reveal, and re-masking on blur/hidden state.
+- `npm run smoke:duplicate-gig` — checks duplicate matching, host scoping, and terminal-state exclusions.
 - `npm run smoke:plugz` — passed.
 - `npm run smoke:draft-protection` — passed; confirms UID isolation, seven-day expiry, and blocked-storage recovery.
 - `npm run smoke:account-export` — passed; confirms UID-scoped reads, timestamp conversion, file download behavior, and object-URL cleanup.
@@ -54,7 +56,7 @@
 
 ## Feature target and current status
 
-The user requested 200 additional mixed features. This change currently delivers **20** distinct capabilities, including account workflows, app installation and shortcuts, accessibility keyboard and motion controls, payout detail screen privacy, portable saved-search presets, booking-specific preparation checklists, browser-local privacy controls, a private travel-fee estimate, cache policy, and portfolio URL safety. The 5,000 generated Ops placeholders and 145 proposed feature concepts were not counted. The remaining target is not complete; the feature roadmap in `docs/FEATURE_AUDIT_200.md` separates the implemented evidence from candidate work and should not be read as a claim that unchecked items ship.
+The user requested 200 additional mixed features. This change currently delivers **21** distinct capabilities, including account workflows, app installation and shortcuts, accessibility keyboard and motion controls, payout detail screen privacy, duplicate gig warning, portable saved-search presets, booking-specific preparation checklists, browser-local privacy controls, a private travel-fee estimate, cache policy, and portfolio URL safety. The 5,000 generated Ops placeholders and 145 proposed feature concepts were not counted. The remaining target is not complete; the feature roadmap in `docs/FEATURE_AUDIT_200.md` separates the implemented evidence from candidate work and should not be read as a claim that unchecked items ship.
 
 ## Deployment and publishing boundary
 
