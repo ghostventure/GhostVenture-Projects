@@ -1015,6 +1015,10 @@
       <div id="gigList">
         <div class="empty"><span>🎵</span>Looking for gigs&hellip;</div>
       </div>
+      <div id="staleListingNotice" role="status" aria-live="polite" hidden style="margin-top:12px;padding:12px 14px;border:1px solid #654f2b;border-radius:10px;background:#211b12;color:#f0ddb5;font-size:13px;line-height:1.55;">
+        <p id="staleListingNoticeText" style="margin:0 0 10px;"></p>
+        <button type="button" id="resetStaleLiveFilters" style="min-height:36px;padding:0 12px;border:1px solid #7a5b11;border-radius:8px;background:#2b220c;color:#ffe39c;font-weight:700;cursor:pointer;">Reset live-gig filters</button>
+      </div>
     </div>
 
     <!-- My Reviews -->
@@ -1067,6 +1071,9 @@
     let MUSICIAN_ID     = null;
     let musicianProfile = null;
     let matchedGigFeed  = [];
+    let staleOpenListingDocs = [];
+    let staleListingState = 'loading';
+    let staleListingLimitReached = false;
     let reviewCache     = [];
     let activeGigFilter = localStorage.getItem('cltch_gig_filter_v1') || 'all';
     let activeGigSort   = localStorage.getItem('cltch_gig_sort_v1') || 'best';
@@ -1144,11 +1151,14 @@
     };
     const BOOKING_CACHE_LIMIT = 120;
     const BOOKING_CACHE_PAST_DAYS = 30;
+    const STALE_LISTING_LOOKBACK_DAYS = 30;
+    const STALE_LISTING_QUERY_LIMIT = 120;
     const gigSearchInput = document.getElementById('gigSearchInput');
     const gigFilterRow = document.getElementById('gigFilterRow');
     const gigSortSelect = document.getElementById('gigSortSelect');
     const gigMinimumPay = document.getElementById('gigMinimumPay');
     const resetGigFilters = document.getElementById('resetGigFilters');
+    const resetStaleLiveFilters = document.getElementById('resetStaleLiveFilters');
     const workspaceTabs = [...document.querySelectorAll('[data-workspace-tab]')];
     const workspaceViewLabel = document.getElementById('workspaceViewLabel');
     const SAVED_GIGS_STORAGE_KEY = 'cltch_saved_gigs_v1';
@@ -1452,6 +1462,7 @@
         });
         renderQueues();
       });
+      resetStaleLiveFilters?.addEventListener('click', () => resetGigFilters?.click());
       if (gigSortSelect) {
         gigSortSelect.value = activeGigSort;
         gigSortSelect.addEventListener('change', () => {
@@ -1480,6 +1491,54 @@
     function renderQueues() {
       renderMatchedQueue();
       renderOpenRequests();
+      renderStaleListingNotice();
+    }
+
+    function countStaleRelevantListings() {
+      if (!isProfileRadarReady(musicianProfile)) return 0;
+      const blackouts = new Set(musicianProfile.blackoutDates || []);
+      const bookedGigIds = new Set((musicianProfile.bookedDates || []).map((booking) => booking.gigId));
+      const bookedDatesSet = new Set((musicianProfile.bookedDates || []).map((booking) => booking.date));
+      const today = isoToday();
+      let count = 0;
+      staleOpenListingDocs.forEach((docSnap) => {
+        const gig = docSnap.data();
+        if (!gig?.date || gig.date >= today) return;
+        if (gig.hostId === MUSICIAN_ID || (gig.passedBy || []).includes(MUSICIAN_ID)) return;
+        if (!isGigActionable({ ...gig, id: docSnap.id }, blackouts, bookedGigIds, bookedDatesSet)) return;
+        if (!matchScore(gig, musicianProfile, false) && !matchScore(gig, musicianProfile, true)) return;
+        count += 1;
+      });
+      return count;
+    }
+
+    function renderStaleListingNotice() {
+      const panel = document.getElementById('staleListingNotice');
+      const text = document.getElementById('staleListingNoticeText');
+      if (!panel || !text) return;
+      if (staleListingState === 'loading') {
+        panel.hidden = true;
+        return;
+      }
+      panel.hidden = false;
+      if (staleListingState === 'error') {
+        text.textContent = 'Recent expired listings could not be checked. The live gig feed is still available; refresh to retry this check.';
+        if (resetStaleLiveFilters) resetStaleLiveFilters.hidden = true;
+        return;
+      }
+      const count = countStaleRelevantListings();
+      if (!count) {
+        if (staleListingLimitReached) {
+          text.textContent = `The recent expired-listing check reached its ${STALE_LISTING_QUERY_LIMIT}-item cap, so additional matching expired gigs may not appear in the count. Reset live-gig filters to find current opportunities; expired listings stay hidden.`;
+          if (resetStaleLiveFilters) resetStaleLiveFilters.hidden = false;
+          return;
+        }
+        panel.hidden = true;
+        return;
+      }
+      if (resetStaleLiveFilters) resetStaleLiveFilters.hidden = false;
+      const capNote = staleListingLimitReached ? ` This check reached its ${STALE_LISTING_QUERY_LIMIT}-item cap, so the count may be partial.` : '';
+      text.textContent = `${count} otherwise matching open listing${count === 1 ? '' : 's'} from the past ${STALE_LISTING_LOOKBACK_DAYS} days ${count === 1 ? 'is' : 'are'} hidden because the event date passed. Expired listings cannot be accepted.${capNote} Reset live-gig filters to find current opportunities; expired listings stay hidden.`;
     }
 
     function matchesFeedControls(item) {
@@ -1894,7 +1953,8 @@
       const bookedGigIds   = new Set((musicianProfile.bookedDates   || []).map(b => b.gigId));
       const bookedDatesSet = new Set((musicianProfile.bookedDates   || []).map(b => b.date));
 
-      const q = buildOpenGigFeedQuery(db, { today: isoToday() });
+      const today = isoToday();
+      const q = buildOpenGigFeedQuery(db, { today });
 
       subscribeWhenVisible(() => onSnapshot(q, (snapshot) => {
         if (!isProfileRadarReady(musicianProfile)) {
@@ -1960,6 +2020,36 @@
         });
         renderRadarSummary();
         renderQueues();
+      }));
+
+      if (!isProfileRadarReady(musicianProfile)) {
+        staleListingState = 'ready';
+        staleOpenListingDocs = [];
+        renderStaleListingNotice();
+        return;
+      }
+      const staleFromDate = new Date(`${today}T00:00:00.000Z`);
+      staleFromDate.setUTCDate(staleFromDate.getUTCDate() - STALE_LISTING_LOOKBACK_DAYS);
+      const staleFrom = staleFromDate.toISOString().slice(0, 10);
+      const staleQuery = query(
+        collection(db, 'gigs'),
+        where('status', '==', 'open'),
+        where('date', '>=', staleFrom),
+        where('date', '<', today),
+        orderBy('date', 'asc'),
+        limit(STALE_LISTING_QUERY_LIMIT)
+      );
+      subscribeWhenVisible(() => onSnapshot(staleQuery, (snapshot) => {
+        staleOpenListingDocs = [];
+        snapshot.forEach((docSnap) => staleOpenListingDocs.push(docSnap));
+        staleListingLimitReached = snapshot.size >= STALE_LISTING_QUERY_LIMIT;
+        staleListingState = 'ready';
+        renderStaleListingNotice();
+      }, () => {
+        staleOpenListingDocs = [];
+        staleListingLimitReached = false;
+        staleListingState = 'error';
+        renderStaleListingNotice();
       }));
     }
 
