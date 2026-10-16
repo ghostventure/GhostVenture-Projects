@@ -1,0 +1,19 @@
+Ghost Surfer Browser
+Release: 2026-07-10
+Package: Ghost-Surfer-Browser-Windows.zip
+
+Included:
+- Dark Ghost Surfer browser shell
+- Startpage.com default home/search
+- Ghost Guard privacy controls
+- Futuristic 2033-style privacy console UI refresh
+- 12 theme-aware color choices in Ghost Control
+- Per-site cookie approval for each top-level domain
+- Approved sites retain cookies; declined sites stay blocked
+- Immediate Ghost Guard alerts for known trackers and blocked permission attempts
+- Tamper warning if local browser settings are changed outside the app
+- Tor-aware local SOCKS routing check
+- Speed Mode and tab suspension controls
+- Download, bookmark, history, settings, and privacy panels
+- Splash screen
+- White-sheet ghost vector icon and imagery

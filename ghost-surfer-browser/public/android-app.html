@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#05080d">
+    <title>Ghost Surfer Android Browser Preview</title>
+    <meta name="description" content="Try an interactive Ghost Surfer browser companion preview with safe web search, local appearance settings, and clear privacy limits.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="android-app.css">
+    <script src="android-app.js" defer></script>
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <main id="main-content" class="phone-browser" aria-label="Ghost Surfer Android browser preview">
+      <p class="preview-disclosure">Interactive website preview, not an Android app. Search and addresses open in a new browser tab. This page does not filter traffic, manage site cookies, or block trackers.</p>
+      <header class="browser-top">
+        <div class="window-bar">
+          <a class="brand-chip" href="index.html">
+            <img src="assets/ghost-surfer-icon.svg" alt="">
+            <span><strong>Ghost Surfer</strong><small>Interactive Preview</small></span>
+          </a>
+          <div class="window-actions" aria-label="Browser controls">
+            <button type="button" id="tab-count" disabled aria-label="Tabs in this preview">1</button>
+            <button type="button" id="settings-toggle" aria-expanded="false" aria-controls="preview-settings" aria-label="Open preview settings">⚙</button>
+          </div>
+        </div>
+        <div class="address-row">
+          <button type="button" id="back-button" aria-label="Back to previous page">‹</button>
+          <form class="address-pill" id="address-form">
+            <label for="address-input">ADDRESS OR SEARCH</label>
+            <input id="address-input" type="text" inputmode="url" autocomplete="url" value="https://www.startpage.com/" aria-label="Website address or search terms">
+          </form>
+          <button type="submit" form="address-form" aria-label="Open address or search">↗</button>
+        </div>
+        <div class="mode-strip" aria-label="Ghost Surfer browser modes">
+          <button type="button" class="active" id="guard-toggle" aria-pressed="true">Guard demo</button>
+          <button type="button" id="compact-toggle" aria-pressed="false">Compact</button>
+          <button type="button" id="grid-toggle" aria-pressed="false">Grid</button>
+          <button type="button" id="clear-preview">Clear preview data</button>
+        </div>
+      </header>
+
+      <section class="browser-page">
+        <div class="search-card">
+          <img src="assets/ghost-surfer-icon.svg" alt="">
+          <p>Search with Startpage</p>
+          <form class="search-box" id="search-form">
+            <label class="visually-hidden" for="search-input">Search the web</label>
+            <input id="search-input" type="search" placeholder="What are you looking for?" required>
+            <button type="submit">Search</button>
+          </form>
+          <small class="search-note">Your search opens on Startpage in a new tab.</small>
+        </div>
+
+        <section class="guard-console" aria-label="Ghost Guard console">
+          <div class="console-head">
+            <div>
+              <p class="eyebrow">Ghost Guard</p>
+              <h1>Ghost Guard preview</h1>
+            </div>
+            <strong>ON</strong>
+          </div>
+          <p class="demo-copy">The counters below are sample data for this preview. They do not measure your browsing.</p>
+          <div class="stat-grid" aria-label="Illustrative sample counters">
+            <div><strong>9</strong><span>Sample tracker alerts</span></div>
+            <div><strong>3</strong><span>Sample site choices</span></div>
+            <div><strong>0</strong><span>Sample permissions</span></div>
+          </div>
+          <p id="preview-status" class="preview-status" role="status" aria-live="polite">Preview ready. Search opens in a new tab.</p>
+        </section>
+
+        <section class="cookie-sheet" aria-label="Cookie clearance prompt">
+          <div>
+            <p class="eyebrow">Cookie clearance</p>
+            <h2>Try a sample cookie choice</h2>
+            <p>These buttons only save a demo preference on this device. They do not change cookies for any website.</p>
+          </div>
+          <div class="sheet-actions">
+            <button type="button" id="cookie-decline">Decline demo</button>
+            <button type="button" id="cookie-approve" class="primary">Approve demo</button>
+          </div>
+        </section>
+
+        <section class="alert-stack" aria-label="Privacy events">
+          <article>
+            <span>GPS</span>
+            <div><strong>Sample location alert</strong><p>Example event only; this preview cannot block location access.</p></div>
+            <em>Sample</em>
+          </article>
+          <article>
+            <span>TR</span>
+            <div><strong>Sample tracker alert</strong><p>Example event only; no tracker scan is running.</p></div>
+            <em>Demo</em>
+          </article>
+          <article>
+            <span>TM</span>
+            <div><strong>Desktop feature note</strong><p>See the Windows product page for current desktop feature details.</p></div>
+            <em>Info</em>
+          </article>
+        </section>
+      </section>
+
+      <aside class="control-drawer" aria-label="Ghost Surfer control center">
+        <div class="drawer-handle"></div>
+        <div class="drawer-title">
+          <strong>Control Center</strong>
+          <span>Settings below stay in this browser only.</span>
+        </div>
+        <div class="tool-grid">
+          <a href="security.html"><span>▣</span>Security</a>
+          <a href="privacy.html"><span>◌</span>Privacy</a>
+          <a href="downloads/Ghost-Surfer-Browser-Windows.zip" download><span>↓</span>Windows ZIP</a>
+          <a href="index.html#interface"><span>◇</span>Desktop UI</a>
+        </div>
+        <details class="install-guide">
+          <summary>Install and release status</summary>
+          <p>No Android APK is available from this preview. The current download is the Windows ZIP; use the homepage for extraction and verification steps.</p>
+          <a href="index.html#install">Windows install guide</a>
+          <a href="downloads/Ghost-Surfer-Browser-Windows.zip" download>Download Windows ZIP</a>
+        </details>
+        <section id="preview-settings" class="preview-settings" hidden aria-label="Preview settings">
+          <h2>Preview settings</h2>
+          <p>Appearance choices are stored locally by this page. Clear them any time.</p>
+          <div class="settings-actions">
+            <button type="button" id="theme-toggle">Change accent</button>
+            <button type="button" id="clear-settings">Reset local settings</button>
+          </div>
+          <a href="accessibility.html">Accessibility help</a>
+        </section>
+      </aside>
+
+      <nav class="browser-nav" aria-label="Browser bottom controls">
+        <button type="button" id="nav-back"><span>‹</span>Back</button>
+        <a href="#top"><span>⌂</span>Home</a>
+        <a href="#top" class="center-action" aria-label="Ghost Surfer preview home"><span>👻</span></a>
+        <a href="index.html#download"><span>↓</span>Get</a>
+        <a href="security.html"><span>▣</span>Guard</a>
+      </nav>
+    </main>
+  </body>
+</html>

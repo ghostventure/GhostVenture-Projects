@@ -1,0 +1,2 @@
+# Release bundles are hosted by Firebase Hosting and excluded from the GitHub source repo.
+/public/downloads/*.zip

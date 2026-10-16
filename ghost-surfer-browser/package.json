@@ -1,0 +1,11 @@
+{
+  "name": "ghost-surfer-browser-site",
+  "version": "2026.7.11",
+  "private": true,
+  "description": "Firebase Hosting source for the Ghost Surfer Browser public website and Windows download.",
+  "scripts": {
+    "check": "node scripts/smoke-check.mjs public",
+    "check:live": "node scripts/smoke-check.mjs https://ghost-surfer-browser.web.app",
+    "deploy": "npm run check && firebase deploy --only hosting --project ghost-surfer-browser"
+  }
+}

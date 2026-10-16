@@ -1,0 +1,2 @@
+9de59f30c6074dbd37ab17fa69530dc96b51d1c0ea486aef0b7ec1083f04e5c0  Ghost-Surfer-Browser-Windows.zip
+fe6699dc1b58c5abba19816f8e570ca747fe342797555df07f2c7105e8954ced  Ghost Surfer.exe

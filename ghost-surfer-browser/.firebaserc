@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "ghost-surfer-browser"
+  },
+  "targets": {
+    "ghost-surfer-browser": {
+      "hosting": {
+        "ghost-surfer-browser": [
+          "ghost-surfer-browser"
+        ]
+      }
+    }
+  }
+}

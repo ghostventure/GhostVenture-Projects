@@ -1,5 +1,11 @@
 # OverHead
 
+## Other Project Source
+
+- [Ghost Surfer Browser](ghost-surfer-browser/README.md) — Firebase Hosting source and documentation for `ghost-surfer-browser.web.app`. This is the single Ghost Surfer source directory in this repository; the large Windows release ZIP remains hosted by Firebase and is not duplicated here.
+
+## OverHead
+
 Current packaged release: **0.3.2** for standard desktop and **0.3.4** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
 
 OverHead is a desktop-first admin cleanup framework for small businesses. It focuses on admin-overload pain points that happen after the customer reaches the business:
