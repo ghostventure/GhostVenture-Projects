@@ -40,6 +40,7 @@ function getNextHandler() {
 export const nextApp = onRequest(
   {
     cors: true,
+    invoker: "public",
     memory: "1GiB",
     timeoutSeconds: 60
   },

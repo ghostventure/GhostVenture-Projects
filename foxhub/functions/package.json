@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "scripts": {
-    "deploy": "npx firebase-tools deploy --only functions --project foxhub-superapp"
+    "deploy": "npm --prefix .. run deploy:next"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",
