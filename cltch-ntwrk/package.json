@@ -36,7 +36,8 @@
     "smoke:faq-accessibility": "node scripts/smoke-faq-accessibility.mjs",
     "smoke:matched-gigs-accessibility": "node scripts/smoke-matched-gigs-accessibility.mjs",
     "smoke:gig-budget": "node scripts/smoke-gig-budget.mjs",
-    "smoke:performer-public-profile": "node scripts/smoke-performer-public-profile.mjs"
+    "smoke:performer-public-profile": "node scripts/smoke-performer-public-profile.mjs",
+    "smoke:quick-replies": "node scripts/smoke-quick-replies.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",

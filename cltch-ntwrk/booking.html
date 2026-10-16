@@ -44,10 +44,16 @@
     .message-form textarea { min-height:96px; resize:vertical; background:#0f1721; border:1px solid #2a3d50; color:#f4f7fb; border-radius:12px; padding:12px 14px; font:inherit; }
     .message-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .message-note { font-size:12px; color:#9fb0c1; line-height:1.6; }
+    .quick-reply-tools { display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:8px; align-items:end; margin:10px 0; }
+    .quick-reply-tools label { grid-column:1 / -1; color:#9fb0c1; font-size:12px; }
+    .quick-reply-tools select { min-height:44px; min-width:0; background:#0f1721; border:1px solid #2a3d50; color:#f4f7fb; border-radius:10px; padding:8px; font:inherit; }
+    .quick-reply-status { grid-column:1 / -1; min-height:1.4em; }
     @media (max-width: 640px) {
       header { padding:18px 18px; flex-direction:column; align-items:flex-start; gap:10px; }
       nav a { margin-left:0; margin-right:14px; }
       .title { font-size:26px; }
+      .quick-reply-tools { grid-template-columns:1fr 1fr; }
+      .quick-reply-tools select { grid-column:1 / -1; }
     }
   </style>
   <link rel="stylesheet" href="cltch-boilerplate.css">
@@ -131,9 +137,18 @@
     <section class="card">
       <div class="label">Booking Messages</div>
       <div class="small" id="messageSubtitle">Messages stay tied to this booking and are only for the host and assigned performer.</div>
+      <div class="message-note" style="margin-top:6px;">For faster loading, this thread shows up to the latest 100 messages in chronological order.</div>
       <div class="message-note" style="margin:10px 0 14px;">Trust note: only use the names, booking details, and payout method shown inside CLTCH.NTWRK. Do not trust off-platform payment demands, login requests, or last-minute identity changes made outside the booking thread.</div>
       <div class="message-list" id="messageList">
         <div class="empty">Loading booking messages…</div>
+      </div>
+      <div class="quick-reply-tools" aria-label="Saved message replies">
+        <label for="quickReplySelect">Saved replies</label>
+        <select id="quickReplySelect"><option value="">Select a saved reply</option></select>
+        <button class="btn" type="button" id="insertQuickReplyBtn">Insert</button>
+        <button class="btn" type="button" id="saveQuickReplyBtn">Save typed message</button>
+        <button class="btn" type="button" id="deleteQuickReplyBtn">Delete</button>
+        <div class="message-note quick-reply-status" id="quickReplyStatus" role="status" aria-live="polite">Saved only in this browser for your account. Inserted text is not sent until you press Send Message.</div>
       </div>
       <form class="message-form" id="messageForm">
         <textarea id="messageInput" maxlength="600" placeholder="Send a booking note, arrival update, or event detail."></textarea>
@@ -205,12 +220,13 @@
   <footer style="padding:24px 18px 40px;text-align:center;color:#556272;font-size:12px;">&copy; 2026 CLTCH.NTWRK</footer>
 
   <script type="module">
-    import { doc, getDoc, updateDoc, serverTimestamp, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    import { doc, getDoc, updateDoc, serverTimestamp, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, reload, signOut } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { readUserSummary, recordAuthEvent } from "./app/user-db.js";
+    import { deleteQuickReply, readQuickReplies, saveQuickReply } from "./app/quick-replies.js";
 
     const bookingId = new URL(window.location.href).searchParams.get("id") || "";
     const titleEl = document.getElementById("bookingTitle");
@@ -224,10 +240,56 @@
     const messageInputEl = document.getElementById("messageInput");
     const messageStatusEl = document.getElementById("messageStatus");
     const messageSendBtn = document.getElementById("messageSendBtn");
+    const quickReplySelect = document.getElementById("quickReplySelect");
+    const quickReplyStatus = document.getElementById("quickReplyStatus");
     let stopMessages = null;
     let activeBooking = null;
     let activeSummary = null;
     let activeUser = null;
+
+    function refreshQuickReplies() {
+      const replies = activeUser ? readQuickReplies(activeUser.uid) : [];
+      quickReplySelect.replaceChildren(new Option('Select a saved reply', ''));
+      replies.forEach((reply) => quickReplySelect.add(new Option(reply.name, reply.id)));
+      return replies;
+    }
+
+    document.getElementById('saveQuickReplyBtn').addEventListener('click', () => {
+      if (!activeUser) return;
+      const text = messageInputEl.value.trim();
+      if (!text) { quickReplyStatus.textContent = 'Type a message first, then save it as a reply.'; return; }
+      const name = window.prompt('Name this saved reply (kept only in this browser):');
+      if (!name?.trim()) return;
+      try {
+        const reply = saveQuickReply(activeUser.uid, name, text);
+        refreshQuickReplies();
+        quickReplySelect.value = reply.id;
+        quickReplyStatus.textContent = 'Reply saved for your account in this browser.';
+      } catch (error) {
+        quickReplyStatus.textContent = error?.message || 'Browser storage is unavailable; the reply was not saved.';
+      }
+    });
+
+    document.getElementById('insertQuickReplyBtn').addEventListener('click', () => {
+      const reply = refreshQuickReplies().find((item) => item.id === quickReplySelect.value);
+      if (!reply) { quickReplyStatus.textContent = 'Choose one of your saved replies first.'; return; }
+      const next = [messageInputEl.value.trim(), reply.text].filter(Boolean).join('\n');
+      if (next.length > 600) { quickReplyStatus.textContent = 'This reply would exceed the 600-character message limit. Shorten the draft first.'; return; }
+      messageInputEl.value = next;
+      messageInputEl.focus();
+      quickReplyStatus.textContent = 'Reply inserted into the composer. Review it before sending.';
+    });
+
+    document.getElementById('deleteQuickReplyBtn').addEventListener('click', () => {
+      if (!activeUser || !quickReplySelect.value) { quickReplyStatus.textContent = 'Choose one of your saved replies first.'; return; }
+      try {
+        deleteQuickReply(activeUser.uid, quickReplySelect.value);
+        refreshQuickReplies();
+        quickReplyStatus.textContent = 'Saved reply deleted from this browser.';
+      } catch {
+        quickReplyStatus.textContent = 'Browser storage is unavailable; the reply could not be deleted.';
+      }
+    });
 
     function requiresVerifiedEmail(user) {
       return !!(user && user.providerData && user.providerData.some((provider) => provider?.providerId === "password") && !user.emailVerified);
@@ -315,7 +377,7 @@
         return;
       }
 
-      const q = query(collection(db, "gigs", gig.id, "messages"), orderBy("createdAt", "asc"));
+      const q = query(collection(db, "gigs", gig.id, "messages"), orderBy("createdAt", "desc"), limit(100));
       stopMessages = subscribeWhenVisible(() => onSnapshot(q, (snapshot) => {
         const items = [];
         snapshot.forEach((docSnap) => items.push({ id: docSnap.id, ...docSnap.data() }));
@@ -323,15 +385,20 @@
           messageListEl.innerHTML = `<div class="empty">No messages yet. Use this thread for event details, arrival updates, or quick coordination.</div>`;
           return;
         }
-        messageListEl.innerHTML = items.map((item) => {
+        messageListEl.replaceChildren();
+        items.reverse().forEach((item) => {
           const self = item.senderId === user.uid;
-          return `
-            <div class="message-item ${self ? "self" : ""}">
-              <div class="message-meta">${item.senderRole === "host" ? "Host" : "Performer"}${self ? " • You" : ""} • ${formatStamp(item.createdAt)}</div>
-              <div class="message-text">${item.text || ""}</div>
-            </div>
-          `;
-        }).join("");
+          const card = document.createElement('div');
+          card.className = `message-item ${self ? 'self' : ''}`;
+          const meta = document.createElement('div');
+          meta.className = 'message-meta';
+          meta.textContent = `${item.senderRole === 'host' ? 'Host' : 'Performer'}${self ? ' • You' : ''} • ${formatStamp(item.createdAt)}`;
+          const body = document.createElement('div');
+          body.className = 'message-text';
+          body.textContent = String(item.text || '');
+          card.append(meta, body);
+          messageListEl.append(card);
+        });
       }));
     }
 
@@ -382,6 +449,7 @@
       activeBooking = gig;
       activeSummary = summary;
       activeUser = user;
+      refreshQuickReplies();
       const isHostOwner = gig.hostId === user.uid;
       const isAcceptedPerformer = gig.acceptedBy === user.uid;
       const canView = isHostOwner || isAcceptedPerformer || gig.status === "open";

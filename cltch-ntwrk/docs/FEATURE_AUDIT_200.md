@@ -137,9 +137,9 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 101. Booking messages protected by Firestore rules
 - [ ] 102. Message delivery and read state
 - [ ] 103. Attachment scanning and short-lived links
-- [ ] 104. Booking-scoped message search
+- [x] 104. Booking message history safely renders user content and loads only the latest 100 entries — `booking.html`; `npm run smoke:quick-replies`
 - [ ] 105. Private host team notes
-- [ ] 106. Per-user saved response templates
+- [x] 106. Per-user quick replies stored locally and inserted only after user selection — `booking.html`, `app/quick-replies.js`; `npm run smoke:quick-replies`
 - [ ] 107. Per-channel notification preferences
 - [ ] 108. Quiet hours by account timezone
 - [ ] 109. Email preference center
@@ -265,6 +265,6 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 40.
-- Remaining checklist items: 160.
+- Implemented and verified in this change: 42.
+- Remaining checklist items: 158.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

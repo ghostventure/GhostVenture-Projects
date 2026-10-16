@@ -9,6 +9,9 @@ class MemoryStorage {
 }
 
 const storage = new MemoryStorage();
+const blockedStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+assert.deepEqual(readGigTemplates('host-A', blockedStorage), []);
+assert.throws(() => saveGigTemplate('host-A', 'Blocked', {}, blockedStorage), /blocked/);
 const fields = { venue: 'Blue Room', location: 'Brooklyn, NY', performerType: 'musician', genre: 'Jazz', pay: '$500', skillNeed: 'Trio', notes: 'Load in at 6' };
 const first = saveGigTemplate('host-A', 'Friday jazz', fields, storage);
 assert.deepEqual(readGigTemplates('host-A', storage), [first]);
