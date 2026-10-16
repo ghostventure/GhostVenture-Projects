@@ -1,4 +1,4 @@
-# FoxHub Current Handoff - 2026-10-15
+# FoxHub Current Handoff - 2026-10-16
 
 ## Purpose
 
@@ -15,9 +15,16 @@ To avoid duplicate status drift, keep live URLs, latest deploy verification, and
 - Sign-up help route: `https://foxhub-c984b.web.app/feedback`
 - Management route: `https://foxhub-c984b.web.app/management`
 - Preferred public domain target: `https://foxhub.com`
-- Current hosted mode: Vite static bundle from `dist`
+- Current hosted mode: Next.js served by the `nextApp` Firebase Function with Firebase Hosting rewrites
 - Current auth mode: Firebase-backed Auth/Firestore runtime
-- Latest verified copied Hosting deploy: October 15, 2026 at `22:46:54 GMT`; post-deploy smoke passed at 390px and 1440px.
+- Latest verified deployment: October 16, 2026 CSP fix deployment to `foxhub-c984b`; live route and browser checks are recorded below.
+
+## Sign-in Hydration CSP Fix — October 16, 2026
+
+- Root cause: the static Hosting CSP blocked Next.js inline scripts, so the page rendered without hydration and its click handlers did not run. Firebase Auth was not the cause.
+- Added a per-request nonce CSP in `middleware.js`, removed the conflicting static CSP from `firebase.next.json`, and enabled dynamic rendering in `app/layout.jsx` so Next can attach the nonce. Other security headers and auth checks remain.
+- Deployed successfully to Firebase project `foxhub-c984b`. Browser checks confirmed the home Sign in link opens `/signin`, the sign-up tab responds, and there were no CSP violations or console errors. `/`, `/signin`, `/signin?mode=signup`, `/landing`, a Next static asset, and `/api/health` returned HTTP 200.
+- No real account sign-in was attempted. TTFB varied across requests; browser rendering and hydration timing were not isolated.
 
 ## Source Updates — October 15, 2026
 
@@ -32,7 +39,7 @@ FoxHub is an interactive alpha shell, not a production banking/payment processor
 Currently installed:
 
 - Next.js app/backend foundation
-- Vite static Hosting bundle
+- Vite app source and alternate static build path
 - local fallback persistence
 - optional Firebase-backed runtime
 - native mobile locked mode when Firebase is not configured
@@ -41,7 +48,7 @@ Currently installed:
 - Home starts on the `Workflow queue` main workflow
 - landing page with public footer routes
 - consolidated `/signin` page for member sign-in and sign-up
-- ad-ready canonical, Open Graph, and Twitter preview metadata on the static public entry
+- ad-ready canonical, Open Graph, and Twitter preview metadata on the public entry
 - public `/feedback` sign-up help route
 - chat, circles, wallet, discover, channels, Moments, marketplace, services, tools, and operator surfaces
 - OneID-oriented identity/profile flow

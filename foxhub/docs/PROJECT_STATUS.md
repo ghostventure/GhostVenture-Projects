@@ -1,10 +1,10 @@
 # FoxHub Project Status
 
-Last updated: 2026-10-15
+Last updated: 2026-10-16
 
 ## Current state
 
-FoxHub is currently an interactive FoxHub alpha with a Next.js web/backend foundation and a Vite-built static Hosting bundle.
+FoxHub is an interactive alpha served through Next.js on Firebase Functions with Firebase Hosting rewrites. A Vite static build path remains in the project.
 
 It includes:
 
@@ -14,10 +14,18 @@ It includes:
 - lazy-loaded React app shell
 - lazy-loaded Firebase repository path
 - deployed Firebase Hosting target
+- deployed `nextApp` Firebase Function for the Next.js site and API routes
 - preferred public domain setting for `FoxHub.com`
 - Android debug APK output for direct testing
 
 The project is not production-ready, but it is no longer a static mock.
+
+## 2026-10-16 Next sign-in hydration CSP fix
+
+- Root cause: the static Hosting `script-src 'self'` CSP blocked Next inline scripts and prevented hydration and click handlers; Firebase Auth was not the cause.
+- Added a per-request nonce CSP in root `middleware.js`, removed the conflicting static CSP from `firebase.next.json`, and enabled dynamic rendering in `app/layout.jsx` so Next can attach the nonce. Other security headers and auth checks remain.
+- Deployed successfully to `foxhub-c984b`. Browser checks confirmed home Sign in navigation, a responsive sign-up tab, and no CSP or console errors. `/`, `/signin`, `/signin?mode=signup`, `/landing`, a Next static asset, and `/api/health` returned HTTP 200.
+- Real account authentication was not attempted; browser rendering and hydration timing were not isolated. See `docs/CURRENT_HANDOFF_2026-05-31.md` for scope and verification limits.
 
 ## 2026-10-15 Workspace UX and loading performance
 
@@ -1779,11 +1787,3 @@ Detailed migration note:
 - `docs/MOBILE_TAMPER_RESISTANCE_2026-04-02.md`
 - `docs/SUPERAPP_MECHANICS_2026-04-02.md`
 - `docs/FRONTEND_AUDIT_AND_ACCESS_2026-04-02.md`
-
-## 2026-06-25 GitHub Upload Note
-
-- Uploaded FoxHub to GitHub repository `https://github.com/PlugzTech/AdventureCode-Projects`.
-- Repository subfolder: `foxhub/`.
-- Upload commit: `65920a4 Add FoxHub CLTCH EstateHat and ExcelBolt projects`.
-- The GitHub copy is source-focused. It intentionally excludes local dependencies, build output, Firebase cache, release packages, environment files, local databases, and generated wrapper assets.
-- The GitHub repository is currently public, so do not commit credentials, private user data, local Firebase smoke credentials, or unpublished operational secrets.

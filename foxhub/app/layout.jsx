@@ -1,5 +1,7 @@
 import "../src/styles.css";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_FOXHUB_PUBLIC_URL || "https://foxhub-c984b.web.app"),
   title: "FoxHub - Private circles and trusted local help",
