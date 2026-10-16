@@ -2,8 +2,8 @@
 
 ## Current source state
 
-- Current worktree is on `codex/cltch-map-list` at `b09b452e8fa128799e8cf774acc0edd656bbe46b` (`Add consent-aware Gig Radar map and list view`), based on `ab1c362` (`Improve gig radar alerts and search accessibility`).
-- Relative to `origin/codex/cltch-modernization-20261016`, this branch is 1 commit ahead and 8 commits behind. The histories are divergent; the modernization tip's cumulative diff removes many unrelated features from this branch, so a wholesale merge is unsafe. The map/list feature also exists as a separate commit in that history, but it is not an ancestor of this branch.
+- Current worktree is on `codex/cltch-map-list`; the map/list source commit is `5359fe3d7de3824a5aa02a6b939c78c13d151d08`. The feature was based on `ab1c362` (`Improve gig radar alerts and search accessibility`).
+- At feature publication commit `b09b452e8fa128799e8cf774acc0edd656bbe46b`, the branch was 1 commit ahead and 8 commits behind `origin/codex/cltch-modernization-20261016`. Later commits only update this progress report; the histories remain divergent. The modernization tip's cumulative diff removes many unrelated features from this branch, so a wholesale merge is unsafe. The map/list feature also exists as a separate commit in that history, but it is not an ancestor of this branch.
 - The current commit history includes stable gig paging and match feedback, host venue safety guidance, performer profile and distance guidance, and performer gig preparation checklists. The latest commit adds account-local new-match alerts and more accessible Gig Radar search controls.
 
 ## Map/list delivery
@@ -14,7 +14,7 @@ Commit `b09b452e8fa128799e8cf774acc0edd656bbe46b` adds six feature paths: `app/g
 
 ## Integration and deployment status
 
-- Map/list source commit `5359fe3d7de3824a5aa02a6b939c78c13d151d08` was deployed to Firebase Hosting site `cltch-ntwrk-social` in project `cltch-ntwrk-social`. The pushed branch tip `b09b452e8fa128799e8cf774acc0edd656bbe46b` adds the progress report on top of that deployed source commit.
+- Map/list source commit `5359fe3d7de3824a5aa02a6b939c78c13d151d08` was deployed to Firebase Hosting site `cltch-ntwrk-social` in project `cltch-ntwrk-social`. Commit `b09b452e8fa128799e8cf774acc0edd656bbe46b` added the report, and subsequent commits updated it with deployment and smoke evidence; these report updates are documentation-only relative to the deployed source.
 - Hosting deployment and public HTTP smoke checks passed. This was a Hosting-only deploy; no Functions, Firestore, or other backend deployment is implied. Authenticated user flows and interactive browser behavior remain unverified.
 - Integrate the divergent branch history deliberately before treating it as the modernization branch's release candidate.
 
