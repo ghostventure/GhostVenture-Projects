@@ -1,0 +1,7 @@
+﻿# Ghost Surfer installer scripts
+
+These PowerShell scripts are included in the complete Windows installer ZIP beside a `Ghost Surfer` application payload folder. The source repository folder does not include that compiled payload. For a working installation package, download and extract the full installer ZIP, then run `Install-GhostSurfer.ps1` from the extracted folder.
+
+The installer installs for the current Windows user under `%LOCALAPPDATA%\Programs\Ghost Surfer`, creates a Start Menu shortcut, and opens the app. Use `-DesktopShortcut` to also create a desktop shortcut. To update, close Ghost Surfer and run the installer again. To remove it, run `Uninstall-GhostSurfer.ps1` from the installed app directory. Uninstall removes the program and shortcuts while keeping browser profile data under LocalAppData.
+
+The packaged app does not require a separate Python installation. The Windows operating system and internet connection are required for normal browsing.
