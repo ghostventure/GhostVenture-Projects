@@ -1,0 +1,12 @@
+{
+    "name":  "ghost-surfer",
+    "private":  true,
+    "scripts":  {
+                    "prepare:release-assets":  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-release-assets.ps1",
+                    "deploy":  "npm run prepare:release-assets \u0026\u0026 firebase deploy --only hosting --project ghost-surfer-browser",
+                    "build:desktop":  "py -3 -m PyInstaller --clean -y \"Ghost Surfer.spec\""
+                },
+    "devDependencies":  {
+                            "firebase-tools":  "^15.22.4"
+                        }
+}

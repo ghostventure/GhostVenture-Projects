@@ -1,0 +1,38 @@
+Ghost Surfer Browser
+Release: 2026-10-17
+Package: Ghost-Surfer-Setup-Windows-2026-10-17.zip
+
+2026-10-17
+- Added a per-user Windows installer, Start Menu shortcut, and included uninstaller.
+- Refreshed the GUI with consistent control sizing, spacing, focus states, and clearer labels.
+- Consolidated cookie consent and privacy notices into one non-modal notice panel.
+- Added global cookie policy options: ask per site, allow first-party cookies, or block all cookies.
+- Third-party cookies and sensitive site permissions remain blocked.
+- Improved downloads with progress, cancel, open, and show-folder actions.
+- Added Ctrl+D bookmark and Ctrl+J downloads shortcuts.
+- Kept the previous portable ZIP available for existing users.
+
+Previous release: 2026-08-14
+Package: Ghost-Surfer-Browser-Windows.zip
+
+Previous release contents:
+- Dark Ghost Surfer browser shell
+- Startpage.com default home/search
+- Ghost Guard privacy controls
+- Futuristic 2033-style privacy console UI refresh
+- 12 theme-aware color choices in Ghost Control
+- Per-site cookie approval for each top-level domain
+- Approved sites retain cookies; declined sites stay blocked
+- Immediate Ghost Guard alerts for known trackers and blocked permission attempts
+- Tamper warning if local browser settings are changed outside the app
+- Tor-aware local SOCKS routing check
+- Speed Mode and tab suspension controls
+- Download, bookmark, history, settings, and privacy panels
+- Splash screen
+- Keyboard shortcuts: Ctrl+L, Ctrl+T, Ctrl+W, Ctrl+Shift+T, Ctrl+R, and Escape
+- Secure, upgrading, and local-page Ghost Guard states
+- Confirmed complete data cleanup, including saved cookie choices and Ghost Guard alerts
+- Bottom notification bar for cookie Allow/Deny choices and Ghost Guard privacy alerts
+- Cookie Decisions manager for reviewing and forgetting individual site choices
+- Persistent page zoom controls from 80% to 150%
+- White-sheet ghost vector icon and imagery

@@ -1,4 +1,4 @@
-﻿# Ghost Surfer installer scripts
+# Ghost Surfer installer scripts
 
 These PowerShell scripts are included in the complete Windows installer ZIP beside a `Ghost Surfer` application payload folder. The source repository folder does not include that compiled payload. For a working installation package, download and extract the full installer ZIP, then run `Install-GhostSurfer.ps1` from the extracted folder.
 
