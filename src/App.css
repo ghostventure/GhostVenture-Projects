@@ -1747,6 +1747,29 @@ select:focus {
   gap: 8px;
 }
 
+.update-check-panel {
+  border-color: color-mix(in srgb, var(--accent-dark) 34%, var(--line));
+  background: linear-gradient(135deg, rgba(185, 97, 59, 0.12), rgba(255, 255, 255, 0.78));
+}
+
+.update-auto-check {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.update-auto-check input {
+  accent-color: var(--accent-dark);
+}
+
 .compact-form {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

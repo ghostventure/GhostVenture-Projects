@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>NOTE</key><string>Download the real GoogleService-Info.plist after registering the iOS bundle ID in Firebase. Do not use this example at runtime.</string>
+</dict></plist>

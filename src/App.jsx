@@ -130,6 +130,9 @@ function userFacingError(error, fallback) {
   return message || fallback
 }
 
+const cylinderMode = window.overheadDesktop?.deploymentMode === 'cylinder'
+const applicationName = cylinderMode ? 'OverHead Cylinder' : 'OverHead Desktop'
+
 function App() {
   const [activeSection, setActiveSection] = useState('overview')
   const [activeModule, setActiveModule] = useState('schedule')
@@ -427,7 +430,7 @@ function App() {
       <header className="desktop-chrome">
         <div className="chrome-title">
           <span className="chrome-dot" />
-          <strong>OverHead Desktop</strong>
+          <strong>{applicationName}</strong>
           <span>Local-first office workspace</span>
           <span>Owner-controlled desktop app</span>
         </div>
@@ -840,8 +843,8 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
         <div className="brand lockup">
           <div className="brand-mark" aria-hidden="true">OH</div>
           <div>
-            <strong>OverHead Desktop</strong>
-            <span>Installed Windows application</span>
+            <strong>{applicationName}</strong>
+            <span>{cylinderMode ? 'Windows Server and Windows IoT workspace' : 'Installed Windows application'}</span>
           </div>
         </div>
         <h1>Open the work. Keep it moving.</h1>
@@ -864,7 +867,7 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
           <button className={isHelp ? 'active' : ''} type="button" onClick={() => setAuthMode('help')}>Help</button>
         </div>
         {isPlans ? (
-          <PublicPlans activePlan={activePlan} choosePlan={choosePlan} />
+          cylinderMode ? <CylinderPlanPanel /> : <PublicPlans activePlan={activePlan} choosePlan={choosePlan} />
         ) : isVerify ? (
           <VerificationPanel
             verification={verification}
@@ -879,7 +882,7 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
           <>
         <h2>{isCreate ? 'Create workspace' : isCustomerEnroll ? 'Create customer account' : isCustomer ? 'Customer access' : 'OverHead Team access'}</h2>
         <p>{isCreate
-          ? `Selected plan: ${selectedPlanName(activePlan)}. This creates the shared website and desktop workspace account.`
+          ? cylinderMode ? 'Create the shared account for this Cylinder host. Evaluation and activation details are available under Plans after sign-in.' : `Selected plan: ${selectedPlanName(activePlan)}. This creates the shared website and desktop workspace account.`
           : isCustomer
             ? isCustomerEnroll ? 'Use the workspace code in your OverHead customer invitation to activate your separate customer account.' : 'Use the customer account issued by your service team. Customer access is kept separate from internal office records and controls.'
             : 'For Members, Managers, and Administrators. Your role controls the dashboard tools you can open after sign-in.'}</p>
@@ -2043,7 +2046,36 @@ function LicensesSection({ backendState, refreshBackend, setOperationNotice }) {
   )
 }
 
-function PlansSection({ backendState, activePlan, setActivePlan, draftSession, refreshBackend, setOperationNotice }) {
+function CylinderPlanPanel({ backendState }) {
+  const entitlement = backendState?.entitlements
+  const subscription = entitlement?.subscription
+  const trialEnd = subscription?.trial_ends_at
+  return <section className="panel page-panel" aria-label="Cylinder deployment">
+    <p className="eyebrow">OverHead Cylinder</p>
+    <h2>Your server workspace</h2>
+    <p>Cylinder runs on Windows Server or Windows IoT. Records, documents, and backups stay on this host unless you explicitly export or synchronize supported records.</p>
+    {entitlement && <div className="billing-protection-note" role="status">
+      <strong>{subscription?.payment_status === 'trial' ? 'Evaluation active' : entitlement.activeTier === 'cylinder' ? 'Cylinder access active' : 'Cylinder access needs activation'}</strong>
+      <span>{trialEnd ? `Evaluation ends ${new Date(trialEnd).toLocaleDateString()}. No automatic charge or renewal.` : `Current access: ${entitlement.activePlan?.name || 'Silver'}.`}</span>
+    </div>}
+    <p>Continued Cylinder access is arranged through your deployment agreement. Contact support to arrange activation or discuss billing and cancellation.</p>
+    <a className="ghost-button" href="https://overhead-office.web.app/contact/" target="_blank" rel="noreferrer">Contact deployment support</a>
+    {backendState?.health && <div className="backend-health">
+      <strong>Host and storage</strong>
+      <span>Host: {backendState.health.deviceName}</span>
+      <span>Local data: {backendState.health.dataRoot}</span>
+      <span>Customers: {entitlement?.usage?.customers ?? 0} / {entitlement?.activePlan?.maxCustomers ?? '—'}</span>
+      <span>Users: {entitlement?.usage?.users ?? 0} / {entitlement?.activePlan?.maxUsers ?? '—'}</span>
+      <span>Updates: Cylinder channel</span>
+    </div>}
+  </section>
+}
+
+function PlansSection(props) {
+  return cylinderMode ? <CylinderPlanPanel backendState={props.backendState} /> : <DesktopPlansSection {...props} />
+}
+
+function DesktopPlansSection({ backendState, activePlan, setActivePlan, draftSession, refreshBackend, setOperationNotice }) {
   const savedBilling = backendState.savedFormMemory?.billing || {}
   const [billing, setBilling] = useState({
     legalName: savedBilling.legalName || '',
@@ -2104,7 +2136,7 @@ function PlansSection({ backendState, activePlan, setActivePlan, draftSession, r
   }
 
   async function startFreeGoldTrial() {
-    const confirmed = window.confirm('Start your one free 30-day Gold trial? No card is required and no charge will be made.')
+    const confirmed = window.confirm('Start your one free 90-day Gold trial? No card is required and no charge will be made.')
     if (!confirmed) return
     try {
       setBillingError('')
@@ -2188,7 +2220,7 @@ function PlansSection({ backendState, activePlan, setActivePlan, draftSession, r
         <span>Before a charge is started, OverHead checks whether this workspace already has the selected plan and blocks duplicate checkout attempts.</span>
       </div>
       <div className="billing-protection-note">
-        <strong>Free 30-day Gold trial</strong>
+        <strong>Free 90-day Gold trial</strong>
         <span>One per workspace. No card, no charge, and every Gold feature is available until the trial ends.</span>
       </div>
       <div className="billing-form">
@@ -2222,13 +2254,13 @@ function PlansSection({ backendState, activePlan, setActivePlan, draftSession, r
           I have reviewed and accept the Free Trial Policy before starting a free trial.
         </label>
         <button className="ghost-button" type="button" disabled={billingBusy} onClick={saveBillingAndTier}>{billingBusy ? 'Saving billing profile…' : 'Save Billing Profile'}</button>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={startFreeGoldTrial}>{billingBusy ? 'Starting trial…' : 'Start Free 30-Day Gold Trial'}</button>
+        <button className="ghost-button" type="button" disabled={billingBusy} onClick={startFreeGoldTrial}>{billingBusy ? 'Starting trial…' : 'Start Free 90-Day Gold Trial'}</button>
         <button className="primary-action" type="button" disabled={billingBusy || !billing.billingPolicyAcknowledged} onClick={openEmbeddedCheckout}>{billingBusy ? 'Preparing secure checkout…' : 'Continue To Secure Checkout'}</button>
         <button className="ghost-button" type="button" disabled={billingBusy} onClick={createReceipt}>Create Full Receipt PDF</button>
         <button className="ghost-button" type="button" disabled={billingBusy} onClick={refreshBillingActivity}>Refresh Billing Activity</button>
         <button className="ghost-button" type="button" disabled={billingBusy} onClick={cancelWithUnusedTimeRefund}>{billingBusy ? 'Processing cancellation…' : 'Cancel Now & Refund Unused Time'}</button>
       </div>
-      <p className="form-hint">Free trial: one no-card, 30-day Gold-equivalent trial per workspace when secure billing services are enabled. Accept the billing policy above to enable secure checkout. Canceling a paid plan ends access immediately; the intended live flow calculates eligible unused time for a refund to the original payment method. Trial periods have no payment to refund.</p>
+      <p className="form-hint">Free trial: one no-card, 90-day Gold-equivalent trial per workspace when secure billing services are enabled. Accept the billing policy above to enable secure checkout. Canceling a paid plan ends access immediately; the intended live flow calculates eligible unused time for a refund to the original payment method. Trial periods have no payment to refund.</p>
       {billingActivity.length > 0 && <div className="backend-health"><strong>Billing activity</strong>{billingActivity.map(([title, at, detail]) => <span key={`${title}-${at}`}>{title}: {new Date(at).toLocaleString()} {detail ? `— ${detail}` : ''}</span>)}</div>}
       <p className="plan-note">Active: {backendState.entitlements?.activePlan?.name || 'Silver'} / {backendState.entitlements?.activePlan?.level || 'Basic'}</p>
       {billingError && <p className="form-error" role="alert">{billingError}</p>}

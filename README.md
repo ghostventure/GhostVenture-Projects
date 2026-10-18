@@ -1,6 +1,12 @@
 # OverHead
 
-Current packaged release: **0.3.2** for standard desktop and **0.3.4** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
+Current packaged release: **0.3.10** for standard desktop and **0.3.10** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
+
+For the current website/Desktop account process, email verification gate, password recovery, and operator acceptance checklist, see `docs/authentication-workflow.md`.
+
+For the owner-only VS Code / Code - OSS hot-fix handoff, see `docs/developer-editor-workflow.md`.
+
+For the verified customer feedback channel and review location, see `docs/feedback-workflow.md`.
 
 OverHead is a desktop-first admin cleanup framework for small businesses. It focuses on admin-overload pain points that happen after the customer reaches the business:
 
@@ -15,14 +21,16 @@ The current Windows build includes a local desktop sign-in/onboarding surface, l
 
 ## Current releases
 
-- **OverHead Desktop 0.3.2:** standard Windows desktop release with customer/staff access lanes, role controls, live operational records, locally stored customer documents, and Firebase-hosted downloads/updates.
-- **OverHead Cylinder 0.3.4:** separate deployment for Windows Server and Windows IoT only. It uses its own application identity, local data directory, updater channel, and Cylinder tier. It will exit on standard Windows editions. Each server workspace gets one 30-day, no-card evaluation; continued paid use requires a separate commercial activation rather than the standard desktop checkout.
+- **OverHead Desktop 0.3.10:** standard Windows desktop release with customer/staff access lanes, role controls, live operational records, locally stored customer documents, and Firebase-hosted downloads/updates.
+- **OverHead Cylinder 0.3.10:** separate deployment for Windows Server and Windows IoT only. It uses its own application identity, local data directory, updater channel, and Cylinder tier. It will exit on standard Windows editions. Each server workspace gets one 30-day, no-card evaluation; continued paid use requires a separate commercial activation rather than the standard desktop checkout.
 
 See `docs/cylinder-deployment.md` for server/IoT deployment, updates, and compatibility details.
 
 ## Shared browser and desktop access
 
 The signed-in website and OverHead Desktop use the same Firebase account, workspace role, subscription entitlement, and member license. The website account page reflects the shared plan and, for administrators, provides the same Stripe billing service used by the EXE. Stripe secrets remain in Firebase Secret Manager and are never included in the Windows package or website files.
+
+New and invited users must verify their email before protected workspace data opens. The website can persist a session only when the user opts in on a private device; the Desktop checks the same Firebase verification state before starting its local operating session.
 
 ## 2026 Desktop GUI Direction
 
@@ -195,15 +203,11 @@ OverHead now includes the first installed-app backend layer:
 - trusted IPC sender checks
 - HTTPS allowlist for external links
 
-Still planned:
+Release prerequisite still outside the product source:
 
-- encrypted profile vault
-- offline job queue
-- retry and dead-letter queue
-- legal acknowledgements
-- data export and deletion tools
-- restore workflow
-- signed release certificate and hosted update feed
+- trusted Windows code-signing certificate and signing service
+
+Implemented local reliability controls include encrypted profile storage where the OS secure store is available, workflow retry with dead-letter recovery, legal acknowledgements, export and controlled deletion workflows, backup-and-restore, and hosted updater feeds. Restore and deletion both create a safety backup before changing local records.
 
 The practical goal is not magic uptime. The goal is that normal app failure should degrade into recoverable local state, queued work, and visible owner action items.
 

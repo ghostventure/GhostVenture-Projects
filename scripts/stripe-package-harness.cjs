@@ -1,0 +1,5 @@
+const { app } = require('electron')
+const path = require('node:path')
+if (!process.env.OVERHEAD_SMOKE_DATA) throw new Error('Isolated smoke data path required')
+app.setPath('appData', process.env.OVERHEAD_SMOKE_DATA)
+require(path.resolve(__dirname, '../release-stripe-0.3.12/win-unpacked/resources/app.asar/electron-main.cjs'))

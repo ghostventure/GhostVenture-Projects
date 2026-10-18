@@ -1,0 +1,256 @@
+{
+  "pages": 27,
+  "words": 7708,
+  "clickable_links": 91,
+  "formula_outputs_checked": 2484,
+  "formula_cache_count": 2443,
+  "layout_overflows": 0,
+  "pdf_text_bounds": "PASS",
+  "financial_reconciliation": "PASS",
+  "workbook_vs_independent_model": "PASS",
+  "page_details": [
+    {
+      "page": 1,
+      "words": 80,
+      "links": 1,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 2,
+      "words": 255,
+      "links": 25,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 3,
+      "words": 323,
+      "links": 4,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 4,
+      "words": 310,
+      "links": 3,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 5,
+      "words": 360,
+      "links": 2,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 6,
+      "words": 116,
+      "links": 2,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 7,
+      "words": 314,
+      "links": 4,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 8,
+      "words": 282,
+      "links": 2,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 9,
+      "words": 327,
+      "links": 2,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 10,
+      "words": 320,
+      "links": 4,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 11,
+      "words": 337,
+      "links": 3,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 12,
+      "words": 298,
+      "links": 1,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 13,
+      "words": 345,
+      "links": 3,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 14,
+      "words": 269,
+      "links": 3,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 15,
+      "words": 310,
+      "links": 1,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 16,
+      "words": 343,
+      "links": 2,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 17,
+      "words": 360,
+      "links": 4,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 18,
+      "words": 235,
+      "links": 1,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 19,
+      "words": 274,
+      "links": 1,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 20,
+      "words": 235,
+      "links": 1,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 21,
+      "words": 308,
+      "links": 1,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 22,
+      "words": 291,
+      "links": 1,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 23,
+      "words": 339,
+      "links": 5,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 24,
+      "words": 314,
+      "links": 2,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 25,
+      "words": 240,
+      "links": 5,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 26,
+      "words": 232,
+      "links": 5,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    },
+    {
+      "page": 27,
+      "words": 291,
+      "links": 3,
+      "dimensions": [
+        612.0,
+        792.0
+      ]
+    }
+  ]
+}

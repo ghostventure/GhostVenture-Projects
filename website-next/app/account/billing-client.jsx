@@ -1,34 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { cylinderPageHref } from "../data";
-import { firebaseAuth, firebaseDb } from "../firebase-client";
+import { firebaseDb } from "../firebase-client";
 
 const messageFor = (error, fallback) => error?.message || fallback;
 
-export default function BillingClient() {
-  const [profile, setProfile] = useState(null);
+export default function BillingClient({ profile }) {
   const [billing, setBilling] = useState(null);
   const [notice, setNotice] = useState("");
-
-  useEffect(
-    () =>
-      onAuthStateChanged(firebaseAuth, async (user) => {
-        if (!user) {
-          setProfile(null);
-          return;
-        }
-        try {
-          const snapshot = await getDoc(doc(firebaseDb, "profiles", user.uid));
-          setProfile(snapshot.exists() ? snapshot.data() : null);
-        } catch (error) {
-          setNotice(messageFor(error, "Billing access could not be loaded."));
-        }
-      }),
-    [],
-  );
 
   useEffect(() => {
     if (!profile?.workspace_id) return undefined;

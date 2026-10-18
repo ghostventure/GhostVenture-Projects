@@ -1,16 +1,19 @@
 export const navItems = [
   { href: '/about/', label: 'About' },
+  { href: '/ios/', label: 'iPhone app' },
   { href: '/cylinder/', label: 'Cylinder' },
   { href: '/careers/', label: 'Careers' },
   { href: '/dashboard/', label: 'Workspace' },
   { href: '/investors/', label: 'Investors' },
   { href: '/faq/', label: 'FAQ' },
   { href: '/support/', label: 'Support' },
+  { href: '/feedback/', label: 'Feedback' },
   { href: '/contact/', label: 'Contact' },
 ]
 
-export const downloadHref = '/downloads/OverHead-Desktop-0.3.5-win-x64.zip'
-export const cylinderDownloadHref = '/downloads/OverHead-Cylinder-0.3.4-win-x64.zip'
+export const downloadHref = '/downloads/OverHead-Desktop-0.3.11-win-x64.zip'
+export const cylinderDownloadHref = '/downloads/OverHead-Cylinder-0.3.10-win-x64.zip'
+export const iosSourceHref = '/downloads/OverHead-iOS-SwiftUI-source.zip'
 export const checksumHref = '/downloads/SHA256SUMS.txt'
 export const cylinderChecksumHref = '/downloads/CYLINDER-SHA256SUMS.txt'
 export const cylinderPageHref = '/cylinder/'

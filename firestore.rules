@@ -2,8 +2,12 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
+    function authenticated() {
       return request.auth != null;
+    }
+
+    function signedIn() {
+      return authenticated() && request.auth.token.email_verified == true;
     }
 
     function selfProfile() {
@@ -55,8 +59,26 @@ service cloud.firestore {
         && request.resource.data.business_name is string;
     }
 
+    match /product_feedback/{feedbackId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['feedback_type', 'rating', 'message', 'follow_up', 'created_by', 'created_by_email', 'created_at', 'status'])
+        && request.resource.data.feedback_type in ['Workflow', 'Bug', 'Feature request', 'Onboarding', 'Other']
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 10
+        && request.resource.data.message.size() <= 4000
+        && request.resource.data.follow_up is bool
+        && request.resource.data.created_by == request.auth.uid
+        && request.resource.data.created_by_email == request.auth.token.email
+        && request.resource.data.created_at == request.time
+        && request.resource.data.status == 'New';
+      allow get, list, update, delete: if false;
+    }
+
     match /profiles/{userId} {
-      allow get: if signedIn() && (request.auth.uid == userId || isManager(resource.data.workspace_id));
+      allow get: if authenticated() && (request.auth.uid == userId || isManager(resource.data.workspace_id));
       allow list: if signedIn() && isManager(resource.data.workspace_id);
       allow create: if createsWorkspaceAdministrator(userId) || createsInvitedMember(userId);
       allow update: if (isAdministrator(resource.data.workspace_id)
@@ -75,7 +97,7 @@ service cloud.firestore {
     }
 
     match /workspaces/{workspaceId} {
-      allow create: if signedIn()
+      allow create: if authenticated()
         && workspaceId == request.auth.uid
         && request.resource.data.owner_uid == request.auth.uid;
       allow get: if isMember(workspaceId);
@@ -84,7 +106,7 @@ service cloud.firestore {
       allow delete: if false;
 
       match /invites/{email} {
-        allow get: if signedIn() && request.auth.token.email == email;
+        allow get: if authenticated() && request.auth.token.email == email;
         allow list: if isAdministrator(workspaceId);
         allow create, update, delete: if isAdministrator(workspaceId)
           && (request.method == 'delete' || request.resource.data.email == email);

@@ -6,7 +6,7 @@ process.env.OVERHEAD_DEPLOYMENT_MODE = 'cylinder'
 function isSupportedServerPlatform() {
   if (process.platform !== 'win32') return false
   try {
-    const output = execFileSync('reg.exe', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion', '/v', 'ProductName'], { encoding: 'utf8', windowsHide: true })
+    const output = execFileSync('reg.exe', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion', '/v', 'ProductName'], { encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 16384 })
     return /Windows Server|\bIoT\b/i.test(output)
   } catch {
     return false

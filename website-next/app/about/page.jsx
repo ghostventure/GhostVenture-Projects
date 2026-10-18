@@ -1,5 +1,7 @@
 import { CardGrid, CTA, PageHero, ProductProof, SiteShell } from '../components'
 import { businessFoundation, businessPrinciples, businessReferences, businessScope } from '../business-foundation'
+import styles from './business-plan.module.css'
+import ExecutiveSummaryFeature from '../executive-summary/feature'
 
 const operatingAreas = [
   { kicker: 'Customer work', title: 'Keep the next customer step visible.', body: 'Keep notes, service details, and follow-ups where the desk can use them.' },
@@ -15,6 +17,7 @@ export default function AboutPage() {
           <p>{businessFoundation.promise}</p>
         </PageHero>
 
+        <ExecutiveSummaryFeature />
         <section className="page-body split">
           <div>
             <p className="eyebrow">Why It Exists</p>
@@ -34,6 +37,23 @@ export default function AboutPage() {
           <p className="eyebrow">Our mission</p>
           <h2>{businessFoundation.mission}</h2>
           <p className="section-copy">{businessFoundation.boundary}</p>
+        </section>
+
+        <section id="business-plan" className={`section ${styles.plan}`} aria-labelledby="business-plan-title">
+          <a className={styles.cover} href="/downloads/Overhead-LLC-Business-Plan.pdf" target="_blank" rel="noopener noreferrer" aria-label="Open the Overhead LLC business plan PDF in a new tab">
+            <img src="/assets/overhead-business-plan-cover.webp" alt="Cover of the Overhead LLC business plan" width="408" height="528" loading="lazy" />
+          </a>
+          <div className={styles.content}>
+            <p className="eyebrow">Our business plan</p>
+            <h2 id="business-plan-title">A closer look at Overhead LLC.</h2>
+            <p className={styles.description}>Explore the business behind OverHead: our market, product direction, operating strategy, and plans for sustainable growth.</p>
+            <p className={styles.details}>September 2026 <span aria-hidden="true">·</span> 27 pages <span aria-hidden="true">·</span> PDF</p>
+            <div className={styles.actions}>
+              <a className="primary" href="/downloads/Overhead-LLC-Business-Plan.pdf" target="_blank" rel="noopener noreferrer">Read the business plan <span className={styles.srOnly}>(PDF, opens in a new tab)</span></a>
+              <a className={styles.download} href="/downloads/Overhead-LLC-Business-Plan.pdf" download="Overhead-LLC-Business-Plan.pdf">Download PDF</a>
+            </div>
+            <p className={styles.note}>Financial projections are clearly labeled planning assumptions, alongside the research and product evidence that inform the plan.</p>
+          </div>
         </section>
 
         <section className="section">

@@ -56,6 +56,22 @@ function timestampIso(value) {
   return value?.toDate?.().toISOString?.() || ''
 }
 async function expireTrialIfNeeded(workspaceId, billingData) {
+  // Extend legacy free trials from their original start, never restart a trial.
+  if (billingData?.billing_provider === 'overhead_free_trial' && ['trialing', 'trial_expired'].includes(billingData.status)) {
+    const billing = getFirestore().doc(`workspaces/${workspaceId}/billing/current`)
+    billingData = await getFirestore().runTransaction(async tx => {
+      const stored = (await tx.get(billing)).data() || {}
+      const start = stored.trial_started_at?.toDate?.()
+      const end = stored.trial_ends_at?.toDate?.()
+      if (stored.billing_provider !== 'overhead_free_trial' || !['trialing', 'trial_expired'].includes(stored.status) || !start || !end) return stored
+      const extended = new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000)
+      if (end.getTime() >= extended.getTime()) return stored
+      const status = extended.getTime() > Date.now() ? 'trialing' : 'trial_expired'
+      tx.set(billing, { trial_ends_at: extended, status, trial_duration_days: 90, updated_at: FieldValue.serverTimestamp() }, { merge: true })
+      return { ...stored, trial_ends_at: { toDate: () => extended }, status }
+    })
+    await syncWorkspaceLicenses(workspaceId)
+  }
   const endsAt = billingData?.trial_ends_at?.toDate?.() || null
   if (billingData?.status !== 'trialing' || !endsAt || endsAt.getTime() > Date.now()) return billingData
   const billing = getFirestore().doc(`workspaces/${workspaceId}/billing/current`)
@@ -155,11 +171,7 @@ async function applyStripeEvent(event) {
 // The desktop app and the Firebase-hosted browser workspace use this one
 // service. Keep the allow-list narrow: credentials and payment actions must
 // never be callable from an arbitrary website.
-exports.billingApi = onRequest({
-  region: 'us-central1',
-  secrets: [stripeSecretKey, stripeWebhookSecret],
-  cors: ['https://overhead-office.web.app', 'https://overhead-office.firebaseapp.com'],
-}, async (req, res) => {
+async function handleBillingRequest(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'POST required' })
   if (req.path === '/webhook') {
     let event
@@ -196,11 +208,10 @@ exports.billingApi = onRequest({
       ].filter(([, at]) => at)
       return json(res, 200, { events, currentStatus: current.status || 'inactive', tier: current.tier || 'silver' })
     }
-    const stripe = new Stripe(stripeSecretKey.value())
     if (body.action === 'start_free_gold_trial') {
       if (body.acceptTrialPolicy !== true) return json(res, 400, { error: 'Acknowledge the Free Trial Policy before starting a trial.' })
       const startsAt = new Date()
-      const endsAt = new Date(startsAt.getTime() + 30 * 24 * 60 * 60 * 1000)
+      const endsAt = new Date(startsAt.getTime() + 90 * 24 * 60 * 60 * 1000)
       await db.runTransaction(async tx => {
         const current = (await tx.get(billing)).data() || {}
         if (current.trial_used) throw new Error('This workspace has already used its one free trial.')
@@ -211,6 +222,7 @@ exports.billingApi = onRequest({
         status: 'trialing',
         billing_provider: 'overhead_free_trial',
         trial_used: true,
+        trial_duration_days: 90,
         trial_policy_accepted_at: FieldValue.serverTimestamp(),
         trial_started_at: startsAt,
         trial_ends_at: endsAt,
@@ -220,8 +232,9 @@ exports.billingApi = onRequest({
         }, { merge: true })
       })
       await syncWorkspaceLicenses(profile.workspace_id, 'gold', 'Trial', '')
-      return json(res, 200, { trialStarted: true, tier: 'gold', status: 'trialing', trialEndsAt: endsAt.toISOString(), message: 'Your free 30-day Gold trial is active. No card was charged.' })
+      return json(res, 200, { trialStarted: true, tier: 'gold', status: 'trialing', trialEndsAt: endsAt.toISOString(), message: 'Your free 90-day Gold trial is active. No card was charged.' })
     }
+    const stripe = new Stripe(stripeSecretKey.value())
     if (body.action === 'checkout') {
       const tier = String(body.tier || '').toLowerCase()
       if (!prices[tier]) return json(res, 400, { error: 'Choose Silver, Gold, or Black.' })
@@ -334,6 +347,14 @@ exports.billingApi = onRequest({
     }
     return json(res, 400, { error: 'Unknown billing action.' })
   } catch (error) { return json(res, 403, { error: error.message || 'Billing request denied.' }) }
+}
+
+const accountCors = ['https://overhead-office.web.app', 'https://overhead-office.firebaseapp.com']
+exports.billingApi = onRequest({ region: 'us-central1', secrets: [stripeSecretKey, stripeWebhookSecret], cors: accountCors }, handleBillingRequest)
+// No payment secrets are needed to start a no-card trial or read its status.
+exports.trialApi = onRequest({ region: 'us-central1', cors: accountCors }, (req, res) => {
+  if (req.path === '/webhook' || !['start_free_gold_trial', 'entitlements', 'billing_activity'].includes(req.body?.action)) return json(res, 400, { error: 'Unknown trial action.' })
+  return handleBillingRequest(req, res)
 })
 
 exports.expireTrials = onSchedule({ region: 'us-central1', schedule: 'every 1 hours', timeZone: 'Etc/UTC' }, async () => {

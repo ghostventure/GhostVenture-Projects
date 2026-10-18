@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import ExecutiveSummaryFeature from '../executive-summary/feature'
 import { CTA, PageHero, SiteShell } from '../components'
 import { businessFoundation } from '../business-foundation'
 import { investorBrochureHref } from '../data'
@@ -43,6 +44,7 @@ export default function InvestorsPage() {
       <div className="investor-hero-actions"><a className="primary" href="#investment-case">Review the investment case</a><Link className="text-link" href={investorBrochureHref}>Download the investor brief</Link></div>
     </PageHero>
 
+    <ExecutiveSummaryFeature />
     <section id="investment-case" className="section investor-snapshot" aria-label="OverHead investment snapshot">
       {snapshot.map(([label, value, detail]) => <article key={label}><span>{label}</span><strong>{value}</strong><p>{detail}</p></article>)}
     </section>

@@ -368,11 +368,13 @@ async function firebaseRequest(url, options = {}) {
 }
 
 async function billingApiRequest(action, payload = {}) {
+  if (isCylinderDeployment()) throw new Error('Cylinder subscriptions are managed through your deployment agreement. Standard desktop billing is unavailable in Cylinder.')
   requireRole(['Owner'], 'billing')
   if (!activeSession?.firebaseIdToken) {
     throw new Error('Sign out and sign back in with your shared OverHead account before opening billing.')
   }
-  const response = await fetch(firebaseConfig.billingApiUrl, {
+  const endpoint = ['start_free_gold_trial', 'entitlements', 'billing_activity'].includes(action) ? firebaseConfig.billingApiUrl.replace(/billingApi$/, 'trialApi') : firebaseConfig.billingApiUrl
+  const response = await fetch(endpoint, {
     signal: AbortSignal.timeout(20000),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeSession.firebaseIdToken}` },
@@ -635,15 +637,19 @@ async function registerSharedProfile(payload) {
   })
   const createdAt = now()
   try {
-    await writeFirestoreDocument(`workspaces/${session.localId}`, {
-      owner_uid: session.localId, business_name: profile.businessName, created_at: createdAt, updated_at: createdAt,
-    }, session.idToken)
     const sharedProfile = {
       uid: session.localId, owner_name: profile.ownerName, business_name: profile.businessName, email,
       workspace_id: session.localId, role: 'Administrator', status: 'Active', email_verified: false,
       terms_accepted_at: createdAt, last_sign_in: createdAt, created_at: createdAt, updated_at: createdAt,
     }
-    await writeFirestoreDocument(`profiles/${session.localId}`, sharedProfile, session.idToken)
+    const documentsRoot = `projects/${firebaseConfig.projectId}/databases/(default)/documents`
+    await firebaseRequest(`https://firestore.googleapis.com/v1/${documentsRoot}:commit`, {
+      method: 'POST', headers: firebaseHeaders(session.idToken),
+      body: JSON.stringify({ writes: [
+        { update: { name: `${documentsRoot}/workspaces/${session.localId}`, fields: firestoreFields({ owner_uid: session.localId, business_name: profile.businessName, created_at: createdAt, updated_at: createdAt }) }, currentDocument: { exists: false } },
+        { update: { name: `${documentsRoot}/profiles/${session.localId}`, fields: firestoreFields(sharedProfile) }, currentDocument: { exists: false } },
+      ] }),
+    })
     await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseConfig.apiKey}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ requestType: 'VERIFY_EMAIL', idToken: session.idToken }),
@@ -796,30 +802,32 @@ function readState() {
   if (fs.existsSync(dbPath)) {
     try {
       const encrypted = fs.readFileSync(dbPath, 'utf8')
-      return { ...defaultState(), ...JSON.parse(decryptStore(encrypted)) }
-    } catch {
-      const corruptPath = `${dbPath}.corrupt-${Date.now()}`
-      fs.copyFileSync(dbPath, corruptPath)
-      return defaultState()
+      const parsed = JSON.parse(decryptStore(encrypted))
+      if (!validRestoreState(parsed)) throw new Error('The saved data structure is invalid.')
+      return { ...defaultState(), ...parsed }
+    } catch (error) {
+      throw new Error(`Your saved OverHead information could not be opened. The original file has been preserved at ${dbPath}. Restore a backup or contact support. ${error.message}`)
     }
   }
   if (!fs.existsSync(legacyDbPath)) return defaultState()
   try {
-    const migrated = { ...defaultState(), ...JSON.parse(fs.readFileSync(legacyDbPath, 'utf8')) }
-    fs.renameSync(legacyDbPath, `${legacyDbPath}.migrated-${Date.now()}`)
+    const parsed = JSON.parse(fs.readFileSync(legacyDbPath, 'utf8'))
+    if (!validRestoreState(parsed)) throw new Error('The saved data structure is invalid.')
+    const migrated = { ...defaultState(), ...parsed }
+    // Keep the source until the secure store is successfully written.
     return migrated
-  } catch {
-    const corruptPath = `${legacyDbPath}.corrupt-${Date.now()}`
-    fs.copyFileSync(legacyDbPath, corruptPath)
-    return defaultState()
+  } catch (error) {
+    throw new Error(`Your saved OverHead information could not be migrated. The original file has been preserved at ${legacyDbPath}. ${error.message}`)
   }
 }
 
 function persist() {
   state.updatedAt = now()
   const tmpPath = `${dbPath}.tmp`
-  fs.writeFileSync(tmpPath, encryptStore(JSON.stringify(state, null, 2)), 'utf8')
+  fs.writeFileSync(tmpPath, encryptStore(JSON.stringify(state, null, 2)), { encoding: 'utf8', flush: true })
+  if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, `${dbPath}.bak`)
   fs.renameSync(tmpPath, dbPath)
+  if (fs.existsSync(legacyDbPath)) fs.renameSync(legacyDbPath, `${legacyDbPath}.migrated-${Date.now()}`)
 }
 
 function encryptStore(plainText) {
@@ -894,7 +902,7 @@ function seed() {
     ['Data Responsibility Disclaimer', 'Draft included', 'OverHead is responsible for the functionality of the program. The customer is responsible for backups, user-entered records, data decisions, data loss, and data manipulation performed by authorized users or outside parties.'],
     ['Support Policy', 'Draft included', 'Support exports can include diagnostics, app version, profile status, and recent audit entries.'],
     ['Subscription Billing & Authorization Policy', 'Draft - legal review required', 'Paid plans renew on the billing interval shown at checkout until canceled. Owners must review plan, price, billing interval, and recurring authorization before checkout. Stripe is the authoritative payment record.'],
-    ['Free Trial Policy', 'Draft - legal review required', 'One 30-day, no-card Gold-equivalent trial is available per workspace. It ends automatically, is not transferable or extendable, and may not be recreated through additional accounts or workspaces.'],
+    ['Free Trial Policy', 'Draft - legal review required', 'One 90-day, no-card Gold-equivalent trial is available per workspace. It ends automatically, is not transferable or extendable, and may not be recreated through additional accounts or workspaces.'],
     ['Cancellation & Prorated Refund Policy', 'Draft - legal review required', 'Eligible unused time in the current paid period is refunded proportionally to the original payment method after immediate cancellation. Trials, fully used periods, unpaid amounts, and ineligible requests are not refundable.'],
     ['Workspace License & Access Policy', 'Draft - legal review required', 'Licenses are automatically assigned to active workspace members, are not transferable, and may be suspended for trial expiry, cancellation, nonpayment, or misuse.'],
   ].forEach(([title, status, body]) => {
@@ -1335,7 +1343,7 @@ function currentSubscription() {
   const user = state.userProfiles.find((item) => item.email === email)
   const managerEmail = user?.manager_email || email
   const usable = (item) => ['paid', 'trial'].includes(item.payment_status)
-    && !(item.payment_status === 'trial' && item.trial_ends_at && Date.parse(item.trial_ends_at) <= Date.now())
+    && (item.payment_status !== 'trial' || (Number.isFinite(Date.parse(item.trial_ends_at)) && Date.parse(item.trial_ends_at) > Date.now()))
   return state.subscriptions.find((item) => item.manager_email === email && usable(item))
     || state.subscriptions.find((item) => item.manager_email === managerEmail && usable(item))
     || null
@@ -3167,6 +3175,7 @@ function getHealth() {
       databaseExists: Boolean(dbPath && fs.existsSync(dbPath)),
       encryptedAtRest: Boolean(dbPath && fs.existsSync(dbPath) && fs.readFileSync(dbPath, 'utf8').startsWith('safeStorage:v1:')),
       locked: true,
+      deploymentMode: isCylinderDeployment() ? 'cylinder' : 'desktop',
       deviceName: os.hostname(),
     }
   }

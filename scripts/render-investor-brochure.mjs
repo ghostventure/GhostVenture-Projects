@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const root = resolve(import.meta.dirname, '..')
-const source = pathToFileURL(resolve(root, 'website-next', 'investor-brochure.html')).href
+const source = pathToFileURL(resolve(root, 'website-next', 'brochures', 'investor.html')).href
 const output = resolve(root, 'website-next', 'public', 'downloads', 'OverHead-Investor-Brochure.pdf')
 
 const browser = await chromium.launch({
@@ -13,7 +13,7 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 1275, height: 1650 }, deviceScaleFactor: 1 })
   await page.goto(source, { waitUntil: 'networkidle' })
-  await page.pdf({ path: output, format: 'Letter', printBackground: true, margin: { top: '0', right: '0', bottom: '0', left: '0' } })
+  await page.pdf({ path: output, preferCSSPageSize: true, printBackground: true, tagged: true, outline: true })
   console.log(output)
 } finally {
   await browser.close()

@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-13",
+  "company_name": "Overhead LLC",
+  "dba": "Overhead LLC",
+  "name_source": "Owner supplied",
+  "purpose": "General purpose",
+  "product_version": "0.3.12",
+  "public_checks": {
+    "homepage": 200,
+    "user_guide": 200,
+    "investor_page": 200,
+    "desktop_0.3.12_zip": 200,
+    "configured_billing_endpoint": 404
+  },
+  "installer_signature": "NotSigned",
+  "live_payment_tested": false,
+  "historical_financials_supplied": false,
+  "existing_customer_count_verified": false,
+  "page_count": 27
+}

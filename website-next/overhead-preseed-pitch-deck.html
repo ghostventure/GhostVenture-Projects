@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OverHead | Pre-Seed Pitch Deck</title>
+  <style>
+    :root { --ink:#eef7fb; --muted:#a9bbc7; --navy:#07111a; --slate:#0f202c; --line:#27404f; --aqua:#52e0d0; --blue:#5299ff; --paper:#f6fafc; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; background:#111a21; color:var(--ink); font-family:Inter, Aptos, Arial, sans-serif; }
+    .slide { width:13.333in; height:7.5in; position:relative; overflow:hidden; padding:.62in .72in; page-break-after:always; background:linear-gradient(135deg, var(--navy), var(--slate)); }
+    .slide.light { color:#102332; background:var(--paper); }
+    .slide::after { content:""; position:absolute; width:4.6in; height:4.6in; right:-2.1in; bottom:-2.2in; border-radius:50%; border:1px solid rgba(82,224,208,.22); box-shadow:0 0 0 .42in rgba(82,224,208,.025),0 0 0 .95in rgba(82,224,208,.025); }
+    .light::after { border-color:rgba(21,103,210,.13); box-shadow:0 0 0 .42in rgba(21,103,210,.035),0 0 0 .95in rgba(21,103,210,.025); }
+    .brand { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .mark { display:grid; place-items:center; width:31px; height:31px; border:1px solid var(--aqua); border-radius:5px; color:var(--aqua); font-size:9px; }
+    .eyebrow { margin:0 0 12px; color:var(--aqua); font-size:10px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+    .light .eyebrow { color:#1767d2; }
+    h1,h2,h3,p { margin:0; }
+    h1 { max-width:9.6in; margin-top:.86in; font-size:47px; line-height:1.06; letter-spacing:-1.6px; }
+    h2 { max-width:10.7in; font-size:32px; line-height:1.1; letter-spacing:-.7px; }
+    h3 { font-size:16px; line-height:1.16; }
+    .lede { max-width:8.4in; margin-top:19px; color:var(--muted); font-size:19px; line-height:1.45; }
+    .light .lede,.light .body,.light li { color:#526878; }
+    .footer { position:absolute; left:.72in; right:.72in; bottom:.34in; display:flex; justify-content:space-between; color:#7f95a5; font-size:9px; letter-spacing:.04em; }
+    .light .footer { color:#748b9a; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:25px; }
+    .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:15px; margin-top:22px; }
+    .card { min-height:1.5in; padding:17px; border:1px solid var(--line); border-radius:8px; background:rgba(255,255,255,.025); }
+    .light .card { border-color:#d3e0e7; background:#fff; }
+    .card .num { color:var(--aqua); font-size:10px; font-weight:800; letter-spacing:.14em; }
+    .light .card .num { color:#1767d2; }
+    .card p { margin-top:9px; color:var(--muted); font-size:13px; line-height:1.36; }
+    .body { margin-top:16px; max-width:9.7in; color:var(--muted); font-size:17px; line-height:1.42; }
+    .accent { color:var(--aqua); }
+    .light .accent { color:#1767d2; }
+    .proof { display:grid; grid-template-columns:1.3fr .7fr; gap:22px; align-items:center; margin-top:17px; }
+    .screen { width:100%; height:4.32in; object-fit:cover; object-position:top; border:1px solid #44606e; border-radius:8px; box-shadow:0 16px 40px rgba(0,0,0,.28); }
+    .list { padding:0; margin:0; list-style:none; }
+    .list li { margin:0 0 13px; padding-left:18px; position:relative; color:var(--muted); font-size:14px; line-height:1.35; }
+    .list li::before { content:""; width:6px; height:6px; position:absolute; left:0; top:7px; border-radius:99px; background:var(--aqua); }
+    .light .list li::before { background:#1767d2; }
+    .pill { display:inline-block; margin-top:20px; padding:8px 11px; border:1px solid rgba(82,224,208,.48); border-radius:99px; color:var(--aqua); font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .metric { padding:18px; min-height:1.6in; border-radius:8px; background:#102633; }
+    .light .metric { background:#eaf3f7; }
+    .metric span { display:block; color:var(--muted); font-size:10px; font-weight:800; letter-spacing:.11em; text-transform:uppercase; }
+    .metric strong { display:block; margin-top:8px; color:var(--aqua); font-size:27px; line-height:1; }
+    .light .metric strong { color:#1767d2; }
+    .metric p { margin-top:8px; color:var(--muted); font-size:12px; line-height:1.3; }
+    .compare { display:grid; grid-template-columns:1.1fr 1fr 1fr; gap:1px; overflow:hidden; margin-top:24px; border:1px solid var(--line); border-radius:8px; background:var(--line); }
+    .compare > div { min-height:.72in; padding:12px 14px; background:#10212c; font-size:13px; }
+    .compare > div:first-child { font-weight:800; }
+    .compare .head { color:var(--aqua); font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+    .light .compare { border-color:#d3e0e7; background:#d3e0e7; }
+    .light .compare > div { background:#fff; }
+    .light .compare .head { color:#1767d2; }
+    .funds { display:grid; grid-template-columns:1.05fr .95fr; gap:24px; margin-top:23px; }
+    .barrow { margin:0 0 16px; }
+    .barrow div { display:flex; justify-content:space-between; color:var(--muted); font-size:13px; }
+    .bar { height:10px; margin-top:7px; overflow:hidden; border-radius:99px; background:#203845; }
+    .bar span { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--aqua),var(--blue)); }
+    .ask { padding:27px; border:1px solid rgba(82,224,208,.46); border-radius:10px; background:linear-gradient(145deg,rgba(82,224,208,.11),rgba(82,153,255,.09)); }
+    .ask strong { display:block; margin:10px 0 12px; color:var(--aqua); font-size:43px; line-height:1; letter-spacing:-1px; }
+    .ask p { color:var(--muted); font-size:14px; line-height:1.42; }
+    .smallnote { margin-top:13px; color:#8095a4; font-size:10px; line-height:1.35; }
+    .center { display:flex; min-height:5.7in; flex-direction:column; justify-content:center; }
+    @media print { html,body { background:#fff; } .slide { margin:0; } }
+  </style>
+</head>
+<body>
+  <section class="slide">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <div class="center">
+      <p class="eyebrow">Pre-seed pitch deck · working prototype</p>
+      <h1>One clear place to run the business office.</h1>
+      <p class="lede">OverHead helps business owners keep customer details, quotes, follow-ups, invoices, approvals, payment information, and daily office work from getting lost across too many tools.</p>
+      <span class="pill">Pre-seed planning · product and pilot validation</span>
+    </div>
+    <div class="footer"><span>BLACK LION MEDIA STUDIO</span><span>CONFIDENTIAL · AUGUST 2026</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">The problem</p>
+    <h2>Small-business office work is still a chain of expensive handoffs.</h2>
+    <p class="body">Customer details, quotes, invoice status, staff decisions, payment tabs, and next steps often live in different places—or only in the owner’s head.</p>
+    <div class="grid3">
+      <article class="card"><span class="num">01 · LOST CONTEXT</span><h3>Every call starts from scratch.</h3><p>Notes, messages, customer history, and exceptions are fragmented across tools and people.</p></article>
+      <article class="card"><span class="num">02 · DROPPED REVENUE WORK</span><h3>Follow-up competes with today’s fires.</h3><p>Quotes, payment reminders, and customer responses become harder to see and own.</p></article>
+      <article class="card"><span class="num">03 · UNCLEAR CONTROL</span><h3>Important actions lack a clear review point.</h3><p>Owners need staff momentum without losing visibility over sensitive decisions and records.</p></article>
+    </div>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>02</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">The solution</p>
+    <h2>One office hub that fits how each business already works.</h2>
+    <p class="body">OverHead is not one fixed process forced on every company. Each office can set up its own customers, staff, templates, approval rules, reminders, and daily work.</p>
+    <div class="grid2">
+      <article class="card"><span class="num">CUSTOMER &amp; REVENUE WORK</span><h3>Keep the next move visible.</h3><p>Customer records, quotes, invoices, payment reminders, and follow-up queues stay connected to the work that needs attention.</p></article>
+      <article class="card"><span class="num">CONTROL &amp; HISTORY</span><h3>Move faster without losing the record.</h3><p>Approvals, local records, privacy settings, backups, and activity history help the owner stay in control.</p></article>
+    </div>
+    <div class="grid3">
+      <article class="metric"><span>Make it fit</span><strong>Rules</strong><p>Set up templates, timing, reminders, and approvals for the business.</p></article>
+      <article class="metric"><span>Owner-led</span><strong>Control</strong><p>Give staff a path to act while keeping important decisions visible.</p></article>
+      <article class="metric"><span>Local-first</span><strong>Trust</strong><p>Designed for resilient day-to-day work, not abstract dashboard theater.</p></article>
+    </div>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>03</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">Product proof</p>
+    <h2>Working desktop prototype—not a concept-only mockup.</h2>
+    <div class="proof">
+      <img class="screen" src="public/assets/overhead-console-proof.png" alt="OverHead desktop command console">
+      <div>
+        <p class="eyebrow">Built today</p>
+        <ul class="list">
+          <li>Windows desktop application and packaged installer</li>
+          <li>Local customer records, task lists, office rules, and support tools</li>
+          <li>Staff approvals, sign-in protection, activity history, and backup/recovery basics</li>
+          <li>Public product website, download flow, legal/support pages, and investor materials</li>
+        </ul>
+        <p class="smallnote">Validation milestones before broader launch: production billing activation, secure shared-account rollout, provider connections, and measured customer pilots.</p>
+      </div>
+    </div>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>04</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">Customer</p>
+    <h2>Built for owner-led businesses with real customer volume and recurring office work.</h2>
+    <p class="body">The core product serves businesses that have outgrown loose notes and disconnected point tools, but do not want the cost or complexity of an enterprise suite.</p>
+    <div class="grid3">
+      <article class="card"><span class="num">PRIMARY BUYER</span><h3>Owner or operations lead</h3><p>The person carrying customer history, staff questions, money follow-up, and the burden of “what happened with that?”</p></article>
+      <article class="card"><span class="num">FIRST USERS</span><h3>Front desk and office team</h3><p>People scheduling, answering customers, preparing quotes, following up, and keeping the office moving.</p></article>
+      <article class="card"><span class="num">FLEXIBLE FIT</span><h3>Service businesses first</h3><p>Start with the day-to-day problems of service offices, then build simple setups around what customers prove they need.</p></article>
+    </div>
+    <p class="smallnote">The first marketing message can speak to one industry without limiting who OverHead can serve.</p>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>05</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">Why now</p>
+    <h2>Small offices need more control—not more disconnected software.</h2>
+    <p class="body">Customers expect fast answers, quick payment follow-up, and fewer mistakes. AI can help with small tasks, but owners still need one place to review and run the work.</p>
+    <div class="compare">
+      <div class="head">Office approach</div><div class="head">What it solves</div><div class="head">What remains</div>
+      <div>Notes, inboxes &amp; spreadsheets</div><div>Fast, familiar, low-cost</div><div>Important details stay scattered</div>
+      <div>Single-purpose tools</div><div>One task at a time</div><div>Information gets lost between customer, money, staff, and support work</div>
+      <div><strong>OverHead</strong></div><div><strong>One place for daily office work</strong></div><div><strong>Flexible setup with clear history and owner control</strong></div>
+    </div>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>06</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">Business model</p>
+    <h2>A subscription that expands with office complexity.</h2>
+    <p class="body">The prototype has a proposed three-tier plan. Early pilots will show what customers will pay for, what setup help they need, and which parts of the product they keep using.</p>
+    <div class="grid3">
+      <article class="card"><span class="num">SILVER · PROPOSED</span><h3>$59 / month</h3><p>Solo owner: customer records, task queue, basic backup tools, and a reliable daily command view.</p></article>
+      <article class="card"><span class="num">GOLD · PROPOSED</span><h3>$129 / month</h3><p>Busy teams: staff profiles, office rules, legal center, and clearer follow-through.</p></article>
+      <article class="card"><span class="num">BLACK · PROPOSED</span><h3>$299 / month</h3><p>High-trust offices: deeper records, audit controls, larger teams, and concierge onboarding.</p></article>
+    </div>
+    <p class="smallnote">These prices are an early test, not current revenue or live customer billing.</p>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>07</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">Finding early customers</p>
+    <h2>Start with a few hands-on pilot customers, then repeat what works.</h2>
+    <div class="grid3">
+      <article class="card"><span class="num">01 · RECRUIT</span><h3>5–10 design partners</h3><p>Find owner-led businesses with clear follow-up, quoting, invoicing, and office-control pain.</p></article>
+      <article class="card"><span class="num">02 · SET UP</span><h3>Hands-on setup</h3><p>Set up the first office process with each customer, watch how they use it, and listen closely to feedback.</p></article>
+      <article class="card"><span class="num">03 · REPEAT</span><h3>Simple setups that work</h3><p>Turn the most useful patterns into clear onboarding, marketing, and product connections.</p></article>
+    </div>
+    <div class="grid2">
+      <article class="metric"><span>How we find them</span><strong>Direct outreach</strong><p>Reach business owners and office leads with a message that speaks to their everyday problems and a clear pilot offer.</p></article>
+      <article class="metric"><span>How we learn</span><strong>Use + conversations</strong><p>Track whether customers finish setup, come back, use the main features, and see enough value to pay.</p></article>
+    </div>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>08</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">Execution plan</p>
+    <h2>Turn the prototype into a safe, useful product that customers can rely on.</h2>
+    <div class="grid3">
+      <article class="card"><span class="num">0–3 MONTHS</span><h3>Finish the basics</h3><p>Complete shared sign-in, setup, customer support, safe releases, and the tools needed to learn from pilot use.</p></article>
+      <article class="card"><span class="num">3–9 MONTHS</span><h3>Run real pilots</h3><p>Work with early customers, improve setup, test pricing, and build the parts they use again and again.</p></article>
+      <article class="card"><span class="num">9–18 MONTHS</span><h3>Grow what works</h3><p>Ship useful connections, turn pilots into customers, and build a steady way to find and keep customers.</p></article>
+    </div>
+    <div class="grid2">
+      <article class="metric"><span>Success is not</span><strong>Just downloads</strong><p>Early success means customers finish setup, keep using it, give useful feedback, and see enough value to pay.</p></article>
+      <article class="metric"><span>Success is</span><strong>Useful daily work</strong><p>Owners can see what needs attention, staff can act within limits, and customer and money work stops falling through the cracks.</p></article>
+    </div>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>09</span></div>
+  </section>
+
+  <section class="slide light">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">Team</p>
+    <h2>Founder-led product build with a practical path to the initial operating team.</h2>
+    <div class="grid2">
+      <article class="card"><span class="num">FOUNDER · BLACK LION MEDIA STUDIO</span><h3>Product, software, and deployment capability already in motion.</h3><p>Working web, desktop, and Android application portfolio; prototype delivery; Firebase-hosted product operations; and a background in Network Administration.</p></article>
+      <article class="card"><span class="num">PRE-SEED TEAM BUILD</span><h3>Add only the roles that make the prototype a reliable business.</h3><p>First priorities: more product/engineering help, safe SaaS operations, pilot setup and customer support, and careful marketing.</p></article>
+    </div>
+    <p class="smallnote">Add founder name, short biography, prior employers/credentials, advisors, and any cofounder details before external investor outreach.</p>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>10</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <p class="eyebrow" style="margin-top:32px">Capital discipline</p>
+    <h2>Capital should fund measurable product and customer-validation milestones.</h2>
+    <div class="funds">
+      <div>
+        <div class="barrow"><div><span>Product &amp; engineering</span><strong>Primary priority</strong></div><div class="bar"><span style="width:55%"></span></div></div>
+        <div class="barrow"><div><span>Pilots &amp; customer outreach</span><strong>Validation priority</strong></div><div class="bar"><span style="width:25%"></span></div></div>
+        <div class="barrow"><div><span>Security &amp; product connections</span><strong>Trust priority</strong></div><div class="bar"><span style="width:15%"></span></div></div>
+        <div class="barrow"><div><span>Legal, operations &amp; contingency</span><strong>Operating reserve</strong></div><div class="bar"><span style="width:5%"></span></div></div>
+      </div>
+      <div class="ask"><span class="eyebrow">Capital discipline</span><strong>Milestone-led</strong><p>Set the raise amount only after the operating budget, pilot plan, runway, and financing terms have been reviewed with the founder and qualified legal and financial advisers.</p><p class="smallnote">This is an allocation framework, not an offer, valuation, forecast, or representation of customer revenue.</p></div>
+    </div>
+    <div class="footer"><span>OVERHEAD · PRE-SEED DECK</span><span>11</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="brand"><span class="mark">OH</span>OverHead</div>
+    <div class="center">
+      <p class="eyebrow">The ask</p>
+      <h1>Help turn a working prototype into a trusted tool for running the business office.</h1>
+      <p class="lede">Pre-seed capital will finish the product, fund hands-on pilot customers, test the price, and prove that businesses use OverHead every day.</p>
+      <span class="pill">Seeking pre-seed conversations · terms to be confirmed</span>
+      <p class="smallnote">Contact: Black Lion Media Studio · solidartentertainment@gmail.com · overhead-office.web.app</p>
+    </div>
+    <div class="footer"><span>BLACK LION MEDIA STUDIO</span><span>CONFIDENTIAL · AUGUST 2026</span></div>
+  </section>
+</body>
+</html>

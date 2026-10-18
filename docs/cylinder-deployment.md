@@ -20,9 +20,9 @@ Continued Cylinder access at the published $499/month or $4,990/year price requi
 
 ## Install
 
-1. Download the current `OverHead-Cylinder-0.3.4-win-x64.zip` from `https://overhead-office.web.app/downloads/OverHead-Cylinder-0.3.4-win-x64.zip` on a supported Windows Server or Windows IoT host.
+1. Use the Cylinder download offered at `https://overhead-office.web.app/cylinder/` on a supported Windows Server or Windows IoT host. A locally built version is not necessarily the published version.
 2. Verify `CYLINDER-SHA256SUMS.txt` inside the ZIP when the file came from an untrusted transfer path.
-3. Extract the ZIP locally and run `OverHead-Cylinder-Setup-0.3.4-win-x64.exe` with an administrator account.
+3. Extract the ZIP locally and run its versioned Cylinder installer with an administrator account.
 4. Launch OverHead Cylinder and create or sign in to the intended workspace.
 
 ## Updates
@@ -38,3 +38,7 @@ Publish the Cylinder installer, blockmap, and matching `latest.yml` together und
 - Customer documents are copied into the local Cylinder data directory and indexed in the local record store. They are not automatically stored in Firebase Storage or replicated to other hosts.
 - Customer support tickets can be shared through the Firebase workspace record path when the user is signed in with a Firebase-backed account.
 - SMTP, Microsoft Entra registration/consent, payment providers, and code-signing credentials remain external configuration requirements.
+
+## September 2026 maintenance
+
+See [Cylinder 0.3.13 maintenance notes](cylinder-sweep-0.3.13.md) for the UX and backend changes, local installer location, test commands, and validation boundaries.

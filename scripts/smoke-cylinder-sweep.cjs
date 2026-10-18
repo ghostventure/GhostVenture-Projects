@@ -1,0 +1,28 @@
+const fs = require('node:fs'), path = require('node:path'), os = require('node:os')
+const assert = require('node:assert/strict')
+const { _electron } = require('playwright')
+async function main() {
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'cylinder-smoke-'))
+  const report = path.resolve(__dirname, process.env.OVERHEAD_SMOKE_RELEASE || '../release-cylinder-sweep-0.3.13')
+  const app = await _electron.launch({ executablePath: require('electron'), args: [path.join(__dirname, 'cylinder-package-harness.cjs')], env: { ...process.env, OVERHEAD_SMOKE_DATA: data } })
+  try {
+    const page = await app.firstWindow()
+    await page.locator('.login-card').waitFor({ timeout: 30000 })
+    assert.match(await page.locator('.login-brand-panel').innerText(), /OverHead Cylinder/)
+    const health = await page.evaluate(() => window.overheadBackend.health())
+    assert.equal(health.deploymentMode, 'cylinder')
+    await page.getByRole('button', { name: 'Plans', exact: true }).click()
+    await page.getByRole('heading', { name: 'Your server workspace' }).waitFor()
+    assert.equal(await page.getByText('Continue To Secure Checkout', { exact: true }).count(), 0)
+    assert.equal(await page.getByRole('link', { name: 'Contact deployment support' }).getAttribute('href'), 'https://overhead-office.web.app/contact/')
+    const updater = await page.evaluate(() => window.overheadBackend.updaterStatus())
+    assert.match(updater.feedUrl, /\/updates\/cylinder$/)
+    const runtime = await app.evaluate(({ app, BrowserWindow }) => ({ userData: app.getPath('userData'), windows: BrowserWindow.getAllWindows().length }))
+    assert.equal(runtime.userData, path.join(data, 'OverHead Cylinder'))
+    assert.equal(runtime.windows, 1)
+    await page.screenshot({ path: path.join(report, 'cylinder-plans.png') })
+    fs.writeFileSync(path.join(report, 'smoke-result.json'), JSON.stringify({ passed: true, simulatedServerEdition: true, ...runtime }, null, 2))
+    console.log('PASS: Cylinder packaged sign-in, Plans, isolated storage and updater channel (Server edition simulated).')
+  } finally { await app.close() }
+}
+main().catch(error => { console.error(error); process.exitCode = 1 })

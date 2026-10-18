@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('overheadDesktop', {
+  deploymentMode: process.argv.includes('--overhead-deployment=cylinder') ? 'cylinder' : 'desktop',
   onSecurityLock: (callback) => {
     const listener = () => callback()
     ipcRenderer.on('security-lock', listener)
@@ -24,12 +25,19 @@ contextBridge.exposeInMainWorld('overheadBackend', {
   rememberedSignIn: () => ipcRenderer.invoke('auth:remembered-sign-in'),
   resumeSession: () => ipcRenderer.invoke('auth:resume-session'),
   verifyEmail: (payload) => ipcRenderer.invoke('auth:verify-email', payload),
+  developerWorkspace: () => ipcRenderer.invoke('developer:workspace'),
+  chooseDeveloperWorkspace: () => ipcRenderer.invoke('developer:choose-workspace'),
+  setDeveloperEditor: (payload) => ipcRenderer.invoke('developer:set-editor', payload),
+  developerEditors: () => ipcRenderer.invoke('developer:editors'),
+  openDeveloperWorkspace: () => ipcRenderer.invoke('developer:open-workspace'),
   lockSession: (sessionId) => ipcRenderer.invoke('session:lock', sessionId),
   listCustomers: () => ipcRenderer.invoke('customers:list'),
+  syncCustomers: () => ipcRenderer.invoke('customers:sync'),
   listTasks: () => ipcRenderer.invoke('tasks:list'),
   updateTaskStatus: (payload) => ipcRenderer.invoke('tasks:update-status', payload),
   queueWorkflowJob: (payload) => ipcRenderer.invoke('jobs:queue', payload),
   processDueJobs: () => ipcRenderer.invoke('jobs:process-due'),
+  retryWorkflowJob: (payload) => ipcRenderer.invoke('jobs:retry', payload),
   listWorkflowJobs: () => ipcRenderer.invoke('jobs:list'),
   createCustomer: (payload) => ipcRenderer.invoke('customers:create', payload),
   selectDocumentFile: () => ipcRenderer.invoke('documents:select-file'),
@@ -55,6 +63,8 @@ contextBridge.exposeInMainWorld('overheadBackend', {
   listStripeConnections: () => ipcRenderer.invoke('stripe:list-connections'),
   importStripeSnapshot: (payload) => ipcRenderer.invoke('stripe:import-snapshot', payload),
   listStripeImports: () => ipcRenderer.invoke('stripe:list-imports'),
+  syncStripeBilling: () => ipcRenderer.invoke('stripe:sync-billing'),
+  getStripeConnectorStatus: () => ipcRenderer.invoke('stripe:status'),
   listPaymentRecords: () => ipcRenderer.invoke('payments:list-records'),
   squareAuthorizationUrl: () => ipcRenderer.invoke('square:authorization-url'),
   openSquareAuthorization: () => ipcRenderer.invoke('square:open-authorization'),
@@ -91,13 +101,17 @@ contextBridge.exposeInMainWorld('overheadBackend', {
   createOperationalDocument: (payload) => ipcRenderer.invoke('pdf:create-operational', payload),
   createSubscriptionReceipt: () => ipcRenderer.invoke('billing:create-receipt'),
   createDataRequest: (payload) => ipcRenderer.invoke('compliance:create-data-request', payload),
+  completeDataDeletion: (payload) => ipcRenderer.invoke('compliance:complete-data-deletion', payload),
   complianceSummary: () => ipcRenderer.invoke('compliance:summary'),
   listAuditEvents: (limit) => ipcRenderer.invoke('audit:list', limit),
   updateSetting: (payload) => ipcRenderer.invoke('settings:update', payload),
   createBackup: () => ipcRenderer.invoke('backup:create'),
   createDataExport: () => ipcRenderer.invoke('export:create'),
   validateRestorePackage: (filePath) => ipcRenderer.invoke('restore:validate', filePath),
+  restoreFromPackage: (payload) => ipcRenderer.invoke('restore:execute', payload),
   createSupportBundle: () => ipcRenderer.invoke('support:create-bundle'),
   updaterStatus: () => ipcRenderer.invoke('updater:status'),
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  setAutoCheck: (payload) => ipcRenderer.invoke('updater:set-auto-check', payload),
   installDownloadedUpdate: () => ipcRenderer.invoke('updater:install'),
 })

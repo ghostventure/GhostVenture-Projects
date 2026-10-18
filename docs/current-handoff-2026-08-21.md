@@ -14,6 +14,12 @@ This document records the deployed product, website, licensing, policy, and rele
 
 The desktop `0.3.5` ZIP, Cylinder `0.3.4` ZIP, both updater channels, both brochures, support materials, legal center, investor page, FAQ, and current website copy have been deployed and verified with HTTP 200 responses. The standard desktop ZIP now has a matching entry in `downloads/SHA256SUMS.txt`; the Cylinder installer has its own entry in `downloads/CYLINDER-SHA256SUMS.txt`.
 
+## Authentication update â€” 2026-08-23
+
+The live website and Firestore rules now require email verification before protected workspace records open. Website creation and invitation acceptance create the Firebase account and matching workspace/profile records, send a verification link, and avoid leaving a usable account behind if setup fails. The Desktop checks Firebase's verified-email status before starting a shared session and directs an unverified user to finish the email-link step first.
+
+`docs/authentication-workflow.md` is the source of truth for the user flow, Firebase Console checks, acceptance-test matrix, and safe support boundary. Email/Password was confirmed enabled on `overhead-office` during this deployment, but the end-to-end verification-link test still requires a disposable real inbox after any Firebase template/domain change.
+
 ## Product and public-site work completed
 
 1. **Business standard.** Added a shared mission, scope, product boundary, and six operating principles: clarity, owner control, minimum necessary information, progressive adoption, evidence/recovery, and straight dealing. See `docs/business-principles.md`.

@@ -34,7 +34,7 @@ import {
 import { legalBoilerplates } from './boilerplates'
 
 export const marketableFeatures = [
-  { label: 'Free Gold Trial', detail: 'One 30-day, no-card Gold-equivalent trial per workspace.' },
+  { label: 'Free Gold Trial', detail: 'One 90-day, no-card Gold-equivalent trial per workspace.' },
   { name: 'Guided sign-in', category: 'Access', icon: KeyRound, detail: 'Owner identity, business profile, recovery phrase, and terms acknowledgement.' },
   { name: 'Role profiles', category: 'Access', icon: UsersRound, detail: 'Owner, front desk, bookkeeper, and support roles with clear access boundaries.' },
   { name: 'Customer database', category: 'Data', icon: SquareUserRound, detail: 'Stores customer profiles, workflow rules, admin state, compliance, and audit history.' },
@@ -120,7 +120,7 @@ export const legalDocuments = [
   {
     title: 'Free Trial Policy',
     status: 'Draft - legal review required',
-    body: 'A free trial provides Gold-equivalent OverHead access for 30 consecutive days, requires no card, and does not create a charge. Each workspace may use one free trial. The trial ends automatically at its recorded end time; access and trial licenses are then suspended unless a paid plan is activated. Free trials are not transferable, redeemable for cash, extendable, or refundable. Creating multiple workspaces or accounts to obtain additional trials is prohibited.',
+    body: 'A free trial provides Gold-equivalent OverHead access for 90 consecutive days, requires no card, and does not create a charge. Each workspace may use one free trial. The trial ends automatically at its recorded end time; access and trial licenses are then suspended unless a paid plan is activated. Free trials are not transferable, redeemable for cash, extendable, or refundable. Creating multiple workspaces or accounts to obtain additional trials is prohibited.',
   },
   {
     title: 'Cancellation & Prorated Refund Policy',
@@ -156,7 +156,7 @@ export const helpArticles = [
   {
     title: 'Free trial, cancellation, and refunds',
     category: 'Billing',
-    body: 'Each workspace may start one card-free, 30-day Gold trial. Paid subscriptions can be canceled by an administrator; eligible unused time in the current paid period is refunded proportionally to the original payment method. Trial access ends automatically and has no payment to refund.',
+    body: 'Each workspace may start one card-free, 90-day Gold trial. Paid subscriptions can be canceled by an administrator; eligible unused time in the current paid period is refunded proportionally to the original payment method. Trial access ends automatically and has no payment to refund.',
   },
   {
     title: 'Password recovery',

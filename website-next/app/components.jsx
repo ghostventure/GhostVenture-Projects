@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { businessGuideHref, checksumHref, cylinderPageHref, downloadHref, investorBrochureHref, navItems } from './data'
+import { checksumHref, cylinderPageHref, downloadHref, investorBrochureHref, navItems } from './data'
 
 export function SiteShell({ children, tone = 'dark' }) {
   return (
@@ -34,10 +34,12 @@ export function Footer() {
         <Link href="/about/">About</Link>
         <Link href="/investors/">Investors</Link>
         <Link href={investorBrochureHref}>Investor Brochure</Link>
-        <Link href={businessGuideHref}>Business Guide</Link>
+        <a href="/user-guide/">User Guide</a>
+        <a href="/executive-summary/">Executive Summary</a>
         <Link href="/careers/">Careers</Link>
         <Link href={cylinderPageHref}>Cylinder</Link>
         <Link href="/support/">Support</Link>
+        <Link href="/feedback/">Feedback</Link>
         <Link href="/legal/">Legal</Link>
         <Link href={checksumHref}>Checksums</Link>
       </div>

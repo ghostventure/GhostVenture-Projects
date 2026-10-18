@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OverHead Investor Brochure</title>
+  <style>
+    @page { size: Letter; margin: 0.46in; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #132031; font: 10.5pt/1.5 Arial, Helvetica, sans-serif; }
+    .cover { min-height: 9.95in; display: flex; flex-direction: column; justify-content: space-between; padding: 0.56in; color: #fff; background: #081018; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .03em; }
+    .mark { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #4de2d0; border-radius: 5px; color: #4de2d0; font-size: 10px; }
+    .eyebrow { margin: 0 0 10px; color: #4de2d0; font-size: 9px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+    h1, h2, h3 { margin: 0; line-height: 1.08; }
+    h1 { max-width: 6.1in; font-size: 39pt; }
+    h2 { font-size: 21pt; margin-bottom: 12px; }
+    h3 { font-size: 12pt; }
+    .cover p { max-width: 5.5in; color: #b9c7d3; font-size: 15pt; }
+    .cover-note { border-top: 1px solid #2a3c4d; padding-top: 14px; color: #b9c7d3; }
+    .page { page-break-before: always; padding: .1in 0; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .card { padding: 15px; border: 1px solid #d5dee6; border-radius: 5px; break-inside: avoid; }
+    .card span { display: block; margin-bottom: 7px; color: #1767d2; font-size: 8.5pt; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .card p { margin: 8px 0 0; color: #56677a; }
+    .signal { padding: 18px; color: #fff; background: #101b27; border-radius: 5px; }
+    .signal p { margin: 8px 0 0; color: #b9c7d3; }
+    .full-image { width: 100%; margin: 12px 0 8px; border: 1px solid #d5dee6; }
+    .caption { margin: 0; color: #637487; font-size: 8.5pt; }
+    .footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #d5dee6; color: #637487; font-size: 8pt; }
+    ul { margin: 8px 0 0; padding-left: 18px; color: #56677a; }
+    li { margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="brand"><span class="mark">OH</span><span>OverHead</span></div>
+    <div>
+      <p class="eyebrow">Investor brochure</p>
+      <h1>A focused operating layer for the local business office.</h1>
+      <p>OverHead brings customer context, active work, approvals, payment handoffs, support evidence, and owner visibility into a practical local-first desktop workflow.</p>
+    </div>
+    <p class="cover-note">Mission: Make daily office operations clearer, more accountable, and within reach for owner-led businesses.</p>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">Opportunity</p>
+    <h2>Small business administration is still full of expensive handoffs.</h2>
+    <div class="two">
+      <div><p>Customer context is often split between notes, inboxes, payment tabs, staff conversations, and the owner's memory. OverHead is built to return that operating layer to one clear command surface.</p><p>The entry point is narrow by design: solve the recurring work that happens after the customer calls, then earn the right to deepen the workflow.</p></div>
+      <div class="signal"><h3>Investment lens</h3><p>Start where workflow repetition is already painful, visible, and worth organizing. A focused product can earn adoption without asking a small office to buy a broad software suite upfront.</p></div>
+    </div>
+    <div class="three" style="margin-top:16px">
+      <article class="card"><span>Buyer</span><h3>Owner-led service businesses</h3><p>The buyer feels the daily cost of scattered follow-up and unclear ownership.</p></article>
+      <article class="card"><span>Entry point</span><h3>Installed office command center</h3><p>A focused Windows workspace for records, queues, approvals, payments, and evidence.</p></article>
+      <article class="card"><span>Commercial model</span><h3>Tiered subscription</h3><p>Silver, Gold, and Black create a path from owner control to higher-volume operations.</p></article>
+    </div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">Product proof</p>
+    <h2>Real desktop surfaces, not concept-only mockups.</h2>
+    <img class="full-image" src="public/assets/overhead-console-proof.png" alt="OverHead Desktop command console">
+    <p class="caption">OverHead Desktop smoke-test capture: signed-in command console with workspace status, customer database, current work, office readiness, and security indicators.</p>
+    <div class="two" style="margin-top:16px">
+      <article class="card"><span>Business standard</span><h3>Clarity, owner control, and straight dealing.</h3><p>Make the next action visible, keep sensitive decisions explainable, and state product and commercial boundaries plainly.</p></article>
+      <article class="card"><span>Product thesis</span><h3>Operational memory compounds.</h3><p>Business rules, records, approval history, and support context become more useful as the workflow becomes habitual—when customers choose to build on proven use.</p></article>
+    </div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">Strategy</p>
+    <h2>Win the office routine, strengthen trust, then widen the system.</h2>
+    <div class="three">
+      <article class="card"><span>01</span><h3>Earn the daily workflow</h3><p>Start with customer context, queues, approvals, payment handoffs, and support evidence that an owner feels every day.</p></article>
+      <article class="card"><span>02</span><h3>Increase trust with the account layer</h3><p>Move from local workspace identity toward secure shared accounts, verified access, and disciplined administration.</p></article>
+      <article class="card"><span>03</span><h3>Expand from proof</h3><p>Add integrations and vertical workflow packs where they directly improve throughput, retention, or customer confidence.</p></article>
+    </div>
+    <div class="two" style="margin-top:16px">
+      <article class="card"><span>Scope</span><h3>Practical operations—not an enterprise-suite promise.</h3><p>A local-first Windows workspace for customer follow-through, revenue operations, role-aware approvals, and support-ready records.</p></article>
+      <article class="card"><span>Next</span><h3>Validate before expanding.</h3><p>Use a narrow pilot to measure activation, repeat use, conversion, and retention before deepening account administration or provider integrations.</p></article>
+    </div>
+    <div class="footer">This brochure is informational and not a securities offering. It does not state customer traction, revenue, valuation, or investment terms. Formal diligence materials and qualified review are required before any offering.</div>
+  </section>
+</body>
+</html>

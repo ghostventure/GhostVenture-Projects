@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "source": "release-trial-functions",
+    "codebase": "trials",
+    "runtime": "nodejs22"
+  }
+}

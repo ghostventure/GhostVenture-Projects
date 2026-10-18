@@ -29,7 +29,7 @@ const faqs = [
   ],
   [
     "Does Cylinder have a trial?",
-    "Yes. Each server workspace receives one 30-day, no-card Cylinder evaluation. It does not create a payment or automatically renew. After the evaluation ends, continued Cylinder access requires a completed commercial activation and issued entitlement.",
+    "Yes. Each server workspace receives one 90-day, no-card Cylinder evaluation. It does not create a payment or automatically renew. After the evaluation ends, continued Cylinder access requires a completed commercial activation and issued entitlement.",
   ],
   [
     "Does Cylinder automatically copy server data to the cloud?",
@@ -69,7 +69,7 @@ const faqs = [
   ],
   [
     "Do browser customer records automatically appear in the desktop app?",
-    "Not yet. Customer records created in the browser workspace are shared through the workspace account layer. Desktop customer records remain local until a dedicated synchronization feature is enabled. Do not assume the two lists are merged automatically.",
+    "Yes, for signed-in team members. OverHead automatically compares the shared workspace customer register with the encrypted local desktop copy after sign-in, after customer creation, and every five minutes while the app is open. Newer records win; local document files remain on the device, and deletions still require an explicit privacy workflow.",
   ],
   [
     "Does it replace Stripe or Square?",
@@ -81,7 +81,7 @@ const faqs = [
   ],
   [
     "Is there a free trial?",
-    "Yes—OverHead is designed to offer one no-card, 30-day Gold-equivalent trial per workspace. Trial activation becomes publicly available when the secure production billing and account service are enabled; no payment is created for the trial.",
+    "Yes—OverHead is designed to offer one no-card, 90-day Gold-equivalent trial per workspace. Trial activation becomes publicly available when the secure production billing and account service are enabled; no payment is created for the trial.",
   ],
   [
     "What happens if I cancel?",
