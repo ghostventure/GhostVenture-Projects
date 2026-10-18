@@ -38,7 +38,7 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 230 | Reusable automation recipes | Already present | `src/App.jsx` and `src/boilerplates.js` provide reusable customer playbooks and workflow boilerplates. |
 | 231 | Webhook-triggered workflows | Blocked | Public, authenticated webhook ingress requires a deployed service and signature verification; not exposed by the local desktop app. |
 | 232 | Form submission automations | Already present | `electron-backend.cjs` customer creation queues setup work; appointment creation queues a scheduling task. |
-| 233 | Field update rules | Blocked | No generic field-update event pipeline or allowlisted update-rule executor exists. |
+| 233 | Field update rules | Implemented | `src/AutomationStudio.jsx`: Owners can save and manually evaluate exact-match field-update rules over role-accessible local feature records; system identity/timestamp fields are protected, and each run is recorded locally. Rules do not run unattended. |
 | 234 | Duplicate record warnings | Already present | Microsoft import preview and commit detect duplicate email/source records in `electron-backend.cjs`. |
 | 235 | Recurring checklist generation | Implemented | `src/features/GrowthWorkspace.jsx`: manually generating a recurring task carries its checklist forward with items reset to unchecked. |
 | 236 | Notification routing rules | Blocked | `src/features/GrowthWorkspace.jsx` supports per-task watchers and recipient-scoped local notices, but reusable event/role/channel routing rules and external notification delivery are not available. |

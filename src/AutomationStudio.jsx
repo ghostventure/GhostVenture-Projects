@@ -6,6 +6,8 @@ const events = [
   ['invoice.overdue', 'Invoice passes its due date'],
   ['task.deadline_due', 'Task deadline arrives'],
 ]
+const updateCollections = ['dashboard', 'tasks', 'projects', 'customers', 'sales', 'finance', 'people', 'scheduling', 'documents', 'communications', 'support']
+const protectedFields = new Set(['id', 'created_at', 'updated_at', 'created_by', 'updated_by'])
 const style = { minHeight: 38, padding: '8px 10px', border: '1px solid var(--line, #d7dce2)', borderRadius: 8, background: 'var(--surface, #fff)', color: 'var(--text, #17202a)' }
 
 export function AutomationStudio({ backendState = {}, sessionRole = 'Owner', setOperationNotice = () => {}, refreshBackend = async () => {} }) {
@@ -14,6 +16,12 @@ export function AutomationStudio({ backendState = {}, sessionRole = 'Owner', set
   const [trigger, setTrigger] = useState(events[0][0])
   const [condition, setCondition] = useState('')
   const [actionText, setActionText] = useState('Review this record')
+  const [action, setAction] = useState('create_task')
+  const [sourceCollection, setSourceCollection] = useState('customers')
+  const [matchField, setMatchField] = useState('status')
+  const [matchValue, setMatchValue] = useState('Needs review')
+  const [targetField, setTargetField] = useState('status')
+  const [targetValue, setTargetValue] = useState('Reviewed')
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [runs, setRuns] = useState([])
@@ -24,9 +32,10 @@ export function AutomationStudio({ backendState = {}, sessionRole = 'Owner', set
   useEffect(() => { if (sessionRole === 'Owner') refresh() }, [sessionRole])
 
   async function saveRule() {
-    if (!name.trim() || !actionText.trim()) { setError('Add a rule name and the task title to create.'); return }
+    if (!name.trim() || (action === 'create_task' && !actionText.trim())) { setError('Add a rule name and the task title to create.'); return }
+    if (action === 'update_field' && (!matchField.trim() || !targetField.trim() || protectedFields.has(targetField.trim()) || !matchValue.trim())) { setError('Choose a match value and an editable, non-system target field.'); return }
     try {
-      await window.overheadBackend.upsertFeatureRecord({ collection: 'automation', record: { id: crypto.randomUUID(), kind: 'rule', name: name.trim().slice(0, 100), trigger, condition: condition.trim().slice(0, 120), action: 'create_task', action_text: actionText.trim().slice(0, 180), enabled: true, last_triggered_ids: [] } })
+      await window.overheadBackend.upsertFeatureRecord({ collection: 'automation', record: { id: crypto.randomUUID(), kind: 'rule', name: name.trim().slice(0, 100), trigger: action === 'update_field' ? 'record.field_matches' : trigger, condition: condition.trim().slice(0, 120), action, action_text: actionText.trim().slice(0, 180), source_collection: sourceCollection, match_field: matchField.trim().slice(0, 80), match_value: matchValue.trim().slice(0, 180), target_field: targetField.trim().slice(0, 80), target_value: targetValue.slice(0, 500), enabled: true, last_triggered_ids: [] } })
       setName(''); setError(''); await refresh(); setOperationNotice('Automation rule saved to the encrypted local workspace.')
     } catch (reason) { setError(String(reason?.message || 'The automation rule could not be saved.')) }
   }
@@ -43,10 +52,19 @@ export function AutomationStudio({ backendState = {}, sessionRole = 'Owner', set
     const audit = backendState.auditEvents || []
     const invoices = backendState.invoices || []
     let created = 0
+    let updated = 0
     try {
       const detailsFor = (event) => { try { return typeof event.details === 'string' ? JSON.parse(event.details) : event.details || {} } catch { return {} } }
       for (const rule of rules.filter((item) => item.enabled)) {
         let matches = []
+        if (rule.action === 'update_field' && updateCollections.includes(rule.source_collection) && rule.match_field && rule.target_field && !protectedFields.has(rule.target_field)) {
+          const records = await window.overheadBackend.listFeatureRecords(rule.source_collection)
+          const fieldMatches = records.filter((record) => record && typeof record.id === 'string' && String(record[rule.match_field] ?? '').toLocaleLowerCase() === String(rule.match_value ?? '').toLocaleLowerCase() && String(record[rule.target_field] ?? '') !== String(rule.target_value ?? '')).slice(0, 100)
+          for (const record of fieldMatches) await window.overheadBackend.upsertFeatureRecord({ collection: rule.source_collection, record: { ...record, [rule.target_field]: rule.target_value } })
+          if (fieldMatches.length) await window.overheadBackend.upsertFeatureRecord({ collection: 'automation', record: { id: crypto.randomUUID(), kind: 'run', rule_id: rule.id, rule_name: rule.name, trigger: rule.trigger, matched: fieldMatches.length, queued: fieldMatches.length, created_at: new Date().toISOString(), outcome: `Updated ${rule.source_collection}.${rule.target_field} locally` } })
+          updated += fieldMatches.length
+          continue
+        }
         if (rule.trigger === 'customer.created') matches = audit.filter((item) => item.event_type === 'customer.created')
         if (rule.trigger === 'quote.status_updated') matches = audit.filter((item) => item.event_type === 'quote.status_updated' && (!rule.condition || String(detailsFor(item).status || '').toLowerCase() === rule.condition.toLowerCase()))
         if (rule.trigger === 'invoice.overdue') matches = invoices.filter((item) => item.status !== 'Paid' && item.due_date && Date.parse(item.due_date) < Date.now()).map((item) => ({ id: item.id, details: { title: item.title, status: item.status } }))
@@ -61,20 +79,27 @@ export function AutomationStudio({ backendState = {}, sessionRole = 'Owner', set
         if (matches.length) await window.overheadBackend.upsertFeatureRecord({ collection: 'automation', record: { ...rule, last_triggered_ids: [...seen].slice(-100) } })
         if (matches.length) await window.overheadBackend.upsertFeatureRecord({ collection: 'automation', record: { id: crypto.randomUUID(), kind: 'run', rule_id: rule.id, rule_name: rule.name, trigger: rule.trigger, matched: matches.length, queued: Math.min(matches.length, 20), created_at: new Date().toISOString(), outcome: 'Queued local tasks' } })
       }
-      setError(''); await refresh(); await refreshBackend(); setOperationNotice(`${created} local workflow task${created === 1 ? '' : 's'} queued from matching events.`)
+      setError(''); await refresh(); await refreshBackend(); setOperationNotice(`${created} local workflow task${created === 1 ? '' : 's'} queued; ${updated} local record field${updated === 1 ? '' : 's'} updated.`)
     } catch (reason) { setError(String(reason?.message || 'The automation run stopped. Review the workflow queue for partial results.')); await refresh() }
   }
   if (sessionRole !== 'Owner') return <section className="panel page-panel"><h2>Automation rules</h2><p>Rule creation and permission controls are restricted to the workspace Owner. Your existing workflow queue remains available in Automation Control.</p></section>
   const deadJobs = (backendState.workflowJobs || []).filter((job) => job.status === 'Dead Letter')
-  const visibleRules = rules.filter((rule) => `${rule.name} ${rule.trigger} ${rule.action_text}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+  const visibleRules = rules.filter((rule) => `${rule.name} ${rule.trigger} ${rule.action_text} ${rule.match_field} ${rule.match_value} ${rule.target_field} ${rule.target_value}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
   return <section className="panel page-panel" aria-labelledby="automation-studio-title">
     <div className="section-head"><div><p className="eyebrow">Owner controls</p><h2 id="automation-studio-title">No-code automation rules</h2></div><button className="primary-action" type="button" onClick={evaluateRules}>Evaluate current records</button></div>
-    <p>Rules inspect local audit events and operational records, then queue deduplicated local tasks. They never send customer messages automatically.</p>
+    <p>Rules inspect local audit events and operational records, then queue deduplicated local tasks. Field-update rules match exact values in a selected local collection and change an existing non-system field when you run them. They never send customer messages automatically.</p>
     <div className="profile-form compact-form">
       <label>Rule name<input style={style} value={name} onChange={(event) => setName(event.target.value)} placeholder="Review newly added customers" /></label>
-      <label>When<select style={style} value={trigger} onChange={(event) => setTrigger(event.target.value)}>{events.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</select></label>
+      <label>Action<select style={style} value={action} onChange={(event) => setAction(event.target.value)}><option value="create_task">Queue a local task</option><option value="update_field">Update matching local records</option></select></label>
+      {action === 'create_task' && <label>When<select style={style} value={events.some(([id]) => id === trigger) ? trigger : events[0][0]} onChange={(event) => setTrigger(event.target.value)}>{events.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</select></label>}
       {trigger === 'quote.status_updated' && <label>Only when status equals<input style={style} value={condition} onChange={(event) => setCondition(event.target.value)} placeholder="Accepted (blank means any change)" /></label>}
-      <label>Create task titled<input style={style} value={actionText} onChange={(event) => setActionText(event.target.value)} placeholder="Review this record" /></label>
+      {action === 'create_task' ? <label>Create task titled<input style={style} value={actionText} onChange={(event) => setActionText(event.target.value)} placeholder="Review this record" /></label> : <>
+        <label>Record collection<select style={style} value={sourceCollection} onChange={(event) => setSourceCollection(event.target.value)}>{updateCollections.map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label>Match field<input style={style} value={matchField} onChange={(event) => setMatchField(event.target.value)} placeholder="status" /></label>
+        <label>Equals<input style={style} value={matchValue} onChange={(event) => setMatchValue(event.target.value)} placeholder="Needs review" /></label>
+        <label>Set existing field<input style={style} value={targetField} onChange={(event) => setTargetField(event.target.value)} placeholder="status" /></label>
+        <label>To value<input style={style} value={targetValue} onChange={(event) => setTargetValue(event.target.value)} placeholder="Reviewed" /></label>
+      </>}
       <button className="primary-action" type="button" onClick={saveRule}>Save rule</button>
     </div>
     <label>Find rules<input style={style} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search rule names and triggers" /></label>
