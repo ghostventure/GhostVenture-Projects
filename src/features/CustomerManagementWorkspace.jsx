@@ -32,8 +32,8 @@ function healthScore(customer, tasks, invoices) {
   return Math.max(0, Math.min(100, score))
 }
 
-export default function CustomerManagementWorkspace({ backendState = {}, secureView = true }) {
-  const { records, loading, error, setError, save, remove } = useFeatureRecords('customers')
+export default function CustomerManagementWorkspace({ backendState = {}, secureView = true, refreshBackend = async () => {}, sessionRole = '' }) {
+  const { records, loading, error, setError, save, remove, refresh } = useFeatureRecords('customers')
   const [tab, setTab] = useState(tabs[0])
   const [selectedId, setSelectedId] = useState('')
   const [segmentDraft, setSegmentDraft] = useState({ name: '', industry: '', status: 'Any', minHealth: '' })
@@ -44,6 +44,7 @@ export default function CustomerManagementWorkspace({ backendState = {}, secureV
   const [allowOwnerOverride, setAllowOwnerOverride] = useState(false)
   const [followupDraft, setFollowupDraft] = useState({ dueDate: '', note: '' })
   const [message, setMessage] = useState('')
+  const [mergeTargets, setMergeTargets] = useState({})
   const customers = backendState.customers || emptyRows
   const tasks = backendState.tasks || emptyRows
   const invoices = backendState.invoices || emptyRows
@@ -228,6 +229,22 @@ export default function CustomerManagementWorkspace({ backendState = {}, secureV
     downloadJson(`customer-${String(selectedCustomer.id).replace(/[^a-z0-9_-]/gi, '-')}-export.json`, { exportedAt: new Date().toISOString(), source: 'OverHead local customer workspace', records: related })
     setMessage('Customer-scoped JSON export created on this device.')
   }
+  async function mergeCustomer(source, targetId) {
+    const target = customers.find((customer) => customer.id === targetId)
+    if (!target || !source || source.id === target.id) throw new Error('Choose a different destination customer.')
+    const sourceLabel = safeName(source)
+    const targetLabel = safeName(target)
+    const confirmed = window.confirm(`Merge ${sourceLabel} into ${targetLabel}? Local record links will move to ${targetLabel}; destination field values take precedence and blank fields are filled from the source. Related profile lists are combined. The source will be archived and an encrypted backup created first. Shared cloud records are not merged.`)
+    if (!confirmed) return
+    try {
+      const result = await window.overheadBackend.mergeCustomers({ sourceCustomerId: source.id, targetCustomerId: target.id })
+      await refreshBackend()
+      await refresh()
+      setError('')
+      setMessage(`Merged ${sourceLabel} into ${targetLabel}. ${result.referencesRewritten} local references updated. Encrypted backup: ${result.safetyBackupPath}. Cloud records still need reconciliation.`)
+      setMergeTargets((current) => { const next = { ...current }; delete next[source.id]; return next })
+    } catch (reason) { setError(reason?.message || 'The customer records could not be merged.') }
+  }
   async function addFollowup(event) {
     event.preventDefault()
     if (!selectedCustomer) throw new Error('Choose a customer first.')
@@ -295,7 +312,7 @@ export default function CustomerManagementWorkspace({ backendState = {}, secureV
         </div>
       </>}
     </>}
-    {tab === 'Duplicates' && <article className="task-row"><h3>Possible duplicate customers</h3><p>Exact normalized name/email matches from currently loaded local customer records. Review before acting; no records are merged or changed.</p>{duplicateGroups.map(({ key, group }) => <div key={key}><strong>{key.startsWith('email:') ? 'Email match' : 'Name match'}</strong>{group.map((customer) => <p key={customer.id}>{safeName(customer)} · {customer.email || 'no email'} · ID {customer.id}</p>)}</div>)}{!duplicateGroups.length && <p>No exact name or email duplicates found.</p>}</article>}
+    {tab === 'Duplicates' && <article className="task-row"><h3>Possible duplicate customers</h3><p>Exact normalized name/email matches from currently loaded local customer records. Review carefully before acting. Local merges rewrite linked workspace records, keep an encrypted pre-merge backup, and archive the source record. They do not merge or delete shared cloud records.</p>{duplicateGroups.map(({ key, group }) => <div key={key}><strong>{key.startsWith('email:') ? 'Email match' : 'Name match'}</strong>{group.map((customer) => <div key={customer.id} className="profile-form compact-form"><p>{safeName(customer)} · {customer.email || 'no email'} · ID {customer.id}</p>{sessionRole === 'Owner' && <><label>Merge this record into<select value={mergeTargets[customer.id] ?? group.find((candidate) => candidate.id !== customer.id)?.id ?? ''} onChange={(event) => setMergeTargets((current) => ({ ...current, [customer.id]: event.target.value }))}><option value="" disabled>Choose destination</option>{group.filter((candidate) => candidate.id !== customer.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{safeName(candidate)} · {candidate.id}</option>)}</select></label><button className="ghost-button" type="button" disabled={!mergeTargets[customer.id] && !group.some((candidate) => candidate.id !== customer.id)} onClick={() => mergeCustomer(customer, mergeTargets[customer.id] ?? group.find((candidate) => candidate.id !== customer.id)?.id).catch((reason) => setError(reason.message))}>Merge and archive this record</button></>}</div>)}</div>)}{!duplicateGroups.length && <p>No exact name or email duplicates found.</p>}</article>}
     {tab === 'Profile tools' && <>
       <label className="customer-picker">Customer<select value={selectedCustomer?.id || ''} onChange={(event) => setSelectedId(event.target.value)}><option value="">Choose a customer</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{safeName(customer)}</option>)}</select></label>
       <div className="customer-management-grid">

@@ -8,7 +8,7 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 |---:|---|---|---|
 | 201 | Custom report builder | Implemented | `src/ReportStudio.jsx`, `src/reportStudio.js`: source, period, status, and text filters. |
 | 202 | Saved report filters | Implemented | `src/ReportStudio.jsx`: encrypted `reporting` records with Owner/Bookkeeper sharing. |
-| 203 | Scheduled report delivery | Blocked | `src/ReportStudio.jsx` saves a delivery request; unattended notification/mail delivery needs a background service and configured provider. |
+| 203 | Scheduled report delivery | Partial | `src/ReportStudio.jsx` schedules a filtered local CSV. The desktop scheduler creates the file and an in-app notice while the app is open and the creating Owner/Bookkeeper is signed in; email and cloud delivery are not configured. |
 | 204 | PDF report export | Implemented | `src/ReportStudio.jsx`: print dialog supports Save as PDF. |
 | 205 | Spreadsheet report export | Already present | `src/App.jsx` ReportsSection exports CSV; `src/ReportStudio.jsx` exports filtered CSV. |
 | 206 | Report sharing permissions | Implemented | `src/ReportStudio.jsx`: saved filters declare permitted Owner/Bookkeeper roles; backend collection enforces role access. |
@@ -41,9 +41,9 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 233 | Field update rules | Implemented | `src/AutomationStudio.jsx`: Owners can save and manually evaluate exact-match field-update rules over role-accessible local feature records; system identity/timestamp fields are protected, and each run is recorded locally. Rules do not run unattended. |
 | 234 | Duplicate record warnings | Already present | Microsoft import preview and commit detect duplicate email/source records in `electron-backend.cjs`. |
 | 235 | Recurring checklist generation | Implemented | `src/features/GrowthWorkspace.jsx`: manually generating a recurring task carries its checklist forward with items reset to unchecked. |
-| 236 | Notification routing rules | Blocked | `src/features/GrowthWorkspace.jsx` supports per-task watchers and recipient-scoped local notices, but reusable event/role/channel routing rules and external notification delivery are not available. |
+| 236 | Notification routing rules | Partial | Owners can route supported security event types to staff roles. Backend role checks create role-scoped local notice tasks; push, email, and other external channels are not configured. |
 | 237 | Automated customer follow-ups | Already present | Customer playbooks and follow-up boilerplates exist; automatic external sending remains disabled. |
-| 238 | Automated project status requests | Blocked | No project/status-request domain or project recipients exist. |
+| 238 | Automated project status requests | Partial | Staff can submit a project status request with a reason; only an Owner can approve or reject it, and approval applies the requested status. Requests and decisions remain in the local project collection; recurring prompts are not configured. |
 | 239 | Workflow pause and resume | Implemented | `src/AutomationStudio.jsx` enables and pauses saved Owner rules. |
 | 240 | Automation permission controls | Already present | `src/AutomationStudio.jsx` gates rule writes/runs to Owner; backend feature-record API enforces collection roles. |
 | 241 | Google Calendar connection | Blocked | Needs Google OAuth app, consent, and calendar connector setup. |
@@ -64,7 +64,7 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 256 | CSV import wizard | Already present | Root `src/features/ControlCenter.jsx` reads and previews CSV rows; it does not commit imports. |
 | 257 | CSV mapping presets | Implemented | `src/features/ControlCenter.jsx`: maps previewed CSV headers to customer fields and saves reusable mappings in encrypted integration records; import writes remain separate. |
 | 258 | Import validation preview | Already present | `src/features/ControlCenter.jsx` shows a local CSV preview; Microsoft imports also validate previews before commit. |
-| 259 | Data export scheduler | Blocked | Needs an unattended scheduler/notification or delivery service; current exports are user initiated. |
+| 259 | Data export scheduler | Partial | An Owner can schedule a one-time full local data ZIP export. The desktop scheduler runs it while OverHead is open and that Owner is signed in, subject to existing export entitlements; external delivery and recurring schedules are not configured. |
 | 260 | Integration health dashboard | Already present | `src/features/ControlCenter.jsx` lists connector setup states; Microsoft/Stripe/Square health is available in existing backend state. |
 | 261 | Global search across records | Already present | `src/features/ControlCenter.jsx` searches feature records allowed by the current role. |
 | 262 | Search by custom fields | Already present | Search serializes accessible feature records, including user-defined fields. |
@@ -89,7 +89,7 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 281 | Multi-factor authentication options | Blocked | Firebase email verification is present, but MFA requires a configured identity-provider factor and recovery flow. |
 | 282 | Single sign-on support | Blocked | Microsoft data import OAuth is not app sign-on; enterprise SSO requires identity-provider integration. |
 | 283 | Session management controls | Already present | `electron-backend.cjs` tracks sessions and the renderer can lock/sign out the current session. |
-| 284 | Device session list | Blocked | Session records do not yet expose trusted device metadata or revocation controls. |
+| 284 | Device session list | Partial | Owners can list saved sessions for the current local installation and revoke another saved local session; actions are audited. It cannot list or revoke sessions on other devices. |
 | 285 | Password policy settings | Already present | `electron-backend.cjs` enforces a 12-character minimum for registration and reset. |
 | 286 | Role and permission editor | Already present | Accounts UI and backend role checks manage Owner, Front Desk, Bookkeeper, and Support access. |
 | 287 | Field-level permissions | Already present | Privacy mode masks customer fields; fine-grained per-role field policies are not yet configurable. |
@@ -98,15 +98,15 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 290 | Data access audit trail | Already present | Sensitive exports, settings, account changes, and data deletion are audited; ordinary read access is not logged. |
 | 291 | Login history | Already present | Authentication success/failure events are recorded in the backend audit history. |
 | 292 | User invitation controls | Already present | Staff and customer invitation flows exist in `electron-backend.cjs` and Accounts/Customers UI. |
-| 293 | Scheduled access reviews | Blocked | Security view accepts manual review notes; no scheduled recurring review engine exists. |
-| 294 | Automatic inactive-user suspension | Blocked | Users can be suspended manually; no inactivity policy/scheduler is configured. |
+| 293 | Scheduled access reviews | Partial | Owners can schedule recurring local Security review tasks. The signed-in desktop scheduler creates each due task; a person must still conduct and record the review. |
+| 294 | Automatic inactive-user suspension | Partial | An Owner can enable a local inactivity policy that suspends inactive non-Owner accounts managed only by this desktop installation. Firebase-linked accounts are excluded and require identity-service enforcement. |
 | 295 | IP allowlist settings | Blocked | The local app has no trusted-network enforcement service or admin allowlist infrastructure. |
 | 296 | Data retention configuration | Already present | Retention policy, compliance summary, and local retention-days setting exist in backend state. |
 | 297 | Export permission controls | Already present | `allowDataExport` toggle and Owner/Bookkeeper role enforcement gate exports. |
 | 298 | Sensitive-field masking | Already present | Privacy mode masks customer and protected evidence details in renderer views. |
 | 299 | Admin recovery codes | Blocked | Recovery phrase support exists, but one-time admin recovery codes and secure rotation do not. |
-| 300 | Security event notifications | Blocked | Audit and risk signals are recorded, but routed push/email notifications need an approved delivery service. |
+| 300 | Security event notifications | Partial | Supported events can generate role-scoped local inbox notices using Owner-configured routes. Native push and email delivery need a configured service. |
 
 ## Verification boundary
 
-The report and automation modules are integrated on OverHead 0.3.17. The integration and search workspaces use local review and export workflows; live third-party connections, unattended delivery, public API/webhook infrastructure, and missing historical source data remain prerequisites rather than silently simulated behavior. The blocked-stage changes received targeted lint and whitespace checks only; no build or smoke test was run in this worktree. Forecast actuals use invoice creation month as a stated local proxy, and project costs remain user-entered estimates.
+The report and automation modules ship on OverHead 0.3.18. Scheduled local exports, security notices, access-review tasks, and inactivity policy evaluation run through the desktop scheduler while OverHead is open and the relevant Owner or Bookkeeper is signed in. They do not send external notifications or enforce policy on Firebase-linked accounts. The integration and search workspaces still need live third-party connections, public API/webhook infrastructure, and historical source data for the listed external behaviors. Forecast actuals use invoice creation month as a stated local proxy, and project costs remain user-entered estimates. The production build and Electron workspace launch check passed; installer and live-route verification are recorded separately.

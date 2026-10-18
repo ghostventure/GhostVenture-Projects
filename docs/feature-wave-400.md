@@ -1,4 +1,4 @@
-# OverHead 0.3.17 feature wave: 400 requested items
+# OverHead 0.3.18 feature wave: 400 requested items
 
 This release branch turns the 400-item inventory into role-aware workspace areas plus additions to the existing dashboard, reports, support, settings, and account screens. Each 100-item audit records whether an item is implemented, already existed in OverHead, partial, or blocked by a concrete product or external prerequisite.
 
@@ -6,11 +6,11 @@ The per-range audit tables are [items 1–100](feature-wave-001-100.md), [101–
 
 | Range | Implemented | Already present | Partial | Blocked |
 |---|---:|---:|---:|---:|
-| 1–100 | 93 | 6 | 0 | 1 |
+| 1–100 | 92 | 6 | 1 | 0 |
 | 101–200 | 84 | 11 | 0 | 5 |
-| 201–300 | 37 | 36 | 0 | 27 |
+| 201–300 | 37 | 36 | 8 | 19 |
 | 301–400 | 58 | 29 | 0 | 13 |
-| **Total** | **272** | **82** | **0** | **46** |
+| **Total** | **272** | **82** | **9** | **37** |
 
 ## Workspace areas
 
@@ -34,4 +34,4 @@ Generic feature records are for local workspace data and preferences. They must 
 
 From the repository root, use `npm ci`, `npm run build`, then `npm run dist:win` to create the Windows installer. `npm run build` is the compile gate. Run packaged smoke checks only after that build succeeds. Verify the installer and portable ZIP, release checksums, the website installer/download routes, `latest.yml`, and the public guide before claiming a release is complete.
 
-All inventory rows audited as Partial have been implemented. The current audit records 268 implemented features, 82 existing features, and 50 remaining blockers. Those blockers are documented with their concrete prerequisites: safe customer/workspace identity transactions, hosted payment/calendar/file/signature integrations, webhook and scheduled delivery services, or native iOS capabilities and platform build infrastructure. The integrated build, packaged verification, GitHub push, and Firebase website deployment remain to complete.
+The 400-item inventory now records 272 implemented features, 82 already-present features, 9 partial features, and 37 blocked features. Partial items have working local behavior with a clearly stated limit, such as cross-device identity enforcement or external notification delivery. The remaining blockers are documented with their concrete prerequisites: Firebase membership/identity transactions, hosted payment/calendar/file/signature integrations, authenticated webhook services, or native iOS capabilities and platform build infrastructure. The integrated build and packaged verification remain pending for this source update.

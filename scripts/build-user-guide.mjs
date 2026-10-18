@@ -27,7 +27,7 @@ try{
  await page.goto(pathToFileURL(resolve(out,'index.html')).href,{waitUntil:'networkidle'})
  const allImages=await page.locator('img').evaluateAll(images=>images.every(im=>im.complete&&im.naturalWidth>0));if(!allImages)throw new Error('Missing guide image')
  await page.locator('a[href^="/"]').evaluateAll(links=>links.forEach(a=>a.href='https://overhead-office.web.app'+a.getAttribute('href')))
- const buffer=await page.pdf({path:resolve(root,'website-next/public/downloads/OverHead-User-Guide.pdf'),preferCSSPageSize:true,printBackground:true,tagged:true,outline:true,displayHeaderFooter:true,headerTemplate:'<span></span>',footerTemplate:'<div style="font:8px Arial;width:100%;padding:0 42px;color:#526873;display:flex;justify-content:space-between"><span>OverHead Desktop 0.3.17 · User Guide</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>'})
+ const buffer=await page.pdf({path:resolve(root,'website-next/public/downloads/OverHead-User-Guide.pdf'),preferCSSPageSize:true,printBackground:true,tagged:true,outline:true,displayHeaderFooter:true,headerTemplate:'<span></span>',footerTemplate:`<div style="font:8px Arial;width:100%;padding:0 42px;color:#526873;display:flex;justify-content:space-between"><span>OverHead Desktop ${guideVersion} · User Guide</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`})
  const pdf=await PDFDocument.load(buffer)
  await page.screenshot({path:resolve(review,'web-desktop.png')})
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:resolve(review,'web-mobile.png')})

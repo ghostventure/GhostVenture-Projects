@@ -107,6 +107,7 @@ const featureRecordSchema = z.object({
 })
 const featureDeleteSchema = z.object({ collection: featureCollectionSchema, recordId: z.string().trim().min(1).max(160) })
 const configurableIdPrefixes = new Set(['cust', 'task', 'quote', 'invoice', 'expense', 'appointment', 'document'])
+const securityNoticeEvents = new Set(['fraud.signal', 'access.denied', 'integrity.attention', 'auth.failed', 'user.suspended', 'data.exported', 'restore.completed', 'session.revoked', 'project.status_request.created', 'project.status_request.decided'])
 const featureCollectionRoles = {
   dashboard: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
   tasks: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
@@ -137,6 +138,11 @@ const customerSchema = z.object({
   industry: z.string().trim().optional().default('General services'),
   serviceArea: z.string().trim().optional().default('Local'),
   preferredContact: z.string().trim().optional().default('Email'),
+})
+
+const customerMergeSchema = z.object({
+  sourceCustomerId: z.string().trim().min(1).max(160),
+  targetCustomerId: z.string().trim().min(1).max(160),
 })
 
 const customerPlaybookSchema = z.object({
@@ -700,7 +706,7 @@ async function registerSharedProfile(payload) {
 async function createCustomerPortalInvite(payload = {}) {
   requireRole(['Owner'], 'customer portal invitation')
   if (!activeSession?.firebaseIdToken || !activeSession?.firebaseUid) throw new Error('Sign out and sign back in with the shared Administrator account first.')
-  const customerId = String(payload.customerId || ''); const customer = state.customers.find((item) => item.id === customerId)
+  const customerId = String(payload.customerId || ''); const customer = state.customers.find((item) => item.id === customerId && !item.merged_into)
   const email = String(payload.email || customer?.email || '').trim().toLowerCase()
   if (!customer || !email) throw new Error('Select a customer with an email address before creating portal access.')
   const workspaceId = activeSession.firebaseUid
@@ -1050,6 +1056,16 @@ function recordAudit(eventType, title, details, actor = 'local') {
   }
   state.auditEvents.unshift({ ...event, checksum: hashValue(event) })
   state.auditEvents = state.auditEvents.slice(0, 500)
+  const defaultNotifyEvents = new Set(['fraud.signal', 'access.denied', 'integrity.attention', 'auth.failed', 'user.suspended'])
+  const rules = (state.featureRecords?.security || []).find((item) => item?.id === 'notification-routing-policy')?.rules || []
+  const routes = new Set(defaultNotifyEvents.has(eventType) ? ['Owner'] : [])
+  for (const rule of Array.isArray(rules) ? rules : []) {
+    if (rule?.event_type === eventType && Array.isArray(rule.recipient_roles)) for (const role of rule.recipient_roles) if (['Owner', 'Front Desk', 'Bookkeeper', 'Support'].includes(role)) routes.add(role)
+  }
+  for (const role of routes) {
+    const noticeExists = state.adminTasks.some((task) => task.notice_source_event_id === event.id && task.notice_role === role)
+    if (!noticeExists) state.adminTasks.unshift({ id: createId('task'), title: `Security alert: ${String(title).slice(0, 120)}`, area: 'Notifications', status: 'Open', priority: 'High', due_at: event.created_at, protected: 0, notice_role: role, notice_source_event_id: event.id, details: String(typeof details === 'string' ? details : JSON.stringify(details)).slice(0, 500), created_at: event.created_at, updated_at: event.created_at })
+  }
   persist()
   return event
 }
@@ -1081,6 +1097,7 @@ function signIn(payload) {
   if (!user) {
     throw new Error('No local account exists for that email. Use Register first.')
   }
+  if (user.status === 'Suspended') throw new Error('This local account is suspended. Ask an active Owner to review access.')
   if (user.email_verified === false) {
     sendVerificationEmail(user, 'sign-in-verification-required')
     throw new Error('Email verification is required. A new code was sent or queued.')
@@ -1435,7 +1452,7 @@ function requireFeature(feature) {
 
 function enforceCustomerLimit() {
   const plan = currentPlan()
-  if (state.customers.length >= plan.maxCustomers) {
+  if (state.customers.filter((customer) => !customer.merged_into).length >= plan.maxCustomers) {
     throw new Error(`${plan.name} allows up to ${plan.maxCustomers} customer records.`)
   }
 }
@@ -1451,6 +1468,37 @@ function lockSession(sessionId) {
   activeSession = null
   recordAudit('session.locked', 'Desktop session locked', { sessionId })
   return { locked: true }
+}
+
+function listDeviceSessions() {
+  requireRole(['Owner'], 'device session list')
+  return state.sessions.map((item) => ({
+      id: item.id,
+      device_name: item.device_name,
+      started_at: item.started_at,
+      last_seen_at: item.last_seen_at,
+      ended_at: item.ended_at || '',
+      revoked_at: item.revoked_at || '',
+      lock_state: item.lock_state,
+      current: item.id === activeSession?.id,
+      email: state.userProfiles.find((user) => user.id === item.user_profile_id)?.email || '',
+    }))
+}
+
+function revokeDeviceSession(payload = {}) {
+  requireRole(['Owner'], 'device session revocation')
+  const id = String(payload.id || '')
+  const session = state.sessions.find((item) => item.id === id)
+  if (!session) throw new Error('That saved session was not found in this local installation.')
+  if (session.id === activeSession?.id) throw new Error('The current session cannot revoke itself. Sign out to end it.')
+  if (session.ended_at || session.revoked_at) return { revoked: false, alreadyEnded: true }
+  session.lock_state = 'locked'
+  session.ended_at = now()
+  session.revoked_at = now()
+  session.last_seen_at = session.ended_at
+  persist()
+  recordAudit('session.revoked', 'Saved OverHead session revoked on this device', { sessionId: id, deviceName: session.device_name, email: state.userProfiles.find((user) => user.id === session.user_profile_id)?.email || '' })
+  return { revoked: true }
 }
 
 function requireRole(allowedRoles, action) {
@@ -1473,6 +1521,16 @@ function upsertFeatureRecord(payload = {}) {
   const input = featureRecordSchema.parse(payload)
   const { collection } = input
   requireRole(featureCollectionRoles[collection], `${collection} feature data update`)
+  if (collection === 'security' && input.record.id === 'notification-routing-policy') {
+    const rules = input.record.rules
+    if (!Array.isArray(rules) || rules.length > securityNoticeEvents.size) throw new Error('Notification routing policy needs a valid list of local event routes.')
+    const events = new Set()
+    for (const rule of rules) {
+      if (!rule || !securityNoticeEvents.has(rule.event_type) || events.has(rule.event_type) || !Array.isArray(rule.recipient_roles) || !rule.recipient_roles.length || rule.recipient_roles.some((role) => !['Owner', 'Front Desk', 'Bookkeeper', 'Support'].includes(role))) throw new Error('Each notification route needs one supported event and one or more valid staff roles.')
+      events.add(rule.event_type)
+    }
+  }
+  let projectStatusAction = ''
   if (collection === 'security' && input.record.id === 'record-id-policy') {
     const rules = input.record.rules
     if (!Array.isArray(rules) || rules.length > configurableIdPrefixes.size) throw new Error('Record ID policy must contain a valid list of entity rules.')
@@ -1490,6 +1548,25 @@ function upsertFeatureRecord(payload = {}) {
   if (Buffer.byteLength(serialized, 'utf8') > 65536) throw new Error('A feature record cannot exceed 64 KB.')
   if (Object.keys(input.record).some((key) => ['__proto__', 'prototype', 'constructor'].includes(key))) throw new Error('Feature data contains a reserved field name.')
   const rows = Array.isArray(state.featureRecords[collection]) ? state.featureRecords[collection] : []
+  if (collection === 'projects' && (input.record.kind === 'project_status_request' || rows.some((item) => item?.id === input.record.id && item.kind === 'project_status_request'))) {
+    const existingRequest = rows.find((item) => item?.id === input.record.id && item.kind === 'project_status_request')
+    if (!existingRequest) {
+      requireRole(['Owner', 'Front Desk', 'Bookkeeper'], 'project status request creation')
+      if (input.record.status !== 'Pending' || !['Planning', 'Open', 'In progress', 'At risk', 'On hold', 'Complete', 'Completed', 'Archived'].includes(input.record.requestedStatus)) throw new Error('Choose a supported requested status and create the request as Pending.')
+      const project = rows.find((item) => item?.id === input.record.projectId && !item.kind)
+      if (!project) throw new Error('The project for this status request no longer exists.')
+      input.record = { id: input.record.id || createId('project-status-request'), kind: 'project_status_request', projectId: project.id, project: project.title, requestedStatus: input.record.requestedStatus, reason: String(input.record.reason || '').trim().slice(0, 500), status: 'Pending', requestedBy: activeSession.email, requestedAt: now() }
+      projectStatusAction = 'created'
+    } else {
+      requireRole(['Owner'], 'project status request decision')
+      if (existingRequest.status !== 'Pending' || !['Approved', 'Rejected'].includes(input.record.status)) throw new Error('Only a pending project status request can be approved or rejected.')
+      const project = rows.find((item) => item?.id === existingRequest.projectId && !item.kind)
+      if (!project) throw new Error('The requested project no longer exists.')
+      if (input.record.status === 'Approved') { project.status = existingRequest.requestedStatus; project.updated_at = now() }
+      input.record = { ...existingRequest, status: input.record.status, decidedBy: activeSession.email, decidedAt: now() }
+      projectStatusAction = input.record.status.toLowerCase()
+    }
+  }
   if (rows.length >= 1000 && !rows.some((item) => item?.id === input.record.id)) throw new Error('This feature collection has reached its 1,000 record limit.')
   const id = typeof input.record.id === 'string' && input.record.id.trim() ? input.record.id.trim() : createId(collection)
   if (id.length > 160) throw new Error('Feature record IDs must be 160 characters or fewer.')
@@ -1505,6 +1582,7 @@ function upsertFeatureRecord(payload = {}) {
   else rows.unshift(record)
   state.featureRecords[collection] = rows
   persist()
+  if (projectStatusAction) recordAudit(`project.status_request.${projectStatusAction}`, `Project status request ${projectStatusAction}`, { projectId: record.projectId, requestedStatus: record.requestedStatus, requestId: record.id }, activeSession.email)
   recordAudit(`feature.${collection}.saved`, `${collection} feature record saved`, { recordId: id }, activeSession.email)
   return JSON.parse(JSON.stringify(record))
 }
@@ -1515,6 +1593,10 @@ function deleteFeatureRecord(payload = {}) {
   const rows = Array.isArray(state.featureRecords[input.collection]) ? state.featureRecords[input.collection] : []
   const index = rows.findIndex((item) => item?.id === input.recordId)
   if (index < 0) return { deleted: false }
+  if (input.collection === 'projects' && rows[index]?.kind === 'project_status_request') {
+    requireRole(['Owner'], 'project status request deletion')
+    if (rows[index].status === 'Pending') throw new Error('Resolve the project status request before deleting it.')
+  }
   rows.splice(index, 1)
   state.featureRecords[input.collection] = rows
   persist()
@@ -1655,7 +1737,7 @@ function listDocuments(customerId = '') {
 function attachCustomerDocument(payload = {}) {
   requireRole(['Owner', 'Front Desk', 'Support'], 'customer document upload')
   const customerId = String(payload.customerId || ''); const sourcePath = String(payload.sourcePath || '')
-  const customer = state.customers.find((item) => item.id === customerId)
+  const customer = state.customers.find((item) => item.id === customerId && !item.merged_into)
   if (!customer || !sourcePath || !fs.existsSync(sourcePath)) throw new Error('Choose an existing file and a saved customer record.')
   const source = path.resolve(sourcePath); const extension = path.extname(source).toLowerCase(); const details = fs.statSync(source)
   if (!documentExtensions.has(extension)) throw new Error('Use a PDF, Office document, spreadsheet, image, text, or CSV file.')
@@ -1839,21 +1921,27 @@ function createAppointment(payload = {}) {
   requireRole(['Owner', 'Front Desk', 'Support'], 'appointment creation')
   const title = String(payload.title || '').trim(); const scheduledFor = String(payload.scheduledFor || '').trim()
   if (!title || !scheduledFor) throw new Error('Add an appointment title and scheduled date/time.')
-  const appointment = { id: createId('appointment'), title, customer_id: String(payload.customerId || ''), scheduled_for: scheduledFor, status: 'Scheduled', notes: String(payload.notes || '').trim(), created_at: now(), updated_at: now() }
+  const customerId = String(payload.customerId || '')
+  if (customerId && !state.customers.some((customer) => customer.id === customerId && !customer.merged_into)) throw new Error('Choose an active customer from this workspace.')
+  const appointment = { id: createId('appointment'), title, customer_id: customerId, scheduled_for: scheduledFor, status: 'Scheduled', notes: String(payload.notes || '').trim(), created_at: now(), updated_at: now() }
   state.appointments.unshift(appointment); state.adminTasks.unshift({ id: createId('task'), title: `Appointment: ${title}`, area: 'Scheduling', status: 'Open', due_at: scheduledFor, created_at: now(), updated_at: now() }); persist(); recordAudit('appointment.created', 'Appointment scheduled', { id: appointment.id, title }); return listAppointments()
 }
 function createQuote(payload = {}) {
   requireRole(['Owner', 'Front Desk'], 'quote creation')
   const title = String(payload.title || '').trim(); const amount = Number(payload.amount || 0)
   if (!title || amount <= 0) throw new Error('Add a quote title and amount greater than zero.')
-  const quote = { id: createId('quote'), title, customer_id: String(payload.customerId || ''), amount, status: 'Draft', notes: String(payload.notes || '').trim(), created_at: now(), updated_at: now() }
+  const customerId = String(payload.customerId || '')
+  if (customerId && !state.customers.some((customer) => customer.id === customerId && !customer.merged_into)) throw new Error('Choose an active customer from this workspace.')
+  const quote = { id: createId('quote'), title, customer_id: customerId, amount, status: 'Draft', notes: String(payload.notes || '').trim(), created_at: now(), updated_at: now() }
   state.quotes.unshift(quote); persist(); recordAudit('quote.created', 'Quote created', { id: quote.id, title, amount }); return listQuotes()
 }
 function createInvoice(payload = {}) {
   requireRole(['Owner', 'Front Desk', 'Bookkeeper'], 'invoice creation')
   const title = String(payload.title || '').trim(); const amount = Number(payload.amount || 0)
   if (!title || amount <= 0) throw new Error('Add an invoice title and amount greater than zero.')
-  const invoice = { id: createId('invoice'), title, customer_id: String(payload.customerId || ''), amount, status: 'Open', due_date: String(payload.dueDate || ''), created_at: now(), updated_at: now() }
+  const customerId = String(payload.customerId || '')
+  if (customerId && !state.customers.some((customer) => customer.id === customerId && !customer.merged_into)) throw new Error('Choose an active customer from this workspace.')
+  const invoice = { id: createId('invoice'), title, customer_id: customerId, amount, status: 'Open', due_date: String(payload.dueDate || ''), created_at: now(), updated_at: now() }
   state.invoices.unshift(invoice); persist(); recordAudit('invoice.created', 'Invoice created', { id: invoice.id, title, amount }); return listInvoices()
 }
 function updateOperationalStatus(payload = {}) {
@@ -1870,7 +1958,7 @@ function assignOperationalCustomer(payload = {}) {
   const definition = definitions[type]; if (!definition || !id) throw new Error('Choose a valid operational record.')
   requireRole(definition.roles, `${type} customer assignment`)
   const record = definition.rows.find((item) => item.id === id); if (!record) throw new Error('That operational record no longer exists.')
-  if (customerId && !state.customers.some((item) => item.id === customerId)) throw new Error('Choose a customer from this workspace.')
+  if (customerId && !state.customers.some((item) => item.id === customerId && !item.merged_into)) throw new Error('Choose an active customer from this workspace.')
   record.customer_id = customerId; record.updated_at = now(); persist(); recordAudit(`${type}.customer_assigned`, `${type} customer assigned`, { id, customerId: customerId || null })
   return type === 'appointment' ? listAppointments() : type === 'quote' ? listQuotes() : listInvoices()
 }
@@ -2293,7 +2381,7 @@ function importMicrosoftPreview(payload) {
   for (const record of selected) {
     const duplicate = state.customers.some((customer) => customer.external_source?.provider === preview.provider && customer.external_source?.connection_id === preview.connection_id && customer.external_source?.id === record.id)
       || Boolean(record.email) && state.customers.some((customer) => customer.email.toLowerCase() === record.email.toLowerCase())
-    if (duplicate || state.customers.length >= currentPlan().maxCustomers) { skipped += 1; continue }
+    if (duplicate || state.customers.filter((customer) => !customer.merged_into).length >= currentPlan().maxCustomers) { skipped += 1; continue }
     state.customers.push({
       id: createId('cust'),
       business_name: record.businessName,
@@ -2318,11 +2406,118 @@ function importMicrosoftPreview(payload) {
 function listCustomers() {
   requireSession('customer record viewing')
   return state.customers
+    .filter((customer) => !customer.merged_into)
     .map((customer) => ({
       ...customer,
       ...(state.workflowPreferences.find((item) => item.customer_id === customer.id) || {}),
     }))
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+}
+
+function rewriteMergedCustomerReferences(source, target) {
+  const sourceIds = new Set([source.id])
+  const sourceNames = new Set([source.business_name, source.owner_name].filter(Boolean).map((value) => String(value).trim().toLocaleLowerCase()))
+  const targetName = target.business_name || target.owner_name || target.email || 'Customer'
+  const seen = new Set()
+  let rewritten = 0
+  const visit = (value) => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return
+    seen.add(value)
+    if (Array.isArray(value)) { value.forEach(visit); return }
+    for (const [key, current] of Object.entries(value)) {
+      if (/(?:^|_)(?:related_)?customer_id$|customerId$|relatedCustomerId$/i.test(key) && sourceIds.has(current)) {
+        value[key] = target.id
+        rewritten += 1
+      } else if (['customer_name', 'customerName'].includes(key) && typeof current === 'string' && sourceNames.has(current.trim().toLocaleLowerCase())) {
+        value[key] = targetName
+      } else visit(current)
+    }
+  }
+  for (const [key, value] of Object.entries(state)) {
+    // Audit records and integrity snapshots are historical evidence. Customer rows
+    // retain the duplicate itself as an archived record rather than rewriting its id.
+    if (!['customers', 'auditEvents', 'integritySnapshots'].includes(key)) visit(value)
+  }
+  return rewritten
+}
+
+function mergeCustomers(payload = {}) {
+  requireRole(['Owner'], 'customer merge')
+  requireFeature('customers')
+  const input = customerMergeSchema.parse(payload || {})
+  if (input.sourceCustomerId === input.targetCustomerId) throw new Error('Choose two different customer records to merge.')
+  const source = state.customers.find((item) => item.id === input.sourceCustomerId && !item.merged_into)
+  const target = state.customers.find((item) => item.id === input.targetCustomerId && !item.merged_into)
+  if (!source || !target) throw new Error('Both customers must be active records in this local workspace.')
+
+  // createBackup snapshots the encrypted pre-merge store before any record changes.
+  const backup = createBackup()
+  const sourceId = source.id
+  const targetId = target.id
+  const sourceName = source.business_name || source.owner_name || source.email || sourceId
+  const targetName = target.business_name || target.owner_name || target.email || targetId
+  const timestamp = now()
+  const sourcePreferences = state.workflowPreferences.find((item) => item.customer_id === sourceId)
+  const targetPreferences = state.workflowPreferences.find((item) => item.customer_id === targetId)
+  const customerRecords = Array.isArray(state.featureRecords?.customers) ? state.featureRecords.customers : []
+  const sourceProfile = customerRecords.find((item) => item.kind === 'customer_profile' && item.customerId === sourceId)
+  const targetProfile = customerRecords.find((item) => item.kind === 'customer_profile' && item.customerId === targetId)
+  const preMergeState = JSON.stringify(state)
+  if (sourcePreferences && targetPreferences) {
+    for (const [key, value] of Object.entries(sourcePreferences)) {
+      if (key !== 'customer_id' && (targetPreferences[key] === undefined || targetPreferences[key] === null || targetPreferences[key] === '') && value !== '') targetPreferences[key] = value
+    }
+    state.workflowPreferences = state.workflowPreferences.filter((item) => item !== sourcePreferences)
+  }
+
+  if (sourceProfile && targetProfile) {
+    for (const [key, value] of Object.entries(sourceProfile)) {
+      if (key === 'id' || key === 'customerId') continue
+      if (Array.isArray(value)) {
+        const merged = [...value, ...(Array.isArray(targetProfile[key]) ? targetProfile[key] : [])]
+        const unique = new Map(merged.map((item, index) => [item?.id || `${key}-${index}-${JSON.stringify(item)}`, item]))
+        targetProfile[key] = [...unique.values()]
+      } else if (value && typeof value === 'object') {
+        targetProfile[key] = { ...value, ...(targetProfile[key] && typeof targetProfile[key] === 'object' ? targetProfile[key] : {}) }
+      } else if (targetProfile[key] === undefined || targetProfile[key] === null || targetProfile[key] === '') {
+        targetProfile[key] = value
+      }
+    }
+    state.featureRecords.customers = customerRecords.filter((item) => item !== sourceProfile)
+  }
+
+  const referencesRewritten = rewriteMergedCustomerReferences(source, target)
+  const targetPreferredFields = ['owner_name', 'email', 'industry', 'service_area', 'preferred_contact']
+  for (const key of targetPreferredFields) {
+    if ((!target[key] || String(target[key]).trim() === '') && source[key]) target[key] = source[key]
+  }
+  target.status = target.status || source.status || 'Active'
+  target.updated_at = timestamp
+  source.merged_into = targetId
+  source.merged_at = timestamp
+  source.merge_backup_path = backup.backupPath
+  source.status = 'Merged'
+  if (Array.isArray(state.featureRecords?.customers)) {
+    const customerData = state.featureRecords.customers
+    const selfRelationships = new Set(customerData.filter((item) => item.kind === 'customer_relationship' && item.customerId && item.customerId === item.relatedCustomerId))
+    if (selfRelationships.size) state.featureRecords.customers = customerData.filter((item) => !selfRelationships.has(item))
+  }
+  try {
+    recordAudit('customer.merged', 'Customer records merged locally', {
+      sourceCustomerId: sourceId,
+      sourceCustomerName: sourceName,
+      targetCustomerId: targetId,
+      targetCustomerName: targetName,
+      referencesRewritten,
+      safetyBackupPath: backup.backupPath,
+      cloudSync: 'Local records only; shared Firestore records were not merged or deleted.',
+    }, activeSession.email)
+  } catch (error) {
+    state = JSON.parse(preMergeState)
+    try { persist() } catch {}
+    throw new Error(`The merge could not be committed. Restore the pre-merge backup at ${backup.backupPath} if the local store is inconsistent. ${error.message}`)
+  }
+  return { sourceCustomerId: sourceId, targetCustomerId: targetId, referencesRewritten, safetyBackupPath: backup.backupPath, customers: listCustomers() }
 }
 
 function activeWorkspaceId() {
@@ -2358,6 +2553,7 @@ function sharedCustomerFields(customer, workspaceId) {
 function applySharedCustomer(remote) {
   const localId = remote.desktop_customer_id || remote.id
   let customer = state.customers.find((item) => item.id === localId || item.shared_customer_id === remote.id)
+  if (customer?.merged_into) return customer
   if (!customer) {
     customer = { id: localId, created_at: remote.created_at || now() }
     state.customers.push(customer)
@@ -2402,7 +2598,7 @@ async function performCustomerSync() {
   let uploaded = 0
   let downloaded = 0
 
-  for (const localCustomer of state.customers.filter((customer) => !isSampleCustomer(customer))) {
+  for (const localCustomer of state.customers.filter((customer) => !customer.merged_into && !isSampleCustomer(customer))) {
     const remoteId = localCustomer.shared_customer_id || localCustomer.id
     const remoteCustomer = remoteById.get(remoteId)
     if (!remoteCustomer) {
@@ -2459,7 +2655,7 @@ async function synchronizeCustomersAfterSignIn(session) {
 
 function listTasks() {
   requireSession('task viewing')
-  return [...state.adminTasks].sort((a, b) => {
+  return [...state.adminTasks.filter((task) => !task.notice_role || activeSession.role === 'Owner' || task.notice_role === activeSession.role)].sort((a, b) => {
     if (Number(b.protected) !== Number(a.protected)) return Number(b.protected) - Number(a.protected)
     return b.updated_at.localeCompare(a.updated_at)
   })
@@ -2503,6 +2699,7 @@ function queueWorkflowJob(payload) {
 
 function processDueJobs() {
   requireSession('workflow job processing')
+  processDueLocalPolicies()
   const due = state.workflowJobs.filter((job) => job.status === 'Queued' && job.run_at <= now()).slice(0, 10)
   due.forEach((job) => {
     job.attempts += 1
@@ -2532,6 +2729,100 @@ function processDueJobs() {
   })
   if (due.length) persist()
   return listWorkflowJobs()
+}
+
+function processDueLocalPolicies() {
+  const securityRecords = state.featureRecords?.security || []
+  const reportRecords = state.featureRecords?.reporting || []
+  if (['Owner', 'Bookkeeper'].includes(activeSession.role)) processDueLocalReportSchedules(reportRecords)
+  if (activeSession.role === 'Owner') {
+    processDueLocalExportSchedule(securityRecords)
+    processDueAccessReview(securityRecords)
+    applyLocalInactiveUserPolicy(securityRecords)
+  }
+}
+
+function processDueLocalReportSchedules(records) {
+  const due = records.filter((item) => item?.kind === 'schedule' && item.status === 'Scheduled' && Date.parse(item.run_at) <= Date.now() && item.created_by_email === activeSession.email).slice(0, 10)
+  if (!due.length) return
+  const sources = { invoices: state.invoices, quotes: state.quotes, appointments: state.appointments, tasks: state.adminTasks, customers: state.customers, expenses: state.expenses }
+  const exportDir = path.join(dataRoot, 'exports', 'scheduled-reports')
+  fs.mkdirSync(exportDir, { recursive: true })
+  for (const schedule of due) {
+    try {
+      const filters = schedule.filters || {}
+      if (!Object.hasOwn(sources, schedule.report_type)) throw new Error('Unsupported report type. Recreate this schedule from Report Studio.')
+      if (!['30', '90', '365', 'all'].includes(String(filters.period || '30'))) throw new Error('Invalid report date range.')
+      const cutoff = filters.period === 'all' ? 0 : Date.now() - Number(filters.period || '30') * 86400000
+      const status = String(filters.status || 'All')
+      const needle = String(filters.query || '').trim().slice(0, 200).toLocaleLowerCase()
+      const rows = sources[schedule.report_type].filter((record) => {
+        const dateValue = record.created_at || record.updated_at || record.scheduled_for || record.due_at || record.due_date || record.expense_date
+        const timestamp = dateValue ? Date.parse(dateValue) || 0 : 0
+        return (!cutoff || (timestamp > 0 && timestamp >= cutoff)) && (status === 'All' || String(record.status || 'Unspecified') === status) && (!needle || Object.values(record).some((value) => typeof value === 'string' && value.toLocaleLowerCase().includes(needle)))
+      })
+      const quote = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`
+      const csv = [['Record ID', 'Title', 'Status', 'Date', 'Amount'], ...rows.map((record) => [record.id, record.title || record.business_name || record.label, record.status, record.created_at || record.updated_at || record.due_date || record.expense_date, record.amount])].map((row) => row.map(quote).join(',')).join('\r\n')
+      const safeId = String(schedule.id || '').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 80) || hashValue(schedule).slice(0, 20)
+      const outputPath = path.join(exportDir, `overhead-${schedule.report_type}-${new Date().toISOString().slice(0, 10)}-${safeId}.csv`)
+      fs.writeFileSync(`${outputPath}.tmp`, `\uFEFF${csv}`, { encoding: 'utf8', flag: 'w' })
+      fs.renameSync(`${outputPath}.tmp`, outputPath)
+      Object.assign(schedule, { status: 'Delivered', delivery: 'local_csv', output_path: outputPath, delivered_at: now(), updated_at: now() })
+      state.adminTasks.unshift({ id: createId('task'), title: `Scheduled ${schedule.report_type} report ready`, area: 'Reports', status: 'Open', priority: 'Normal', due_at: now(), report_schedule_id: schedule.id, output_path: outputPath, created_at: now(), updated_at: now() })
+      recordAudit('report.scheduled_export_created', 'Scheduled report CSV created locally', { scheduleId: schedule.id, reportType: schedule.report_type, rowCount: rows.length }, activeSession.email)
+    } catch (error) {
+      Object.assign(schedule, { status: 'Failed', last_error: String(error?.message || 'Scheduled report export failed.').slice(0, 300), updated_at: now() })
+      recordAudit('report.scheduled_export_failed', 'Scheduled report CSV could not be created', { scheduleId: schedule.id, error: schedule.last_error }, activeSession.email)
+    }
+  }
+  persist()
+}
+
+function processDueLocalExportSchedule(records) {
+  const schedule = records.find((item) => item?.id === 'data-export-schedule' && item.enabled && item.status === 'Scheduled' && Date.parse(item.run_at) <= Date.now() && item.created_by_email === activeSession.email)
+  if (!schedule) return
+  try {
+    const result = createDataExport()
+    Object.assign(schedule, { status: 'Delivered', output_path: result.exportPath, delivered_at: now(), updated_at: now() })
+    state.adminTasks.unshift({ id: createId('task'), title: 'Scheduled full data export ready', area: 'Reports', status: 'Open', priority: 'High', due_at: now(), output_path: result.exportPath, created_at: now(), updated_at: now() })
+  } catch (error) {
+    Object.assign(schedule, { status: 'Failed', last_error: String(error?.message || 'Scheduled export failed.').slice(0, 300), updated_at: now() })
+  }
+  persist()
+}
+
+function processDueAccessReview(records) {
+  const schedule = records.find((item) => item?.id === 'access-review-schedule' && item.enabled && Date.parse(item.next_at) <= Date.now() && item.created_by_email === activeSession.email)
+  if (!schedule) return
+  const dueAt = schedule.next_at
+  const exists = state.adminTasks.some((task) => task.access_review_due_at === dueAt && task.status !== 'Complete')
+  if (!exists) state.adminTasks.unshift({ id: createId('task'), title: 'Scheduled access review due', area: 'Security', status: 'Open', priority: 'High', due_at: now(), access_review_due_at: dueAt, created_at: now(), updated_at: now() })
+  const interval = Math.min(365, Math.max(7, Number(schedule.interval_days) || 30))
+  schedule.last_review_task_at = now()
+  schedule.next_at = new Date(Date.now() + interval * 86400000).toISOString()
+  schedule.updated_at = now()
+  persist()
+}
+
+function applyLocalInactiveUserPolicy(records) {
+  const policy = records.find((item) => item?.id === 'inactive-user-policy' && item.enabled)
+  const days = Number(policy?.inactive_days)
+  if (!Number.isInteger(days) || days < 30 || days > 3650) return
+  const cutoff = Date.now() - days * 86400000
+  let changed = false
+  for (const user of state.userProfiles) {
+    if (user.status !== 'Active' || user.role === 'Owner' || user.firebase_uid) continue
+    const lastSeen = Date.parse(user.last_sign_in || user.created_at || '')
+    if (lastSeen && lastSeen < cutoff) {
+      user.status = 'Suspended'
+      user.suspended_at = now()
+      user.suspension_reason = `Automatically suspended after ${days} days without a local sign-in.`
+      user.updated_at = now()
+      changed = true
+      recordAudit('user.suspended', 'Local user automatically suspended for inactivity', { email: user.email, inactiveDays: days }, activeSession.email)
+    }
+  }
+  if (changed) persist()
 }
 
 function retryWorkflowJob(payload) {
@@ -2660,7 +2951,7 @@ function addPlaybookTask(customer, title, priority = 'High', protectedTask = 1) 
 function applyCustomerPlaybook(payload = {}) {
   requireRole(['Owner', 'Front Desk', 'Support'], 'customer playbook setup')
   const input = customerPlaybookSchema.parse(payload)
-  const customer = state.customers.find((item) => item.id === input.customerId)
+  const customer = state.customers.find((item) => item.id === input.customerId && !item.merged_into)
   if (!customer) throw new Error('Customer record not found.')
   const template = customerPlaybookTemplates[input.template]
   let preferences = state.workflowPreferences.find((item) => item.customer_id === customer.id)
@@ -2992,7 +3283,7 @@ function applySubscription(payload, options = {}) {
       usage: {
         users: state.userProfiles.length,
         managers: state.managerProfiles.length,
-        customers: state.customers.length,
+        customers: state.customers.filter((customer) => !customer.merged_into).length,
       },
     }
   }
@@ -3030,7 +3321,7 @@ function getEntitlementState() {
     usage: {
       users: state.userProfiles.length,
       managers: state.managerProfiles.length,
-      customers: state.customers.length,
+      customers: state.customers.filter((customer) => !customer.merged_into).length,
     },
   }
 }
@@ -3138,7 +3429,7 @@ function buildOfficeChecklist() {
   const checklist = [
     { id: 'profile', label: 'Owner profile created', status: state.userProfiles.length ? 'Done' : 'Open' },
     { id: 'plan', label: 'Plan entitlement active', status: currentSubscription() ? 'Done' : 'Open' },
-    { id: 'customers', label: 'First customer record added', status: state.customers.length ? 'Done' : 'Open' },
+    { id: 'customers', label: 'First customer record added', status: state.customers.some((customer) => !customer.merged_into) ? 'Done' : 'Open' },
     { id: 'backup', label: 'Backup available', status: health.backupCount ? 'Done' : 'Open' },
     { id: 'legal', label: 'Terms acknowledged', status: state.legalAcknowledgements.length ? 'Done' : 'Open' },
     { id: 'risk', label: 'Fraud/risk queue reviewed', status: health.openFraudSignalCount ? 'Review' : 'Done' },
@@ -3173,7 +3464,7 @@ function createQuickNote(payload = {}) {
 async function createFillablePdf(payload = {}) {
   requireRole(['Owner', 'Front Desk', 'Support'], 'fillable PDF generation')
   const input = pdfRequestSchema.parse(payload)
-  const customer = state.customers.find((item) => item.id === input.customerId) || state.customers[0]
+  const customer = state.customers.find((item) => item.id === input.customerId && !item.merged_into) || state.customers.find((item) => !item.merged_into)
   const outputDir = path.join(dataRoot, 'pdfs')
   fs.mkdirSync(outputDir, { recursive: true })
   const pdfPath = path.join(outputDir, `overhead-${input.packetType}-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`)
@@ -3358,7 +3649,7 @@ function getComplianceSummary() {
     exportAllowed: state.appToggles.allowDataExport,
     encryptedAtRest: fs.existsSync(dbPath) && fs.readFileSync(dbPath, 'utf8').startsWith('safeStorage:v1:'),
     aggregate: {
-      customers: state.customers.length,
+      customers: state.customers.filter((customer) => !customer.merged_into).length,
       users: state.userProfiles.length,
       managers: state.managerProfiles.length,
       auditEvents: state.auditEvents.length,
@@ -3485,7 +3776,7 @@ function getHealth() {
     databasePath: dbPath,
     databaseExists: fs.existsSync(dbPath),
     encryptedAtRest: fs.existsSync(dbPath) && fs.readFileSync(dbPath, 'utf8').startsWith('safeStorage:v1:'),
-    customerCount: state.customers.length,
+    customerCount: state.customers.filter((customer) => !customer.merged_into).length,
     taskCount: state.adminTasks.length,
     auditCount: state.auditEvents.length,
     backupCount: fs.existsSync(path.join(dataRoot, 'backups')) ? fs.readdirSync(path.join(dataRoot, 'backups')).length : 0,
@@ -3509,6 +3800,7 @@ module.exports = {
   acknowledgeLegal,
   createBackup,
   createCustomer,
+  mergeCustomers,
   createAppointment,
   createQuote,
   createInvoice,
@@ -3583,6 +3875,8 @@ module.exports = {
   listUserProfiles,
   listWorkflowJobs,
   lockSession,
+  listDeviceSessions,
+  revokeDeviceSession,
   persistIntegritySnapshot,
   processDueJobs,
   queueWorkflowJob,

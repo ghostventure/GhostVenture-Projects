@@ -590,10 +590,10 @@ function App() {
                 setOperationNotice={setOperationNotice}
               />
             )}
-            {activeSection === 'reports' && <><ReportsSection backendState={backendState} /><ReportStudio backendState={backendState} sessionRole={session.role} setOperationNotice={setOperationNotice} /></>}
+            {activeSection === 'reports' && <><ReportsSection backendState={backendState} /><ReportStudio backendState={backendState} sessionRole={session.role} sessionEmail={session.email} setOperationNotice={setOperationNotice} /></>}
             {activeSection === 'growth' && <GrowthWorkspace session={session} />}
             {activeSection === 'sales-growth' && <SalesWorkspace backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
-            {activeSection === 'customer-management' && <CustomerManagementWorkspace backendState={backendState} secureView={secureView} />}
+            {activeSection === 'customer-management' && <CustomerManagementWorkspace backendState={backendState} secureView={secureView} refreshBackend={refreshBackend} sessionRole={session.role} />}
             {activeSection === 'field-assist' && <FieldAssistSection backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'scheduling' && <SchedulingWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
             {activeSection === 'documents' && <DocumentControlWorkspace backendState={backendState} setOperationNotice={setOperationNotice} refreshBackend={refreshBackend} />}
@@ -698,6 +698,7 @@ function App() {
             {activeSection === 'security' && (
               <SecuritySection
                 backendState={backendState}
+                session={session}
                 refreshBackend={refreshBackend}
                 setOperationNotice={setOperationNotice}
               />
@@ -2966,10 +2967,34 @@ function SquareSection({ backendState, refreshBackend, setOperationNotice }) {
   )
 }
 
-function SecuritySection({ backendState, refreshBackend, setOperationNotice }) {
+function SecuritySection({ backendState, session, refreshBackend, setOperationNotice }) {
   const [reset, setReset] = useState({ email: 'owner@overhead.local', recoveryPhrase: '', newPassword: '' })
   const [dataRequest, setDataRequest] = useState({ requestType: 'export', subjectEmail: 'owner@overhead.local', notes: '' })
   const [deletionConfirmation, setDeletionConfirmation] = useState('')
+  const [securityRecords, setSecurityRecords] = useState([])
+  const [exportRunAt, setExportRunAt] = useState('')
+  const [reviewIntervalDays, setReviewIntervalDays] = useState('90')
+  const [inactiveDays, setInactiveDays] = useState('90')
+  const [inactiveEnabled, setInactiveEnabled] = useState(false)
+  const [noticeEvent, setNoticeEvent] = useState('fraud.signal')
+  const [noticeRoles, setNoticeRoles] = useState(['Owner'])
+
+  useEffect(() => {
+    if (session?.role !== 'Owner' || !window.overheadBackend?.listFeatureRecords) return
+    const load = async () => {
+      try {
+        const records = await window.overheadBackend.listFeatureRecords('security')
+        setSecurityRecords(records)
+        const policy = records.find((record) => record.id === 'inactive-user-policy')
+        if (policy) { setInactiveEnabled(Boolean(policy.enabled)); setInactiveDays(String(policy.inactive_days || 90)) }
+        const access = records.find((record) => record.id === 'access-review-schedule')
+        if (access) setReviewIntervalDays(String(access.interval_days || 90))
+      } catch { setSecurityRecords([]) }
+    }
+    load()
+    const timer = window.setInterval(load, 30000)
+    return () => window.clearInterval(timer)
+  }, [session?.role])
 
   async function resetPassword() {
     if (!window.overheadBackend?.resetPassword) return
@@ -2991,6 +3016,48 @@ function SecuritySection({ backendState, refreshBackend, setOperationNotice }) {
     const result = await window.overheadBackend.completeDataDeletion({ requestId, confirmation: deletionConfirmation })
     setDeletionConfirmation('')
     setOperationNotice(`Local deletion completed. Safety backup: ${result.safetyBackupPath}`)
+    await refreshBackend()
+  }
+
+  async function saveSecurityRecord(record) {
+    await window.overheadBackend.upsertFeatureRecord({ collection: 'security', record })
+    const records = await window.overheadBackend.listFeatureRecords('security')
+    setSecurityRecords(records)
+    setOperationNotice(`${record.title || record.kind || 'Security setting'} saved locally.`)
+  }
+
+  async function scheduleFullExport() {
+    if (!exportRunAt || Date.parse(exportRunAt) <= Date.now()) return setOperationNotice('Choose a future time for the local data export.')
+    await saveSecurityRecord({ id: 'data-export-schedule', kind: 'data_export_schedule', title: 'Scheduled local data export', created_by_email: session.email, run_at: new Date(exportRunAt).toISOString(), status: 'Scheduled', enabled: true })
+    setExportRunAt('')
+  }
+
+  async function saveAccessReviewSchedule() {
+    const interval = Number(reviewIntervalDays)
+    if (!Number.isInteger(interval) || interval < 7 || interval > 365) return setOperationNotice('Set access review cadence between 7 and 365 days.')
+    const previous = securityRecords.find((item) => item.id === 'access-review-schedule')
+    await saveSecurityRecord({ id: 'access-review-schedule', kind: 'access_review_schedule', title: 'Recurring access review', created_by_email: session.email, interval_days: interval, next_at: previous?.enabled ? previous.next_at : new Date(Date.now() + interval * 86400000).toISOString(), enabled: true })
+  }
+
+  async function saveInactivePolicy() {
+    const days = Number(inactiveDays)
+    if (!Number.isInteger(days) || days < 30 || days > 3650) return setOperationNotice('Set an inactivity window between 30 and 3,650 days.')
+    await saveSecurityRecord({ id: 'inactive-user-policy', kind: 'inactive_user_policy', title: 'Local account inactivity policy', enabled: inactiveEnabled, inactive_days: days, updated_by: session.email })
+  }
+
+  async function saveNotificationRoute() {
+    const rules = securityRecords.find((item) => item.id === 'notification-routing-policy')?.rules || []
+    const updated = [...rules.filter((item) => item.event_type !== noticeEvent), { event_type: noticeEvent, recipient_roles: noticeRoles }]
+    await saveSecurityRecord({ id: 'notification-routing-policy', kind: 'notification-routing-policy', title: 'Local notification routes', rules: updated })
+  }
+
+  async function removeNotificationRoute(eventType) {
+    const rules = securityRecords.find((item) => item.id === 'notification-routing-policy')?.rules || []
+    await saveSecurityRecord({ id: 'notification-routing-policy', kind: 'notification-routing-policy', title: 'Local notification routes', rules: rules.filter((item) => item.event_type !== eventType) })
+  }
+
+  async function markSecurityAlertRead(task) {
+    await window.overheadBackend.updateTaskStatus({ taskId: task.id, status: 'Complete' })
     await refreshBackend()
   }
 
@@ -3065,6 +3132,18 @@ function SecuritySection({ backendState, refreshBackend, setOperationNotice }) {
           </div>
         </div>
       </div>
+      <div className="backend-health">
+        <strong>Local security notifications</strong>
+        {(backendState.tasks || []).filter((task) => task.notice_role && task.status !== 'Complete').slice(0, 10).map((task) => <p key={task.id}>{task.title} · {task.details || ''} <button className="ghost-button" type="button" onClick={() => markSecurityAlertRead(task)}>Mark read</button></p>)}
+        {!(backendState.tasks || []).some((task) => task.notice_role && task.status !== 'Complete') && <span>No unread security notices for your role.</span>}
+        <small>Notices are stored locally and shown to the selected staff roles. No email, push, or cloud notification is sent.</small>
+      </div>
+      {session?.role === 'Owner' && <div className="dashboard-grid">
+        <div className="backend-health"><strong>Local export schedule</strong><label>Run at<input type="datetime-local" value={exportRunAt} onChange={(event) => setExportRunAt(event.target.value)}/></label><button className="ghost-button" type="button" onClick={scheduleFullExport}>Schedule full data export</button><small>{securityRecords.find((item) => item.id === 'data-export-schedule')?.status || 'No export scheduled'} · Runs while OverHead is open and the scheduling Owner is signed in.</small></div>
+        <div className="backend-health"><strong>Recurring access review</strong><label>Repeat every days<input type="number" min="7" max="365" value={reviewIntervalDays} onChange={(event) => setReviewIntervalDays(event.target.value)}/></label><button className="ghost-button" type="button" onClick={saveAccessReviewSchedule}>Save review schedule</button><small>Creates an in-app review task for an Owner. Review decisions remain manual.</small></div>
+        <div className="backend-health"><strong>Local account inactivity policy</strong><label>Inactive days<input type="number" min="30" max="3650" value={inactiveDays} onChange={(event) => setInactiveDays(event.target.value)}/></label><label><input type="checkbox" checked={inactiveEnabled} onChange={(event) => setInactiveEnabled(event.target.checked)}/> Enable for local non-Owner accounts</label><button className="ghost-button" type="button" onClick={saveInactivePolicy}>Save inactivity policy</button><small>Firebase-linked accounts are excluded; their identity provider must enforce suspension.</small></div>
+        <div className="backend-health"><strong>Notification routing</strong><label>Security event<select value={noticeEvent} onChange={(event) => setNoticeEvent(event.target.value)}>{['fraud.signal', 'access.denied', 'integrity.attention', 'auth.failed', 'user.suspended', 'data.exported', 'restore.completed', 'session.revoked', 'project.status_request.created', 'project.status_request.decided'].map((eventType) => <option key={eventType} value={eventType}>{eventType}</option>)}</select></label><label>Recipient role<select value={noticeRoles[0] || 'Owner'} onChange={(event) => setNoticeRoles([event.target.value])}>{['Owner', 'Front Desk', 'Bookkeeper', 'Support'].map((role) => <option key={role}>{role}</option>)}</select></label><button className="ghost-button" type="button" onClick={saveNotificationRoute}>Save local route</button>{(securityRecords.find((item) => item.id === 'notification-routing-policy')?.rules || []).map((rule) => <p key={rule.event_type}>{rule.event_type} → {rule.recipient_roles.join(', ')} <button className="ghost-button" type="button" onClick={() => removeNotificationRoute(rule.event_type)}>Remove</button></p>)}<small>Role checks are enforced in the local backend; notices appear in the in-app task inbox.</small></div>
+      </div>}
     </section>
   )
 }

@@ -1,8 +1,8 @@
-version: 0.3.17
+version: 0.3.18
 files:
-  - url: OverHead-Setup-0.3.17-win-x64.exe
-    sha512: Nl6Pz0dslB5lXpGAsI9HJSHyljyH+YRNa7dXceOSVk/cM4pjd3uAzbymWGcTkQ4YJ2jn+x84GoOCEReqkfoaiQ==
-    size: 104035958
-path: OverHead-Setup-0.3.17-win-x64.exe
-sha512: Nl6Pz0dslB5lXpGAsI9HJSHyljyH+YRNa7dXceOSVk/cM4pjd3uAzbymWGcTkQ4YJ2jn+x84GoOCEReqkfoaiQ==
-releaseDate: '2026-10-18T16:31:41.2993027Z'
+  - url: OverHead-Setup-0.3.18-win-x64.exe
+    sha512: GM1yzPJRdl6/yy/Cudiv65rzPFjjXQWZi2tZiieSKxXwWWdz3tU0dg2P/xAx1S5uAEgWayqLbj/PWGX67Cu2EA==
+    size: 104041970
+path: OverHead-Setup-0.3.18-win-x64.exe
+sha512: GM1yzPJRdl6/yy/Cudiv65rzPFjjXQWZi2tZiieSKxXwWWdz3tU0dg2P/xAx1S5uAEgWayqLbj/PWGX67Cu2EA==
+releaseDate: '2026-10-18T17:39:58.6907810Z'

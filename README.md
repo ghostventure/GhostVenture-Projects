@@ -21,7 +21,7 @@ The current Windows build includes a local desktop sign-in/onboarding surface, l
 
 ## Current releases
 
-- **OverHead Desktop 0.3.15:** standard Windows desktop release with customer/staff access lanes, role controls, live operational records, locally stored customer documents, and Firebase-hosted downloads/updates.
+- **OverHead Desktop 0.3.18:** standard Windows desktop release with customer/staff access lanes, role controls, local workflow schedules, project status approvals, customer merge safeguards, saved-session controls, and Firebase-hosted downloads/updates.
 - **OverHead Cylinder 0.3.10:** separate deployment for Windows Server and Windows IoT only. It uses its own application identity, local data directory, updater channel, and Cylinder tier. It will exit on standard Windows editions. Each server workspace gets one 30-day, no-card evaluation; continued paid use requires a separate commercial activation rather than the standard desktop checkout.
 
 See `docs/cylinder-deployment.md` for server/IoT deployment, updates, and compatibility details.

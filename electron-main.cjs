@@ -573,6 +573,8 @@ if (singleInstanceLock) app.whenReady().then(async () => {
       return { editor: editor.label, workspacePath: workspace.workspacePath }
     }))
     ipcMain.handle('session:lock', trustedHandler((_event, sessionId) => backend.lockSession(sessionId)))
+    ipcMain.handle('session:list-device', trustedHandler(() => backend.listDeviceSessions()))
+    ipcMain.handle('session:revoke-device', trustedHandler((_event, payload) => backend.revokeDeviceSession(payload)))
     ipcMain.handle('customers:list', trustedHandler(() => backend.listCustomers()))
     ipcMain.handle('customers:sync', trustedHandler(() => backend.syncCustomersWithWorkspace()))
     ipcMain.handle('tasks:list', trustedHandler(() => backend.listTasks()))
@@ -585,6 +587,7 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('jobs:retry', trustedHandler((_event, payload) => backend.retryWorkflowJob(payload)))
     ipcMain.handle('jobs:list', trustedHandler(() => backend.listWorkflowJobs()))
     ipcMain.handle('customers:create', trustedHandler((_event, payload) => backend.createCustomer(payload)))
+    ipcMain.handle('customers:merge', trustedHandler((_event, payload) => backend.mergeCustomers(payload)))
     ipcMain.handle('documents:select-file', trustedHandler(async () => {
       const result = await dialog.showOpenDialog({ title: 'Choose customer document', properties: ['openFile'], filters: [{ name: 'Supported documents', extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'png', 'jpg', 'jpeg'] }] })
       return result.canceled ? { canceled: true, filePath: '' } : { canceled: false, filePath: result.filePaths[0] || '' }

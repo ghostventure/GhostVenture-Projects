@@ -12,8 +12,8 @@ const site = 'overhead-office'
 const root = path.resolve(__dirname, '..')
 const brochureMode = process.argv.includes('--brochures')
 const guideMode = process.argv.includes('--user-guide')
-const release = path.join(root, guideMode ? 'release-user-guide' : brochureMode ? 'release-brochures-2026-09-07' : 'release-stripe-0.3.12')
-const version = '0.3.12'
+const release = path.join(root, process.env.OVERHEAD_RELEASE_DIR || (guideMode ? 'release-user-guide' : brochureMode ? 'release-brochures-2026-09-07' : 'release'))
+const version = require('../package.json').version
 const api = new Client({ urlPrefix: 'https://firebasehosting.googleapis.com', apiVersion: 'v1beta1', auth: true })
 async function liveRelease() { return (await api.get(`/sites/${site}/releases`, {queryParams:{pageSize:1}})).body.releases[0] }
 async function main() {
