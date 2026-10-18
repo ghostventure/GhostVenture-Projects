@@ -32,6 +32,7 @@ const STARTUP_RECOVERY_HTML = 'data:text/html;charset=utf-8,' + encodeURICompone
 // This desktop console does not need GPU acceleration. Keeping rendering on the
 // CPU avoids a common launch failure on machines with older or unstable drivers.
 app.disableHardwareAcceleration()
+if (process.env.OVERHEAD_SMOKE_DATA) app.setPath('appData', path.resolve(process.env.OVERHEAD_SMOKE_DATA))
 app.setPath('userData', path.join(app.getPath('appData'), DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead'))
 const recoveryStatePath = path.join(app.getPath('userData'), 'runtime-recovery.json')
 const updatePreferencesPath = path.join(app.getPath('userData'), 'update-preferences.json')
