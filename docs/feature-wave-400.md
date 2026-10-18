@@ -1,4 +1,4 @@
-# OverHead 0.3.16 feature wave: 400 requested items
+# OverHead 0.3.17 feature wave: 400 requested items
 
 This release branch turns the 400-item inventory into role-aware workspace areas plus additions to the existing dashboard, reports, support, settings, and account screens. Each 100-item audit records whether an item is implemented, already existed in OverHead, partial, or blocked by a concrete product or external prerequisite.
 
@@ -6,11 +6,11 @@ The per-range audit tables are [items 1–100](feature-wave-001-100.md), [101–
 
 | Range | Implemented | Already present | Partial | Blocked |
 |---|---:|---:|---:|---:|
-| 1–100 | 73 | 6 | 0 | 21 |
-| 101–200 | 80 | 11 | 0 | 9 |
-| 201–300 | 21 | 35 | 0 | 44 |
-| 301–400 | 50 | 29 | 0 | 21 |
-| **Total** | **224** | **81** | **0** | **95** |
+| 1–100 | 93 | 6 | 0 | 1 |
+| 101–200 | 84 | 11 | 0 | 5 |
+| 201–300 | 34 | 36 | 0 | 30 |
+| 301–400 | 57 | 29 | 0 | 14 |
+| **Total** | **268** | **82** | **0** | **50** |
 
 ## Workspace areas
 
@@ -21,7 +21,7 @@ The per-range audit tables are [items 1–100](feature-wave-001-100.md), [101–
 - **Rule Builder**: reviewable trigger and action rules with a local execution boundary; external delivery or providers remain separately configured.
 - **Integrations**: connection status, validated customer CSV import with duplicate handling, accounting-shaped CSV export, and saved mappings. Provider credentials are never stored in generic feature records.
 - **Search**: role-scoped search over encrypted feature collections, personal/shared saved views, recent searches, tags, pinning, and CSV results.
-- **Field & Assist**: offline field notes/checklists and opt-in deterministic suggestions. No hosted AI provider is called.
+- **Field & Assist**: offline field notes/checklists, consent-based audio recording saved by the user, planned team utilization, and opt-in deterministic suggestions. No hosted AI provider is called.
 - **Support, Settings, Accounts, and Admin Security**: support triage, access preferences, seat utilization, local review notes, and closure checklists.
 
 ## Storage and access boundaries
@@ -34,4 +34,4 @@ Generic feature records are for local workspace data and preferences. They must 
 
 From the repository root, use `npm ci`, `npm run build`, then `npm run dist:win` to create the Windows installer. `npm run build` is the compile gate. Run packaged smoke checks only after that build succeeds. Verify the installer and portable ZIP, release checksums, the website installer/download routes, `latest.yml`, and the public guide before claiming a release is complete.
 
-All inventory rows audited as Partial have now been implemented. Work is proceeding on rows still marked Blocked, which include local product workflows as well as genuine provider, identity, and native-platform prerequisites. The GitHub push and Firebase website deployment remain release actions to complete after those changes, the integrated build, and packaged verification pass.
+All inventory rows audited as Partial have been implemented. The current audit records 268 implemented features, 82 existing features, and 50 remaining blockers. Those blockers are documented with their concrete prerequisites: safe customer/workspace identity transactions, hosted payment/calendar/file/signature integrations, webhook and scheduled delivery services, or native iOS capabilities and platform build infrastructure. The integrated build, packaged verification, GitHub push, and Firebase website deployment remain to complete.

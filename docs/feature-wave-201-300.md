@@ -1,6 +1,6 @@
 # OverHead feature wave 201–300
 
-Audited against the integrated OverHead 0.3.16 feature wave and the isolated feature modules in this wave. “Implemented” identifies new work in this wave; “Already present” identifies existing behavior or an integration point. “Blocked” means completing the listed behavior needs a service, data model, or identity/network capability the current desktop workspace does not have. Blocked rows name the missing prerequisite.
+Audited against the integrated OverHead 0.3.17 feature wave and its local workspaces. “Implemented” identifies new work in this wave; “Already present” identifies existing behavior or an integration point. “Blocked” means completing the listed behavior needs a service, data model, or identity/network capability the current desktop workspace does not have. Blocked rows name the missing prerequisite.
 
 The new report and rule modules use the encrypted local feature-record API. Reports include filters and metric definitions, while customer, project, billing, and security records remain in their existing stores. PDF output uses the operating system print dialog; delivery schedules are saved as requests only because the desktop runtime has no background report-delivery service.
 
@@ -109,4 +109,4 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 
 ## Verification boundary
 
-The report and automation modules are integrated on the 0.3.16 feature branch. The integration and search workspaces use local review and export workflows; live third-party connections, unattended delivery, public API/webhook infrastructure, and missing historical source data remain prerequisites rather than silently simulated behavior. The blocked-stage changes received targeted lint and whitespace checks only; no build or smoke test was run in this worktree. Forecast actuals use invoice creation month as a stated local proxy, and project costs remain user-entered estimates.
+The report and automation modules are integrated on OverHead 0.3.17. The integration and search workspaces use local review and export workflows; live third-party connections, unattended delivery, public API/webhook infrastructure, and missing historical source data remain prerequisites rather than silently simulated behavior. The blocked-stage changes received targeted lint and whitespace checks only; no build or smoke test was run in this worktree. Forecast actuals use invoice creation month as a stated local proxy, and project costs remain user-entered estimates.
