@@ -7,12 +7,12 @@ Audited against the current main checkout, including `src/features/GrowthWorkspa
 | 1 | Customizable home dashboard | Implemented | `src/features/GrowthWorkspace.jsx:38-41,139`; dashboard card add/edit/remove UI. |
 | 2 | Drag-and-drop dashboard cards | Implemented | `src/features/GrowthWorkspace.jsx:122-123,139`; dashboard cards use HTML drag/drop and save the reordered layout. |
 | 3 | Saved dashboard layouts | Implemented | `src/features/GrowthWorkspace.jsx:52-57,98-100`; layouts persist in encrypted `dashboard` records. |
-| 4 | Multiple dashboard workspaces | Partial | `src/features/GrowthWorkspace.jsx:42,53,89-95`; named presets switch saved layouts, but do not isolate records into separate workspaces. |
+| 4 | Multiple dashboard workspaces | Implemented | `src/features/GrowthWorkspace.jsx:42,53,98-100,282-287`; named dashboard workspaces have account-scoped, independently saved card layouts. Work records remain shared under their existing permissions. |
 | 5 | Dashboard layout presets | Implemented | `src/features/GrowthWorkspace.jsx:139`; Executive, Sales, Operations, and Blank layout choices. |
-| 6 | Per-user dashboard views | Partial | `src/features/GrowthWorkspace.jsx:44,55,98-100` keys Growth layouts by account email; the older `src/App.jsx:1050-1057,1121` overview widget selection is device-local and not account-scoped. |
-| 7 | KPI goal markers | Partial | `src/features/GrowthWorkspace.jsx:5,139`; KPI goal is stored and displayed as text, without progress/threshold marker behavior. |
-| 8 | Period-over-period comparisons | Partial | `src/features/GrowthWorkspace.jsx:5,24`; comparison period is only a saved KPI field; no period values are computed. |
-| 9 | Dashboard filters | Partial | `src/features/GrowthWorkspace.jsx:68-71,140`; status filtering exists on record areas, but dashboard cards do not filter their underlying data. |
+| 6 | Per-user dashboard views | Implemented | `src/features/GrowthWorkspace.jsx:44,55,98-100`; card order and named workspace presets are keyed by the signed-in account. |
+| 7 | KPI goal markers | Implemented | `src/features/GrowthWorkspace.jsx:320`; numeric goals render a clamped progress marker and accessible label when the card value is numeric. |
+| 8 | Period-over-period comparisons | Implemented | `src/features/GrowthWorkspace.jsx:5,24,320`; cards accept a current value, prior-period value, and comparison period, then display the signed change. |
+| 9 | Dashboard filters | Implemented | `src/features/GrowthWorkspace.jsx:99-107,320`; a card's status filter is applied to the underlying task, project, or opportunity metric rows. |
 | 10 | Dashboard search | Implemented | `src/features/GrowthWorkspace.jsx:45,68-71,139`; query narrows visible cards on the dashboard and searchable record fields in other areas. |
 | 11 | Pinned reports | Blocked | `src/features/ControlCenter.jsx:131-138,161` can pin search results/records; no report-pinning workflow found. |
 | 12 | Recently viewed items | Blocked | No recent-view tracking found in `src/features/GrowthWorkspace.jsx` or `src/App.jsx`. |
@@ -20,50 +20,50 @@ Audited against the current main checkout, including `src/features/GrowthWorkspa
 | 14 | Quick-action menu | Already present | `src/App.jsx:188-218,525-530,690-722`; command-center quick commands and operations drawer. |
 | 15 | Keyboard shortcut editor | Blocked | No shortcut configuration or key-binding editor found in `src/App.jsx`. |
 | 16 | Command palette | Already present | `src/App.jsx:188-218,525-530,678-722`; searchable command center. |
-| 17 | Contextual help panels | Partial | `src/features/GrowthWorkspace.jsx:136` has “How it works”; `src/App.jsx:776-800` feature rail is section-level rather than contextual to individual records. |
+| 17 | Contextual help panels | Implemented | `src/features/GrowthWorkspace.jsx:27-31,316-317`; the help toggle presents area-specific dashboard, task, and project guidance. |
 | 18 | Collapsible navigation groups | Blocked | `src/App.jsx:39-73,484-507`; navigation is a flat section list, with no group-collapse controls. |
 | 19 | Custom navigation labels | Blocked | No per-user or workspace navigation-label setting found in `src/App.jsx`. |
-| 20 | Dashboard data freshness indicator | Partial | `src/App.jsx:1110-1188` shows local health and record counts; sync timestamps/status are shown elsewhere, not as a dashboard freshness indicator. |
-| 21 | Reusable task templates | Partial | `src/features/GrowthWorkspace.jsx:143` buttons prefill task drafts; templates are not separately managed/versioned records. |
-| 22 | Recurring tasks | Partial | `src/features/GrowthWorkspace.jsx:7,23` stores a free-text repeat rule; no recurring-task generation engine found. Recurring invoices are separately supported in `src/features/CustomerFinanceWorkspace.jsx:156-158`. |
-| 23 | Task dependencies | Partial | `src/features/GrowthWorkspace.jsx:7,23` stores `depends_on` as a field, without dependency validation or scheduling behavior. |
+| 20 | Dashboard data freshness indicator | Implemented | `src/features/GrowthWorkspace.jsx:66-68,321`; successful record load stores and displays the refresh time on the dashboard. |
+| 21 | Reusable task templates | Implemented | `src/features/GrowthWorkspace.jsx:151-155,355`; tasks can be saved as reusable encrypted records and applied to a new draft. |
+| 22 | Recurring tasks | Implemented | `src/features/GrowthWorkspace.jsx:190-201,333`; a weekly, monthly, quarterly, or yearly rule can generate the next dated task on demand. Generation is user-triggered. |
+| 23 | Task dependencies | Implemented | `src/features/GrowthWorkspace.jsx:111-114,329`; task dependencies resolve to an existing task and block completion until it is complete. |
 | 24 | Subtasks | Blocked | No parent/child task model or nested task UI found in `src/features/GrowthWorkspace.jsx` or `src/App.jsx`. |
 | 25 | Kanban task board | Implemented | `src/features/GrowthWorkspace.jsx:140-141`; Board view groups tasks into status columns and drag/drop updates status. |
-| 26 | Task priority levels | Partial | `src/features/GrowthWorkspace.jsx:7,23,151`; priority is a free-text field/display, not a validated priority scale with behavior. |
+| 26 | Task priority levels | Implemented | `src/features/GrowthWorkspace.jsx:7,23,289`; priority uses a validated Low, Normal, High, or Urgent selector. |
 | 27 | Custom task statuses | Implemented | `src/features/GrowthWorkspace.jsx:66-71,125-132,140-141`; statuses are collected from records and can be used as board columns. |
-| 28 | Task labels | Partial | `src/features/GrowthWorkspace.jsx:7,23`; labels are stored as text without label management or label-based filtering. |
-| 29 | Task watchers | Partial | `src/features/GrowthWorkspace.jsx:7,23`; watcher values are text fields, with no notification/subscription behavior. |
-| 30 | Task due-date reminders | Partial | `src/features/GrowthWorkspace.jsx:7,23` stores due dates; `src/App.jsx:1896-1916` queues reminders manually, not automatically from each task’s due date. |
+| 28 | Task labels | Implemented | `src/features/GrowthWorkspace.jsx:86-90,309`; comma-separated labels can be selected in the task label filter. |
+| 29 | Task watchers | Implemented | `src/features/GrowthWorkspace.jsx:164-170,197-202,399`; comma-separated watcher account emails receive persisted local inbox entries, which can be marked read. No external delivery is used. |
+| 30 | Task due-date reminders | Implemented | `src/features/GrowthWorkspace.jsx:60-83,286-292,398`; opening Tasks evaluates due tasks, adds a once-per-task/date reminder to the local inbox, and allows dismissal. Evaluation requires OverHead to be open. |
 | 31 | Bulk task editing | Blocked | Task records expose per-record edit/delete actions in `src/features/GrowthWorkspace.jsx:140-151`; no multi-select/bulk operation exists. |
-| 32 | Task assignment rules | Partial | Assignment is a record field (`src/features/GrowthWorkspace.jsx:7,23`); `src/features/ControlCenter.jsx:17-20,127-130` saves automation drafts but explicitly does not execute them. |
+| 32 | Task assignment rules | Implemented | `src/features/GrowthWorkspace.jsx:120-124,223-231,324`; saved priority/project/customer rules assign new matching tasks to the first matching assignee. |
 | 33 | Task workload estimates | Implemented | `src/features/PeopleOperationsWorkspace.jsx:12-24,38-41` totals delegated task estimates against team capacity. Growth task `estimate` is only a field. |
 | 34 | Task time tracking | Already present | `src/features/SchedulingWorkspace.jsx:64-69` records approved hours and billable time; entries are not attached to Growth task records. |
-| 35 | Task checklists | Partial | `src/features/GrowthWorkspace.jsx:7,23,145` stores checklist text; no interactive checklist-item completion state. |
-| 36 | Task approval steps | Partial | `src/App.jsx:1969-2130` has separate management approvals; no approval-step chain is attached to task records. |
-| 37 | Task escalation rules | Partial | `src/features/ControlCenter.jsx:15-20,104-121` includes a deadline-escalation recipe/draft; rules only save/toggle local status and do not execute automatically. |
+| 35 | Task checklists | Implemented | `src/features/GrowthWorkspace.jsx:118,160-164,333`; checklist lines persist as individually checkable task items. |
+| 36 | Task approval steps | Implemented | `src/features/GrowthWorkspace.jsx:119,237-245,333`; newline-separated account emails form an ordered approval chain, and only the current account can approve or reject its step. |
+| 37 | Task escalation rules | Implemented | `src/features/GrowthWorkspace.jsx:60-83,285-287`; configured overdue thresholds are evaluated on opening Tasks, matching tasks are escalated and a local inbox notice is created. Evaluation requires OverHead to be open. |
 | 38 | Task history timeline | Blocked | `src/features/GrowthWorkspace.jsx:140` offers a Timeline view option but renders the same list unless Board is selected; no task event timeline found. |
-| 39 | Task links to customers | Partial | `src/features/GrowthWorkspace.jsx:7,23` keeps a customer text reference; core backend task records can carry `customer_id` (`electron-backend.cjs:1684,2471-2482`), but Growth links do not resolve to customer records. |
-| 40 | Task links to projects | Partial | `src/features/GrowthWorkspace.jsx:7,23` stores a project text reference; no relationship navigation/validation in Growth. |
-| 41 | Project templates | Partial | `src/features/GrowthWorkspace.jsx:143` prefills named project drafts; templates are static buttons, not reusable project template records. |
-| 42 | Project milestones | Partial | `src/features/GrowthWorkspace.jsx:8,24` stores a free-text milestone value, without milestone records or completion tracking. |
-| 43 | Project health scores | Partial | `src/features/GrowthWorkspace.jsx:8,24` accepts a manually entered health value; no computed score. |
-| 44 | Project budget tracking | Partial | `src/features/GrowthWorkspace.jsx:8,24` stores a project budget value; finance records are not linked for actual-vs-budget project reporting. |
-| 45 | Project capacity planning | Partial | `src/features/GrowthWorkspace.jsx:8,24` has a capacity field; `src/features/PeopleOperationsWorkspace.jsx:12-24,38-41` calculates team workload, but not project/resource capacity. |
-| 46 | Project risk register | Partial | `src/features/GrowthWorkspace.jsx:8,24` has a free-text risk field, not a register with owner/severity/review actions. |
-| 47 | Project decision log | Partial | `src/features/GrowthWorkspace.jsx:8,24` has a decision text field; `src/features/SchedulingWorkspace.jsx:74-77` captures meeting actions, without a project decision history. |
-| 48 | Project status reports | Partial | `src/App.jsx:1060-1107` creates activity reports; no project-specific report generation is present. |
-| 49 | Project dependency maps | Partial | `src/features/GrowthWorkspace.jsx:8,24` has a dependency field, but no dependency graph/map. |
-| 50 | Project calendar view | Partial | `src/features/SchedulingWorkspace.jsx:8-20,50-55` calendar supports meetings/events with optional project text references; project dates are not rendered as project calendar items. |
+| 39 | Task links to customers | Implemented | `src/features/GrowthWorkspace.jsx:288-290`; task customer selector resolves an existing customer and persists its ID and display name. |
+| 40 | Task links to projects | Implemented | `src/features/GrowthWorkspace.jsx:291-292`; task project selector stores the project ID/title and task cards display the relationship. |
+| 41 | Project templates | Implemented | `src/features/GrowthWorkspace.jsx:151-155,355`; project records can be saved and reused as templates. |
+| 42 | Project milestones | Implemented | `src/features/GrowthWorkspace.jsx:117,163-168,333`; project milestone lines become persistent checkable items. |
+| 43 | Project health scores | Implemented | `src/features/GrowthWorkspace.jsx:128-130`; save computes health from status, overdue dates, and risk severity. |
+| 44 | Project budget tracking | Implemented | `src/features/GrowthWorkspace.jsx:128-130,335`; budget and manually entered actual cost are shown with variance. |
+| 45 | Project capacity planning | Implemented | `src/features/GrowthWorkspace.jsx:335`; portfolio view compares project capacity hours with estimates on linked tasks. |
+| 46 | Project risk register | Implemented | `src/features/GrowthWorkspace.jsx:96,176-185,333`; risks have owner, severity, open/mitigated status, and project association. |
+| 47 | Project decision log | Implemented | `src/features/GrowthWorkspace.jsx:142-145,333`; changes to a project's decision create dated, owner-attributed history records. |
+| 48 | Project status reports | Implemented | `src/features/GrowthWorkspace.jsx:97,189-212,335`; users can save local portfolio snapshots with project status, risks, budget, and actual-cost details. |
+| 49 | Project dependency maps | Implemented | `src/features/GrowthWorkspace.jsx:294,333`; each project shows its prerequisite and projects that depend on it. |
+| 50 | Project calendar view | Implemented | `src/features/GrowthWorkspace.jsx:335`; month view lists projects whose start or due dates fall in the selected month. |
 | 51 | Project Gantt view | Blocked | No Gantt/timeline bar view found in `src/features/GrowthWorkspace.jsx` or `src/features/SchedulingWorkspace.jsx`. |
-| 52 | Project portfolio dashboard | Partial | `src/features/GrowthWorkspace.jsx:14,139` includes a Project health card label/preset; it does not aggregate project health or portfolio risk. |
-| 53 | Project intake forms | Partial | `src/features/GrowthWorkspace.jsx:8,145` provides a generic project record form; no distinct intake workflow or review routing. |
-| 54 | Project stage gates | Partial | `src/features/GrowthWorkspace.jsx:8,66-71,125-132` supports manual project stage/status changes; no gated checks/approvals. |
+| 52 | Project portfolio dashboard | Implemented | `src/features/GrowthWorkspace.jsx:335`; portfolio summary aggregates project counts, at-risk projects, budget/actual totals, and estimated capacity. |
+| 53 | Project intake forms | Implemented | `src/features/GrowthWorkspace.jsx:8,118,129,301`; project intake captures rationale and the Active gate requires it alongside owner and dates. |
+| 54 | Project stage gates | Implemented | `src/features/GrowthWorkspace.jsx:111-114,129,278`; activating a project requires owner, dates, rationale, and a completed prerequisite. |
 | 55 | Project change requests | Blocked | No project change-request record or review flow found in `src/features/GrowthWorkspace.jsx`. |
 | 56 | Project retrospectives | Blocked | No retrospective workflow; an “Incident review” button in `src/features/GrowthWorkspace.jsx:143` only pre-fills a project title. |
-| 57 | Project resource assignments | Partial | `src/features/GrowthWorkspace.jsx:8,24` stores resource text; `src/features/SchedulingWorkspace.jsx:60-63` separately books resources without project assignment. |
+| 57 | Project resource assignments | Implemented | `src/features/GrowthWorkspace.jsx:204-215,294`; project-linked resource bookings validate time ranges and reject overlapping bookings for the same resource. |
 | 58 | Project cost forecasting | Blocked | `src/features/CustomerFinanceWorkspace.jsx:167` forecasts workspace cash flow, not project costs. Project budget is only a field in Growth. |
-| 59 | Project document folders | Partial | `src/features/DocumentControlWorkspace.jsx:56-61` indexes customer files with a project reference; no hierarchical project folder structure. |
-| 60 | Project archive controls | Partial | `src/features/SchedulingWorkspace.jsx:77` includes an “Archived” project status; it changes a status value only and provides no archive/restore controls. |
+| 59 | Project document folders | Implemented | `src/features/GrowthWorkspace.jsx:247-280,422`; create, rename, and delete project folders, file indexed documents into them, and unfile documents when a folder is deleted. Source files remain in the document vault. |
+| 60 | Project archive controls | Implemented | `src/features/GrowthWorkspace.jsx:198-202,333`; projects can be archived with a timestamp and restored to Planning; archived projects remain searchable. |
 | 61 | Custom customer fields | Blocked | `src/features/GrowthWorkspace.jsx:9` has a fixed field list; no administrator-defined field schema. |
 | 62 | Customer segments | Partial | `src/features/GrowthWorkspace.jsx:9,25` stores a free-text segment; no segment builder or segment-based actions. |
 | 63 | Customer health scoring | Partial | `src/features/GrowthWorkspace.jsx:9,25` stores a manually entered health value; no calculation from customer activity. |
