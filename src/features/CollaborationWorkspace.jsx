@@ -1,0 +1,73 @@
+import { useMemo, useState } from 'react'
+import { FeaturePanel, FeatureRecordList, FeatureRecordManager, FeatureTabs, currentDate, useFeatureRecords } from './FeatureWave101Helpers'
+
+const tabs = [{ id: 'messages', label: 'Channels and DMs' }, { id: 'inbox', label: 'Shared inbox' }, { id: 'templates', label: 'Templates and handoffs' }, { id: 'preferences', label: 'Notification preferences' }]
+
+export default function CollaborationWorkspace({ backendState = {}, session = {}, setOperationNotice = () => {} }) {
+  const { records, loading, error, setError, save, remove } = useFeatureRecords('communications')
+  const [tab, setTab] = useState('messages')
+  const [messageDraft, setMessageDraft] = useState({ mode: 'Channel', destination: 'general', text: '', mentions: '' })
+  const [search, setSearch] = useState('')
+  const author = session.email || session.ownerName || 'Workspace member'
+  const messages = records.filter((record) => record.kind === 'message')
+  const inboxItems = records.filter((record) => ['inbox_item', 'email_thread'].includes(record.kind))
+  const matchingMessages = useMemo(() => messages.filter((record) => {
+    const needle = search.trim().toLowerCase()
+    return !needle || `${record.destination} ${record.text} ${record.mentions} ${record.author}`.toLowerCase().includes(needle)
+  }).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))), [messages, search])
+
+  async function saveRecord(record) { await save(record); setError(''); setOperationNotice(`${record.title || 'Collaboration record'} saved locally.`) }
+  async function deleteRecord(id) { await remove(id); setOperationNotice('Collaboration record deleted.') }
+  async function sendMessage(event) {
+    event.preventDefault()
+    if (!messageDraft.text.trim()) { setError('Write a message before saving.'); return }
+    const destination = messageDraft.destination.trim()
+    if (!destination) { setError('Choose a channel or recipient.'); return }
+    await save({ kind: 'message', title: messageDraft.mode === 'Channel' ? `#${destination}` : `Direct message to ${destination}`, mode: messageDraft.mode, destination, text: messageDraft.text.trim(), mentions: messageDraft.mentions.trim(), author, readBy: [author], created_at: new Date().toISOString() })
+    setMessageDraft((current) => ({ ...current, text: '', mentions: '' }))
+    setError('')
+    setOperationNotice('Message saved to this encrypted local workspace. It was not sent over a network.')
+  }
+
+  async function markRead(record) {
+    const readBy = [...new Set([...(Array.isArray(record.readBy) ? record.readBy : []), author])]
+    await save({ ...record, readBy })
+  }
+
+  async function createDigestTask() {
+    const pending = inboxItems.filter((item) => item.status === 'Open').length + messages.filter((item) => !item.readBy?.includes(author)).length
+    await window.overheadBackend?.createQuickNote?.({ title: `Team digest: ${pending} items to review`, details: 'Review unread local messages and open shared-inbox items in OverHead Collaboration.' })
+    setOperationNotice('A local team digest task was added to the work queue.')
+  }
+
+  return <section className="reports-page">
+    <FeatureTabs tabs={tabs} active={tab} onChange={setTab} />
+    {error && <p className="form-error" role="alert">{error}</p>}{loading && <p className="queue-empty">Loading secure collaboration records…</p>}
+    {tab === 'messages' && <FeaturePanel eyebrow="Team communication" title="Channels and direct messages" description="Messages are stored in the local encrypted workspace for this device. They do not sync to other computers or send through email or chat providers.">
+      <form className="profile-form compact-form" onSubmit={sendMessage}><label>Message type<select value={messageDraft.mode} onChange={(event) => setMessageDraft((current) => ({ ...current, mode: event.target.value }))}><option>Channel</option><option>Direct message</option></select></label><label>{messageDraft.mode === 'Channel' ? 'Channel name' : 'Recipient email'}<input value={messageDraft.destination} onChange={(event) => setMessageDraft((current) => ({ ...current, destination: event.target.value }))} placeholder={messageDraft.mode === 'Channel' ? 'general' : 'teammate@example.com'} /></label><label>Message<textarea rows="3" maxLength="2000" value={messageDraft.text} onChange={(event) => setMessageDraft((current) => ({ ...current, text: event.target.value }))} placeholder="Write an internal message" /></label><label>@mentions (emails or names)<input value={messageDraft.mentions} onChange={(event) => setMessageDraft((current) => ({ ...current, mentions: event.target.value }))} /></label><button className="primary-action" type="submit">Save message</button></form>
+      <label className="form-field">Search messages<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this local workspace" /></label>
+      <div className="task-list">{matchingMessages.map((message) => <article className="task-row" key={message.id}><div><strong>{message.title}</strong><span>{message.author} · {message.created_at}</span><p>{message.text}</p>{message.mentions && <small>Mentions: {message.mentions}</small>}</div><span>{message.readBy?.includes(author) ? 'Read on this profile' : 'Unread'}</span>{!message.readBy?.includes(author) && <button className="ghost-button" type="button" onClick={() => markRead(message).catch((reason) => setError(reason.message))}>Mark read</button>}</article>)}{!matchingMessages.length && <p className="queue-empty">No local messages match this search.</p>}</div>
+      <FeatureRecordManager records={records} kind="thread_comment" title="Thread comments" description="Attach a local comment to a channel, task, or conversation and mention colleagues by name or email." fields={[{ name: 'title', label: 'Thread or record', required: true }, { name: 'author', label: 'Comment author', defaultValue: author }, { name: 'mentions', label: '@mentions' }, { name: 'date', label: 'Date', type: 'date', defaultValue: currentDate() }, { name: 'text', label: 'Comment', multiline: true, required: true }]} onSave={saveRecord} onDelete={deleteRecord} emptyText="No comments." />
+    </FeaturePanel>}
+    {tab === 'inbox' && <FeaturePanel eyebrow="Shared inbox" title="Support and conversation queue" description="Review OverHead support tickets alongside manually linked customer conversations. Email linking stores a reference only; OverHead does not import mailbox content.">
+      <div className="task-list">{(backendState.supportTickets || []).map((ticket) => <article className="task-row" key={ticket.id}><strong>{ticket.subject || 'Support request'}</strong><span>{ticket.status || 'Open'}</span><span>{ticket.customer_email || ticket.requester_email || ''}</span><span>{ticket.updated_at || ticket.created_at}</span></article>)}{!(backendState.supportTickets || []).length && <p className="queue-empty">No OverHead support tickets are available.</p>}</div>
+      <FeatureRecordManager records={records} kind="inbox_item" title="Assigned conversation" description="Assign a local conversation, set its label and status, and keep the next response owner visible." fields={[{ name: 'title', label: 'Conversation subject', required: true }, { name: 'customer', label: 'Customer email or name' }, { name: 'assignee', label: 'Assigned teammate email' }, { name: 'label', label: 'Category' }, { name: 'status', label: 'Status', options: ['Open', 'Waiting', 'Resolved', 'Closed'], defaultValue: 'Open' }, { name: 'nextAction', label: 'Next action', multiline: true }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Open', 'Waiting', 'Resolved', 'Closed']} emptyText="No assigned conversations." />
+      <FeatureRecordManager records={records} kind="email_thread" title="Link an email conversation" description="Save a subject, contact, message reference, and next action without copying mailbox credentials or automatically syncing the mailbox." fields={[{ name: 'title', label: 'Email subject', required: true }, { name: 'customer', label: 'Customer email' }, { name: 'externalReference', label: 'Message URL or provider reference' }, { name: 'assignee', label: 'Conversation owner' }, { name: 'status', label: 'Status', options: ['Open', 'Waiting', 'Resolved', 'Closed'], defaultValue: 'Open' }, { name: 'notes', label: 'Internal summary', multiline: true }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Open', 'Waiting', 'Resolved', 'Closed']} emptyText="No email references linked." />
+      <FeatureRecordManager records={records} kind="customer_history" title="Customer message history" description="Record a local interaction summary for future staff handoffs." fields={[{ name: 'title', label: 'Interaction subject', required: true }, { name: 'customer', label: 'Customer name or email', required: true }, { name: 'date', label: 'Date', type: 'date', defaultValue: currentDate() }, { name: 'channel', label: 'Channel', options: ['Phone', 'Email', 'In person', 'Portal', 'Other'] }, { name: 'notes', label: 'Summary', multiline: true }]} onSave={saveRecord} onDelete={deleteRecord} emptyText="No customer interaction notes." />
+    </FeaturePanel>}
+    {tab === 'templates' && <FeaturePanel eyebrow="Shared responses" title="Message templates and handoff notes" description="Save reusable drafts for staff to copy into their approved communication channel. Templates remain local.">
+      <FeatureRecordManager records={records} kind="message_template" title="Message templates" description="Store a reusable subject and body for common follow-up messages." fields={[{ name: 'title', label: 'Template name', required: true }, { name: 'channel', label: 'Use for', options: ['Email', 'Phone', 'Support', 'Internal'] }, { name: 'subject', label: 'Subject' }, { name: 'body', label: 'Draft text', multiline: true, required: true }]} onSave={saveRecord} onDelete={deleteRecord} emptyText="No message templates." />
+      <FeatureRecordManager records={records} kind="internal_note" title="Internal-only notes" description="Keep work context for the team; notes stay inside the local OverHead workspace." fields={[{ name: 'title', label: 'Note title', required: true }, { name: 'relatedTo', label: 'Related customer, task, or invoice' }, { name: 'owner', label: 'Note owner' }, { name: 'status', label: 'Visibility', options: ['Team only', 'Owner only'], defaultValue: 'Team only' }, { name: 'notes', label: 'Note', multiline: true, required: true }]} onSave={saveRecord} onDelete={deleteRecord} emptyText="No internal notes." />
+      <FeatureRecordManager records={records} kind="handoff" title="Cross-team handoff" description="Record current state, next action, and recipient when work changes teams." fields={[{ name: 'title', label: 'Handoff subject', required: true }, { name: 'fromTeam', label: 'From team' }, { name: 'toTeam', label: 'To team' }, { name: 'owner', label: 'Receiving owner' }, { name: 'nextAction', label: 'Next action', multiline: true, required: true }, { name: 'dueDate', label: 'Due date', type: 'date' }, { name: 'status', label: 'Status', options: ['Open', 'Accepted', 'Complete'], defaultValue: 'Open' }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Open', 'Accepted', 'Complete']} emptyText="No handoff notes." />
+      <FeatureRecordManager records={records} kind="meeting_link" title="Video meeting links" description="Store a meeting URL created by your chosen provider. OverHead does not host or record video meetings." fields={[{ name: 'title', label: 'Meeting title', required: true }, { name: 'url', label: 'Provider meeting URL', type: 'url', required: true }, { name: 'date', label: 'Meeting date', type: 'datetime-local' }, { name: 'attendees', label: 'Attendee emails' }, { name: 'notes', label: 'Notes' }]} onSave={saveRecord} onDelete={deleteRecord} emptyText="No meeting links." />
+      <div className="backend-health"><strong>Audio notes</strong><span>Audio recording is not available in this local feature store because it cannot retain binary media attachments. Use a text note or attach an audio file through an approved external workflow.</span></div>
+    </FeaturePanel>}
+    {tab === 'preferences' && <FeaturePanel eyebrow="Notifications" title="Read receipts, quiet hours, and team digests" description="These controls apply to local collaboration records. They do not configure push notifications or send messages outside OverHead.">
+      <FeatureRecordManager records={records} kind="read_receipt" title="Read receipts for important notices" description="Track which team member acknowledged an announcement or key local notice." fields={[{ name: 'title', label: 'Notice', required: true }, { name: 'person', label: 'Team member email', required: true }, { name: 'status', label: 'Receipt status', options: ['Unread', 'Read', 'Acknowledged'], defaultValue: 'Unread' }, { name: 'readAt', label: 'Read date', type: 'datetime-local' }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Unread', 'Read', 'Acknowledged']} emptyText="No read receipts." />
+      <FeatureRecordManager records={records} kind="notification_preference" title="Notification quiet hours" description="Set local quiet-hour windows for future notification routing." fields={[{ name: 'title', label: 'Preference name', defaultValue: 'Quiet hours' }, { name: 'person', label: 'Team member email' }, { name: 'startTime', label: 'Quiet from', type: 'time', required: true }, { name: 'endTime', label: 'Quiet until', type: 'time', required: true }, { name: 'timezone', label: 'IANA time zone', defaultValue: Intl.DateTimeFormat().resolvedOptions().timeZone }, { name: 'status', label: 'Status', options: ['Enabled', 'Disabled'], defaultValue: 'Enabled' }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Enabled', 'Disabled']} emptyText="No quiet-hour preferences." />
+      <FeatureRecordList records={records.filter((record) => record.kind === 'digest') } emptyText="No team digests created." />
+      <div className="button-row"><button className="ghost-button" type="button" onClick={() => createDigestTask().catch((reason) => setError(reason.message))}>Queue local team digest task</button><span>Counts unread local messages and open assigned conversations.</span></div>
+      <div className="backend-health"><strong>Activity stream</strong>{records.slice().sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))).slice(0, 15).map((record) => <span key={record.id}>{record.updated_at} · {record.kind}: {record.title || record.destination || 'updated'}</span>)}{!records.length && <span>No collaboration activity yet.</span>}</div>
+    </FeaturePanel>}
+  </section>
+}
