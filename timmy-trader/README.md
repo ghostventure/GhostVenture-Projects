@@ -54,6 +54,16 @@ docs/WORKFLOWS.md
 - Bundles a current U.S. listed stock/ETF universe snapshot so all-market rotation can start from known tickers before the live universe refresh completes.
 - Documents practical guardrails for asset-class expansion beyond stocks/ETFs, including crypto, commodity exposure, forex/currencies, index proxies, and unsupported instruments.
 
+## Release Notes
+
+### 0.1.1
+
+- Validates external market-data symbols and OHLCV values before strategy processing, and handles timestamps consistently.
+- Adapts native navigation to narrower windows while preserving full labels at wider sizes.
+- Makes duplicate launches leave the running Timmy session alone. `Power Cycle` now requests a restart through a private marker and waits for the current process to release its lock before relaunching.
+- Rejects unsafe Debian package version strings before the packaging script changes files.
+- Regression coverage includes market-data validation, GUI sizing and restart handoff, single-instance behavior, and package-version validation.
+
 ## What It Does Not Do Yet
 
 - It does not place live Webull orders unless the live environment switches are intentionally enabled and the Webull adapter allows the submit path.
@@ -158,7 +168,7 @@ scripts/package_deb.sh
 Install it locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.0_amd64.deb
+sudo apt install ./dist/timmy-trader_0.1.1_amd64.deb
 ```
 
 After install, launch **Timmy** from the system menu or run:
@@ -185,7 +195,7 @@ The installed app stores runtime config in:
 ~/.config/timmy-trader
 ```
 
-Timmy keeps one active native app instance per runtime home. A new launch checks the existing lock, scans for older native/source Timmy process forms, shuts them down, and opens a fresh instance.
+Timmy keeps one active native app instance per runtime home. A new launch checks the existing lock and exits without disturbing the running process if that instance is already active. `Power Cycle` requests a controlled restart; the app exits and releases its lock before the launcher starts the replacement.
 
 On first installed launch, Timmy seeds `~/.config/timmy-trader/.env` from the packaged safe template only. It does not copy source-checkout secrets or Webull token files into the installed runtime.
 
