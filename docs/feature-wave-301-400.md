@@ -40,7 +40,7 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 332 | Mobile-friendly task views | Already present | `ios/OverHeadIOS/Sources/WorkspaceViews.swift:26` `TasksView`; desktop layout also has responsive styling. |
 | 333 | Offline draft support | Implemented | `src/featureWave301400.jsx:131` field note/checklist capture saved in the encrypted local `mobile` collection. |
 | 334 | Form autosave | Already present | `src/App.jsx:1443` saved customer form memory and `:2241` billing form memory. |
-| 335 | Undo for common actions | Blocked | No reversible action journal; retrofitting undo across money/access/security operations without inverse validation would be unsafe. |
+| 335 | Undo for common actions | Implemented | `src/featureWave301400.jsx` provides an explicit undo for the last field checklist toggle, restoring the prior saved checklist. Money, access, and security actions remain excluded from undo. |
 | 336 | Clear empty-state guidance | Already present | Empty-state guidance across `src/App.jsx` reports, tasks, customer records, and support. |
 | 337 | Inline field help | Already present | Privacy and field guidance in `src/App.jsx` forms and `SettingsSection`. |
 | 338 | Setup progress checklist | Already present | `src/App.jsx` overview readiness and account profile completion indicators. |

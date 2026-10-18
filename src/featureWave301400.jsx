@@ -157,6 +157,7 @@ export function FieldAssistSection({ backendState, session, setOperationNotice }
   const [history, setHistory] = useState([])
   const [fieldDraft, setFieldDraft] = useState({ title: '', note: '', customerId: '', minutes: '', checklist: '' })
   const [mobileRecords, setMobileRecords] = useState([])
+  const [undoChecklist, setUndoChecklist] = useState(null)
   const [error, setError] = useState('')
   useEffect(() => {
     let active = true
@@ -197,6 +198,28 @@ export function FieldAssistSection({ backendState, session, setOperationNotice }
       setOperationNotice('Field note saved in the encrypted local workspace.')
     } catch (reason) { setError(reason.message) }
   }
+  async function updateChecklist(record, item, done) {
+    const before = record.checklist || []
+    const after = before.map((check) => check.label === item.label ? { ...check, done } : check)
+    const next = { ...record, checklist: after }
+    try {
+      await window.overheadBackend?.upsertFeatureRecord?.({ collection: 'mobile', record: next })
+      setUndoChecklist({ recordId: record.id, checklist: before })
+      setMobileRecords((current) => current.map((saved) => saved.id === record.id ? next : saved))
+      setError('')
+    } catch (reason) { setError(`Checklist update failed: ${reason.message}`) }
+  }
+  async function undoChecklistChange() {
+    if (!undoChecklist) return
+    const record = mobileRecords.find((item) => item.id === undoChecklist.recordId)
+    if (!record) return setUndoChecklist(null)
+    const next = { ...record, checklist: undoChecklist.checklist }
+    try {
+      await window.overheadBackend?.upsertFeatureRecord?.({ collection: 'mobile', record: next })
+      setMobileRecords((current) => current.map((saved) => saved.id === record.id ? next : saved))
+      setUndoChecklist(null); setOperationNotice('Last field checklist change was undone.')
+    } catch (reason) { setError(`Could not undo checklist change: ${reason.message}`) }
+  }
   const selectedCustomer = (backendState.customers || []).find((customer) => customer.id === fieldDraft.customerId)
   return <section className="panel page-panel feature-wave-section">
     <div className="section-head"><div><p className="eyebrow">Field work · private local assist</p><h2>Mobile capture and reviewable suggestions</h2></div></div>
@@ -213,7 +236,8 @@ export function FieldAssistSection({ backendState, session, setOperationNotice }
         <label>Visit checklist (one step per line)<textarea value={fieldDraft.checklist} onChange={(event) => setFieldDraft((current) => ({ ...current, checklist: event.target.value }))} rows="3" placeholder="Confirm arrival\nReview requested work\nAgree on next step" /></label>
         <button className="mini-button" type="button" onClick={() => setFieldDraft((current) => ({ ...current, checklist: 'Review site access and hazards\nConfirm required protective equipment\nKeep customer and staff clear of active work area\nRecord any incident and notify the responsible manager' }))}>Use worksite safety checklist</button>
         <button className="primary-action" type="button" onClick={captureFieldNote}>Save field note</button>
-        {mobileRecords.slice(0, 4).map((record) => <article key={record.id}><strong>{record.title}</strong><p>{record.note}</p><small>{record.minutes || 0} minutes · {record.sync_status || 'Saved locally'} · {new Date(record.captured_at || record.created_at).toLocaleString()}</small>{record.checklist?.map((item) => <label className="checkbox-line" key={item.label}><input type="checkbox" checked={item.done} onChange={async (event) => { const next = { ...record, checklist: record.checklist.map((check) => check.label === item.label ? { ...check, done: event.target.checked } : check) }; await window.overheadBackend?.upsertFeatureRecord?.({ collection: 'mobile', record: next }); setMobileRecords((current) => current.map((saved) => saved.id === record.id ? next : saved)) }} /><span>{item.label}</span></label>)}</article>)}
+        {undoChecklist && <button className="mini-button" type="button" onClick={undoChecklistChange}>Undo last checklist change</button>}
+        {mobileRecords.slice(0, 4).map((record) => <article key={record.id}><strong>{record.title}</strong><p>{record.note}</p><small>{record.minutes || 0} minutes · {record.sync_status || 'Saved locally'} · {new Date(record.captured_at || record.created_at).toLocaleString()}</small>{record.checklist?.map((item) => <label className="checkbox-line" key={item.label}><input type="checkbox" checked={item.done} onChange={(event) => updateChecklist(record, item, event.target.checked)} /><span>{item.label}</span></label>)}</article>)}
         <small>Voice notes, photo/signature capture, barcode scanning, native home-screen widgets and push notifications require platform permissions and signed native integrations; none are simulated here.</small>
       </div>
       <div className="backend-health local-assist">
