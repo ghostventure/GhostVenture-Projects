@@ -28,6 +28,8 @@ See `docs/cylinder-deployment.md` for server/IoT deployment, updates, and compat
 
 Dashboard panel preferences are described in [`docs/dashboard-customization.md`](docs/dashboard-customization.md).
 
+Expense entry, approval, and monthly budget guidance is in [`docs/expense-ledger.md`](docs/expense-ledger.md).
+
 ## Shared browser and desktop access
 
 The signed-in website and OverHead Desktop use the same Firebase account, workspace role, subscription entitlement, and member license. The website account page reflects the shared plan and, for administrators, provides the same Stripe billing service used by the EXE. Stripe secrets remain in Firebase Secret Manager and are never included in the Windows package or website files.
