@@ -3,21 +3,26 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from .models import Candle
 
 STOOQ_DAILY_URL = "https://stooq.com/q/d/l/"
+_SAFE_SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9.^=_-]{0,19}$")
 
 
 def fetch_stooq_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
+    _validate_fetch_options(days, timeout=timeout, max_workers=max_workers)
     return _fetch_parallel(symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, timeout=timeout), days, max_workers)
 
 
 def fetch_yahoo_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
+    _validate_fetch_options(days, timeout=timeout, max_workers=max_workers)
     return _fetch_parallel(symbols, lambda symbol: _fetch_one_yahoo_symbol(symbol, days=days, timeout=timeout), days, max_workers)
 
 
@@ -33,8 +38,13 @@ def fetch_daily_bars(provider: str, symbols: list[str], days: int = 90, timeout:
 
 
 def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) -> dict[str, list[Candle]]:
+    _validate_fetch_options(days, timeout=None, max_workers=max_workers)
     bars: dict[str, list[Candle]] = {}
-    clean_symbols = sorted(dict.fromkeys(symbol.upper() for symbol in symbols if symbol.strip()))
+    clean_symbols = sorted({
+        symbol.strip().upper()
+        for symbol in symbols
+        if isinstance(symbol, str) and symbol.strip() and _SAFE_SYMBOL.fullmatch(symbol.strip().upper())
+    })
     if not clean_symbols:
         return bars
     workers = max(1, min(max_workers, len(clean_symbols)))
@@ -46,12 +56,15 @@ def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) 
                 candles = future.result()
             except Exception:
                 continue
-            if candles:
-                bars[symbol] = candles[-days:]
+            valid_candles = [candle for candle in candles if _valid_candle(candle)]
+            if valid_candles:
+                bars[symbol] = sorted(valid_candles, key=lambda candle: candle.timestamp)[-days:]
     return bars
 
 
 def _fetch_one_stooq_symbol(symbol: str, timeout: int = 10) -> list[Candle]:
+    _validate_fetch_options(1, timeout=timeout, max_workers=1)
+    symbol = _validated_symbol(symbol)
     stooq_symbol = _stooq_symbol(symbol)
     url = f"{STOOQ_DAILY_URL}?{urlencode({'s': stooq_symbol, 'i': 'd'})}"
     request = Request(url, headers={"User-Agent": "Timmy/0.1"})
@@ -82,6 +95,8 @@ def _fetch_one_stooq_symbol(symbol: str, timeout: int = 10) -> list[Candle]:
 
 
 def _fetch_one_yahoo_symbol(symbol: str, days: int = 90, timeout: int = 10) -> list[Candle]:
+    _validate_fetch_options(days, timeout=timeout, max_workers=1)
+    symbol = _validated_symbol(symbol)
     range_value = "6mo" if days > 90 else "3mo"
     yahoo_symbol = _yahoo_symbol(symbol)
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?{urlencode({'range': range_value, 'interval': '1d'})}"
@@ -101,14 +116,15 @@ def _fetch_one_yahoo_symbol(symbol: str, days: int = 90, timeout: int = 10) -> l
             low = quote["low"][index]
             close = quote["close"][index]
             volume = quote.get("volume", [0])[index] or 0
-        except (IndexError, KeyError, TypeError):
+            timestamp = datetime.fromtimestamp(int(epoch), tz=timezone.utc).replace(tzinfo=None)
+        except (IndexError, KeyError, TypeError, ValueError, OverflowError):
             continue
         if None in {open_price, high, low, close}:
             continue
         candles.append(
             Candle(
                 symbol=symbol.upper(),
-                timestamp=datetime.fromtimestamp(int(epoch)),
+                timestamp=timestamp,
                 open=float(open_price),
                 high=float(high),
                 low=float(low),
@@ -141,3 +157,41 @@ def _yahoo_symbol(symbol: str) -> str:
         "DOTUSD": "DOT-USD",
     }
     return aliases.get(clean, clean)
+
+
+def _validate_fetch_options(days: int, timeout: int | None, max_workers: int) -> None:
+    if not isinstance(days, int) or isinstance(days, bool) or days < 1:
+        raise ValueError("days must be a positive integer")
+    if timeout is not None and (not isinstance(timeout, (int, float)) or timeout <= 0 or not math.isfinite(timeout)):
+        raise ValueError("timeout must be a positive finite number")
+    if not isinstance(max_workers, int) or isinstance(max_workers, bool) or max_workers < 1:
+        raise ValueError("max_workers must be a positive integer")
+
+
+def _validated_symbol(symbol: str) -> str:
+    if not isinstance(symbol, str):
+        raise ValueError("symbol must be text")
+    clean = symbol.strip().upper()
+    if not _SAFE_SYMBOL.fullmatch(clean):
+        raise ValueError("symbol contains unsupported characters")
+    return clean
+
+
+def _valid_candle(candle: Candle) -> bool:
+    try:
+        values = (candle.open, candle.high, candle.low, candle.close, candle.volume)
+        if not all(math.isfinite(float(value)) for value in values):
+            return False
+        open_price, high, low, close, volume = map(float, values)
+        return (
+            open_price > 0
+            and close > 0
+            and high >= max(open_price, close)
+            and low <= min(open_price, close)
+            and high >= low
+            and volume >= 0
+            and isinstance(candle.timestamp, datetime)
+            and candle.timestamp.utcoffset() is None
+        )
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return False

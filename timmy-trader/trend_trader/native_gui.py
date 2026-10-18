@@ -6,7 +6,6 @@ import json
 import os
 import secrets
 import subprocess
-import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
@@ -40,6 +39,7 @@ AUTO_REFRESH_MS = max(30, int(os.getenv("TIMMY_DASHBOARD_REFRESH_SECONDS", "60")
 ACCOUNT_REFRESH_MS = max(5, int(os.getenv("TIMMY_ACCOUNT_REFRESH_MINUTES", "15"))) * 60 * 1000
 LIVE_PREVIEW_TTL_SECONDS = 180
 TRADING_PRINCIPLE = "Make money, but never be reckless, clumsy, or wasteful."
+RESTART_REQUEST_MARKER = ".timmy-restart-request"
 
 
 class TimmyNativeApp:
@@ -100,11 +100,15 @@ class TimmyNativeApp:
         self._execution_events_cache: list[dict] = []
         self._tooltip: tk.Toplevel | None = None
         self.audit_status = "Audit chain ready"
+        self._compact_layout = False
+        self._resize_job: str | None = None
 
         self.root = tk.Tk()
         self.root.title("Timmy")
         self.root.geometry("1280x840")
-        self.root.minsize(1120, 720)
+        # Keep the important controls usable on smaller laptop screens. The
+        # left rail collapses responsively instead of forcing a wide window.
+        self.root.minsize(900, 650)
         self.colors = self._theme_palette()
         self.root.configure(bg=self.colors["bg"])
         self.min_score_var = tk.StringVar(value="72")
@@ -145,6 +149,7 @@ class TimmyNativeApp:
         self.root.report_callback_exception = self._handle_tk_exception
         self.root.bind("<F5>", lambda _event: self.refresh_all())
         self.root.bind("<Control-r>", lambda _event: self.run_decision_cycle())
+        self.root.bind("<Configure>", self._schedule_responsive_layout, add="+")
 
     def run(self) -> int:
         self.refresh_all()
@@ -319,6 +324,7 @@ class TimmyNativeApp:
         self.root.rowconfigure(0, weight=1)
 
         rail = tk.Frame(self.root, bg=self.colors["rail"], width=236)
+        self.rail = rail
         rail.grid(row=0, column=0, sticky="nsew")
         rail.grid_propagate(False)
         rail.columnconfigure(0, weight=0)
@@ -328,8 +334,10 @@ class TimmyNativeApp:
         rail_stripe.grid(row=0, column=0, rowspan=4, sticky="nsw")
         mark = tk.Label(rail, text="T", bg=self.colors["gold"], fg=self.colors["mark_text"], font=("Sans", 22, "bold"),
                         width=2, height=1, anchor="center", justify="center", relief="flat")
+        self.mark = mark
         mark.grid(row=0, column=0, padx=(24, 10), pady=(24, 10), sticky="w")
         brand_box = tk.Frame(rail, bg=self.colors["rail"])
+        self.brand_box = brand_box
         brand_box.grid(row=0, column=1, pady=(22, 10), sticky="w")
         brand = tk.Label(brand_box, text="Timmy", bg=self.colors["rail"], fg=self.colors["rail_text"],
                          justify="left", anchor="w", font=("Sans", 15, "bold"))
@@ -340,6 +348,7 @@ class TimmyNativeApp:
 
         nav_items = ["Overview", "Setup", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit", "Health"]
         nav = tk.Frame(rail, bg=self.colors["rail"])
+        self.nav = nav
         nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(18, 0))
         for item in nav_items:
             button = tk.Button(
@@ -361,9 +370,11 @@ class TimmyNativeApp:
             self._fit_text(button, min_size=9, max_size=11, padding=22, wrap=True)
             button.pack(fill="x", pady=3)
             self.nav_buttons[item] = button
+            self._add_tooltip(button, item)
 
         rail.rowconfigure(2, weight=1)
         runtime = tk.Frame(rail, bg=self.colors["runtime"], highlightbackground=self.colors["rail_line"], highlightthickness=1)
+        self.runtime_card = runtime
         runtime.grid(row=3, column=0, columnspan=2, sticky="ew", padx=20, pady=22)
         runtime_top = tk.Frame(runtime, bg=self.colors["cyan"], height=4)
         runtime_top.pack(fill="x")
@@ -1157,6 +1168,58 @@ class TimmyNativeApp:
 
     def _panel(self, parent: tk.Widget) -> tk.Frame:
         return tk.Frame(parent, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
+
+    @staticmethod
+    def _uses_compact_layout(width: int) -> bool:
+        return width < 1120
+
+    def _schedule_responsive_layout(self, event=None) -> None:
+        # Configure events also arrive for child widgets. Only use the top-level
+        # event and coalesce rapid window drags into one layout update.
+        if event is not None and event.widget is not self.root:
+            return
+        if self._resize_job is None:
+            self._resize_job = self.root.after_idle(self._apply_responsive_layout)
+
+    def _apply_responsive_layout(self) -> None:
+        self._resize_job = None
+        compact = self._uses_compact_layout(self.root.winfo_width())
+        if compact == self._compact_layout:
+            return
+        self._compact_layout = compact
+        self.rail.configure(width=76 if compact else 236)
+        self.mark.grid_configure(padx=(14, 5) if compact else (24, 10))
+        if compact:
+            self.brand_box.grid_remove()
+            self.runtime_card.grid_remove()
+            self.nav.grid_configure(padx=7, pady=(12, 0))
+            for label, button in self.nav_buttons.items():
+                button.configure(text={"Overview": "OVR", "Setup": "SET", "Universe": "UNI", "Scanner": "SCAN",
+                                       "Strategy": "STR", "Execution": "EXEC", "Broker": "BRK", "Audit": "AUD",
+                                       "Health": "HLT"}[label], padx=3, pady=9)
+                self._fit_text(button, min_size=8, max_size=9, padding=8, wrap=False)
+            margins = 12
+            for widget in (self.hero, self.metrics, self.body, self.controls, self.status_bar):
+                try:
+                    widget.grid_configure(padx=margins)
+                except tk.TclError:
+                    pass
+            for index in range(6):
+                self.controls.columnconfigure(index, minsize=0)
+        else:
+            self.brand_box.grid()
+            self.runtime_card.grid()
+            self.nav.grid_configure(padx=20, pady=(18, 0))
+            for label, button in self.nav_buttons.items():
+                button.configure(text=label, padx=10, pady=11)
+                self._fit_text(button, min_size=9, max_size=11, padding=22, wrap=True)
+            for widget in (self.hero, self.metrics, self.body, self.controls, self.status_bar):
+                try:
+                    widget.grid_configure(padx=24)
+                except tk.TclError:
+                    pass
+            for index in range(6):
+                self.controls.columnconfigure(index, minsize=118)
 
     def _mini_stat(self, parent: tk.Widget, column: int, title: str) -> tk.Label:
         frame = tk.Frame(parent, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
@@ -2035,26 +2098,24 @@ class TimmyNativeApp:
             self.status_bar.configure(text="Power cycle cancelled.")
             return
         self._save_runtime_settings()
-        env = os.environ.copy()
-        env["TIMMY_HOME"] = str(self.home)
         try:
-            with Path("/tmp/timmy-launch.log").open("ab") as log:
-                subprocess.Popen(
-                    _restart_command(self.home),
-                    cwd=str(self.home),
-                    env=env,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    start_new_session=True,
-                    close_fds=True,
-                )
+            self.home.mkdir(parents=True, exist_ok=True)
+            marker = self.home / RESTART_REQUEST_MARKER
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            flags |= getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(marker, flags, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as request:
+                os.fchmod(request.fileno(), 0o600)
+                request.write("restart\n")
+                request.flush()
+                os.fsync(request.fileno())
         except Exception as exc:
             self._write_crash_log(
                 f"Power cycle failed\n{''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))}"
             )
             self.status_bar.configure(text=f"Power cycle failed: {exc}")
             return
-        self.status_bar.configure(text="Power cycling Timmy...")
+        self.status_bar.configure(text="Restart requested. Closing Timmy...")
         self.root.after(250, self.close)
 
     def live_preview_then_submit(self, refresh: bool = True) -> str:
@@ -4971,10 +5032,3 @@ def _format_quantity(value: float) -> str:
     if float(value).is_integer():
         return str(int(value))
     return f"{value:.8f}".rstrip("0").rstrip(".")
-
-
-def _restart_command(home: Path) -> list[str]:
-    launcher = home / "scripts" / "launch_timmy.sh"
-    if launcher.exists():
-        return [str(launcher)]
-    return [sys.executable, "-m", "trend_trader.desktop"]

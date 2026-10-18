@@ -4,6 +4,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION=${1:-0.1.0}
+# VERSION becomes part of paths used below (including the rm -rf target), and
+# is written into the Debian control file. Accept only a conservative Debian
+# version subset so a caller cannot escape build/deb or inject control fields.
+if [[ ! "$VERSION" =~ ^[0-9][A-Za-z0-9.+:~-]*$ ]]; then
+  echo "Invalid Debian package version: ${VERSION}" >&2
+  echo "Use a version beginning with a digit and containing only letters, digits, '.', '+', ':', '~', or '-'." >&2
+  exit 2
+fi
 ARCH=amd64
 PKG_NAME=timmy-trader
 PKG_ROOT="build/deb/${PKG_NAME}_${VERSION}_${ARCH}"

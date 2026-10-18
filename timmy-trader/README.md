@@ -47,6 +47,10 @@ docs/WORKFLOWS.md
 - Adds a native `Power Cycle` control to save settings, relaunch Timmy, and replace the old process cleanly.
 - Organizes the native GUI around Timmy's operating model: Universe, Scanner, Strategy, Execution, Broker, and Audit.
 - Adds adaptable trading style presets and pattern toggles for breakout, momentum, pullback, and volume-expansion setups.
+- Validates external market-data symbols and OHLCV bars before they reach the strategy engine, including safe timestamp handling.
+- Makes the native navigation adapt to narrower windows while keeping the full labels available at wider sizes.
+- Prevents duplicate launches from terminating an existing Timmy session and uses a lock-release handoff for Power Cycle.
+- Validates Debian package version input before packaging changes files.
 - Bundles a current U.S. listed stock/ETF universe snapshot so all-market rotation can start from known tickers before the live universe refresh completes.
 - Documents practical guardrails for asset-class expansion beyond stocks/ETFs, including crypto, commodity exposure, forex/currencies, index proxies, and unsupported instruments.
 

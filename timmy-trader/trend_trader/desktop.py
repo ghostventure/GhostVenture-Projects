@@ -4,13 +4,17 @@ import argparse
 import atexit
 import fcntl
 import os
-import signal
 import subprocess
+import sys
 import time
 import traceback
 from pathlib import Path
 
-from trend_trader.native_gui import TimmyNativeApp
+from trend_trader import native_gui
+
+
+TimmyNativeApp = native_gui.TimmyNativeApp
+RESTART_REQUEST = ".timmy-restart-request"
 
 
 def _runtime_home() -> Path:
@@ -53,128 +57,31 @@ def _claim_single_instance(home: Path) -> object | None:
 
 
 def _claim_or_replace_single_instance(home: Path) -> object | None:
-    _replace_existing_instance(home)
     lock_file = _claim_single_instance(home)
-    if lock_file is not None:
-        return lock_file
-
-    _replace_existing_instance(home, force=True)
-    for _ in range(10):
-        lock_file = _claim_single_instance(home)
-        if lock_file is not None:
-            return lock_file
-        time.sleep(0.1)
-    _write_crash_log(home, "Timmy could not claim the single-instance lock after replacing prior instances.")
-    return None
+    if lock_file is None:
+        _write_crash_log(home, "Timmy is already running; the existing process was left untouched.")
+    return lock_file
 
 
-def _replace_existing_instance(home: Path, force: bool = False) -> None:
-    pids = set(_discover_existing_timmy_pids())
-    lock_path = home / "timmy.lock"
-    pid = _read_lock_pid(lock_path)
-    if pid is not None:
-        pids.add(pid)
-    pids.discard(os.getpid())
-    if not pids:
-        return
-    live_pids = {pid for pid in pids if _process_exists(pid)}
-    for pid in live_pids:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-
-    if not force:
-        for _ in range(30):
-            live_pids = {pid for pid in live_pids if _process_exists(pid)}
-            if not live_pids:
-                return
-            time.sleep(0.1)
-
-    for _ in range(5):
-        live_pids = {pid for pid in live_pids if _process_exists(pid)}
-        if not live_pids:
-            return
-        for pid in live_pids:
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        time.sleep(0.1)
-
-    for pid in live_pids:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+def _restart_command(home: Path) -> list[str]:
+    launcher = home / "scripts" / "launch_timmy.sh"
+    if launcher.is_file():
+        return [str(launcher)]
+    if getattr(sys, "frozen", False):
+        return [sys.executable]
+    return [sys.executable, "-m", "trend_trader.desktop"]
 
 
-def _discover_existing_timmy_pids() -> list[int]:
+def _consume_restart_request(home: Path) -> bool:
+    marker = home / RESTART_REQUEST
     try:
-        result = subprocess.run(["pgrep", "-af", "Timmy|timmy-desktop|trend_trader.desktop"], check=False,
-                                capture_output=True, text=True, timeout=2)
-    except Exception:
-        return []
-    pids: list[int] = []
-    for line in result.stdout.splitlines():
-        parts = line.split(maxsplit=1)
-        if len(parts) != 2:
-            continue
-        try:
-            pid = int(parts[0])
-        except ValueError:
-            continue
-        if pid == os.getpid():
-            continue
-        if _is_timmy_process(pid):
-            pids.append(pid)
-    return pids
-
-
-def _is_timmy_process(pid: int) -> bool:
-    proc = Path("/proc") / str(pid)
-    try:
-        exe = proc.joinpath("exe").resolve()
-    except (FileNotFoundError, PermissionError, OSError):
-        exe = None
-    if exe and str(exe) == "/opt/timmy-trader/Timmy":
-        return True
-
-    try:
-        cmdline = proc.joinpath("cmdline").read_bytes().decode("utf-8", errors="replace").split("\0")
-    except (FileNotFoundError, PermissionError, OSError):
-        return False
-    args = [arg for arg in cmdline if arg]
-    if not args:
-        return False
-    if Path(args[0]).name in {"timmy-desktop", "Timmy"}:
-        return True
-    return len(args) >= 3 and Path(args[0]).name.startswith("python") and args[1:3] == ["-m", "trend_trader.desktop"]
-
-
-def _read_lock_pid(lock_path: Path) -> int | None:
-    try:
-        lines = lock_path.read_text(encoding="utf-8").splitlines()
+        marker.unlink()
     except FileNotFoundError:
-        return None
-    for line in lines:
-        if not line.startswith("pid="):
-            continue
-        try:
-            return int(line.removeprefix("pid=").strip())
-        except ValueError:
-            return None
-    return None
-
-
-def _process_exists(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
         return False
-    except PermissionError:
-        return True
+    except OSError as exc:
+        _write_crash_log(home, f"Could not clear restart request: {exc}")
+        return False
+    return True
 
 
 def _write_crash_log(home: Path, details: str) -> None:
@@ -201,15 +108,45 @@ def main() -> int:
     if lock_file is None and not args.allow_second_instance:
         return 1
 
+    # A marker left by a crash must never cause a restart loop. If it cannot be
+    # cleared, fail closed and ignore any marker observed after this run.
+    stale_marker_cleared = True
+    try:
+        (home / RESTART_REQUEST).unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        stale_marker_cleared = False
+        _write_crash_log(home, f"Could not clear stale restart request: {exc}")
+
+    exit_code = 0
+    restart_requested = False
     try:
         try:
-            return TimmyNativeApp(home).run()
+            exit_code = TimmyNativeApp(home).run()
+            restart_requested = _consume_restart_request(home) and stale_marker_cleared
         except Exception:
             _write_crash_log(home, traceback.format_exc())
-            return 1
+            exit_code = 1
     finally:
         if lock_file is not None:
             lock_file.close()
+
+    if restart_requested and exit_code == 0:
+        try:
+            subprocess.Popen(
+                _restart_command(home),
+                cwd=str(home),
+                env=os.environ.copy(),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                close_fds=True,
+            )
+        except Exception:
+            _write_crash_log(home, f"Timmy restart failed\n{traceback.format_exc()}")
+            return 1
+    return exit_code
 
 
 if __name__ == "__main__":
