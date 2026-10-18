@@ -47,7 +47,7 @@ const outcomes = [
   {
     kicker: "Staff control",
     title: "Keep work moving with the right checks.",
-    body: "Route sensitive exports, policy edits, billing changes, restore operations, and record changes through the reviews your office needs.",
+    body: "Route project status changes for Owner review, schedule recurring access-review tasks, and keep role-based notices inside the app.",
   },
   {
     kicker: "Clear answers",
@@ -133,6 +133,40 @@ export default function HomePage() {
         </section>
 
         <ExecutiveSummaryFeature />
+        <section className="section home-release" aria-labelledby="release-title">
+          <p className="eyebrow">Current desktop release · 0.3.18</p>
+          <h2 id="release-title">More control over local office workflows.</h2>
+          <p className="section-copy">
+            The latest Windows release adds Owner tools for merging duplicate
+            local customer records with an encrypted pre-merge backup, scheduling
+            local CSV reports and full data exports, and reviewing or ending
+            sessions saved on this installation.
+          </p>
+          <div className="card-grid three">
+            <article>
+              <span>Customer records</span>
+              <strong>Resolve local duplicates safely.</strong>
+              <p>Review the merge and backup before local records are combined.</p>
+            </article>
+            <article>
+              <span>Scheduled work</span>
+              <strong>Keep routine reviews on the calendar.</strong>
+              <p>Queue local reports, exports, and recurring access-review tasks.</p>
+            </article>
+            <article>
+              <span>Session controls</span>
+              <strong>Review sessions from this installation.</strong>
+              <p>Owners can inspect and end sessions saved by this local copy.</p>
+            </article>
+          </div>
+          <p className="office-fit-note">
+            Scheduled desktop jobs run while OverHead is open and the required
+            Owner or Bookkeeper is signed in. Reports and notices stay local or
+            in-app; these controls do not manage Firebase account suspension,
+            merge shared cloud customer records, or end sessions on other devices.
+          </p>
+          <Link className="text-link" href={businessGuideHref}>Read the current user guide</Link>
+        </section>
         <section className="section revenue-check">
           <div className="revenue-check-intro">
             <p className="eyebrow">Office Revenue Leak Check</p>

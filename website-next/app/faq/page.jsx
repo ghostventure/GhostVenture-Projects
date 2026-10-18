@@ -48,6 +48,26 @@ const faqs = [
     `${businessFoundation.mission} In practice, that means ${businessPrinciples[0].title.toLowerCase()}, ${businessPrinciples[1].title.toLowerCase()}, and ${businessPrinciples[5].title.toLowerCase()}.`,
   ],
   [
+    "What is included in OverHead 0.3.18?",
+    "Version 0.3.18 adds local report and security workflow controls, including scheduled CSV exports, access-review tasks, inactivity policies, role-routed in-app notices, saved-session management, and Owner-reviewed local customer merges. The exact actions available depend on your role.",
+  ],
+  [
+    "Do scheduled exports and security jobs run when OverHead is closed?",
+    "No. These are desktop jobs. OverHead must be open and the required Owner or Bookkeeper session signed in when a job is due. Scheduled reports save locally and create an in-app notice; they are not emailed or uploaded. Access-review tasks still need a person to complete the review.",
+  ],
+  [
+    "Do inactivity policies suspend shared or Firebase accounts?",
+    "No. The inactivity policy applies to local staff profiles managed by this desktop installation. It does not suspend Firebase-linked accounts. Check the affected profile and policy result in OverHead, and manage shared account access through its authorized account controls.",
+  ],
+  [
+    "Can I revoke a session on another computer or merge cloud customer records?",
+    "No. Session management can list and end saved sessions from the current local installation, but cannot reach sessions on other devices. The Owner-only customer merge works on local records after a backup; shared cloud records must be reconciled separately.",
+  ],
+  [
+    "Do security notices send email or push alerts?",
+    "No. Supported security events can create role-scoped notices in OverHead's local staff inbox. Email, push, and other external notification delivery are not configured in this release.",
+  ],
+  [
     "Do I need to move everything into OverHead on day one?",
     "No. Start with one active customer, one queue, or one repeated office process. The goal is useful adoption, not a disruptive all-at-once migration.",
   ],
