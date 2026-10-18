@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FeatureForm, FeaturePanel, FeatureRecordList, FeatureRecordManager, FeatureTabs, currentDate, useFeatureRecords } from './FeatureWave101Helpers'
 
 const emptyRows = []
@@ -48,6 +48,9 @@ export default function SalesWorkspace({ backendState = {}, refreshBackend = () 
   const [renewalCustomerId, setRenewalCustomerId] = useState('')
   const [playbookOpportunityId, setPlaybookOpportunityId] = useState('')
   const [conversionDeal, setConversionDeal] = useState(null)
+  const conversionDialogRef = useRef(null)
+  const conversionOpenerRef = useRef(null)
+  const conversionTitleId = 'sales-conversion-dialog-title'
 
   const opportunities = useMemo(() => records.filter((record) => !record.kind || record.kind === 'opportunity'), [records])
   const settings = records.find((record) => record.kind === 'sales_settings')
@@ -100,11 +103,35 @@ export default function SalesWorkspace({ backendState = {}, refreshBackend = () 
   const conversionFields = useMemo(() => [
     { name: 'businessName', label: 'Customer business name', required: true },
     { name: 'ownerName', label: 'Primary contact' },
-    { name: 'email', label: 'Contact email' },
+    { name: 'email', label: 'Contact email', type: 'email', required: true },
     { name: 'industry', label: 'Industry', defaultValue: 'General services' },
     { name: 'serviceArea', label: 'Service area', defaultValue: 'Local' },
     { name: 'preferredContact', label: 'Preferred contact', options: ['Email', 'Phone', 'Text'] },
   ], [])
+
+  useEffect(() => {
+    if (!conversionDeal) return undefined
+    const dialog = conversionDialogRef.current
+    const focusable = () => [...(dialog?.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || [])]
+    focusable()[0]?.focus()
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') { event.preventDefault(); closeConversionDialog(); return }
+      if (event.key !== 'Tab') return
+      const items = focusable()
+      if (!items.length) { event.preventDefault(); dialog?.focus(); return }
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [conversionDeal])
+
+  function closeConversionDialog() {
+    setConversionDeal(null)
+    requestAnimationFrame(() => conversionOpenerRef.current?.focus())
+  }
 
   async function saveRecord(record) {
     await save(record)
@@ -203,18 +230,22 @@ export default function SalesWorkspace({ backendState = {}, refreshBackend = () 
     const businessName = String(values.businessName || '').trim()
     const email = String(values.email || '').trim()
     const currentCustomers = backendState.customers || emptyRows
+    const pendingCustomerId = conversionDeal.pendingCustomerId || conversionDeal.conversionCustomerId || conversionDeal.customerId
     const matched = currentCustomers.find((customer) => normalize(customer.business_name) === normalize(businessName) || (email && normalize(customer.email) === normalize(email)))
-    let customer = matched
+    let customer = currentCustomers.find((item) => item.id === pendingCustomerId) || (conversionDeal.pendingCustomer?.id === pendingCustomerId ? conversionDeal.pendingCustomer : null) || matched
     if (!customer) {
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid contact email before creating a customer record.')
       if (!window.overheadBackend?.createCustomer) throw new Error('The local customer service is unavailable.')
       const result = await window.overheadBackend.createCustomer({ ...values, businessName, email })
-      customer = (result?.customers || []).find((row) => normalize(row.business_name) === normalize(businessName))
+      customer = (result?.customers || []).find((row) => normalize(row.business_name) === normalize(businessName) && normalize(row.email) === normalize(email))
       if (!customer) throw new Error('The customer was created, but its returned record could not be matched. Refresh the workspace before retrying.')
     }
-    await saveRecord({ ...conversionDeal, kind: 'opportunity', customer: customer.business_name, customerId: customer.id, conversionStatus: 'Converted', convertedAt: new Date().toISOString() })
-    await saveRecord({ kind: 'lead_conversion', title: `Converted: ${conversionDeal.title}`, opportunityId: conversionDeal.id, customerId: customer.id, customer: customer.business_name, date: currentDate(), status: 'Complete', notes: matched ? 'Linked to an existing customer profile.' : 'Created a customer profile from the Won opportunity.' })
+    const pendingDeal = { ...conversionDeal, kind: 'opportunity', customer: customer.business_name, pendingCustomerId: customer.id, pendingCustomer: customer, conversionCustomerEmail: customer.email || email, conversionStatus: 'Conversion pending' }
+    await saveRecord(pendingDeal)
+    await saveRecord({ id: `lead-conversion-${conversionDeal.id}`, kind: 'lead_conversion', title: `Converted: ${conversionDeal.title}`, opportunityId: conversionDeal.id, customerId: customer.id, customer: customer.business_name, date: currentDate(), status: 'Complete', notes: matched ? 'Linked to an existing customer profile.' : 'Created a customer profile from the Won opportunity.' })
+    await saveRecord({ ...pendingDeal, customerId: customer.id, conversionCustomerId: customer.id, conversionStatus: 'Converted', convertedAt: conversionDeal.convertedAt || new Date().toISOString() })
     await refreshBackend()
-    setConversionDeal(null)
+    closeConversionDialog()
     setOperationNotice(`${customer.business_name} is linked to the Won opportunity.`)
   }
 
@@ -267,9 +298,9 @@ export default function SalesWorkspace({ backendState = {}, refreshBackend = () 
       {editing && <form className="profile-form compact-form" onSubmit={saveOpportunity} style={{ display: 'grid', gap: 12, padding: 14, border: '1px solid var(--line)', borderRadius: 8 }}>
         <strong>{editing.id ? 'Edit opportunity' : 'New opportunity'}</strong><div className="growth-form-grid">{opportunityFields.map((field) => <label key={field.name} className={field.multiline ? 'wide' : ''}>{field.label}{field.options ? <select value={editing[field.name] ?? field.defaultValue ?? ''} onChange={(event) => setEditing((current) => ({ ...current, [field.name]: event.target.value }))}>{field.options.map((option) => <option key={option.value ?? option} value={option.value ?? option}>{option.label ?? option}</option>)}</select> : field.multiline ? <textarea rows="3" value={editing[field.name] ?? ''} onChange={(event) => setEditing((current) => ({ ...current, [field.name]: event.target.value }))} /> : <input type={field.type || 'text'} min={field.min} max={field.max} step={field.step} value={editing[field.name] ?? field.defaultValue ?? ''} onChange={(event) => setEditing((current) => ({ ...current, [field.name]: event.target.value }))} />}</label>)}</div><div className="button-row"><button className="primary-action" type="submit">Save opportunity</button><button className="ghost-button" type="button" onClick={() => setEditing(null)}>Cancel</button></div>
       </form>}
-      <div className="task-list">{opportunities.map((deal) => <article className="task-row" key={deal.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'start' }}><div><strong>{deal.title}</strong><span>{deal.customer ? `${deal.customer} · ` : ''}{deal.stage || deal.status || 'Lead'} · {deal.owner || 'Unassigned'}</span><span>{money(deal.amount)} at {Math.min(100, Math.max(0, asNumber(deal.probability)))}% · weighted {money(asNumber(deal.amount) * Math.min(100, Math.max(0, asNumber(deal.probability))) / 100)} · close {deal.close_date || 'unscheduled'}</span><span>Lead score {deal.lead_score === undefined || deal.lead_score === '' ? 'not scored' : `${deal.lead_score}/100`} · commission estimate {money(asNumber(deal.amount) * commissionRate / 100)}</span>{deal.lost_reason && <span>Lost reason: {deal.lost_reason}</span>}{deal.conversionStatus === 'Converted' && <span>Converted to customer profile {deal.customerId || ''}</span>}{deal.notes && <p>{deal.notes}</p>}</div><div className="feature-record-actions"><button className="ghost-button" type="button" onClick={() => scoreLead(deal)}>Calculate lead score</button><button className="text-button" type="button" onClick={() => { setEditing({ ...deal }); setError('') }}>Edit</button>{isWon(deal) && deal.conversionStatus !== 'Converted' && <button className="text-button" type="button" onClick={() => { setConversionDeal(deal); setError('') }}>Convert to customer</button>}<button className="text-button danger-text" type="button" onClick={() => deleteRecord(deal.id).catch((reason) => setError(reason.message))}>Delete</button></div></article>)}{!opportunities.length && <p className="queue-empty">No opportunities saved yet.</p>}</div>
+      <div className="task-list">{opportunities.map((deal) => <article className="task-row" key={deal.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'start' }}><div><strong>{deal.title}</strong><span>{deal.customer ? `${deal.customer} · ` : ''}{deal.stage || deal.status || 'Lead'} · {deal.owner || 'Unassigned'}</span><span>{money(deal.amount)} at {Math.min(100, Math.max(0, asNumber(deal.probability)))}% · weighted {money(asNumber(deal.amount) * Math.min(100, Math.max(0, asNumber(deal.probability))) / 100)} · close {deal.close_date || 'unscheduled'}</span><span>Lead score {deal.lead_score === undefined || deal.lead_score === '' ? 'not scored' : `${deal.lead_score}/100`} · commission estimate {money(asNumber(deal.amount) * commissionRate / 100)}</span>{deal.lost_reason && <span>Lost reason: {deal.lost_reason}</span>}{deal.conversionStatus === 'Converted' && <span>Converted to customer profile {deal.customerId || ''}</span>}{deal.notes && <p>{deal.notes}</p>}</div><div className="feature-record-actions"><button className="ghost-button" type="button" onClick={() => scoreLead(deal)}>Calculate lead score</button><button className="text-button" type="button" onClick={() => { setEditing({ ...deal }); setError('') }}>Edit</button>{isWon(deal) && (deal.conversionStatus !== 'Converted' || !records.some((record) => record.kind === 'lead_conversion' && record.opportunityId === deal.id)) && <button className="text-button" type="button" onClick={(event) => { conversionOpenerRef.current = event.currentTarget; setConversionDeal(deal); setError('') }}>{deal.conversionStatus === 'Converted' ? 'Repair conversion record' : 'Convert to customer'}</button>}<button className="text-button danger-text" type="button" onClick={() => deleteRecord(deal.id).catch((reason) => setError(reason.message))}>Delete</button></div></article>)}{!opportunities.length && <p className="queue-empty">No opportunities saved yet.</p>}</div>
       <div className="profile-form compact-form" style={{ maxWidth: 560 }}><strong>Create a renewal opportunity</strong><label>Customer profile<select value={renewalCustomerId} onChange={(event) => setRenewalCustomerId(event.target.value)}><option value="">Choose a customer with a renewal date</option>{renewalProfiles.map((profile) => { const coreCustomer = (backendState.customers || emptyRows).find((item) => item.id === profile.customerId); const label = coreCustomer?.business_name || profile.title || profile.businessName || profile.customerName || 'Customer'; const renewalDate = typeof profile.renewal === 'object' ? profile.renewal.date : profile.renewal; return <option key={profile.id} value={profile.id}>{label} · renews {renewalDate}</option> })}</select></label><button className="ghost-button" type="button" onClick={() => createRenewal().catch((reason) => setError(reason.message))}>Create renewal opportunity</button></div>
-      {conversionDeal && <div className="growth-modal-backdrop" role="presentation"><div className="growth-editor"><div className="section-head"><div><p className="eyebrow">Won deal conversion</p><h3>Customer profile for {conversionDeal.title}</h3></div><button className="ghost-button" type="button" onClick={() => setConversionDeal(null)}>Close</button></div><p className="panel-copy">Review the customer details. If the business name or email matches an existing customer, the existing profile will be linked.</p><FeatureForm fields={conversionFields} initial={{ businessName: conversionDeal.customer || conversionDeal.title, ownerName: conversionDeal.owner || '' }} submitLabel="Create or link customer" onSubmit={(values) => convertDeal(values).catch((reason) => { setError(reason.message); throw reason })} onCancel={() => setConversionDeal(null)} /></div></div>}
+      {conversionDeal && <div className="growth-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeConversionDialog() }}><div ref={conversionDialogRef} className="growth-editor" role="dialog" aria-modal="true" aria-labelledby={conversionTitleId} tabIndex={-1}><div className="section-head"><div><p className="eyebrow">Won deal conversion</p><h3 id={conversionTitleId}>Customer profile for {conversionDeal.title}</h3></div><button className="ghost-button" type="button" onClick={closeConversionDialog}>Close</button></div><p className="panel-copy">Review the customer details. If the business name or email matches an existing customer, the existing profile will be linked. A valid contact email is required for new customer records.</p><FeatureForm fields={conversionFields} initial={{ businessName: conversionDeal.customer || conversionDeal.title, ownerName: conversionDeal.owner || '', email: conversionDeal.conversionCustomerEmail || (backendState.customers || emptyRows).find((customer) => customer.id === (conversionDeal.pendingCustomerId || conversionDeal.conversionCustomerId || conversionDeal.customerId))?.email || '' }} submitLabel="Create or link customer" onSubmit={convertDeal} onCancel={closeConversionDialog} /></div></div>}
     </FeaturePanel>}
 
     {tab === 'rules' && <FeaturePanel eyebrow="Lead qualification and assignment" title="Territories, lead scoring, and owner rules" description="Rules act only when you press Apply. They update local opportunity owner fields; they do not enforce record visibility or change account permissions.">
