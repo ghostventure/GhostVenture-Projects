@@ -2029,7 +2029,25 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
     actionType: 'quote_send',
     title: '',
     details: '',
+    amount: '',
   })
+  const [approvalPolicies, setApprovalPolicies] = useState([])
+  const [routeRole, setRouteRole] = useState('Owner')
+  const [routeThreshold, setRouteThreshold] = useState('')
+
+  useEffect(() => {
+    if (session?.role !== 'Owner' || !window.overheadBackend?.listFeatureRecords) return
+    window.overheadBackend.listFeatureRecords('security').then((records) => {
+      const policy = records.find((record) => record.id === 'approval-routing-policy')
+      setApprovalPolicies(Array.isArray(policy?.rules) ? policy.rules : [])
+    }).catch(() => setApprovalPolicies([]))
+  }, [session?.role])
+
+  useEffect(() => {
+    const rule = approvalPolicies.find((item) => item.action_type === approvalDraft.actionType)
+    setRouteRole(rule?.approver_role || 'Owner')
+    setRouteThreshold(rule ? String(rule.threshold) : '')
+  }, [approvalDraft.actionType, approvalPolicies])
 
   async function updateUser() {
     if (!window.overheadBackend?.updateUser) return
@@ -2071,10 +2089,20 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
 
   async function createApproval() {
     if (!window.overheadBackend?.createApprovalRequest || !approvalDraft.title) return
-    await window.overheadBackend.createApprovalRequest(approvalDraft)
+    await window.overheadBackend.createApprovalRequest({ ...approvalDraft, amount: approvalDraft.amount === '' ? undefined : Number(approvalDraft.amount) })
     setOperationNotice('Management approval request created.')
-    setApprovalDraft({ actionType: 'quote_send', title: '', details: '' })
+    setApprovalDraft((current) => ({ ...current, title: '', details: '', amount: '' }))
     await refreshBackend()
+  }
+
+  async function saveApprovalRoute() {
+    const threshold = Number(routeThreshold)
+    if (!Number.isFinite(threshold) || threshold < 0) { setOperationNotice('Enter a non-negative amount threshold for this approval route.'); return }
+    const rule = { action_type: approvalDraft.actionType, threshold, approver_role: routeRole }
+    const rules = [...approvalPolicies.filter((item) => item.action_type !== rule.action_type), rule]
+    await window.overheadBackend.upsertFeatureRecord({ collection: 'security', record: { id: 'approval-routing-policy', kind: 'approval-routing-policy', rules } })
+    setApprovalPolicies(rules)
+    setOperationNotice(`Approval route saved. Requests up to ${threshold} go to ${routeRole}; higher amounts stay with an Owner.`)
   }
 
   async function decideApproval(approvalId, decision) {
@@ -2172,7 +2200,15 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
             </label>
             <FormField label="Title" value={approvalDraft.title} onChange={(value) => updateApprovalDraft('title', value)} placeholder="What needs approval?" />
             <FormField label="Details" value={approvalDraft.details} onChange={(value) => updateApprovalDraft('details', value)} placeholder="Why it needs management approval" />
+            <FormField label="Amount (optional)" value={approvalDraft.amount} onChange={(value) => updateApprovalDraft('amount', value)} placeholder="0.00" />
             <button className="ghost-button" type="button" onClick={createApproval}>Request Approval</button>
+            {session?.role === 'Owner' && <div className="profile-form compact-form">
+              <strong>Conditional route for {approvalDraft.actionType.replaceAll('_', ' ')}</strong>
+              <label>At or below this amount<select value={routeRole} onChange={(event) => setRouteRole(event.target.value)}><option>Owner</option><option>Bookkeeper</option><option>Front Desk</option><option>Support</option></select></label>
+              <FormField label="Maximum amount for this role" value={routeThreshold} onChange={setRouteThreshold} placeholder="For example, 250" />
+              <button className="ghost-button" type="button" onClick={saveApprovalRoute}>Save conditional route</button>
+              <small>Requests over the threshold route to an Owner. The backend verifies the assigned reviewer and prevents requesters from approving their own requests.</small>
+            </div>}
           </div>
           <div className="approval-list">
             {(backendState.approvalRequests || []).slice(0, 6).map((approval) => (
@@ -2180,9 +2216,9 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
                 <div>
                   <strong>{approval.title}</strong>
                   <span>{approval.action_type} - {approval.status}</span>
-                  <small>{approval.requested_by} to {approval.manager_email}</small>
+                  <small>{approval.requested_by} to {approval.approver_role || 'Owner'} ({approval.approver_email || approval.manager_email}){approval.amount !== undefined ? ` · ${approval.amount}` : ''}</small>
                 </div>
-                {approval.status === 'Pending' && (
+                {approval.status === 'Pending' && (session?.role === 'Owner' || (approval.approver_email === session?.email && approval.approver_role === session?.role)) && (
                   <div className="button-row">
                     <button className="mini-button" type="button" onClick={() => decideApproval(approval.id, 'Approved')}>Approve</button>
                     <button className="mini-button" type="button" onClick={() => decideApproval(approval.id, 'Rejected')}>Reject</button>

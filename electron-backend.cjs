@@ -63,6 +63,7 @@ const approvalRequestSchema = z.object({
   title: z.string().trim().min(1),
   details: z.string().trim().optional().default(''),
   customerId: z.string().trim().optional().default(''),
+  amount: z.coerce.number().finite().min(0).max(1000000000).optional(),
 })
 
 const approvalDecisionSchema = z.object({
@@ -1952,6 +1953,14 @@ function updateEmployeeLicense(payload = {}) {
 function createApprovalRequest(payload = {}) {
   requireRole(['Front Desk', 'Bookkeeper', 'Support', 'Owner'], 'approval request creation')
   const input = approvalRequestSchema.parse(payload)
+  const policyRecord = (state.featureRecords?.security || []).find((item) => item?.id === 'approval-routing-policy')
+  const configured = (Array.isArray(policyRecord?.rules) ? policyRecord.rules : []).find((item) => item?.action_type === input.actionType)
+  const threshold = Number(configured?.threshold)
+  const selectedRole = ['Owner', 'Front Desk', 'Bookkeeper', 'Support'].includes(configured?.approver_role) ? configured.approver_role : 'Owner'
+  const approverRole = configured && Number.isFinite(threshold) && input.amount !== undefined && input.amount <= threshold ? selectedRole : 'Owner'
+  const eligibleApprovers = state.userProfiles.filter((user) => user.status === 'Active' && user.role === approverRole && user.email !== activeSession.email)
+  if (approverRole !== 'Owner' && !eligibleApprovers.length) throw new Error(`No active ${approverRole} reviewer other than the requester is available. Update the approval route or staff accounts.`)
+  const assignedApprover = (approverRole === 'Owner' ? state.userProfiles.find((user) => user.status === 'Active' && user.role === 'Owner') : eligibleApprovers[0])
   const createdAt = now()
   const request = {
     id: createId('approval'),
@@ -1961,6 +1970,9 @@ function createApprovalRequest(payload = {}) {
     customer_id: input.customerId,
     requested_by: activeSession.email,
     manager_email: managerForActiveSession(),
+    amount: input.amount,
+    approver_role: approverRole,
+    approver_email: assignedApprover?.email || '',
     status: 'Pending',
     decision_notes: '',
     decided_by: '',
@@ -1975,20 +1987,19 @@ function createApprovalRequest(payload = {}) {
 }
 
 function decideApprovalRequest(payload = {}) {
-  requireRole(['Owner'], 'management approval')
   const input = approvalDecisionSchema.parse(payload)
   const request = state.approvalRequests.find((item) => item.id === input.approvalId)
   if (!request) throw new Error('Approval request not found.')
-  if (request.manager_email !== activeSession.email && activeSession.role !== 'Owner') {
-    throw new Error('Only the assigned manager can decide this request.')
-  }
+  requireRole(['Owner', request.approver_role || 'Owner'], 'management approval')
+  if (request.status !== 'Pending') throw new Error('This approval request has already been decided.')
+  if (activeSession.role !== 'Owner' && (request.approver_email !== activeSession.email || request.approver_role !== activeSession.role || request.requested_by === activeSession.email)) throw new Error('Only the assigned reviewer can decide this request, and requesters cannot approve their own requests.')
   request.status = input.decision
   request.decision_notes = input.notes
   request.decided_by = activeSession.email
   request.decided_at = now()
   request.updated_at = now()
   persist()
-  recordAudit('approval.decided', 'Management approval decided', { id: request.id, decision: input.decision }, activeSession.email)
+  recordAudit('approval.decided', 'Management approval decided', { id: request.id, decision: input.decision, approverRole: activeSession.role }, activeSession.email)
   return listApprovalRequests()
 }
 
@@ -1998,7 +2009,7 @@ function listApprovalRequests() {
     return [...state.approvalRequests].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
   }
   return state.approvalRequests
-    .filter((item) => item.requested_by === activeSession.email || item.manager_email === activeSession.email)
+    .filter((item) => item.requested_by === activeSession.email || item.approver_email === activeSession.email)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
 }
 
