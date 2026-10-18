@@ -34,11 +34,15 @@ import { workflowBoilerplates } from './boilerplates'
 import { customerDatabaseSchema } from './customerDatabase'
 import { complianceBadges, helpArticles, legalDocuments, marketableFeatures, planTiers, supportChannels } from './productBlueprint'
 import { themes } from './themes'
+import GrowthWorkspace from './features/GrowthWorkspace'
+import { AccountGovernancePanel, FeatureWavePreferences, FieldAssistSection, SupportOperationsPanel } from './featureWave301400'
 import './App.css'
 
 const navSections = [
   { id: 'overview', label: 'Team Dashboard', detail: 'Priorities, ownership, readiness', icon: Gauge },
   { id: 'reports', label: 'Reports', detail: 'Activity, revenue, and work summaries', icon: BarChart3 },
+  { id: 'growth', label: 'Growth & Work', detail: 'Dashboards, tasks, projects, sales', icon: BriefcaseBusiness },
+  { id: 'field-assist', label: 'Field & Assist', detail: 'Offline capture and reviewed local help', icon: Sparkles },
   { id: 'work', label: 'Workflows', detail: 'Scheduling, answers, quotes', icon: Workflow },
   { id: 'customers', label: 'Customers', detail: 'Profiles, rules, service history', icon: Users },
   { id: 'imports', label: 'Import', detail: 'Microsoft 365 and Business Central', icon: CloudDownload },
@@ -534,6 +538,8 @@ function App() {
               />
             )}
             {activeSection === 'reports' && <ReportsSection backendState={backendState} />}
+            {activeSection === 'growth' && <GrowthWorkspace session={session} />}
+            {activeSection === 'field-assist' && <FieldAssistSection backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'work' && (
               <WorkflowsSection
                 activeModule={activeModule}
@@ -573,6 +579,7 @@ function App() {
                 selectedLegal={selectedLegal}
                 setActiveLegal={setActiveLegal}
                 session={session}
+                backendState={backendState}
                 refreshBackend={refreshBackend}
                 setOperationNotice={setOperationNotice}
               />
@@ -588,6 +595,7 @@ function App() {
             {activeSection === 'accounts' && (
               <AccountsSection
                 backendState={backendState}
+                session={session}
                 refreshBackend={refreshBackend}
                 setOperationNotice={setOperationNotice}
               />
@@ -1332,6 +1340,8 @@ function sectionTitle(section) {
   return {
     overview: 'OverHead Console',
     reports: 'Workspace Reports',
+    growth: 'Growth & Work Suite',
+    'field-assist': 'Field & Assist',
     work: 'Workflow Operations',
     customers: 'Customer Records',
     imports: 'Import From Microsoft',
@@ -1354,7 +1364,7 @@ function displayRole(role) {
 }
 
 function allowedSectionsForRole(role) {
-  const member = ['overview', 'work', 'customers', 'support', 'tools', 'security']
+  const member = ['overview', 'growth', 'field-assist', 'work', 'customers', 'support', 'tools', 'security']
   if (role === 'Owner') return navSections.map((section) => section.id)
   if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, ...(role === 'Bookkeeper' ? ['reports'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
   return member
@@ -1746,7 +1756,7 @@ function EvidenceSection({ integrity, secureView, backendState }) {
   )
 }
 
-function SupportSection({ activeLegal, selectedLegal, setActiveLegal, session, refreshBackend, setOperationNotice }) {
+function SupportSection({ activeLegal, selectedLegal, setActiveLegal, session, backendState, refreshBackend, setOperationNotice }) {
   const [ticketDraft, setTicketDraft] = useState({ subject: '', details: '', priority: 'Normal' })
   const [sharedTickets, setSharedTickets] = useState([])
   const [supportError, setSupportError] = useState('')
@@ -1843,6 +1853,7 @@ function SupportSection({ activeLegal, selectedLegal, setActiveLegal, session, r
           ))}
         </div>
       </div>
+      <SupportOperationsPanel tickets={sharedTickets} users={backendState.userProfiles || []} session={session} setOperationNotice={setOperationNotice} />
     </section>
   )
 }
@@ -1922,7 +1933,7 @@ function ToolsSection({ backendState, refreshBackend, setOperationNotice, operat
   )
 }
 
-function AccountsSection({ backendState, refreshBackend, setOperationNotice }) {
+function AccountsSection({ backendState, session, refreshBackend, setOperationNotice }) {
   const firstUser = backendState.userProfiles?.[0]
   const [selectedEmail, setSelectedEmail] = useState(firstUser?.email || '')
   const [draft, setDraft] = useState({
@@ -2107,6 +2118,7 @@ function AccountsSection({ backendState, refreshBackend, setOperationNotice }) {
           </div>
         </div>
       </div>
+      <AccountGovernancePanel backendState={backendState} session={session} setOperationNotice={setOperationNotice} />
     </section>
   )
 }
@@ -3067,6 +3079,7 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
             <span><strong>Reduce motion</strong><small>Limit interface animation and scrolling effects.</small></span>
           </label>
         </div>
+        <FeatureWavePreferences session={session} backendState={backendState} setOperationNotice={setOperationNotice} />
         <div className="profile-form">
           <div className="backend-health">
             <strong>Local workspace health</strong>

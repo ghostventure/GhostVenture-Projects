@@ -1,0 +1,53 @@
+.growth-workspace { display: grid; gap: 18px; color: #243337; }
+.growth-heading, .growth-toolbar, .growth-controls, .growth-actions, .growth-record, .growth-record-actions, .growth-heading > div, .growth-editor > .growth-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.growth-heading h2 { margin: 0 0 5px; font-size: 25px; }
+.growth-heading p:not(.eyebrow), .growth-toolbar p { margin: 3px 0 0; color: #647578; }
+.growth-controls { justify-content: flex-start; flex-wrap: wrap; padding: 13px 16px; background: #f0f4f1; border: 1px solid #dfe7e2; border-radius: 14px; }
+.growth-controls label, .growth-actions label { display: flex; align-items: center; gap: 8px; color: #637276; font-size: 12px; font-weight: 700; }
+.growth-search { display: flex; align-items: center; gap: 8px; width: min(390px, 100%); padding: 0 10px; border: 1px solid #d4dfda; border-radius: 9px; background: white; }
+.growth-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; }
+.growth-controls select, .growth-actions select { padding: 8px; border: 1px solid #d4dfda; border-radius: 8px; background: white; }
+.growth-tabs { display: flex; gap: 7px; overflow-x: auto; border-bottom: 1px solid #dce5df; }
+.growth-tab { display: flex; gap: 9px; align-items: center; border: 0; border-bottom: 3px solid transparent; padding: 12px 14px; background: transparent; color: #657477; cursor: pointer; white-space: nowrap; }
+.growth-tab.active { border-bottom-color: #16806e; color: #155c51; font-weight: 800; }
+.growth-tab span, .growth-column h4 span { border-radius: 99px; padding: 2px 7px; background: #e7efea; font-size: 11px; }
+.growth-panel { display: grid; gap: 18px; padding: 20px; border: 1px solid #e0e7e1; border-radius: 16px; background: white; box-shadow: 0 6px 24px rgba(24, 49, 41, .04); }
+.growth-toolbar { align-items: flex-start; }
+.growth-toolbar h3 { margin: 0; }
+.growth-actions { flex-wrap: wrap; justify-content: flex-end; }
+.growth-preset-row, .growth-template-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.growth-preset-row > span, .growth-template-row > span { margin-right: 5px; color: #708084; font-size: 12px; font-weight: 800; }
+.growth-preset-row button, .growth-template-row button { border: 1px solid #d8e2dc; border-radius: 99px; padding: 7px 11px; background: #f8faf8; color: #31534c; cursor: pointer; }
+.growth-dashboard-grid { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 12px; }
+.growth-kpi, .growth-add-card { min-height: 148px; border: 1px solid #e0e8e2; border-radius: 13px; padding: 14px; background: linear-gradient(150deg, #fbfcfa, #f0f6f2); }
+.growth-kpi > div, .growth-kpi footer { display: flex; justify-content: space-between; align-items: center; }
+.growth-kpi small, .growth-kpi span { color: #67777a; }
+.growth-kpi > strong { display: block; margin: 13px 0 3px; font-size: 28px; color: #164d43; }
+.growth-kpi button, .growth-record-actions button, .growth-board-card button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 7px; padding: 6px; background: transparent; color: #4a6d64; cursor: pointer; }
+.growth-kpi footer { margin-top: 16px; }
+.growth-add-card { display: grid; place-content: center; justify-items: center; gap: 9px; color: #3d7468; cursor: pointer; }
+.growth-record-list { display: grid; gap: 8px; }
+.growth-record { padding: 13px 14px; border: 1px solid #e3eae5; border-radius: 11px; }
+.growth-record-main { min-width: 0; }
+.growth-record h4 { display: inline-block; margin: 3px 0 3px 9px; }
+.growth-record p { margin: 0; color: #728084; font-size: 12px; }
+.growth-status { display: inline-block; border-radius: 99px; padding: 4px 8px; background: #e8f2ed; color: #3a6b5e; font-size: 10px; font-weight: 800; }
+.growth-record-actions { flex-shrink: 0; }
+.growth-board { display: grid; grid-auto-columns: minmax(220px, 1fr); grid-auto-flow: column; gap: 12px; overflow-x: auto; align-items: start; }
+.growth-column { min-height: 170px; border: 1px solid #e1e9e3; border-radius: 12px; padding: 11px; background: #f8faf8; }
+.growth-column h4 { display: flex; justify-content: space-between; margin: 0 0 10px; }
+.growth-board-card { display: grid; gap: 5px; margin-top: 8px; padding: 11px; border: 1px solid #e1e8e3; border-radius: 9px; background: white; }
+.growth-board-card span { color: #768488; font-size: 12px; }
+.growth-board-card > div { display: flex; justify-content: flex-end; }
+.growth-empty { display: grid; justify-items: center; gap: 8px; padding: 30px 10px; color: #668078; text-align: center; }
+.growth-template-row { border-top: 1px solid #e6ece7; padding-top: 14px; }
+.growth-notice { min-height: 18px; margin: 0; color: #60766f; font-size: 12px; }
+.growth-modal-backdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(15, 25, 23, .5); }
+.growth-editor { display: grid; gap: 18px; width: min(720px, 100%); max-height: 90vh; overflow-y: auto; padding: 22px; border-radius: 16px; background: #fff; box-shadow: 0 20px 80px #0004; }
+.growth-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.growth-form-grid label { display: grid; gap: 6px; color: #526368; font-size: 12px; font-weight: 700; }
+.growth-form-grid input { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #d9e2dd; border-radius: 8px; }
+.growth-form-grid .wide { grid-column: 1 / -1; }
+.growth-modal-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #e5ebe7; padding-top: 14px; color: #708084; font-size: 12px; }
+@media (max-width: 900px) { .growth-dashboard-grid { grid-template-columns: repeat(2, minmax(160px, 1fr)); } .growth-heading, .growth-toolbar { align-items: flex-start; flex-direction: column; } .growth-actions { justify-content: flex-start; } }
+@media (max-width: 580px) { .growth-dashboard-grid, .growth-form-grid { grid-template-columns: 1fr; } .growth-form-grid .wide { grid-column: auto; } .growth-record { align-items: flex-start; flex-direction: column; } .growth-record-actions { flex-wrap: wrap; } .growth-modal-actions { align-items: flex-start; flex-direction: column; } }
