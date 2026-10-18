@@ -5,6 +5,71 @@ const tabs = [{ id: 'calendar', label: 'Shared calendar' }, { id: 'booking', lab
 const monthNow = () => new Date().toISOString().slice(0, 7)
 const emptyRows = []
 
+function icsEscape(value = '') {
+  return String(value).replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;')
+}
+
+function icsUnescape(value = '') {
+  return String(value).replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\')
+}
+
+function icsDate(value, tzid = '') {
+  const compact = String(value || '').trim()
+  const zone = /^[A-Za-z0-9_+/-]{1,100}$/.test(tzid) ? tzid : ''
+  if (/^\d{8}$/.test(compact)) return icsDate(`${compact}T000000`, zone)
+  const match = compact.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/)
+  if (!match) return null
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]))
+  if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3]) || Number(match[4]) > 23 || Number(match[5]) > 59) return null
+  if (match[7]) return { value: `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`, timezone: 'UTC' }
+  return { value: `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`, timezone: zone || Intl.DateTimeFormat().resolvedOptions().timeZone }
+}
+
+function parseIcsEvents(source) {
+  const unfolded = source.replace(/\r?\n[ \t]/g, '')
+  const blocks = unfolded.split(/BEGIN:VEVENT\s*/i).slice(1).map((part) => part.split(/END:VEVENT/i)[0])
+  return blocks.map((block, index) => {
+    const props = {}
+    for (const line of block.split(/\r?\n/)) {
+      const split = line.indexOf(':')
+      if (split < 0) continue
+      const [key, ...params] = line.slice(0, split).split(';')
+      const name = key.toUpperCase()
+      if (!['UID', 'SUMMARY', 'DTSTART', 'DTEND', 'DESCRIPTION', 'LOCATION', 'STATUS'].includes(name)) continue
+      const tzid = params.find((part) => /^TZID=/i.test(part))?.slice(5) || ''
+      props[name] = { value: line.slice(split + 1), tzid }
+    }
+    const start = props.DTSTART && icsDate(props.DTSTART.value, props.DTSTART.tzid)
+    const end = props.DTEND && icsDate(props.DTEND.value, props.DTEND.tzid)
+    if (!start || !props.SUMMARY?.value.trim()) return null
+    return {
+      kind: 'meeting', title: icsUnescape(props.SUMMARY.value), startAt: start.value,
+      endAt: end?.value || '', timezone: start.timezone,
+      agenda: [props.DESCRIPTION && icsUnescape(props.DESCRIPTION.value), props.LOCATION && `Location: ${icsUnescape(props.LOCATION.value)}`].filter(Boolean).join('\n'),
+      status: props.STATUS?.value.toUpperCase() === 'CANCELLED' ? 'Canceled' : 'Scheduled',
+      calendarSourceUid: icsUnescape(props.UID?.value || `local-import-${Date.now()}-${index}`),
+    }
+  }).filter(Boolean)
+}
+
+function foldIcsLine(line) {
+  const chunks = []
+  let chunk = ''
+  let bytes = 0
+  for (const character of line) {
+    const size = new TextEncoder().encode(character).length
+    if (bytes + size > 73) { chunks.push(chunk); chunk = ` ${character}`; bytes = 1 + size }
+    else { chunk += character; bytes += size }
+  }
+  chunks.push(chunk)
+  return chunks.join('\r\n')
+}
+
+function toIcsDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  return match ? `${match[1]}${match[2]}${match[3]}T${match[4]}${match[5]}00` : ''
+}
+
 export default function SchedulingWorkspace({ backendState = {}, setOperationNotice = () => {} }) {
   const { records, loading, error, setError, save, remove } = useFeatureRecords('scheduling')
   const { records: projectRecords, save: saveProject, remove: removeProject } = useFeatureRecords('projects')
@@ -12,6 +77,8 @@ export default function SchedulingWorkspace({ backendState = {}, setOperationNot
   const [month, setMonth] = useState(monthNow())
   const [focusDraft, setFocusDraft] = useState({ title: 'Focus time', startAt: '', endAt: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
   const [focusError, setFocusError] = useState('')
+  const [calendarNotice, setCalendarNotice] = useState('')
+  const [calendarError, setCalendarError] = useState('')
   const appointments = backendState.appointments || emptyRows
 
   const scheduleRows = useMemo(() => {
@@ -44,10 +111,53 @@ export default function SchedulingWorkspace({ backendState = {}, setOperationNot
     setFocusDraft((current) => ({ ...current, startAt: '', endAt: '' }))
   }
 
+  async function importCalendarFile(event) {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { setCalendarError('Choose an iCalendar file smaller than 5 MB.'); return }
+    try {
+      const parsed = parseIcsEvents(await file.text())
+      if (!parsed.length) throw new Error('No supported calendar events were found in that file.')
+      let imported = 0
+      for (const eventRecord of parsed) {
+        const existing = records.find((record) => record.calendarSourceUid === eventRecord.calendarSourceUid)
+        await save({ ...eventRecord, ...(existing?.id ? { id: existing.id } : {}) })
+        imported += 1
+      }
+      setCalendarError('')
+      setCalendarNotice(`${imported} event${imported === 1 ? '' : 's'} imported from ${file.name}.`)
+    } catch (reason) { setCalendarError(reason?.message || 'The calendar file could not be imported.') }
+  }
+
+  function exportCalendarFile() {
+    const exportRows = [
+      ...records.filter((record) => ['meeting', 'resource_booking', 'shift', 'focus_block'].includes(record.kind)),
+      ...appointments.map((item) => ({ id: item.id, kind: 'appointment', title: item.title, startAt: item.scheduled_for, status: item.status, notes: item.notes })),
+    ].filter((record) => toIcsDate(record.startAt))
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//OverHead//Local Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH']
+    for (const record of exportRows) {
+      const start = toIcsDate(record.startAt)
+      const end = toIcsDate(record.endAt) || start
+      lines.push('BEGIN:VEVENT', `UID:${icsEscape(record.calendarSourceUid || record.id || `${record.kind}-${start}`)}@overhead.local`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`, `DTSTART${record.timezone && record.timezone !== 'UTC' ? `;TZID=${record.timezone}` : ''}:${start}${record.timezone === 'UTC' ? 'Z' : ''}`, `DTEND${record.timezone && record.timezone !== 'UTC' ? `;TZID=${record.timezone}` : ''}:${end}${record.timezone === 'UTC' ? 'Z' : ''}`, `SUMMARY:${icsEscape(record.title || record.kind)}`, `DESCRIPTION:${icsEscape([record.kind, record.agenda, record.notes].filter(Boolean).join('\n'))}`, `STATUS:${record.status === 'Canceled' || record.status === 'Cancelled' ? 'CANCELLED' : 'CONFIRMED'}`, 'END:VEVENT')
+    }
+    lines.push('END:VCALENDAR')
+    const blob = new Blob([lines.map(foldIcsLine).join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' })
+    const href = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = href
+    link.download = `overhead-calendar-${currentDate()}.ics`
+    link.click()
+    URL.revokeObjectURL(href)
+    setCalendarError('')
+    setCalendarNotice(`${exportRows.length} local event${exportRows.length === 1 ? '' : 's'} exported. Provider calendars are not contacted.`)
+  }
+
   return <section className="reports-page">
     <FeatureTabs tabs={tabs} active={tab} onChange={setTab} />
     {error && <p className="form-error" role="alert">{error}</p>}{loading && <p className="queue-empty">Loading secure schedule records…</p>}
     {tab === 'calendar' && <FeaturePanel eyebrow="Scheduling and time" title="Shared team calendar" description="See locally scheduled appointments, meetings, shifts, resource bookings, and focus blocks by month. Times retain the time zone recorded with the event.">
+      <div className="profile-form compact-form"><strong>Calendar file exchange</strong><p>Import or export standard .ics calendar files to move events between OverHead and another calendar app. This is a manual desktop file exchange; it does not connect to provider accounts.</p><label>Import calendar (.ics)<input type="file" accept=".ics,text/calendar" onChange={(event) => importCalendarFile(event).catch((reason) => setCalendarError(reason.message))} /></label><button className="ghost-button" type="button" onClick={exportCalendarFile}>Export local calendar (.ics)</button>{calendarError && <p className="form-error" role="alert">{calendarError}</p>}{calendarNotice && <p role="status">{calendarNotice}</p>}</div>
       <label className="form-field">Calendar month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
       <div className="task-list">{scheduleRows.map((row) => <article className="task-row" key={`${row.kind}-${row.id}`}><strong>{row.title || row.kind}</strong><span>{row.kind}</span><span>{row.date}{row.timezone ? ` · ${row.timezone}` : ''}</span><span>{row.status || 'Scheduled'}</span>{row.project && <small>Project: {row.project}</small>}</article>)}{!scheduleRows.length && <p className="queue-empty">No events are scheduled for {month}.</p>}</div>
       <FeatureRecordManager records={records} kind="meeting" title="Add calendar event" description="Create a meeting or event with a time zone, attendees, agenda, and optional project reference." fields={[{ name: 'title', label: 'Event title', required: true }, { name: 'startAt', label: 'Start time', type: 'datetime-local', required: true }, { name: 'endAt', label: 'End time', type: 'datetime-local' }, { name: 'timezone', label: 'IANA time zone', defaultValue: Intl.DateTimeFormat().resolvedOptions().timeZone, required: true }, { name: 'attendees', label: 'Attendee emails (comma separated)' }, { name: 'project', label: 'Project name or ID' }, { name: 'agenda', label: 'Agenda', multiline: true }, { name: 'status', label: 'Status', options: ['Scheduled', 'Confirmed', 'Complete', 'Canceled'], defaultValue: 'Scheduled' }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Scheduled', 'Confirmed', 'Complete', 'Canceled']} emptyText="No meetings." />

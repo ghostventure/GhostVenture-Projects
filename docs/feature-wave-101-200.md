@@ -61,7 +61,7 @@ Audit of the original feature inventory against baseline `3578fa7`. Implemented 
 | 155 | Timesheet reminders | Implemented | Scheduling local reminder queue records. |
 | 156 | Billable-hours reports | Implemented | Scheduling totals from approved billable entries. |
 | 157 | Time budget alerts | Implemented | Scheduling budget threshold and alert records. |
-| 158 | Calendar sync connectors | Blocked | Provider OAuth/account authorization and sync engine are required; no credentials are stored in feature records. |
+| 158 | Calendar sync connectors | Blocked | The desktop calendar now supports manual iCalendar (.ics) import/export for local events. Live provider account authorization and ongoing sync still require provider OAuth and a sync engine; no credentials are stored in feature records. |
 | 159 | Focus-time blocks | Implemented | Scheduling focus block records. |
 | 160 | Schedule utilization reports | Implemented | Scheduling utilization summary from local shifts/time entries. |
 | 161 | Document version history | Implemented | Documents workspace version metadata register. |
@@ -105,4 +105,4 @@ Audit of the original feature inventory against baseline `3578fa7`. Implemented 
 | 199 | Collaboration activity stream | Implemented | Activity stream built from local collaboration records. |
 | 200 | Cross-team handoff notes | Implemented | Collaboration handoff records with source/destination teams. |
 
-Coverage count: 83 implemented in this wave, 11 already present in the baseline, and 6 blocked on hosted/provider or native media infrastructure. The workspaces use the encrypted feature-record API and are now mounted in the app with role-based navigation. Finance is available to Owners and Bookkeepers; People is Owner-only.
+Coverage count: 84 implemented in this wave, 11 already present in the baseline, and 5 blocked on hosted/provider infrastructure. Appointment booking, payment links, live calendar providers, secure hosted file sharing, and e-signature services still need external integrations. The workspaces use the encrypted feature-record API and are now mounted in the app with role-based navigation. Finance is available to Owners and Bookkeepers; People is Owner-only.
