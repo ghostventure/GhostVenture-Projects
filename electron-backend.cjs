@@ -95,6 +95,39 @@ const taskStatusSchema = z.object({
   status: z.enum(['Open', 'Queued', 'Complete', 'Blocked']),
 })
 
+const featureCollectionSchema = z.enum([
+  'dashboard', 'tasks', 'projects', 'customers', 'sales', 'finance', 'people', 'scheduling',
+  'documents', 'communications', 'reporting', 'automation', 'integrations', 'search', 'security',
+  'account', 'accessibility', 'mobile', 'support', 'ai_knowledge',
+])
+const featureRecordSchema = z.object({
+  collection: featureCollectionSchema,
+  record: z.record(z.string(), z.unknown()).refine((record) => Object.keys(record).length <= 100, 'A feature record can contain up to 100 fields.'),
+})
+const featureDeleteSchema = z.object({ collection: featureCollectionSchema, recordId: z.string().trim().min(1).max(160) })
+const featureCollectionRoles = {
+  dashboard: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+  tasks: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+  projects: ['Owner', 'Front Desk', 'Bookkeeper'],
+  customers: ['Owner', 'Front Desk', 'Bookkeeper'],
+  sales: ['Owner', 'Front Desk', 'Bookkeeper'],
+  finance: ['Owner', 'Bookkeeper'],
+  people: ['Owner'],
+  scheduling: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+  documents: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+  communications: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+  reporting: ['Owner', 'Bookkeeper'],
+  automation: ['Owner', 'Front Desk', 'Bookkeeper'],
+  integrations: ['Owner'],
+  search: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+  security: ['Owner'],
+  account: ['Owner'],
+  accessibility: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+  mobile: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+  support: ['Owner', 'Support'],
+  ai_knowledge: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
+}
+
 const customerSchema = z.object({
   businessName: z.string().trim().min(1),
   ownerName: z.string().trim().optional().default(''),
@@ -771,6 +804,7 @@ function defaultState() {
     microsoftConnections: [],
     paymentRecords: [],
     dataRequests: [],
+    featureRecords: {},
     settings: {},
     auditEvents: [],
     integritySnapshots: [],
@@ -827,6 +861,7 @@ function upgradeState(snapshot = {}) {
   const upgraded = { ...defaultState(), ...(snapshot && typeof snapshot === 'object' ? snapshot : {}) }
   upgraded.expenses = Array.isArray(upgraded.expenses) ? upgraded.expenses : []
   upgraded.expenseBudgets = Array.isArray(upgraded.expenseBudgets) ? upgraded.expenseBudgets : []
+  upgraded.featureRecords = upgraded.featureRecords && typeof upgraded.featureRecords === 'object' && !Array.isArray(upgraded.featureRecords) ? upgraded.featureRecords : {}
   return upgraded
 }
 
@@ -1397,6 +1432,54 @@ function requireRole(allowedRoles, action) {
     recordFraudSignal('role_denied_action', 'Medium', { role: activeSession.role, action }, activeSession.email)
     throw new Error(`${activeSession.role} cannot perform ${action}.`)
   }
+}
+
+function listFeatureRecords(collection) {
+  const parsedCollection = featureCollectionSchema.parse(collection)
+  requireRole(featureCollectionRoles[parsedCollection], `${parsedCollection} feature data access`)
+  const records = Array.isArray(state.featureRecords[parsedCollection]) ? state.featureRecords[parsedCollection] : []
+  return JSON.parse(JSON.stringify(records))
+}
+
+function upsertFeatureRecord(payload = {}) {
+  const input = featureRecordSchema.parse(payload)
+  const { collection } = input
+  requireRole(featureCollectionRoles[collection], `${collection} feature data update`)
+  let serialized
+  try { serialized = JSON.stringify(input.record) } catch { throw new Error('Feature data must be a plain JSON record.') }
+  if (Buffer.byteLength(serialized, 'utf8') > 65536) throw new Error('A feature record cannot exceed 64 KB.')
+  if (Object.keys(input.record).some((key) => ['__proto__', 'prototype', 'constructor'].includes(key))) throw new Error('Feature data contains a reserved field name.')
+  const rows = Array.isArray(state.featureRecords[collection]) ? state.featureRecords[collection] : []
+  if (rows.length >= 1000 && !rows.some((item) => item?.id === input.record.id)) throw new Error('This feature collection has reached its 1,000 record limit.')
+  const id = typeof input.record.id === 'string' && input.record.id.trim() ? input.record.id.trim() : createId(collection)
+  if (id.length > 160) throw new Error('Feature record IDs must be 160 characters or fewer.')
+  const previousIndex = rows.findIndex((item) => item?.id === id)
+  const previous = previousIndex >= 0 ? rows[previousIndex] : null
+  const record = {
+    ...input.record,
+    id,
+    created_at: previous?.created_at || now(),
+    updated_at: now(),
+  }
+  if (previousIndex >= 0) rows[previousIndex] = record
+  else rows.unshift(record)
+  state.featureRecords[collection] = rows
+  persist()
+  recordAudit(`feature.${collection}.saved`, `${collection} feature record saved`, { recordId: id }, activeSession.email)
+  return JSON.parse(JSON.stringify(record))
+}
+
+function deleteFeatureRecord(payload = {}) {
+  const input = featureDeleteSchema.parse(payload)
+  requireRole(featureCollectionRoles[input.collection], `${input.collection} feature data deletion`)
+  const rows = Array.isArray(state.featureRecords[input.collection]) ? state.featureRecords[input.collection] : []
+  const index = rows.findIndex((item) => item?.id === input.recordId)
+  if (index < 0) return { deleted: false }
+  rows.splice(index, 1)
+  state.featureRecords[input.collection] = rows
+  persist()
+  recordAudit(`feature.${input.collection}.deleted`, `${input.collection} feature record deleted`, { recordId: input.recordId }, activeSession.email)
+  return { deleted: true }
 }
 
 function requireSession(action = 'workspace access') {
@@ -3322,6 +3405,9 @@ module.exports = {
   listSquareImports,
   listSharedSupportTickets,
   listTasks,
+  listFeatureRecords,
+  upsertFeatureRecord,
+  deleteFeatureRecord,
   listUserProfiles,
   listWorkflowJobs,
   lockSession,
