@@ -1,6 +1,6 @@
 # Feature wave 301–400 audit
 
-Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API is in `6df8a0c`. The components in `src/featureWave301400.js` are integrated into Settings, Accounts, Support, and Field & Assist on the 0.3.16 feature branch. No build or smoke run occurred before all four packs were integrated.
+Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API is in `6df8a0c`. The components in `src/featureWave301400.jsx` are integrated into Settings, Accounts, Support, and Field & Assist on the 0.3.16 feature branch. No smoke run occurred before the integrated build.
 
 “Implemented” means a concrete workflow exists in the new component. “Already present” identifies baseline behavior. “Blocked” means a safe implementation depends on native platform signing/permissions, a missing authenticated billing/mail integration, or backend state transitions the product does not currently expose. Rule-based suggestions are local and offline; no AI provider is configured or contacted.
 
@@ -20,31 +20,31 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 312 | Login email change process | Blocked | No reauthentication + verified email-change flow; changing a profile email alone could desynchronize Firebase Auth. |
 | 313 | Profile data download | Already present | `src/App.jsx:2492` backend data export invoked from Settings; exports full local workspace data, not a profile-only packet. |
 | 314 | Workspace archive export | Already present | `src/App.jsx:2492` and Settings data export workflow. |
-| 315 | Account closure checklist | Implemented | `src/featureWave301400.js:305` `AccountGovernancePanel`; owner-only checklist in encrypted `account` records. It does not delete or cancel anything. |
+| 315 | Account closure checklist | Implemented | `src/featureWave301400.jsx:305` `AccountGovernancePanel`; owner-only checklist in encrypted `account` records. It does not delete or cancel anything. |
 | 316 | Workspace transfer tools | Blocked | Same verified membership/ownership migration requirement as 302–303. |
-| 317 | Seat utilization reports | Implemented | `src/featureWave301400.js:62` `FeatureWavePreferences` and `:305` `AccountGovernancePanel`; active-license/profile counts. |
+| 317 | Seat utilization reports | Implemented | `src/featureWave301400.jsx:62` `FeatureWavePreferences` and `:305` `AccountGovernancePanel`; active-license/profile counts. |
 | 318 | Subscription admin roles | Already present | `src/App.jsx:1358` role-specific section map and `:1925` account role controls. |
-| 319 | Account notification settings | Implemented | `src/featureWave301400.js:62` stores activity/renewal reminder preferences and sound choice. Delivery is not scheduled; no alert service is configured. |
+| 319 | Account notification settings | Implemented | `src/featureWave301400.jsx:62` stores activity/renewal reminder preferences and sound choice. Delivery is not scheduled; no alert service is configured. |
 | 320 | Organization-wide defaults | Already present | `src/App.jsx:2909` `SettingsSection`; owner-controlled operational toggles. |
 | 321 | Dark and light themes | Already present | `src/themes.js` and `src/App.jsx:3049` theme picker; includes dark/light and system options. |
-| 322 | Adjustable text size | Implemented | `src/featureWave301400.js:62` saved text scale; `src/App.css:117` scale variables. |
+| 322 | Adjustable text size | Implemented | `src/featureWave301400.jsx:62` saved text scale; `src/App.css:117` scale variables. |
 | 323 | High-contrast mode | Already present | `src/index.css` `html[data-theme="contrast"]`; theme picker in `src/App.jsx:3049`. |
 | 324 | Screen-reader labels | Already present | Accessible names and dialog/region semantics in `src/App.jsx`, e.g. `:453`, `:510`, `:678`, `:787`. |
 | 325 | Keyboard-only navigation | Already present | Native form/button controls and visible `:focus-visible` styles in `src/index.css`. |
 | 326 | Reduced-motion setting | Already present | `src/App.jsx:212` and `:3041`; local preference and document setting. |
-| 327 | Language selection | Implemented | `src/featureWave301400.js:62` persists language selection; English is currently the only available translation. |
-| 328 | Regional date formats | Implemented | `src/featureWave301400.js:62` locale preference and formatted date preview. Existing date displays are not yet globally switched to that locale. |
-| 329 | Regional number formats | Implemented | `src/featureWave301400.js:62` locale-aware currency preview and saved region preference. Existing reports are not yet globally switched. |
+| 327 | Language selection | Implemented | `src/featureWave301400.jsx:62` persists language selection; English is currently the only available translation. |
+| 328 | Regional date formats | Implemented | `src/featureWave301400.jsx:62` locale preference and formatted date preview. Existing date displays are not yet globally switched to that locale. |
+| 329 | Regional number formats | Implemented | `src/featureWave301400.jsx:62` locale-aware currency preview and saved region preference. Existing reports are not yet globally switched. |
 | 330 | Customizable notification sounds | Blocked | Preference stores an optional local preview tone, but current app notifications are not wired to a sound event. |
-| 331 | Compact density setting | Implemented | `src/featureWave301400.js:62`; `src/App.css:119` compact spacing rules. |
+| 331 | Compact density setting | Implemented | `src/featureWave301400.jsx:62`; `src/App.css:119` compact spacing rules. |
 | 332 | Mobile-friendly task views | Already present | `ios/OverHeadIOS/Sources/WorkspaceViews.swift:26` `TasksView`; desktop layout also has responsive styling. |
-| 333 | Offline draft support | Implemented | `src/featureWave301400.js:131` field note/checklist capture saved in the encrypted local `mobile` collection. |
+| 333 | Offline draft support | Implemented | `src/featureWave301400.jsx:131` field note/checklist capture saved in the encrypted local `mobile` collection. |
 | 334 | Form autosave | Already present | `src/App.jsx:1443` saved customer form memory and `:2241` billing form memory. |
 | 335 | Undo for common actions | Blocked | No reversible action journal; retrofitting undo across money/access/security operations without inverse validation would be unsafe. |
 | 336 | Clear empty-state guidance | Already present | Empty-state guidance across `src/App.jsx` reports, tasks, customer records, and support. |
 | 337 | Inline field help | Already present | Privacy and field guidance in `src/App.jsx` forms and `SettingsSection`. |
 | 338 | Setup progress checklist | Already present | `src/App.jsx` overview readiness and account profile completion indicators. |
-| 339 | Guided feature tours | Implemented | `src/featureWave301400.js:62` keyboard-operable five-step guided tour. |
+| 339 | Guided feature tours | Implemented | `src/featureWave301400.jsx:62` keyboard-operable five-step guided tour. |
 | 340 | Feedback and bug-report form | Already present | `website-next/app/feedback/feedback-form.jsx` and `/feedback` page. |
 | 341 | Mobile home screen widgets | Blocked | Requires signed iOS WidgetKit target, extension entitlements, and release packaging; none exists in this Windows build. |
 | 342 | Push notifications | Blocked | Requires APNs credentials, user consent flow, signed native app, and notification backend. |
@@ -56,56 +56,56 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 348 | Offline customer lookup | Already present | `ios/OverHeadIOS/Sources/WorkspaceStore.swift:29` customer snapshots; Firestore local cache supports previously synced records. |
 | 349 | Location-tagged visit notes | Blocked | No explicit location-consent, permission, retention, or data-minimization workflow; capture avoids automatic location. |
 | 350 | Mobile signature capture | Blocked | No native signature consent, capture, storage, or export flow. |
-| 351 | Field visit checklists | Implemented | `src/featureWave301400.js:131` encrypted visit checklist records. |
+| 351 | Field visit checklists | Implemented | `src/featureWave301400.jsx:131` encrypted visit checklist records. |
 | 352 | Mobile barcode scanning | Blocked | Requires native camera/scan permissions and barcode-to-record resolution. |
-| 353 | Mobile contact calling | Implemented | `src/featureWave301400.js:131` uses customer phone with a `tel:` handoff. |
-| 354 | Directions from customer records | Implemented | `src/featureWave301400.js:131` opens directions from the saved service-area value; no device location is read. |
-| 355 | Mobile time entry | Implemented | `src/featureWave301400.js:131` records manually entered visit minutes. |
-| 356 | Worksite safety checklist | Implemented | `src/featureWave301400.js:131` adds a reviewable safety checklist template to field notes. |
+| 353 | Mobile contact calling | Implemented | `src/featureWave301400.jsx:131` uses customer phone with a `tel:` handoff. |
+| 354 | Directions from customer records | Implemented | `src/featureWave301400.jsx:131` opens directions from the saved service-area value; no device location is read. |
+| 355 | Mobile time entry | Implemented | `src/featureWave301400.jsx:131` records manually entered visit minutes. |
+| 356 | Worksite safety checklist | Implemented | `src/featureWave301400.jsx:131` adds a reviewable safety checklist template to field notes. |
 | 357 | Mobile approval actions | Already present | `ios/OverHeadIOS/Sources/WorkspaceViews.swift:49` approval review and role-gated approve/decline. |
 | 358 | Mobile document upload | Blocked | Desktop customer attachment exists, but the iOS target has no document picker/upload workflow. |
 | 359 | Mobile calendar agenda | Blocked | iOS target has no calendar/appointment agenda view. |
 | 360 | Device sync status page | Blocked | Host health and customer sync status exist in desktop Settings, but no native page exposes per-device pending/sync status. |
 | 361 | Support ticket queue | Already present | `src/App.jsx:1749` `SupportSection`; shared support ticket queue. |
-| 362 | Ticket priority rules | Implemented | `src/featureWave301400.js:214` defines review targets by priority; it flags elapsed targets for review. |
-| 363 | Ticket category taxonomy | Implemented | `src/featureWave301400.js:214` support category selector persisted in encrypted `support` records. |
-| 364 | Service-level target tracking | Implemented | `src/featureWave301400.js:214` computes target deadline from ticket priority and creation timestamp. |
-| 365 | Ticket escalation paths | Implemented | `src/featureWave301400.js:214` assignment rotation and elapsed-target escalation cue; actual customer email is not sent. |
+| 362 | Ticket priority rules | Implemented | `src/featureWave301400.jsx:214` defines review targets by priority; it flags elapsed targets for review. |
+| 363 | Ticket category taxonomy | Implemented | `src/featureWave301400.jsx:214` support category selector persisted in encrypted `support` records. |
+| 364 | Service-level target tracking | Implemented | `src/featureWave301400.jsx:214` computes target deadline from ticket priority and creation timestamp. |
+| 365 | Ticket escalation paths | Implemented | `src/featureWave301400.jsx:214` assignment rotation and elapsed-target escalation cue; actual customer email is not sent. |
 | 366 | Customer self-service knowledge base | Already present | `website-next/app/faq/page.jsx` public FAQ and existing help content in `src/productBlueprint.js`. |
-| 367 | Help article feedback | Implemented | `src/featureWave301400.js:214` records local topic/helpfulness feedback. |
-| 368 | Support macros | Implemented | `src/featureWave301400.js:214` reviewable reply macro selector. |
-| 369 | Ticket-to-project conversion | Implemented | `src/featureWave301400.js:214` creates a local project reference to the ticket for authorized roles. |
-| 370 | Ticket assignment round-robin | Implemented | `src/featureWave301400.js:214` rotates across active Owner/Support profiles. |
-| 371 | Customer support satisfaction ratings | Implemented | `src/featureWave301400.js:214` saves a 1–5 rating with ticket metadata. |
-| 372 | Support workload dashboard | Implemented | `src/featureWave301400.js:214` counts active ticket assignments by support owner. |
+| 367 | Help article feedback | Implemented | `src/featureWave301400.jsx:214` records local topic/helpfulness feedback. |
+| 368 | Support macros | Implemented | `src/featureWave301400.jsx:214` reviewable reply macro selector. |
+| 369 | Ticket-to-project conversion | Implemented | `src/featureWave301400.jsx:214` creates a local project reference to the ticket for authorized roles. |
+| 370 | Ticket assignment round-robin | Implemented | `src/featureWave301400.jsx:214` rotates across active Owner/Support profiles. |
+| 371 | Customer support satisfaction ratings | Implemented | `src/featureWave301400.jsx:214` saves a 1–5 rating with ticket metadata. |
+| 372 | Support workload dashboard | Implemented | `src/featureWave301400.jsx:214` counts active ticket assignments by support owner. |
 | 373 | Ticket response-time reports | Blocked | First-response timestamps are not stored consistently; the component shows priority targets and available ticket timestamps, not fabricated response durations. |
-| 374 | Internal ticket collaboration | Implemented | `src/featureWave301400.js:214` encrypted staff-only handoff notes. |
-| 375 | Related ticket suggestions | Implemented | `src/featureWave301400.js:214` local subject-keyword matches; suggestions are not semantic AI. |
-| 376 | Customer incident timeline | Implemented | `src/featureWave301400.js:214` shows ticket creation, metadata updates, and internal note times. |
-| 377 | Service outage notices | Implemented | `src/featureWave301400.js:214` saves a local draft; external publication requires a configured service channel. |
+| 374 | Internal ticket collaboration | Implemented | `src/featureWave301400.jsx:214` encrypted staff-only handoff notes. |
+| 375 | Related ticket suggestions | Implemented | `src/featureWave301400.jsx:214` local subject-keyword matches; suggestions are not semantic AI. |
+| 376 | Customer incident timeline | Implemented | `src/featureWave301400.jsx:214` shows ticket creation, metadata updates, and internal note times. |
+| 377 | Service outage notices | Implemented | `src/featureWave301400.jsx:214` saves a local draft; external publication requires a configured service channel. |
 | 378 | Support email routing | Blocked | No verified support mailbox routing configuration or transport is exposed in the desktop queue. |
-| 379 | Ticket reopen rules | Implemented | `src/featureWave301400.js:214` stores an explicit reopen request marker. The upstream shared ticket status is not changed by this adjunct record. |
-| 380 | Support closure checklist | Implemented | `src/featureWave301400.js:214` per-ticket closure checklist. |
-| 381 | Natural-language record search | Implemented | `src/featureWave301400.js:1` `localSuggestions('search')` matches terms across loaded local records. |
-| 382 | Meeting summary drafts | Implemented | `src/featureWave301400.js:1` extractive sentence selection, no provider. |
-| 383 | Task description drafts | Implemented | `src/featureWave301400.js:1` local next-action/template draft. |
-| 384 | Project status summary drafts | Implemented | `src/featureWave301400.js:1` summary from locally loaded task/appointment/quote/invoice counts. |
-| 385 | Duplicate note detection | Implemented | `src/featureWave301400.js:1` local normalized text-containment match; explicitly not semantic. |
-| 386 | Suggested next actions | Implemented | `src/featureWave301400.js:1` reviewable local workflow prompt. |
-| 387 | Report question-to-chart drafts | Implemented | `src/featureWave301400.js:1` proposes a record count/chart grouping from local data. |
-| 388 | Knowledge base article drafts | Implemented | `src/featureWave301400.js:1` assembles an editable template from supplied notes. |
-| 389 | Customer email draft suggestions | Implemented | `src/featureWave301400.js:1` reviewable local email template; no mail is sent. |
-| 390 | Risk signal summaries | Implemented | `src/featureWave301400.js:1` offers a review checklist without declaring fraud or compliance results. |
-| 391 | Workload imbalance suggestions | Implemented | `src/featureWave301400.js:1` task-count comparison by assigned owner; complexity is not modeled. |
-| 392 | Missing-field detection | Implemented | `src/featureWave301400.js:1` checks a supplied field list for common owner/due date/customer/status/next-action values. |
-| 393 | Long-thread summaries | Implemented | `src/featureWave301400.js:1` short extractive sentence list from pasted text. |
-| 394 | Document key-point extraction | Implemented | `src/featureWave301400.js:1` extractive points from pasted text; files are not uploaded. |
-| 395 | Suggested task categorization | Implemented | `src/featureWave301400.js:1` transparent keyword-based category hint. |
+| 379 | Ticket reopen rules | Implemented | `src/featureWave301400.jsx:214` stores an explicit reopen request marker. The upstream shared ticket status is not changed by this adjunct record. |
+| 380 | Support closure checklist | Implemented | `src/featureWave301400.jsx:214` per-ticket closure checklist. |
+| 381 | Natural-language record search | Implemented | `src/featureWave301400.jsx:1` `localSuggestions('search')` matches terms across loaded local records. |
+| 382 | Meeting summary drafts | Implemented | `src/featureWave301400.jsx:1` extractive sentence selection, no provider. |
+| 383 | Task description drafts | Implemented | `src/featureWave301400.jsx:1` local next-action/template draft. |
+| 384 | Project status summary drafts | Implemented | `src/featureWave301400.jsx:1` summary from locally loaded task/appointment/quote/invoice counts. |
+| 385 | Duplicate note detection | Implemented | `src/featureWave301400.jsx:1` local normalized text-containment match; explicitly not semantic. |
+| 386 | Suggested next actions | Implemented | `src/featureWave301400.jsx:1` reviewable local workflow prompt. |
+| 387 | Report question-to-chart drafts | Implemented | `src/featureWave301400.jsx:1` proposes a record count/chart grouping from local data. |
+| 388 | Knowledge base article drafts | Implemented | `src/featureWave301400.jsx:1` assembles an editable template from supplied notes. |
+| 389 | Customer email draft suggestions | Implemented | `src/featureWave301400.jsx:1` reviewable local email template; no mail is sent. |
+| 390 | Risk signal summaries | Implemented | `src/featureWave301400.jsx:1` offers a review checklist without declaring fraud or compliance results. |
+| 391 | Workload imbalance suggestions | Implemented | `src/featureWave301400.jsx:1` task-count comparison by assigned owner; complexity is not modeled. |
+| 392 | Missing-field detection | Implemented | `src/featureWave301400.jsx:1` checks a supplied field list for common owner/due date/customer/status/next-action values. |
+| 393 | Long-thread summaries | Implemented | `src/featureWave301400.jsx:1` short extractive sentence list from pasted text. |
+| 394 | Document key-point extraction | Implemented | `src/featureWave301400.jsx:1` extractive points from pasted text; files are not uploaded. |
+| 395 | Suggested task categorization | Implemented | `src/featureWave301400.jsx:1` transparent keyword-based category hint. |
 | 396 | Forecast scenario summaries | Blocked | No defensible forecasting inputs/model exist. The helper offers a planning prompt only; it does not calculate financial forecasts. |
-| 397 | Natural-language automation setup | Implemented | `src/featureWave301400.js:1` drafts a trigger/condition/review outline; it does not create or run automation. |
-| 398 | AI usage controls for admins | Implemented | `src/featureWave301400.js:131` Owner-only control; explicitly local/offline suggestions only. |
-| 399 | Per-workspace AI opt-in settings | Implemented | `src/featureWave301400.js:131` opt-in defaults off and persists in encrypted `ai_knowledge` collection. |
-| 400 | AI suggestion review history | Implemented | `src/featureWave301400.js:131` records user-selected reviews; no provider/model is claimed. |
+| 397 | Natural-language automation setup | Implemented | `src/featureWave301400.jsx:1` drafts a trigger/condition/review outline; it does not create or run automation. |
+| 398 | AI usage controls for admins | Implemented | `src/featureWave301400.jsx:131` Owner-only control; explicitly local/offline suggestions only. |
+| 399 | Per-workspace AI opt-in settings | Implemented | `src/featureWave301400.jsx:131` opt-in defaults off and persists in encrypted `ai_knowledge` collection. |
+| 400 | AI suggestion review history | Implemented | `src/featureWave301400.jsx:131` records user-selected reviews; no provider/model is claimed. |
 
 ## Integration notes
 

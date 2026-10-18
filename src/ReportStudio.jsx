@@ -27,7 +27,7 @@ export function ReportStudio({ backendState = {}, sessionRole = 'Owner', setOper
   const [schedules, setSchedules] = useState([])
   const [error, setError] = useState('')
   const metrics = useMemo(() => buildReportMetrics(backendState, period), [backendState, period])
-  const records = backendState[reportType] || []
+  const records = useMemo(() => backendState[reportType] || [], [backendState, reportType])
   const rows = useMemo(() => filterReportRows(records, { period, status, query }), [records, period, status, query])
   const availableStatuses = [...new Set(records.map((record) => String(record.status || 'Unspecified')))]
   const total = rows.reduce((sum, record) => sum + (Number(record.amount) || 0), 0)
@@ -83,7 +83,7 @@ export function ReportStudio({ backendState = {}, sessionRole = 'Owner', setOper
     await saveRecord({ id: crypto.randomUUID(), kind: 'metric', title: metricName.trim(), measure: metricKind, source: reportType, created_by_role: sessionRole })
     setMetricName(''); setOperationNotice('Custom metric definition saved.')
   }
-  async function useFilter(item) {
+  async function applySavedFilter(item) {
     setReportType(item.filters.reportType); setPeriod(item.filters.period); setStatus(item.filters.status); setQuery(item.filters.query)
     await saveRecord({ id: crypto.randomUUID(), kind: 'access', report_type: item.filters.reportType, saved_filter_id: item.id, action: 'opened', actor_role: sessionRole, accessed_at: new Date().toISOString() })
   }
@@ -112,7 +112,7 @@ export function ReportStudio({ backendState = {}, sessionRole = 'Owner', setOper
     <div className="task-list">{rows.slice(0, 30).map((record) => <div className="task-row" key={record.id}><strong>{record.title || record.business_name || record.label || record.id}</strong><span>{record.status || '—'}</span><span>{record.amount == null ? '' : money(record.amount)}</span><span>{record.created_at || record.due_date || record.expense_date || ''}</span></div>)}</div>
     <div className="report-controls"><label style={control}>Save current report name<input style={input} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Monthly invoice review" /></label><button style={button} type="button" onClick={saveFilter}>Save shared filter</button><label style={control}>Schedule local reminder request<input style={input} type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} /></label><button style={button} type="button" onClick={scheduleDelivery}>Save request</button><span className="form-hint">Delivery requires a background notification or mail service; this request is stored for review only.</span></div>
     <div className="report-controls"><label style={control}>Report annotation<input style={input} value={annotation} onChange={(event) => setAnnotation(event.target.value)} placeholder="Context for this period" /></label><button style={button} type="button" onClick={addAnnotation}>Add note</button><label style={control}>Metric name<input style={input} value={metricName} onChange={(event) => setMetricName(event.target.value)} placeholder="Accepted quote rate" /></label><select style={input} value={metricKind} onChange={(event) => setMetricKind(event.target.value)}><option value="record_count">Record count</option><option value="amount_sum">Amount sum</option><option value="completion_rate">Task completion rate</option></select><button style={button} type="button" onClick={addMetric}>Save metric</button></div>
-    <div className="dashboard-grid">{saved.filter((item) => item.shared_roles?.includes(sessionRole)).map((item) => <button style={button} type="button" key={item.id} onClick={() => useFilter(item)}>{item.title} · {item.filters.reportType}</button>)}</div>
+    <div className="dashboard-grid">{saved.filter((item) => item.shared_roles?.includes(sessionRole)).map((item) => <button style={button} type="button" key={item.id} onClick={() => applySavedFilter(item)}>{item.title} · {item.filters.reportType}</button>)}</div>
     {customMetrics.map((metric) => <p key={metric.id} className="form-hint">Custom metric: {metric.title} · {metricValue(metric)} ({metric.measure} from {metric.source})</p>)}
     {notes.slice(-5).map((note) => <p key={note.id} className="form-hint">{new Date(note.created_at).toLocaleString()}: {note.note}</p>)}
     <details><summary>Data sources and access history</summary><p>This screen reads encrypted local invoices, quotes, appointments, tasks, customers, and expenses. Current metric sources: {Object.entries(metrics.sourceCounts).map(([name, count]) => `${name} ${count}`).join(' · ')}.</p>{accessEvents.map((event) => <small key={event.id} style={{ display: 'block' }}>{event.action} · {event.report_type} · {event.actor_role} · {event.accessed_at}</small>)}</details>

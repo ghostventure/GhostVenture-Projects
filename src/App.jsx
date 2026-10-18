@@ -42,9 +42,9 @@ import DocumentControlWorkspace from './features/DocumentControlWorkspace'
 import CollaborationWorkspace from './features/CollaborationWorkspace'
 import ControlCenter from './features/ControlCenter'
 import { IntegrationStudio } from './IntegrationStudio'
-import { AutomationStudio } from './AutomationStudio'
-import { ReportStudio } from './ReportStudio'
-import { AccountGovernancePanel, FeatureWavePreferences, FieldAssistSection, SupportOperationsPanel } from './featureWave301400'
+import { AutomationStudio } from './AutomationStudio.jsx'
+import { ReportStudio } from './ReportStudio.jsx'
+import { AccountGovernancePanel, FeatureWavePreferences, FieldAssistSection, SupportOperationsPanel } from './featureWave301400.jsx'
 import './App.css'
 
 const navSections = [

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, ArrowDownToLine, Bell, Check, ChevronDown, CircleAlert, LockKeyhole, Plus, Search, ShieldCheck, Trash2, Workflow } from 'lucide-react'
+import { Activity, ArrowDownToLine, Check, ChevronDown, CircleAlert, LockKeyhole, Plus, Search, ShieldCheck, Trash2, Workflow } from 'lucide-react'
 import './ControlCenter.css'
 
 const collectionsByRole = {
@@ -63,7 +63,7 @@ export default function ControlCenter({ area = 'automation', backendState = {}, 
       }
     }).catch((reason) => { if (active) setError(reason.message || 'The workspace records could not be loaded.') })
     return () => { active = false }
-  }, [area])
+  }, [area, session.role])
   useEffect(() => {
     if (area !== 'search') return
     let active = true
@@ -140,7 +140,7 @@ export default function ControlCenter({ area = 'automation', backendState = {}, 
   }
   function exportSearch() {
     const keys = [...new Set(matches.flatMap((item) => Object.keys(item)).filter((key) => !key.startsWith('__')))].slice(0, 30)
-    const csv = toRows([keys, ...matches.map((item) => keys.map((key) => item[key] && typeof item[key] === 'object' ? JSON.stringify(item[key]) : item[key])])
+    const csv = toRows([keys, ...matches.map((item) => keys.map((key) => item[key] && typeof item[key] === 'object' ? JSON.stringify(item[key]) : item[key]))])
     const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); link.download = 'overhead-search-results.csv'; link.click(); URL.revokeObjectURL(link.href)
   }
   function readImport(event) {
@@ -153,7 +153,6 @@ export default function ControlCenter({ area = 'automation', backendState = {}, 
     reader.readAsText(file)
   }
 
-  const collection = area === 'integrations' ? 'integrations' : area === 'security' ? 'security' : area === 'search' ? 'search' : 'automation'
   return <section className="panel page-panel control-center">
     <div className="section-head"><div><p className="eyebrow">{area === 'automation' ? 'Operations' : area === 'integrations' ? 'Connections' : area === 'search' ? 'Find and organize' : 'Protection'}</p><h2>{area === 'automation' ? 'Automation & rules' : area === 'integrations' ? 'Integrations & data exchange' : area === 'search' ? 'Workspace search' : 'Security administration'}</h2></div>{area === 'security' ? <ShieldCheck size={20}/> : area === 'automation' ? <Workflow size={20}/> : area === 'search' ? <Search size={20}/> : <Activity size={20}/>}</div>
     {area === 'automation' && <div className="control-grid"><div className="control-card"><h3>No-code workflow builder</h3><p>Define an event, a condition, and a reviewable next action. Rules are drafts and are not executed automatically.</p><form className="control-form" onSubmit={createRule}><label>Rule name<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} maxLength="120" required/></label><label>Trigger<select value={draft.trigger} onChange={(event) => setDraft({ ...draft, trigger: event.target.value })} required><option value="">Choose a trigger</option>{['Task status changes', 'Due date passes', 'Customer is assigned', 'Form is received', 'Record is duplicated', 'Scheduled review time'].map((item) => <option key={item}>{item}</option>)}</select></label><label>Condition<input value={draft.condition} onChange={(event) => setDraft({ ...draft, condition: event.target.value })} placeholder="When priority is High" maxLength="300"/></label><label>Action<input value={draft.action} onChange={(event) => setDraft({ ...draft, action: event.target.value })} placeholder="Create a review task" maxLength="300" required/></label><label>Schedule (optional)<input value={draft.schedule} onChange={(event) => setDraft({ ...draft, schedule: event.target.value })} placeholder="Weekdays at 9:00 AM" maxLength="160"/></label><button className="primary-action" type="submit"><Plus size={16}/> Save draft rule</button></form></div><div className="control-card"><h3>Recipes</h3><p>Start from a reviewed recipe, edit its trigger and action, then enable it when your team is ready.</p>{automations.map(([title, trigger, action, status]) => <article className="recipe-row" key={title}><div><strong>{title}</strong><small>{trigger} → {action}</small></div><button className="mini-button" type="button" onClick={() => setDraft({ title, trigger, condition: '', action, schedule: '', status })}>Use recipe</button></article>)}</div><div className="control-card wide"><h3>Rule register and run history</h3>{records.filter((item) => item.kind === 'rule').map((record) => <article className="record-row" key={record.id}><div><strong>{record.title}</strong><small>{record.trigger}{record.condition ? ` · ${record.condition}` : ''} → {record.action}</small><span>{record.schedule ? `Schedule: ${record.schedule} · ` : ''}{record.status}{record.last_reviewed_at ? ` · reviewed ${new Date(record.last_reviewed_at).toLocaleString()}` : ''}</span></div><button className="mini-button" type="button" onClick={() => runRule(record)}>{record.status === 'Enabled' ? 'Pause' : 'Enable'}</button><button type="button" aria-label={`Delete ${record.title}`} onClick={() => removeRecord(record)}><Trash2 size={15}/></button></article>)}{records.filter((item) => item.kind === 'run').map((record) => <p key={record.id}>{record.title} · {record.status} · {record.created_at}</p>)}{!records.length && <p>No rules configured. Pick a recipe or build a new draft above.</p>}</div></div>}
