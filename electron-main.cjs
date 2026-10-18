@@ -595,6 +595,10 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('appointments:create', trustedHandler((_event, payload) => backend.createAppointment(payload)))
     ipcMain.handle('quotes:create', trustedHandler((_event, payload) => backend.createQuote(payload)))
     ipcMain.handle('invoices:create', trustedHandler((_event, payload) => backend.createInvoice(payload)))
+    ipcMain.handle('expenses:create', trustedHandler((_event, payload) => backend.createExpense(payload)))
+    ipcMain.handle('expenses:update-status', trustedHandler((_event, payload) => backend.updateExpenseStatus(payload)))
+    ipcMain.handle('expenses:set-budget', trustedHandler((_event, payload) => backend.setExpenseBudget(payload)))
+    ipcMain.handle('expenses:summary', trustedHandler((_event, month) => backend.getExpenseSummary(month)))
     ipcMain.handle('operations:assign-customer', trustedHandler((_event, payload) => backend.assignOperationalCustomer(payload)))
     ipcMain.handle('operations:update-status', trustedHandler((_event, payload) => backend.updateOperationalStatus(payload)))
     ipcMain.handle('microsoft:connect', trustedHandler(async (_event, payload) => backend.connectMicrosoft(payload, (deviceCode) => {

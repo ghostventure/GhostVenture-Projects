@@ -1222,6 +1222,7 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
       </section>}
       {widgetSet.has('live-operations') && <LiveOperations backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
       {widgetSet.has('records') && <OperationalRecords backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
+      {(session.role === 'Owner' || session.role === 'Bookkeeper') && <ExpenseLedger backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
       {widgetSet.has('compliance') && <ComplianceBadges />}
     </section>
   )
@@ -1254,6 +1255,55 @@ function OperationalRecords({ backendState, refreshBackend, setOperationNotice }
   async function setCustomer(id, customerId) { try { await window.overheadBackend.assignOperationalCustomer({ type, id, customerId }); setError(''); setOperationNotice('Customer assignment saved.'); await refreshBackend() } catch (reason) { setError(userFacingError(reason, 'The customer assignment could not be saved.')) } }
   async function createPdf(id) { try { const result = await window.overheadBackend.createOperationalDocument({ type, id }); setError(''); setOperationNotice(`${type[0].toUpperCase()}${type.slice(1)} PDF created: ${result.pdfPath}`); await refreshBackend() } catch (reason) { setError(userFacingError(reason, 'The document could not be created.')) } }
   return <section className="panel action-panel"><div className="section-head"><div><p className="eyebrow">Record control</p><h2>Update and deliver work</h2></div></div><div className="queue-filters">{Object.keys(definitions).map((item) => <button className={type === item ? 'active' : ''} type="button" key={item} onClick={() => setType(item)}>{item}s</button>)}</div><div className="task-list">{records.map((record) => <div className="task-row" key={record.id}><strong>{record.title}</strong><span>{customerName(record.customer_id)}</span><label><span className="sr-only">Status</span><select value={record.status} onChange={(event) => setStatus(record.id, event.target.value)}>{definitions[type].map((status) => <option key={status}>{status}</option>)}</select></label><label><span className="sr-only">Customer</span><select value={record.customer_id || ''} onChange={(event) => setCustomer(record.id, event.target.value)}><option value="">Unassigned</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.business_name || customer.owner_name || customer.email}</option>)}</select></label>{type !== 'appointment' && <button className="ghost-button" type="button" onClick={() => createPdf(record.id)}>Create PDF</button>}</div>)}{!records.length && <p className="queue-empty">Create a {type} above to manage it here.</p>}</div>{error && <p className="form-error">{error}</p>}</section>
+}
+
+const EXPENSE_CATEGORIES = ['Advertising', 'Insurance', 'Meals', 'Office supplies', 'Payroll', 'Rent', 'Software', 'Travel', 'Utilities', 'Other']
+function ExpenseLedger({ backendState, refreshBackend, setOperationNotice }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const [draft, setDraft] = useState({ title: '', vendor: '', category: 'Other', amount: '', expenseDate: today, notes: '' })
+  const [month, setMonth] = useState(today.slice(0, 7))
+  const [budgetDraft, setBudgetDraft] = useState({ category: 'Other', amount: '' })
+  const [summary, setSummary] = useState({ month, budget: 0, actual: 0, categories: [] })
+  const [error, setError] = useState('')
+  const expenses = backendState.expenses || []
+  useEffect(() => { let active = true; window.overheadBackend?.getExpenseSummary?.(month).then((result) => { if (active) setSummary(result) }).catch((reason) => { if (active) setError(userFacingError(reason, 'The expense summary could not be loaded.')) }); return () => { active = false } }, [month, backendState.expenses])
+  async function submitExpense() {
+    try {
+      await window.overheadBackend.createExpense(draft)
+      setDraft((current) => ({ ...current, title: '', vendor: '', amount: '', notes: '' }))
+      setError(''); setOperationNotice('Expense submitted for approval.'); await refreshBackend()
+    } catch (reason) { setError(userFacingError(reason, 'The expense could not be saved.')) }
+  }
+  async function setStatus(expenseId, status) {
+    try { await window.overheadBackend.updateExpenseStatus({ expenseId, status }); setError(''); setOperationNotice(`Expense marked ${status.toLowerCase()}.`); await refreshBackend() }
+    catch (reason) { setError(userFacingError(reason, 'The expense status could not be updated.')) }
+  }
+  async function saveBudget() {
+    try { const next = await window.overheadBackend.setExpenseBudget({ month, ...budgetDraft }); setSummary(next); setBudgetDraft((current) => ({ ...current, amount: '' })); setError(''); setOperationNotice('Monthly category budget saved.') }
+    catch (reason) { setError(userFacingError(reason, 'The category budget could not be saved.')) }
+  }
+  const money = (value) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(value || 0))
+  return <section className="panel action-panel">
+    <div className="section-head"><div><p className="eyebrow">Expense control</p><h2>Expense ledger</h2></div><span className="record-count">{expenses.length} saved</span></div>
+    <p className="panel-copy">Record operating costs, review approvals, and compare category spending with monthly budgets.</p>
+    <div className="profile-form compact-form">
+      <label>Description<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Cloud hosting subscription" /></label>
+      <label>Vendor<input value={draft.vendor} onChange={(event) => setDraft({ ...draft, vendor: event.target.value })} placeholder="Vendor name" /></label>
+      <label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}>{EXPENSE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label>
+      <label>Amount<input type="number" min="0.01" step="0.01" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} placeholder="0.00" /></label>
+      <label>Expense date<input type="date" value={draft.expenseDate} onChange={(event) => setDraft({ ...draft, expenseDate: event.target.value })} /></label>
+      <label>Notes<input value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Optional note" /></label>
+      <button className="primary-action" type="button" onClick={submitExpense}>Submit expense</button>
+    </div>
+    <div className="section-head expense-report-head"><div><p className="eyebrow">Budget vs actual</p><h3>{money(summary.actual)} recorded · {money(summary.budget)} budgeted</h3></div><label>Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label></div>
+    <div className="profile-form compact-form expense-budget-form"><label>Budget category<select value={budgetDraft.category} onChange={(event) => setBudgetDraft({ ...budgetDraft, category: event.target.value })}>{EXPENSE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label><label>Monthly budget<input type="number" min="0" step="0.01" value={budgetDraft.amount} onChange={(event) => setBudgetDraft({ ...budgetDraft, amount: event.target.value })} placeholder="0.00" /></label><button className="ghost-button" type="button" onClick={saveBudget}>Save category budget</button></div>
+    {summary.categories.length > 0 && <div className="task-list">{summary.categories.map((item) => <div className="task-row" key={item.category}><strong>{item.category}</strong><span>Actual {money(item.actual)}</span><span>Budget {money(item.budget)}</span><span>{item.variance >= 0 ? `${money(item.variance)} remaining` : `${money(-item.variance)} over`}</span></div>)}</div>}
+    <div className="task-list">{expenses.filter((item) => item.expense_date.startsWith(month)).map((item) => {
+      const statuses = item.status === 'Pending' ? ['Pending', 'Approved', 'Rejected'] : item.status === 'Approved' ? ['Pending', 'Approved', 'Rejected', 'Paid'] : item.status === 'Rejected' ? ['Rejected', 'Pending'] : ['Paid']
+      return <div className="task-row" key={item.id}><strong>{item.title}<small className="expense-meta">{item.vendor} · {item.category} · {item.expense_date}</small></strong><span>{money(item.amount)}</span><label><span className="sr-only">Expense status</span><select value={item.status} onChange={(event) => setStatus(item.id, event.target.value)}>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label></div>
+    })}{!expenses.some((item) => item.expense_date.startsWith(month)) && <p className="queue-empty">No expenses recorded for {month}.</p>}</div>
+    {error && <p className="form-error">{error}</p>}
+  </section>
 }
 
 function ComplianceBadges() {

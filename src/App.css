@@ -1341,6 +1341,11 @@ select:focus {
   font-weight: 700;
 }
 
+.expense-meta { display: block; margin-top: 4px; color: var(--muted); font-weight: 400; }
+.expense-report-head { margin-top: 22px; align-items: end; }
+.expense-report-head h3 { margin: 0; font-size: 1rem; }
+.expense-budget-form { margin-bottom: 14px; }
+
 .module-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

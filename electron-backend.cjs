@@ -753,6 +753,8 @@ function defaultState() {
     appointments: [],
     quotes: [],
     invoices: [],
+    expenses: [],
+    expenseBudgets: [],
     workflowPreferences: [],
     guidedLaunchRuns: [],
     adminTasks: [],
@@ -804,7 +806,7 @@ function readState() {
       const encrypted = fs.readFileSync(dbPath, 'utf8')
       const parsed = JSON.parse(decryptStore(encrypted))
       if (!validRestoreState(parsed)) throw new Error('The saved data structure is invalid.')
-      return { ...defaultState(), ...parsed }
+      return upgradeState(parsed)
     } catch (error) {
       throw new Error(`Your saved OverHead information could not be opened. The original file has been preserved at ${dbPath}. Restore a backup or contact support. ${error.message}`)
     }
@@ -813,12 +815,19 @@ function readState() {
   try {
     const parsed = JSON.parse(fs.readFileSync(legacyDbPath, 'utf8'))
     if (!validRestoreState(parsed)) throw new Error('The saved data structure is invalid.')
-    const migrated = { ...defaultState(), ...parsed }
+    const migrated = upgradeState(parsed)
     // Keep the source until the secure store is successfully written.
     return migrated
   } catch (error) {
     throw new Error(`Your saved OverHead information could not be migrated. The original file has been preserved at ${legacyDbPath}. ${error.message}`)
   }
+}
+
+function upgradeState(snapshot = {}) {
+  const upgraded = { ...defaultState(), ...(snapshot && typeof snapshot === 'object' ? snapshot : {}) }
+  upgraded.expenses = Array.isArray(upgraded.expenses) ? upgraded.expenses : []
+  upgraded.expenseBudgets = Array.isArray(upgraded.expenseBudgets) ? upgraded.expenseBudgets : []
+  return upgraded
 }
 
 function persist() {
@@ -1476,6 +1485,7 @@ function getBootstrap() {
     appointments: listAppointments(),
     quotes: listQuotes(),
     invoices: listInvoices(),
+    expenses: ['Owner', 'Bookkeeper'].includes(activeSession.role) ? listExpenses() : [],
     tasks: listTasks(),
     supportTickets: [...state.supportTickets].sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
     documents: listDocuments(),
@@ -1545,6 +1555,44 @@ function getStoredDocumentPath(documentId = '') {
 function listAppointments() { requireSession('appointment viewing'); return [...state.appointments].sort((a, b) => String(a.scheduled_for).localeCompare(String(b.scheduled_for))) }
 function listQuotes() { requireSession('quote viewing'); return [...state.quotes].sort((a, b) => b.updated_at.localeCompare(a.updated_at)) }
 function listInvoices() { requireSession('invoice viewing'); return [...state.invoices].sort((a, b) => b.updated_at.localeCompare(a.updated_at)) }
+const expenseCategories = ['Advertising', 'Insurance', 'Meals', 'Office supplies', 'Payroll', 'Rent', 'Software', 'Travel', 'Utilities', 'Other']
+function listExpenses() { requireRole(['Owner', 'Bookkeeper'], 'expense viewing'); return [...state.expenses].sort((a, b) => b.expense_date.localeCompare(a.expense_date) || b.created_at.localeCompare(a.created_at)) }
+function createExpense(payload = {}) {
+  requireRole(['Owner', 'Bookkeeper'], 'expense creation')
+  const title = String(payload.title || '').trim(); const vendor = String(payload.vendor || '').trim(); const category = String(payload.category || 'Other'); const amount = Number(payload.amount); const expenseDate = String(payload.expenseDate || '').trim()
+  if (!title || !vendor || !Number.isFinite(amount) || amount <= 0 || amount > 10000000) throw new Error('Add a description, vendor, and valid amount greater than zero.')
+  if (!expenseCategories.includes(category)) throw new Error('Choose a valid expense category.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate) || Number.isNaN(Date.parse(`${expenseDate}T00:00:00Z`))) throw new Error('Choose a valid expense date.')
+  const expense = { id: createId('expense'), title, vendor, category, amount: Math.round(amount * 100) / 100, expense_date: expenseDate, status: 'Pending', notes: String(payload.notes || '').trim().slice(0, 1000), created_by: activeSession.email, created_at: now(), updated_at: now() }
+  state.expenses.unshift(expense); persist(); recordAudit('expense.created', 'Expense submitted for approval', { id: expense.id, category, amount: expense.amount }); return listExpenses()
+}
+function updateExpenseStatus(payload = {}) {
+  requireRole(['Owner', 'Bookkeeper'], 'expense approval')
+  const expense = state.expenses.find((item) => item.id === String(payload.expenseId || '')); const status = String(payload.status || '')
+  if (!expense) throw new Error('That expense no longer exists.')
+  if (!['Pending', 'Approved', 'Rejected', 'Paid'].includes(status)) throw new Error('Choose a valid expense status.')
+  if (status === 'Paid' && expense.status !== 'Approved') throw new Error('Approve the expense before marking it paid.')
+  if (expense.status === 'Rejected' && status !== 'Pending') throw new Error('Rejected expenses must be resubmitted before approval.')
+  expense.status = status; expense.updated_at = now(); persist(); recordAudit('expense.status_updated', 'Expense status updated', { id: expense.id, status }); return listExpenses()
+}
+function setExpenseBudget(payload = {}) {
+  requireRole(['Owner', 'Bookkeeper'], 'expense budget update')
+  const month = String(payload.month || ''); const category = String(payload.category || ''); const amount = Number(payload.amount)
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !expenseCategories.includes(category) || !Number.isFinite(amount) || amount < 0 || amount > 10000000) throw new Error('Choose a month, category, and valid budget amount.')
+  let budget = state.expenseBudgets.find((item) => item.month === month && item.category === category)
+  if (!budget) { budget = { id: createId('budget'), month, category }; state.expenseBudgets.push(budget) }
+  budget.amount = Math.round(amount * 100) / 100; budget.updated_at = now(); persist(); recordAudit('expense.budget_updated', 'Monthly expense budget updated', { month, category, amount: budget.amount }); return getExpenseSummary(month)
+}
+function getExpenseSummary(month = new Date().toISOString().slice(0, 7)) {
+  requireRole(['Owner', 'Bookkeeper'], 'expense reporting')
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month))) throw new Error('Choose a valid reporting month.')
+  const categories = expenseCategories.map((category) => {
+    const actual = state.expenses.filter((item) => item.expense_date.startsWith(month) && item.category === category && item.status !== 'Rejected').reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    const budget = Number(state.expenseBudgets.find((item) => item.month === month && item.category === category)?.amount || 0)
+    return { category, budget, actual: Math.round(actual * 100) / 100, variance: Math.round((budget - actual) * 100) / 100 }
+  }).filter((item) => item.budget || item.actual)
+  return { month, budget: Math.round(categories.reduce((sum, item) => sum + item.budget, 0) * 100) / 100, actual: Math.round(categories.reduce((sum, item) => sum + item.actual, 0) * 100) / 100, categories }
+}
 function createAppointment(payload = {}) {
   requireRole(['Owner', 'Front Desk', 'Support'], 'appointment creation')
   const title = String(payload.title || '').trim(); const scheduledFor = String(payload.scheduledFor || '').trim()
@@ -3100,7 +3148,7 @@ function restoreFromPackage(payload = {}) {
   const validation = validateRestorePackage(input.filePath)
   if (!validation.valid) throw new Error('Restore package was rejected.')
   const backup = createBackup()
-  const restored = { ...defaultState(), ...JSON.parse(decryptStore(fs.readFileSync(validation.filePath, 'utf8'))) }
+  const restored = upgradeState(JSON.parse(decryptStore(fs.readFileSync(validation.filePath, 'utf8'))))
   state = restored
   seed()
   recordAudit('restore.completed', 'Local workspace restored from validated package', { filePath: validation.filePath, safetyBackupPath: backup.backupPath })
@@ -3212,6 +3260,11 @@ module.exports = {
   createAppointment,
   createQuote,
   createInvoice,
+  createExpense,
+  listExpenses,
+  updateExpenseStatus,
+  setExpenseBudget,
+  getExpenseSummary,
   updateOperationalStatus,
   assignOperationalCustomer,
   connectMicrosoft,
