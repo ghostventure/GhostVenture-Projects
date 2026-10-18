@@ -40,6 +40,7 @@ import PeopleOperationsWorkspace from './features/PeopleOperationsWorkspace'
 import SchedulingWorkspace from './features/SchedulingWorkspace'
 import DocumentControlWorkspace from './features/DocumentControlWorkspace'
 import CollaborationWorkspace from './features/CollaborationWorkspace'
+import ControlCenter from './features/ControlCenter'
 import { AccountGovernancePanel, FeatureWavePreferences, FieldAssistSection, SupportOperationsPanel } from './featureWave301400'
 import './App.css'
 
@@ -53,6 +54,10 @@ const navSections = [
   { id: 'collaboration', label: 'Team & Comms', detail: 'Shared notes, contacts and preferences', icon: MessageSquareText },
   { id: 'finance', label: 'Finance', detail: 'Invoices, expenses and close workflow', icon: ReceiptText },
   { id: 'people', label: 'People', detail: 'Staff development and workload', icon: UserRoundCog },
+  { id: 'rule-center', label: 'Rule Builder', detail: 'Reviewable event workflows', icon: Workflow },
+  { id: 'integrations', label: 'Integrations', detail: 'Connections, imports, and export status', icon: CloudDownload },
+  { id: 'search', label: 'Search', detail: 'Search, saved views, and record tags', icon: Search },
+  { id: 'admin-security', label: 'Admin Security', detail: 'Access reviews and security policies', icon: LockKeyhole },
   { id: 'work', label: 'Workflows', detail: 'Scheduling, answers, quotes', icon: Workflow },
   { id: 'customers', label: 'Customers', detail: 'Profiles, rules, service history', icon: Users },
   { id: 'imports', label: 'Import', detail: 'Microsoft 365 and Business Central', icon: CloudDownload },
@@ -555,6 +560,10 @@ function App() {
             {activeSection === 'collaboration' && <CollaborationWorkspace backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'finance' && <CustomerFinanceWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
             {activeSection === 'people' && <PeopleOperationsWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'rule-center' && <ControlCenter area="automation" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'integrations' && <ControlCenter area="integrations" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'search' && <ControlCenter area="search" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'admin-security' && <ControlCenter area="security" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'work' && (
               <WorkflowsSection
                 activeModule={activeModule}
@@ -1362,6 +1371,10 @@ function sectionTitle(section) {
     collaboration: 'Team Collaboration',
     finance: 'Finance Operations',
     people: 'People Operations',
+    'rule-center': 'Automation Rule Builder',
+    integrations: 'Integration Status & Data Exchange',
+    search: 'Workspace Search',
+    'admin-security': 'Security Administration',
     work: 'Workflow Operations',
     customers: 'Customer Records',
     imports: 'Import From Microsoft',
@@ -1384,9 +1397,9 @@ function displayRole(role) {
 }
 
 function allowedSectionsForRole(role) {
-  const member = ['overview', 'field-assist', 'scheduling', 'collaboration', 'work', 'customers', 'support', 'tools', 'security']
+  const member = ['overview', 'field-assist', 'scheduling', 'collaboration', 'search', 'work', 'customers', 'support', 'tools', 'security']
   if (role === 'Owner') return navSections.map((section) => section.id)
-  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'documents', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
+  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'documents', 'rule-center', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
   return member
 }
 
