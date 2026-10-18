@@ -73,11 +73,11 @@ Audit of the original feature inventory against baseline `3578fa7`. Implemented 
 | 167 | Document request checklists | Implemented | Document request checklist records. |
 | 168 | Customer-specific file rooms | Already present | Existing customer attachment vault; new document workspace adds per-customer index. |
 | 169 | Project document indexing | Implemented | Document index project association and search. |
-| 170 | Full-text file search | Blocked | No OCR/content extraction service; current search covers user-entered metadata. |
+| 170 | Full-text file search | Implemented | `src/features/DocumentControlWorkspace.jsx` content search uses `electron-backend.cjs` to scan local TXT, CSV, and DOCX files (maximum 200 files/50 MB total/4 MB each); PDF OCR, spreadsheets, and images are unsupported. |
 | 171 | Document activity feed | Implemented | Document workspace displays metadata and backend audit activity. |
-| 172 | PDF annotation | Blocked | Requires a PDF viewer/annotation layer and attachment write-back support. |
+| 172 | PDF annotation | Implemented | `annotateStoredPdf` in `electron-backend.cjs` stamps visible text on a selected PDF page and saves a protected annotated copy; original is preserved; not a freehand viewer. |
 | 173 | Attachment preview | Already present | Existing local document open action in customer vault. |
-| 174 | Bulk file download | Blocked | The current export contains document metadata only; bundling attachment files needs a secure archive flow. |
+| 174 | Bulk file download | Implemented | `exportDocumentBundle` in `electron-backend.cjs`, exposed by `electron-main.cjs`/`electron-preload.cjs`, revalidates vault paths and creates a native-dialog ZIP for up to 100 files/250 MB. |
 | 175 | Secure file-sharing links | Blocked | Requires authenticated hosted storage and expiring signed-link service. |
 | 176 | File retention rules | Implemented | Retention metadata/rule register; no automatic deletion is performed. |
 | 177 | Duplicate file detection | Implemented | Documents detects matching stored filename and byte size. |
@@ -105,4 +105,4 @@ Audit of the original feature inventory against baseline `3578fa7`. Implemented 
 | 199 | Collaboration activity stream | Implemented | Activity stream built from local collaboration records. |
 | 200 | Cross-team handoff notes | Implemented | Collaboration handoff records with source/destination teams. |
 
-Coverage count: 80 implemented in this wave, 11 already present in the baseline, and 9 blocked on infrastructure or binary/media support. The workspaces use the encrypted feature-record API and are now mounted in the app with role-based navigation. Finance is available to Owners and Bookkeepers; People is Owner-only.
+Coverage count: 83 implemented in this wave, 11 already present in the baseline, and 6 blocked on hosted/provider or native media infrastructure. The workspaces use the encrypted feature-record API and are now mounted in the app with role-based navigation. Finance is available to Owners and Bookkeepers; People is Owner-only.

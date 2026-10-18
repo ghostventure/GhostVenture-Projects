@@ -594,6 +594,13 @@ if (singleInstanceLock) app.whenReady().then(async () => {
       if (error) throw new Error(error)
       return { opened: true }
     }))
+    ipcMain.handle('documents:export-bundle', trustedHandler(async (_event, documentIds) => {
+      const result = await dialog.showSaveDialog(mainWindow, { title: 'Export selected customer documents', defaultPath: 'OverHead-Documents.zip', filters: [{ name: 'ZIP archive', extensions: ['zip'] }] })
+      if (result.canceled || !result.filePath) return { canceled: true }
+      return backend.exportDocumentBundle({ documentIds, destinationPath: result.filePath })
+    }))
+    ipcMain.handle('documents:annotate-pdf', trustedHandler((_event, payload) => backend.annotateStoredPdf(payload)))
+    ipcMain.handle('documents:search-content', trustedHandler((_event, payload) => backend.searchStoredDocumentContents(payload)))
     ipcMain.handle('customers:create-portal-invite', trustedHandler((_event, payload) => backend.createCustomerPortalInvite(payload)))
     ipcMain.handle('appointments:create', trustedHandler((_event, payload) => backend.createAppointment(payload)))
     ipcMain.handle('quotes:create', trustedHandler((_event, payload) => backend.createQuote(payload)))

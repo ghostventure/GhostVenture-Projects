@@ -596,7 +596,7 @@ function App() {
             {activeSection === 'customer-management' && <CustomerManagementWorkspace backendState={backendState} secureView={secureView} />}
             {activeSection === 'field-assist' && <FieldAssistSection backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'scheduling' && <SchedulingWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
-            {activeSection === 'documents' && <DocumentControlWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'documents' && <DocumentControlWorkspace backendState={backendState} setOperationNotice={setOperationNotice} refreshBackend={refreshBackend} />}
             {activeSection === 'collaboration' && <CollaborationWorkspace backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'finance' && <CustomerFinanceWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
             {activeSection === 'people' && <PeopleOperationsWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}

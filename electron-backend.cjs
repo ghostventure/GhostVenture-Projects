@@ -1629,10 +1629,129 @@ function attachCustomerDocument(payload = {}) {
 }
 
 function getStoredDocumentPath(documentId = '') {
-  requireRole(['Owner', 'Front Desk', 'Support'], 'customer document opening')
+  return getSecureStoredDocument(documentId, 'customer document opening').filePath
+}
+
+function getSecureStoredDocument(documentId, action) {
+  requireRole(['Owner', 'Front Desk', 'Support'], action)
   const document = state.documents.find((item) => item.id === String(documentId || ''))
-  if (!document || !fs.existsSync(document.stored_path)) throw new Error('That document is no longer available on this device.')
-  return document.stored_path
+  if (!document) throw new Error('That document is no longer available on this device.')
+  const documentRoot = path.resolve(path.join(dataRoot, 'documents'))
+  const storedPath = path.resolve(String(document.stored_path || ''))
+  if (!storedPath.startsWith(`${documentRoot}${path.sep}`)) throw new Error('The stored document path is outside the secure document folder.')
+  let realRoot, filePath
+  try { realRoot = fs.realpathSync(documentRoot); filePath = fs.realpathSync(storedPath) } catch { throw new Error('That document is no longer available on this device.') }
+  if (!filePath.startsWith(`${realRoot}${path.sep}`)) throw new Error('The stored document path is outside the secure document folder.')
+  const details = fs.statSync(filePath)
+  if (!details.isFile() || details.size > MAX_DOCUMENT_BYTES) throw new Error('The stored document is not a supported file.')
+  return { document, filePath, details }
+}
+
+async function exportDocumentBundle(payload = {}) {
+  requireRole(['Owner', 'Front Desk', 'Support'], 'bulk customer document export')
+  const input = z.object({ documentIds: z.array(z.string().trim().min(1).max(160)).min(1).max(100), destinationPath: z.string().trim().min(1).max(1000) }).parse(payload)
+  const documentIds = [...new Set(input.documentIds)]
+  if (documentIds.length !== input.documentIds.length) throw new Error('The selection contains duplicate document IDs.')
+  const selected = documentIds.map((id) => getSecureStoredDocument(id, 'bulk customer document export'))
+  const totalBytes = selected.reduce((sum, item) => sum + item.details.size, 0)
+  if (totalBytes > 250 * 1024 * 1024) throw new Error('A document bundle cannot exceed 250 MB.')
+  const destinationPath = path.resolve(input.destinationPath)
+  if (path.extname(destinationPath).toLowerCase() !== '.zip') throw new Error('Choose a ZIP file destination for the document bundle.')
+  const documentRoot = path.resolve(path.join(dataRoot, 'documents'))
+  if (destinationPath.startsWith(`${documentRoot}${path.sep}`)) throw new Error('Save the ZIP outside the protected document vault.')
+  const zip = new AdmZip()
+  selected.forEach(({ document, filePath }) => {
+    const extension = path.extname(filePath).toLowerCase()
+    const safeName = path.basename(document.file_name || filePath, extension).replace(/[^a-z0-9_-]/gi, '_').slice(0, 80) || 'document'
+    zip.addLocalFile(filePath, 'documents', `${document.id}-${safeName}${extension}`)
+  })
+  await zip.writeZipPromise(destinationPath, { overwrite: true })
+  recordAudit('documents.bundle_exported', 'Secure local document bundle exported', { documentCount: selected.length, totalBytes })
+  return { fileName: path.basename(destinationPath), documentCount: selected.length, totalBytes }
+}
+
+async function annotateStoredPdf(payload = {}) {
+  requireRole(['Owner', 'Front Desk', 'Support'], 'PDF annotation')
+  const input = z.object({ documentId: z.string().trim().min(1).max(160), page: z.number().int().min(1).max(10000), annotation: z.string().trim().min(1).max(1200) }).parse(payload)
+  const { document, filePath, details } = getSecureStoredDocument(input.documentId, 'PDF annotation')
+  if (path.extname(filePath).toLowerCase() !== '.pdf') throw new Error('Choose a PDF attachment for annotation.')
+  let pdf
+  try { pdf = await PDFDocument.load(fs.readFileSync(filePath), { updateMetadata: false }) } catch { throw new Error('The selected PDF could not be opened or is password-protected.') }
+  const pages = pdf.getPages()
+  if (input.page > pages.length) throw new Error(`Choose a page from 1 to ${pages.length}.`)
+  const page = pages[input.page - 1]
+  const [width, height] = page.getSize()
+  if (width < 120 || height < 80) throw new Error('The selected page is too small to annotate.')
+  const font = await pdf.embedFont(StandardFonts.Helvetica)
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
+  const normalizedText = input.annotation.replace(/[^\x20-\x7E]/g, '?').replace(/\s+/g, ' ').trim()
+  const maxChars = Math.max(20, Math.floor((width - 56) / 6))
+  const lines = []
+  for (let offset = 0; offset < normalizedText.length; offset += maxChars) lines.push(normalizedText.slice(offset, offset + maxChars))
+  const lineHeight = 13
+  const boxHeight = Math.min(height - 32, lines.length * lineHeight + 30)
+  const stampLines = lines.slice(0, Math.max(1, Math.floor((boxHeight - 24) / lineHeight)))
+  const x = 16, y = height - boxHeight - 16
+  page.drawRectangle({ x, y, width: Math.max(1, width - 32), height: boxHeight, color: rgb(1, 0.96, 0.78), opacity: 0.92, borderColor: rgb(0.65, 0.3, 0.05), borderWidth: 1 })
+  page.drawText(`OverHead annotation ? ${now().slice(0, 10)} ? page ${input.page}`, { x: x + 10, y: y + boxHeight - 17, size: 9, font: bold, color: rgb(0.38, 0.16, 0.02) })
+  stampLines.forEach((line, index) => page.drawText(line, { x: x + 10, y: y + boxHeight - 34 - index * lineHeight, size: 9, font, color: rgb(0.18, 0.12, 0.05) }))
+  const outputDir = path.dirname(filePath)
+  const outputId = createId('document')
+  const baseName = path.basename(document.file_name || filePath, '.pdf').replace(/[^a-z0-9_-]/gi, '_').slice(0, 72) || 'document'
+  const outputPath = path.join(outputDir, `${outputId}-${baseName}-annotated.pdf`)
+  const pdfBytes = await pdf.save()
+  if (pdfBytes.byteLength > MAX_DOCUMENT_BYTES) throw new Error('The annotated copy exceeds the 25 MB attachment limit.')
+  fs.writeFileSync(outputPath, pdfBytes, { flag: 'wx' })
+  const outputDetails = fs.statSync(outputPath)
+  const annotated = { id: outputId, customer_id: document.customer_id, label: `${String(document.label || document.file_name).slice(0, 96)} (annotated copy)`, file_name: path.basename(outputPath), stored_path: outputPath, extension: '.pdf', byte_size: outputDetails.size, checksum: crypto.createHash('sha256').update(fs.readFileSync(outputPath)).digest('hex'), uploaded_by: activeSession.email, created_at: now(), updated_at: now(), source_document_id: document.id, annotation_page: input.page }
+  state.documents.unshift(annotated)
+  persist()
+  recordAudit('documents.pdf_annotated', 'PDF annotation copy created', { sourceDocumentId: document.id, documentId: outputId, page: input.page, annotationLength: normalizedText.length, sourceBytes: details.size })
+  return { documentId: outputId, fileName: annotated.file_name, pageCount: pages.length, page: input.page }
+}
+
+function decodeXmlText(value) {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ')
+}
+
+function extractSearchableDocumentText(filePath) {
+  const extension = path.extname(filePath).toLowerCase()
+  if (extension === '.txt' || extension === '.csv') return fs.readFileSync(filePath, 'utf8').split(String.fromCharCode(0)).join('')
+  if (extension === '.docx') {
+    const archive = new AdmZip(filePath)
+    const entry = archive.getEntry('word/document.xml')
+    if (!entry) throw new Error('The DOCX document body is missing.')
+    if (Number(entry.header?.size || 0) > 16 * 1024 * 1024) throw new Error('The DOCX document body exceeds the content-search limit.')
+    return decodeXmlText(entry.getData().toString('utf8'))
+  }
+  return null
+}
+
+function searchStoredDocumentContents(payload = {}) {
+  requireRole(['Owner', 'Front Desk', 'Support'], 'document content search')
+  const input = z.object({ query: z.string().trim().min(2).max(100) }).parse(payload)
+  const needle = input.query.toLocaleLowerCase()
+  const results = []
+  let scanned = 0, skipped = 0, totalBytes = 0
+  for (const document of state.documents) {
+    if (scanned + skipped >= 200 || results.length >= 100 || totalBytes >= 50 * 1024 * 1024) break
+    if (!['.txt', '.csv', '.docx'].includes(path.extname(String(document.stored_path || '')).toLowerCase())) { skipped += 1; continue }
+    let stored
+    try { stored = getSecureStoredDocument(document.id, 'document content search') } catch { skipped += 1; continue }
+    if (stored.details.size > 4 * 1024 * 1024 || totalBytes + stored.details.size > 50 * 1024 * 1024) { skipped += 1; continue }
+    totalBytes += stored.details.size
+    let text
+    try { text = extractSearchableDocumentText(stored.filePath) } catch { skipped += 1; continue }
+    scanned += 1
+    const lower = String(text || '').toLocaleLowerCase()
+    let position = lower.indexOf(needle), matchCount = 0
+    if (position < 0) continue
+    const snippet = String(text).slice(Math.max(0, position - 80), Math.min(String(text).length, position + input.query.length + 120)).replace(/\s+/g, ' ').trim()
+    while (position >= 0 && matchCount < 100) { matchCount += 1; position = lower.indexOf(needle, position + needle.length) }
+    results.push({ documentId: document.id, fileName: document.file_name || path.basename(stored.filePath), label: document.label, customerId: document.customer_id, matchCount, snippet })
+  }
+  recordAudit('documents.content_searched', 'Stored text documents searched locally', { resultCount: results.length, scannedCount: scanned, skippedCount: skipped, queryLength: input.query.length })
+  return { results, scannedCount: scanned, skippedCount: skipped, supportedTypes: ['.txt', '.csv', '.docx'], limited: scanned + skipped >= 200 || totalBytes >= 50 * 1024 * 1024 }
 }
 
 function listAppointments() { requireSession('appointment viewing'); return [...state.appointments].sort((a, b) => String(a.scheduled_for).localeCompare(String(b.scheduled_for))) }
@@ -3357,6 +3476,7 @@ module.exports = {
   buildGuidedLaunchPlan,
   createDataExport,
   attachCustomerDocument,
+  annotateStoredPdf,
   createDataRequest,
   completeDataDeletion,
   createQuickNote,
@@ -3383,6 +3503,8 @@ module.exports = {
   getHealth,
   getDeveloperWorkspace,
   getStoredDocumentPath,
+  exportDocumentBundle,
+  searchStoredDocumentContents,
   getRememberedSignIn,
   resumeRememberedSession,
   getStripeAuthorizationUrl,
