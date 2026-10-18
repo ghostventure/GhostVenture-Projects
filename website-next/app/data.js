@@ -11,7 +11,7 @@ export const navItems = [
   { href: '/contact/', label: 'Contact' },
 ]
 
-export const downloadHref = '/downloads/OverHead-Desktop-0.3.11-win-x64.zip'
+export const downloadHref = '/downloads/OverHead-Desktop-0.3.15-win-x64.zip'
 export const cylinderDownloadHref = '/downloads/OverHead-Cylinder-0.3.10-win-x64.zip'
 export const iosSourceHref = '/downloads/OverHead-iOS-SwiftUI-source.zip'
 export const checksumHref = '/downloads/SHA256SUMS.txt'

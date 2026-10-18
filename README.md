@@ -1,6 +1,6 @@
 # OverHead
 
-Current packaged release: **0.3.10** for standard desktop and **0.3.10** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
+Current packaged release: **0.3.15** for standard desktop and **0.3.10** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
 
 For the current website/Desktop account process, email verification gate, password recovery, and operator acceptance checklist, see `docs/authentication-workflow.md`.
 
@@ -21,7 +21,7 @@ The current Windows build includes a local desktop sign-in/onboarding surface, l
 
 ## Current releases
 
-- **OverHead Desktop 0.3.10:** standard Windows desktop release with customer/staff access lanes, role controls, live operational records, locally stored customer documents, and Firebase-hosted downloads/updates.
+- **OverHead Desktop 0.3.15:** standard Windows desktop release with customer/staff access lanes, role controls, live operational records, locally stored customer documents, and Firebase-hosted downloads/updates.
 - **OverHead Cylinder 0.3.10:** separate deployment for Windows Server and Windows IoT only. It uses its own application identity, local data directory, updater channel, and Cylinder tier. It will exit on standard Windows editions. Each server workspace gets one 30-day, no-card evaluation; continued paid use requires a separate commercial activation rather than the standard desktop checkout.
 
 See `docs/cylinder-deployment.md` for server/IoT deployment, updates, and compatibility details.
