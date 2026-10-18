@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 const defaultPreferences = { textScale: 'normal', locale: 'en-US', density: 'comfortable', language: 'en', notificationSound: 'off' }
 const assistModes = [
@@ -227,6 +227,7 @@ export function FieldAssistSection({ backendState, session, setOperationNotice }
       <div className="backend-health field-capture">
         <strong>Field visit and offline capture</strong>
         <p>Text and checklists are saved to the encrypted local workspace. When offline, capture stays on this device until OverHead can reach its local store. No location is collected automatically.</p>
+        <LocalAudioNoteRecorder />
         <label>Visit title<input value={fieldDraft.title} onChange={(event) => setFieldDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Site visit" /></label>
         <label>Customer<select value={fieldDraft.customerId} onChange={(event) => setFieldDraft((current) => ({ ...current, customerId: event.target.value }))}><option value="">No customer selected</option>{(backendState.customers || []).map((customer) => <option key={customer.id} value={customer.id}>{customer.business_name || customer.owner_name || customer.email}</option>)}</select></label>
         {selectedCustomer?.phone && <a href={`tel:${selectedCustomer.phone}`}>Call {selectedCustomer.phone}</a>}
@@ -253,6 +254,62 @@ export function FieldAssistSection({ backendState, session, setOperationNotice }
       </div>
     </div>
   </section>
+}
+
+function LocalAudioNoteRecorder() {
+  const recorderRef = useRef(null)
+  const streamRef = useRef(null)
+  const timerRef = useRef(null)
+  const chunksRef = useRef([])
+  const byteCountRef = useRef(0)
+  const [title, setTitle] = useState('Field audio note')
+  const [recording, setRecording] = useState(false)
+  const [recordedUrl, setRecordedUrl] = useState('')
+  const [recordedType, setRecordedType] = useState('audio/webm')
+  const [duration, setDuration] = useState(0)
+  const [error, setError] = useState('')
+  useEffect(() => () => {
+    clearInterval(timerRef.current)
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+  }, [recordedUrl])
+  async function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { setError('Audio recording is not supported in this environment.'); return }
+    try {
+      setError('')
+      if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+      setRecordedUrl(''); setDuration(0); chunksRef.current = []; byteCountRef.current = 0
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      const preferredType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : ''
+      const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined)
+      recorderRef.current = recorder
+      recorder.ondataavailable = (event) => {
+        if (!event.data?.size) return
+        byteCountRef.current += event.data.size
+        if (byteCountRef.current > 50 * 1024 * 1024) { setError('Recording stopped at the 50 MB local file limit.'); recorder.stop(); return }
+        chunksRef.current.push(event.data)
+      }
+      recorder.onerror = () => setError('The browser could not capture audio. Check microphone permissions and try again.')
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        if (blob.size) { setRecordedType(blob.type || 'audio/webm'); setRecordedUrl(URL.createObjectURL(blob)) }
+        stream.getTracks().forEach((track) => track.stop()); streamRef.current = null
+        clearInterval(timerRef.current); setRecording(false)
+      }
+      recorder.start(1000); setRecording(true)
+      timerRef.current = setInterval(() => setDuration((seconds) => { if (seconds >= 599) { recorder.stop(); return 600 } return seconds + 1 }), 1000)
+    } catch (reason) {
+      streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null
+      setRecording(false); setError(reason.name === 'NotAllowedError' ? 'Microphone access was declined. Allow it only if you want to record a note.' : `Could not start audio recording: ${reason.message}`)
+    }
+  }
+  function stopRecording() { if (recorderRef.current?.state === 'recording') recorderRef.current.stop() }
+  function clearRecording() { if (recordedUrl) URL.revokeObjectURL(recordedUrl); setRecordedUrl(''); setDuration(0); chunksRef.current = [] }
+  const extension = recordedType.includes('ogg') ? 'ogg' : recordedType.includes('mp4') ? 'm4a' : 'webm'
+  const fileTitle = (title.trim() || 'audio-note').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').slice(0, 60) || 'audio-note'
+  return <div className="backend-health local-audio-note"><strong>Local audio note</strong><p>Recording begins only when you select Start. Audio stays in memory until you download or clear it; maximum 10 minutes or 50 MB.</p><label>Note title<input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} disabled={recording} /></label><div className="button-row">{recording ? <button className="mini-button" type="button" onClick={stopRecording}>Stop recording ({Math.floor(duration / 60)}:{String(duration % 60).padStart(2, '0')})</button> : <button className="mini-button" type="button" onClick={startRecording}>Start audio recording</button>}{recordedUrl && <button className="mini-button" type="button" onClick={clearRecording}>Clear recording</button>}</div>{recordedUrl && <><audio controls src={recordedUrl}>Audio playback is unavailable.</audio><a className="ghost-button" href={recordedUrl} download={`${fileTitle}.${extension}`}>Download audio note</a></>}{error && <small className="form-error" role="alert">{error}</small>}</div>
 }
 
 export function SupportOperationsPanel({ tickets = [], users = [], session, setOperationNotice }) {

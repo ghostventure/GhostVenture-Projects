@@ -17,7 +17,7 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 209 | Customer retention reports | Implemented | `src/reportStudio.js`: repeat customers and creation-month cohorts from invoice/customer links; it reports repeat activity, not churn. |
 | 210 | Task completion reports | Implemented | `src/reportStudio.js`: task completion count and rate. |
 | 211 | Project variance reports | Implemented | `src/ReportStudio.jsx`: summarizes saved project budget and actual-cost values as current local estimates. |
-| 212 | Team utilization reports | Blocked | Project capacity and task estimates exist, but there are no time-entry or person-level available-hour records for actual team utilization. |
+| 212 | Team utilization reports | Implemented | `src/features/GrowthWorkspace.jsx` compares assigned open-task estimates due in the next seven days with user-entered weekly availability by staff owner. It is a planned-utilization estimate; it does not use actual time entries or unscheduled tasks. |
 | 213 | Expense trend analysis | Implemented | `src/reportStudio.js` groups local expense amounts by month. |
 | 214 | Aging receivables report | Implemented | `src/reportStudio.js` groups unpaid invoices by due-date age. |
 | 215 | Cohort analysis | Implemented | `src/reportStudio.js` groups customers by creation month and counts repeat invoice activity. |

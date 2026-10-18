@@ -93,7 +93,7 @@ Audit of the original feature inventory against baseline `3578fa7`. Implemented 
 | 187 | Customer message history | Implemented | Collaboration customer-linked message records. |
 | 188 | Message templates | Implemented | Collaboration message template records. |
 | 189 | Internal-only notes | Implemented | Collaboration internal note records. |
-| 190 | Audio note recording | Blocked | Shared feature record API is JSON-limited and does not store audio binaries. |
+| 190 | Audio note recording | Implemented | `src/featureWave301400.jsx` provides user-started microphone recording, playback, and local file download, capped at 10 minutes/50 MB. Audio remains in memory until downloaded or cleared; it is not uploaded or persisted to workspace records. |
 | 191 | Video meeting links | Implemented | Collaboration stores externally provided meeting URLs. |
 | 192 | Conversation assignment | Implemented | Collaboration assignment field and queue. |
 | 193 | Conversation status labels | Implemented | Collaboration status labels and filters. |
