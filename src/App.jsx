@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   BadgeCheck,
+  BarChart3,
   Bell,
   BookOpenCheck,
   BriefcaseBusiness,
@@ -37,6 +38,7 @@ import './App.css'
 
 const navSections = [
   { id: 'overview', label: 'Team Dashboard', detail: 'Priorities, ownership, readiness', icon: Gauge },
+  { id: 'reports', label: 'Reports', detail: 'Activity, revenue, and work summaries', icon: BarChart3 },
   { id: 'work', label: 'Workflows', detail: 'Scheduling, answers, quotes', icon: Workflow },
   { id: 'customers', label: 'Customers', detail: 'Profiles, rules, service history', icon: Users },
   { id: 'imports', label: 'Import', detail: 'Microsoft 365 and Business Central', icon: CloudDownload },
@@ -55,6 +57,7 @@ const navSections = [
 
 const sectionFeatures = {
   overview: ['Command palette', 'Readiness checklist', 'Current work queue', 'Quick notes'],
+  reports: ['Date range filters', 'Activity summaries', 'CSV export', 'Local-only reports'],
   work: ['Service intake flows', 'Quote approvals', 'Invoice nudges', 'Follow-up rules'],
   customers: ['Customer policy records', 'Workflow preferences', 'Protected fields', 'Service area notes'],
   imports: ['Microsoft sign-in', 'Read-only preview', 'Duplicate protection', 'Local encrypted token cache'],
@@ -530,6 +533,7 @@ function App() {
                 setOperationNotice={setOperationNotice}
               />
             )}
+            {activeSection === 'reports' && <ReportsSection backendState={backendState} />}
             {activeSection === 'work' && (
               <WorkflowsSection
                 activeModule={activeModule}
@@ -1021,6 +1025,56 @@ function readDashboardWidgetPreferences() {
   return dashboardWidgets.map(([id]) => id)
 }
 
+function ReportsSection({ backendState }) {
+  const [recordType, setRecordType] = useState('invoices')
+  const [period, setPeriod] = useState('30')
+  const records = backendState[recordType] || []
+  const cutoff = period === 'all' ? 0 : Date.now() - Number(period) * 86400000
+  const rows = records.filter((record) => {
+    const date = Date.parse(record.created_at || record.updated_at || record.scheduled_for || record.due_at || '')
+    return !cutoff || (Number.isFinite(date) && date >= cutoff)
+  })
+  const total = rows.reduce((sum, record) => sum + (Number(record.amount) || 0), 0)
+  const statuses = rows.reduce((counts, record) => {
+    const status = String(record.status || 'Unspecified')
+    counts[status] = (counts[status] || 0) + 1
+    return counts
+  }, {})
+  function downloadCsv() {
+    const quote = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`
+    const data = [
+      ['Record ID', 'Title', 'Status', 'Date', 'Amount'],
+      ...rows.map((record) => [record.id, record.title || record.label, record.status, record.created_at || record.updated_at || record.scheduled_for || record.due_at, record.amount]),
+    ].map((row) => row.map(quote).join(',')).join('\r\n')
+    const url = URL.createObjectURL(new Blob([`\uFEFF${data}`], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `overhead-${recordType}-report-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+  return (
+    <section className="reports-page">
+      <div className="panel action-panel">
+        <div className="section-head"><div><p className="eyebrow">Workspace reporting</p><h2>Activity report</h2></div><BarChart3 size={18} /></div>
+        <p>Review a local summary of operational records, then export the filtered rows as a spreadsheet-ready CSV.</p>
+        <div className="report-controls">
+          <label>Record type<select value={recordType} onChange={(event) => setRecordType(event.target.value)}><option value="invoices">Invoices</option><option value="quotes">Quotes</option><option value="appointments">Appointments</option><option value="tasks">Tasks</option></select></label>
+          <label>Date range<select value={period} onChange={(event) => setPeriod(event.target.value)}><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All available records</option></select></label>
+          <button className="primary-action" type="button" onClick={downloadCsv} disabled={!rows.length}>Export CSV</button>
+        </div>
+        <div className="dashboard-grid report-metrics">
+          <StatusCard icon={FileText} title="Matching records" value={String(rows.length)} note={`From ${records.length} available ${recordType}.`} />
+          <StatusCard icon={ReceiptText} title="Recorded value" value={`$${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} note="Sum of amounts stored on matching records." />
+          <StatusCard icon={CheckCircle2} title="Statuses" value={String(Object.keys(statuses).length)} note="Distinct statuses in this report." />
+        </div>
+        {rows.length ? <div className="report-status-list">{Object.entries(statuses).map(([status, count]) => <span key={status}><strong>{status}</strong>{count}</span>)}</div> : <p className="queue-empty">No {recordType} match this date range.</p>}
+        <p className="form-hint">This report reads the current OverHead workspace. CSV files are saved to your device when exported.</p>
+      </div>
+    </section>
+  )
+}
+
 function OverviewSection({ session, secureView, integrity, backendState, refreshBackend, setOperationNotice }) {
   const queue = backendState.tasks.length ? backendState.tasks : actions
   const health = backendState.health
@@ -1227,6 +1281,7 @@ function ComplianceBadges() {
 function sectionTitle(section) {
   return {
     overview: 'OverHead Console',
+    reports: 'Workspace Reports',
     work: 'Workflow Operations',
     customers: 'Customer Records',
     imports: 'Import From Microsoft',
@@ -1251,7 +1306,7 @@ function displayRole(role) {
 function allowedSectionsForRole(role) {
   const member = ['overview', 'work', 'customers', 'support', 'tools', 'security']
   if (role === 'Owner') return navSections.map((section) => section.id)
-  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'imports', 'automations', 'evidence', 'accounts', 'licenses']
+  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, ...(role === 'Bookkeeper' ? ['reports'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
   return member
 }
 
