@@ -1,20 +1,21 @@
 # OverHead 0.3.16 feature wave: 400 requested items
 
-This release branch turns the 400-item inventory into five role-aware workspace areas plus additions to the existing dashboard, reports, support, settings, and account screens. Each 100-item audit records whether an item is implemented, already existed in OverHead, partial, or blocked by a missing provider, platform capability, delivery service, or data source.
+This release branch turns the 400-item inventory into role-aware workspace areas plus additions to the existing dashboard, reports, support, settings, and account screens. Each 100-item audit records whether an item is implemented, already existed in OverHead, partial, or blocked by a concrete product or external prerequisite.
 
 The per-range audit tables are [items 1–100](feature-wave-001-100.md), [101–200](feature-wave-101-200.md), [201–300](feature-wave-201-300.md), and [301–400](feature-wave-301-400.md). A listed item is not described as complete unless its audit row says **Implemented** or **Already present**.
 
 | Range | Implemented | Already present | Partial | Blocked |
 |---|---:|---:|---:|---:|
-| 1–100 | 11 | 6 | 61 | 22 |
+| 1–100 | 73 | 6 | 0 | 21 |
 | 101–200 | 80 | 11 | 0 | 9 |
 | 201–300 | 21 | 35 | 0 | 44 |
 | 301–400 | 50 | 29 | 0 | 21 |
-| **Total** | **162** | **81** | **61** | **96** |
+| **Total** | **224** | **81** | **0** | **95** |
 
 ## Workspace areas
 
-- **Growth & Work**: per-account dashboard presets and cards, plus task, project, customer, and sales record boards backed by the encrypted local feature-record API.
+- **Growth & Work**: per-account dashboard presets, interactive task workflows, project planning and portfolio controls, and customer and opportunity boards backed by the encrypted local feature-record API.
+- **Sales Studio and Customer Management**: weighted forecasts, lead scoring and conversion, reusable playbooks, customer segments and health, consent, feedback intake, ownership rules, and scoped export.
 - **Finance, People, Scheduling, Documents, Team & Comms**: role-gated local workspaces for finance operations, staff planning, scheduling, document review, and collaboration records.
 - **Reports**: local report filters, annotations, metrics, trend summaries, print/PDF and CSV export, and report access history.
 - **Rule Builder**: reviewable trigger and action rules with a local execution boundary; external delivery or providers remain separately configured.
@@ -33,4 +34,4 @@ Generic feature records are for local workspace data and preferences. They must 
 
 From the repository root, use `npm ci`, `npm run build`, then `npm run dist:win` to create the Windows installer. `npm run build` is the compile gate. Run packaged smoke checks only after that build succeeds. Verify the installer and portable ZIP, release checksums, the website installer/download routes, `latest.yml`, and the public guide before claiming a release is complete.
 
-The current feature branch is `codex/overhead-400-feature-wave-20261018`. The GitHub push and Firebase website deployment remain release actions to complete after the integrated build and packaged verification pass.
+All inventory rows audited as Partial have now been implemented. Work is proceeding on rows still marked Blocked, which include local product workflows as well as genuine provider, identity, and native-platform prerequisites. The GitHub push and Firebase website deployment remain release actions to complete after those changes, the integrated build, and packaged verification pass.

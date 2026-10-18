@@ -1,6 +1,6 @@
 # Feature wave 301–400 audit
 
-Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API is in `6df8a0c`. The components in `src/featureWave301400.jsx` are integrated into Settings, Accounts, Support, and Field & Assist on the 0.3.16 feature branch. No smoke run occurred before the integrated build.
+Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API is in `6df8a0c`. The components in `src/featureWave301400.jsx` are integrated into Settings, Accounts, Support, and Field & Assist on the 0.3.16 feature branch. A production build and packaged-code smoke check passed at an earlier integration checkpoint; rebuild and repeat the smoke check after final feature integration.
 
 “Implemented” means a concrete workflow exists in the new component. “Already present” identifies baseline behavior. “Blocked” means a safe implementation depends on native platform signing/permissions, a missing authenticated billing/mail integration, or backend state transitions the product does not currently expose. Rule-based suggestions are local and offline; no AI provider is configured or contacted.
 

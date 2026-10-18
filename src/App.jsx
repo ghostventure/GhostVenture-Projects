@@ -35,6 +35,8 @@ import { customerDatabaseSchema } from './customerDatabase'
 import { complianceBadges, helpArticles, legalDocuments, marketableFeatures, planTiers, supportChannels } from './productBlueprint'
 import { themes } from './themes'
 import GrowthWorkspace from './features/GrowthWorkspace'
+import SalesWorkspace from './features/SalesWorkspace'
+import CustomerManagementWorkspace from './features/CustomerManagementWorkspace'
 import CustomerFinanceWorkspace from './features/CustomerFinanceWorkspace'
 import PeopleOperationsWorkspace from './features/PeopleOperationsWorkspace'
 import SchedulingWorkspace from './features/SchedulingWorkspace'
@@ -51,6 +53,8 @@ const navSections = [
   { id: 'overview', label: 'Team Dashboard', detail: 'Priorities, ownership, readiness', icon: Gauge },
   { id: 'reports', label: 'Reports', detail: 'Activity, revenue, and work summaries', icon: BarChart3 },
   { id: 'growth', label: 'Growth & Work', detail: 'Dashboards, tasks, projects, sales', icon: BriefcaseBusiness },
+  { id: 'sales-growth', label: 'Sales Studio', detail: 'Forecasts, qualification, and deal workflow', icon: BarChart3 },
+  { id: 'customer-management', label: 'Customer Management', detail: 'Segments, care, consent, and ownership', icon: Users },
   { id: 'field-assist', label: 'Field & Assist', detail: 'Offline capture and reviewed local help', icon: Sparkles },
   { id: 'scheduling', label: 'Scheduling', detail: 'Bookings, capacity, time and reminders', icon: CalendarDays },
   { id: 'documents', label: 'Documents', detail: 'Records, retention and review control', icon: FileText },
@@ -557,6 +561,8 @@ function App() {
             )}
             {activeSection === 'reports' && <><ReportsSection backendState={backendState} /><ReportStudio backendState={backendState} sessionRole={session.role} setOperationNotice={setOperationNotice} /></>}
             {activeSection === 'growth' && <GrowthWorkspace session={session} />}
+            {activeSection === 'sales-growth' && <SalesWorkspace backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'customer-management' && <CustomerManagementWorkspace backendState={backendState} secureView={secureView} />}
             {activeSection === 'field-assist' && <FieldAssistSection backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'scheduling' && <SchedulingWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
             {activeSection === 'documents' && <DocumentControlWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
@@ -1368,6 +1374,8 @@ function sectionTitle(section) {
     overview: 'OverHead Console',
     reports: 'Workspace Reports',
     growth: 'Growth & Work Suite',
+    'sales-growth': 'Sales Studio',
+    'customer-management': 'Customer Management',
     'field-assist': 'Field & Assist',
     scheduling: 'Scheduling & Time',
     documents: 'Document Control',
@@ -1402,7 +1410,7 @@ function displayRole(role) {
 function allowedSectionsForRole(role) {
   const member = ['overview', 'field-assist', 'scheduling', 'collaboration', 'search', 'work', 'customers', 'support', 'tools', 'security']
   if (role === 'Owner') return navSections.map((section) => section.id)
-  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'documents', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
+  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'sales-growth', 'customer-management', 'documents', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
   return member
 }
 

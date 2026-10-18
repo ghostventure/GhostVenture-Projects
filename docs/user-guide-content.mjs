@@ -11,7 +11,9 @@ export const chapters = [
 <table><thead><tr><th>Open this section</th><th>To do this</th></tr></thead><tbody>
 <tr><td>Team Dashboard</td><td>Review current work; add notes; choose visible dashboard panels; create and update appointments, quotes, and invoices.</td></tr>
 <tr><td>Reports</td><td>Owners and bookkeepers can filter invoices, quotes, appointments, or tasks by date and export a local CSV.</td></tr>
-<tr><td>Growth &amp; Work</td><td>Owners, front desk, and bookkeepers can customize dashboards and maintain task, project, customer, and sales boards.</td></tr>
+<tr><td>Growth &amp; Work</td><td>Owners, front desk, and bookkeepers can customize dashboards and maintain task, project, and customer boards.</td></tr>
+<tr><td>Sales Studio</td><td>Owners, front desk, and bookkeepers can forecast opportunities, qualify leads, record deal activity, and manage local sales playbooks.</td></tr>
+<tr><td>Customer Management</td><td>Owners, front desk, and bookkeepers can manage customer segments, health, structured contacts, consent, ownership rules, and feedback intake.</td></tr>
 <tr><td>Scheduling</td><td>Create local appointments, capacity plans, and time records. Public booking and calendar sync need an external account setup.</td></tr>
 <tr><td>Finance</td><td>Owners and bookkeepers can track invoices, expenses, budgets, and close checklists.</td></tr>
 <tr><td>People</td><td>Owners can maintain staff planning, reviews, and role-specific development records.</td></tr>
