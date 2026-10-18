@@ -65,25 +65,25 @@ Audited against the current main checkout, including `src/features/GrowthWorkspa
 | 59 | Project document folders | Implemented | `src/features/GrowthWorkspace.jsx:247-280,422`; create, rename, and delete project folders, file indexed documents into them, and unfile documents when a folder is deleted. Source files remain in the document vault. |
 | 60 | Project archive controls | Implemented | `src/features/GrowthWorkspace.jsx:198-202,333`; projects can be archived with a timestamp and restored to Planning; archived projects remain searchable. |
 | 61 | Custom customer fields | Blocked | `src/features/GrowthWorkspace.jsx:9` has a fixed field list; no administrator-defined field schema. |
-| 62 | Customer segments | Partial | `src/features/GrowthWorkspace.jsx:9,25` stores a free-text segment; no segment builder or segment-based actions. |
-| 63 | Customer health scoring | Partial | `src/features/GrowthWorkspace.jsx:9,25` stores a manually entered health value; no calculation from customer activity. |
+| 62 | Customer segments | Implemented | `src/features/CustomerManagementWorkspace.jsx:51,85-99,207-213` saves encrypted criteria (industry, status, minimum computed health) and shows matching local customers. |
+| 63 | Customer health scoring | Implemented | `src/features/CustomerManagementWorkspace.jsx:22-33,85,213` calculates a visible 0–100 heuristic from overdue invoices, open tasks, recent task/invoice activity, and missing email; it is explicitly not predictive. |
 | 64 | Customer interaction timeline | Blocked | `src/App.jsx:1471-1597` shows customer details/documents but no interaction event timeline. |
 | 65 | Customer notes with mentions | Blocked | `src/features/GrowthWorkspace.jsx:9` has plain notes; `src/features/CollaborationWorkspace.jsx:6-29` supports mentions only on standalone internal messages. |
-| 66 | Customer contact roles | Partial | `src/features/GrowthWorkspace.jsx:9,25` stores contacts as free text; core customer records have a primary owner/email rather than structured contact roles. |
-| 67 | Duplicate customer detection | Partial | `electron-backend.cjs:2125-2127` skips previously imported external IDs; `createCustomer` at `:2415-2461` does not detect matching local name/email duplicates. |
+| 66 | Customer contact roles | Implemented | `src/features/CustomerManagementWorkspace.jsx:101-107,220` stores multiple structured contacts with role, email, and phone in the encrypted customer feature collection. |
+| 67 | Duplicate customer detection | Implemented | `src/features/CustomerManagementWorkspace.jsx:73-82,231` groups exact normalized local name/email matches for staff review; no merge or mutation is performed. |
 | 68 | Customer merge tool | Blocked | No merge/identity reconciliation workflow found in `src/App.jsx` or `electron-backend.cjs`. |
-| 69 | Customer onboarding checklist | Partial | `electron-backend.cjs:2415-2485` queues a customer workflow-setup task; `src/features/GrowthWorkspace.jsx:143` has a “New customer” draft preset, not a completion checklist. |
-| 70 | Customer renewal tracking | Partial | `src/features/GrowthWorkspace.jsx:9,25` has renewal date/stage fields and a Renewal template; no scheduled reminder or renewal opportunity automation. |
+| 69 | Customer onboarding checklist | Implemented | `src/features/CustomerManagementWorkspace.jsx:6,64-65,221` creates a four-step customer checklist and persists completion state per customer. |
+| 70 | Customer renewal tracking | Implemented | `src/features/CustomerManagementWorkspace.jsx:222` persists a customer renewal date and stage for staff review; no automatic reminder is sent. |
 | 71 | Customer satisfaction surveys | Blocked | No survey creation, distribution, or response collection found in the customer workspace. |
-| 72 | Customer feedback inbox | Partial | `website-next/app/feedback/feedback-form.jsx` accepts product feedback; no in-app customer feedback inbox or record queue. |
+| 72 | Customer feedback inbox | Implemented | `src/features/CustomerManagementWorkspace.jsx:116-146,232` imports validated product_feedback JSON (max 50 records, 4,000-character message bound, source deduplication) and provides local triage; there is no automatic cloud sync. |
 | 73 | Customer relationship map | Blocked | No graph/relationship explorer found; contact roles remain unstructured text. |
 | 74 | Customer portal access | Already present | `src/App.jsx:1523-1529` creates customer portal invitations; `electron-backend.cjs:698-735` handles invitation records. |
-| 75 | Customer data export | Partial | `electron-backend.cjs:2575` exports workspace data; no per-customer scoped export flow was found. |
-| 76 | Customer consent tracking | Partial | `src/features/GrowthWorkspace.jsx:9` has a consent text field; no dedicated consent source/date/version audit workflow. |
-| 77 | Customer communication preferences | Partial | `src/App.jsx:1489-1513` stores a preferred contact method, and Growth has a preferences text field; no channel opt-out enforcement. |
+| 75 | Customer data export | Implemented | `src/features/CustomerManagementWorkspace.jsx:158-162,218` downloads a customer-scoped JSON export with the customer, local profile, linked feedback, tasks, and invoices. |
+| 76 | Customer consent tracking | Implemented | `src/features/CustomerManagementWorkspace.jsx:223` records consent purpose, state, source/reference, and timestamp in the encrypted customer profile. |
+| 77 | Customer communication preferences | Implemented | `src/features/CustomerManagementWorkspace.jsx:60,164-170,223,227` checks the per-customer channel and consent before creating a follow-up record and blocks prohibited contact; no customer email sender exists. |
 | 78 | Customer lifecycle stages | Implemented | `src/features/GrowthWorkspace.jsx:13,66-71,130` offers lifecycle stages and persists manual stage changes through the board. |
-| 79 | Customer risk flags | Partial | `src/features/GrowthWorkspace.jsx:9,25` stores a risk note; no customer-linked risk flag lifecycle or severity logic. |
-| 80 | Customer account ownership rules | Partial | `src/features/GrowthWorkspace.jsx:9,25` stores an owner name; assignment rules or ownership enforcement are absent. |
+| 79 | Customer risk flags | Implemented | `src/features/CustomerManagementWorkspace.jsx:148-156,224` saves customer-linked risk notes with severity and open/resolved state. |
+| 80 | Customer account ownership rules | Implemented | `src/features/CustomerManagementWorkspace.jsx:174-197,225-226` saves industry/health rules with active-staff owners and applies them only on explicit action, preserving existing owners unless the override checkbox is selected. |
 | 81 | Opportunity pipeline board | Implemented | `src/features/GrowthWorkspace.jsx:10,18,140-141`; sales records display as stage columns and move between stages. |
 | 82 | Custom sales stages | Implemented | `src/features/GrowthWorkspace.jsx:18,66-71,130`; saved opportunity stages become columns and drag/drop changes the stage. |
 | 83 | Opportunity probability weighting | Implemented | `src/features/SalesWorkspace.jsx:65,251,270` calculates and displays amount multiplied by probability for open deals. |
