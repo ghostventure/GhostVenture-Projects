@@ -206,6 +206,10 @@ function App() {
       }
     }
     setTheme(window.localStorage.getItem('overhead.theme.v1') || 'system')
+    const reducedMotionPreference = window.localStorage.getItem('overhead.reduceMotion.v1')
+    document.documentElement.dataset.reducedMotion = reducedMotionPreference === null
+      ? String(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false)
+      : reducedMotionPreference
     if (window.overheadBackend?.health) {
       window.overheadBackend.health()
         .then((health) => setBackendState({ ...emptyBackendState, health }))
@@ -2798,6 +2802,10 @@ function SecuritySection({ backendState, refreshBackend, setOperationNotice }) {
 }
 
 function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session, draftSession, updateDraft, signIn, backendState, refreshBackend, operationNotice, setOperationNotice }) {
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    const saved = window.localStorage.getItem('overhead.reduceMotion.v1')
+    return saved === null ? Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) : saved === 'true'
+  })
   const [restorePath, setRestorePath] = useState('')
   const [restoreConfirmation, setRestoreConfirmation] = useState('')
   const [updater, setUpdater] = useState({ status: 'not-checked', autoCheck: true, message: 'Update status is loading.' })
@@ -2922,6 +2930,12 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
     } catch (error) { setOperationNotice(userFacingError(error, 'Could not open the source workspace.')) }
   }
 
+  function updateReducedMotion(enabled) {
+    setReduceMotion(enabled)
+    window.localStorage.setItem('overhead.reduceMotion.v1', String(enabled))
+    document.documentElement.dataset.reducedMotion = String(enabled)
+  }
+
   return (
     <section className="panel page-panel">
       <div className="section-head">
@@ -2943,6 +2957,10 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
             <strong>{privacyMode ? 'Privacy mode on' : 'Privacy mode off'}</strong>
             <span>Masks sensitive evidence and customer records.</span>
           </button>
+          <label className="checkbox-line accessibility-preference">
+            <input type="checkbox" checked={reduceMotion} onChange={(event) => updateReducedMotion(event.target.checked)} />
+            <span><strong>Reduce motion</strong><small>Limit interface animation and scrolling effects.</small></span>
+          </label>
         </div>
         <div className="profile-form">
           <div className="backend-health">

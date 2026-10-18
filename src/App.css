@@ -379,6 +379,30 @@ select:focus {
   height: 16px;
 }
 
+.accessibility-preference {
+  min-height: 78px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+
+.accessibility-preference span {
+  display: grid;
+  gap: 4px;
+}
+
+.accessibility-preference strong {
+  color: var(--heading);
+}
+
+.accessibility-preference small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
 .login-card small {
   color: #6f7b78;
   font-size: 12px;
@@ -1865,6 +1889,15 @@ select:focus {
   color: transparent !important;
   text-shadow: 0 0 10px rgba(17, 23, 23, 0.5);
   user-select: none;
+}
+
+html[data-reduced-motion='true'] *,
+html[data-reduced-motion='true'] *::before,
+html[data-reduced-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
 }
 
 [data-theme='dark'] .desktop-app,
