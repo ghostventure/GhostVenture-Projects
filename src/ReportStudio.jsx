@@ -25,6 +25,10 @@ export function ReportStudio({ backendState = {}, sessionRole = 'Owner', setOper
   const [customMetrics, setCustomMetrics] = useState([])
   const [accessEvents, setAccessEvents] = useState([])
   const [schedules, setSchedules] = useState([])
+  const [projects, setProjects] = useState([])
+  const [salesRecords, setSalesRecords] = useState([])
+  const [forecastSnapshots, setForecastSnapshots] = useState([])
+  const [forecastMonth, setForecastMonth] = useState(new Date().toISOString().slice(0, 7))
   const [error, setError] = useState('')
   const metrics = useMemo(() => buildReportMetrics(backendState, period), [backendState, period])
   const records = useMemo(() => backendState[reportType] || [], [backendState, reportType])
@@ -41,20 +45,23 @@ export function ReportStudio({ backendState = {}, sessionRole = 'Owner', setOper
 
   async function refresh() {
     try {
-      const items = await window.overheadBackend.listFeatureRecords('reporting')
+      const [items, projectRows, salesRows] = await Promise.all([window.overheadBackend.listFeatureRecords('reporting'), window.overheadBackend.listFeatureRecords('projects'), window.overheadBackend.listFeatureRecords('sales')])
       setSaved(items.filter((item) => item.kind === 'saved_filter'))
       setNotes(items.filter((item) => item.kind === 'annotation'))
       setCustomMetrics(items.filter((item) => item.kind === 'metric'))
       setAccessEvents(items.filter((item) => item.kind === 'access').slice(-20).reverse())
       setSchedules(items.filter((item) => item.kind === 'schedule'))
+      setProjects(projectRows.filter((item) => !item.kind))
+      setForecastSnapshots(items.filter((item) => item.kind === 'forecast_snapshot').sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))))
+      setSalesRecords(salesRows.filter((item) => !item.kind || item.kind === 'opportunity'))
       setError('')
     } catch (reason) { setError(String(reason?.message || 'Saved reporting settings are unavailable.')) }
   }
   useEffect(() => { refresh() }, [])
 
   async function saveRecord(record) {
-    try { await window.overheadBackend.upsertFeatureRecord({ collection: 'reporting', record }); await refresh() }
-    catch (reason) { setError(String(reason?.message || 'The reporting setting could not be saved.')) }
+    try { const savedRecord = await window.overheadBackend.upsertFeatureRecord({ collection: 'reporting', record }); await refresh(); return savedRecord }
+    catch (reason) { setError(String(reason?.message || 'The reporting setting could not be saved.')); return null }
   }
   function downloadCsv() {
     const quote = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`
@@ -77,6 +84,11 @@ export function ReportStudio({ backendState = {}, sessionRole = 'Owner', setOper
     if (!scheduleAt || Date.parse(scheduleAt) <= Date.now()) { setError('Choose a future local delivery time.'); return }
     await saveRecord({ id: crypto.randomUUID(), kind: 'schedule', report_type: reportType, filters: { period, status, query }, run_at: new Date(scheduleAt).toISOString(), delivery: 'local_notification', status: 'Scheduled', created_by_role: sessionRole })
     setScheduleAt(''); setOperationNotice('Local report reminder scheduled. Export the report when the reminder appears.')
+  }
+  async function saveForecastSnapshot() {
+    const amount = salesRecords.filter((deal) => !['won', 'lost'].includes(String(deal.stage || deal.status).toLowerCase()) && String(deal.close_date || '').slice(0, 7) === forecastMonth).reduce((sum, deal) => { const probability = Number(deal.probability || 0); return sum + Number(deal.amount || 0) * Math.min(100, Math.max(0, Number.isFinite(probability) ? probability : 0)) / 100 }, 0)
+    const saved = await saveRecord({ id: crypto.randomUUID(), kind: 'forecast_snapshot', title: `Sales forecast ${forecastMonth}`, month: forecastMonth, weighted_amount: amount, created_at: new Date().toISOString(), created_by_role: sessionRole })
+    if (saved) setOperationNotice(`Weighted sales forecast snapshot saved for ${forecastMonth}.`)
   }
   async function addMetric() {
     if (!metricName.trim()) { setError('Name the custom metric.'); return }
@@ -110,6 +122,8 @@ export function ReportStudio({ backendState = {}, sessionRole = 'Owner', setOper
       <article className="panel"><h3>Receivables aging</h3>{Object.entries(metrics.agingReceivables).map(([label, value]) => <p key={label}>{label}: {money(value)}</p>)}</article>
     </div>
     <div className="task-list">{rows.slice(0, 30).map((record) => <div className="task-row" key={record.id}><strong>{record.title || record.business_name || record.label || record.id}</strong><span>{record.status || '—'}</span><span>{record.amount == null ? '' : money(record.amount)}</span><span>{record.created_at || record.due_date || record.expense_date || ''}</span></div>)}</div>
+    {projects.length > 0 && <section className="backend-health"><h3>Project budget variance</h3><p>Local project estimates use each saved project budget and actual cost; this is a current snapshot, not an accounting ledger.</p><div className="task-list">{projects.map((project) => { const budget = Number(project.budget || 0); const actual = Number(project.actualCost || 0); return <div className="task-row" key={project.id}><strong>{project.title || project.id}</strong><span>Budget {money(budget)}</span><span>Actual cost {money(actual)}</span><span>{actual > budget ? 'Over budget' : 'Under budget'} by {money(Math.abs(budget - actual))}</span></div> })}</div></section>}
+    <section className="backend-health"><h3>Forecast accuracy snapshots</h3><p>Save a monthly weighted open-sales forecast, then compare it with invoices created in that month. Invoice timing is used as a local actual-revenue proxy.</p><label style={control}>Forecast month<input style={input} type="month" value={forecastMonth} onChange={(event) => setForecastMonth(event.target.value)}/></label><button style={button} type="button" onClick={saveForecastSnapshot}>Save forecast snapshot</button>{forecastSnapshots.filter((snapshot) => snapshot.month === forecastMonth).map((snapshot) => { const actual = (backendState.invoices || []).filter((invoice) => String(invoice.created_at || '').slice(0, 7) === snapshot.month).reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0); const variance = actual - Number(snapshot.weighted_amount || 0); return <p key={snapshot.id}>{snapshot.month} forecast {money(snapshot.weighted_amount)} · invoices {money(actual)} · variance {money(variance)} · captured {new Date(snapshot.created_at).toLocaleString()}</p> })}</section>
     <div className="report-controls"><label style={control}>Save current report name<input style={input} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Monthly invoice review" /></label><button style={button} type="button" onClick={saveFilter}>Save shared filter</button><label style={control}>Schedule local reminder request<input style={input} type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} /></label><button style={button} type="button" onClick={scheduleDelivery}>Save request</button><span className="form-hint">Delivery requires a background notification or mail service; this request is stored for review only.</span></div>
     <div className="report-controls"><label style={control}>Report annotation<input style={input} value={annotation} onChange={(event) => setAnnotation(event.target.value)} placeholder="Context for this period" /></label><button style={button} type="button" onClick={addAnnotation}>Add note</button><label style={control}>Metric name<input style={input} value={metricName} onChange={(event) => setMetricName(event.target.value)} placeholder="Accepted quote rate" /></label><select style={input} value={metricKind} onChange={(event) => setMetricKind(event.target.value)}><option value="record_count">Record count</option><option value="amount_sum">Amount sum</option><option value="completion_rate">Task completion rate</option></select><button style={button} type="button" onClick={addMetric}>Save metric</button></div>
     <div className="dashboard-grid">{saved.filter((item) => item.shared_roles?.includes(sessionRole)).map((item) => <button style={button} type="button" key={item.id} onClick={() => applySavedFilter(item)}>{item.title} · {item.filters.reportType}</button>)}</div>

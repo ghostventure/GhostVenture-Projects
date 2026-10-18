@@ -291,7 +291,7 @@ export default function GrowthWorkspace({ session }) {
       const finalDay = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate()
       nextDate.setDate(Math.min(originalDay, finalDay))
     }
-    const saved = await window.overheadBackend.upsertFeatureRecord({ collection: 'tasks', record: { ...task, id: undefined, title: `${task.title} · ${nextDate.toLocaleDateString()}`, status: defaults.tasks[0], due: nextDate.toISOString().slice(0, 10), recurrence: task.recurrence, checklistItems: [] } })
+    const saved = await window.overheadBackend.upsertFeatureRecord({ collection: 'tasks', record: { ...task, id: undefined, title: `${task.title} · ${nextDate.toLocaleDateString()}`, status: defaults.tasks[0], due: nextDate.toISOString().slice(0, 10), recurrence: task.recurrence, checklistItems: (task.checklistItems || []).map((item) => ({ ...item, done: false })) } })
     const updated = [...records, saved]; setRecords(updated); setAll((state) => ({ ...state, tasks: updated })); setNotice(`Next task occurrence created for ${saved.due}.`)
   }
   const queueTaskReminder = async (task) => {

@@ -1,6 +1,6 @@
 # OverHead feature wave 201–300
 
-Audited against OverHead 0.3.15 (`3578fa7`) and the isolated feature modules in this wave. “Implemented” identifies new work in this wave; “Already present” identifies existing behavior or an integration point. “Blocked” means completing the listed behavior needs a service, data model, or identity/network capability the current desktop workspace does not have. Blocked rows name the missing prerequisite.
+Audited against the integrated OverHead 0.3.16 feature wave and the isolated feature modules in this wave. “Implemented” identifies new work in this wave; “Already present” identifies existing behavior or an integration point. “Blocked” means completing the listed behavior needs a service, data model, or identity/network capability the current desktop workspace does not have. Blocked rows name the missing prerequisite.
 
 The new report and rule modules use the encrypted local feature-record API. Reports include filters and metric definitions, while customer, project, billing, and security records remain in their existing stores. PDF output uses the operating system print dialog; delivery schedules are saved as requests only because the desktop runtime has no background report-delivery service.
 
@@ -16,12 +16,12 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 208 | Pipeline conversion analysis | Implemented | `src/reportStudio.js`: sent, accepted, and declined quote counts and conversion rate. |
 | 209 | Customer retention reports | Implemented | `src/reportStudio.js`: repeat customers and creation-month cohorts from invoice/customer links; it reports repeat activity, not churn. |
 | 210 | Task completion reports | Implemented | `src/reportStudio.js`: task completion count and rate. |
-| 211 | Project variance reports | Blocked | No project budget/actual data model exists in the audited baseline; needs project cost and budget records. |
-| 212 | Team utilization reports | Blocked | No time-entry, work-hour, or capacity records exist in the audited baseline. |
+| 211 | Project variance reports | Implemented | `src/ReportStudio.jsx`: summarizes saved project budget and actual-cost values as current local estimates. |
+| 212 | Team utilization reports | Blocked | Project capacity and task estimates exist, but there are no time-entry or person-level available-hour records for actual team utilization. |
 | 213 | Expense trend analysis | Implemented | `src/reportStudio.js` groups local expense amounts by month. |
 | 214 | Aging receivables report | Implemented | `src/reportStudio.js` groups unpaid invoices by due-date age. |
 | 215 | Cohort analysis | Implemented | `src/reportStudio.js` groups customers by creation month and counts repeat invoice activity. |
-| 216 | Forecast accuracy tracking | Blocked | No timestamped forecast snapshots exist to compare with actuals. |
+| 216 | Forecast accuracy tracking | Implemented | `src/ReportStudio.jsx`: saves timestamped monthly weighted sales snapshots and compares them with invoice-created-month totals as a local actual-revenue proxy. |
 | 217 | Custom metric definitions | Implemented | `src/ReportStudio.jsx`: encrypted definitions for record count, amount sum, and completion rate. |
 | 218 | Report annotation notes | Implemented | `src/ReportStudio.jsx`: encrypted, role-scoped notes attached to the selected report type. |
 | 219 | Data source transparency panel | Implemented | `src/ReportStudio.jsx`: names local source collections and record counts. |
@@ -40,7 +40,7 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 232 | Form submission automations | Already present | `electron-backend.cjs` customer creation queues setup work; appointment creation queues a scheduling task. |
 | 233 | Field update rules | Blocked | No generic field-update event pipeline or allowlisted update-rule executor exists. |
 | 234 | Duplicate record warnings | Already present | Microsoft import preview and commit detect duplicate email/source records in `electron-backend.cjs`. |
-| 235 | Recurring checklist generation | Blocked | Playbooks create a checklist once; recurring checklist scheduling needs a recurrence model and scheduler behavior. |
+| 235 | Recurring checklist generation | Implemented | `src/features/GrowthWorkspace.jsx`: manually generating a recurring task carries its checklist forward with items reset to unchecked. |
 | 236 | Notification routing rules | Blocked | Desktop notification toggle exists, but no channel/recipient routing model is available. |
 | 237 | Automated customer follow-ups | Already present | Customer playbooks and follow-up boilerplates exist; automatic external sending remains disabled. |
 | 238 | Automated project status requests | Blocked | No project/status-request domain or project recipients exist. |
@@ -62,30 +62,30 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 254 | API key management | Blocked | No public API service exists; generic feature records must not store reusable credentials. |
 | 255 | Webhook configuration page | Blocked | No public webhook receiver or signing-secret lifecycle exists. |
 | 256 | CSV import wizard | Already present | Root `src/features/ControlCenter.jsx` reads and previews CSV rows; it does not commit imports. |
-| 257 | CSV mapping presets | Blocked | The current CSV preview does not define or persist field mappings. |
+| 257 | CSV mapping presets | Implemented | `src/features/ControlCenter.jsx`: maps previewed CSV headers to customer fields and saves reusable mappings in encrypted integration records; import writes remain separate. |
 | 258 | Import validation preview | Already present | `src/features/ControlCenter.jsx` shows a local CSV preview; Microsoft imports also validate previews before commit. |
 | 259 | Data export scheduler | Blocked | Needs an unattended scheduler/notification or delivery service; current exports are user initiated. |
 | 260 | Integration health dashboard | Already present | `src/features/ControlCenter.jsx` lists connector setup states; Microsoft/Stripe/Square health is available in existing backend state. |
 | 261 | Global search across records | Already present | `src/features/ControlCenter.jsx` searches feature records allowed by the current role. |
 | 262 | Search by custom fields | Already present | Search serializes accessible feature records, including user-defined fields. |
 | 263 | Saved search views | Already present | `src/features/ControlCenter.jsx` persists search views in the encrypted `search` collection. |
-| 264 | Advanced search filters | Blocked | The current search accepts terms but has no structured multi-field filter/facet editor. |
+| 264 | Advanced search filters | Implemented | `src/features/ControlCenter.jsx`: filters accessible results by source collection and selected field value. |
 | 265 | Recent search history | Already present | `src/features/ControlCenter.jsx` saves recent query records. |
 | 266 | Search result grouping | Already present | `src/features/ControlCenter.jsx` groups result counts by source collection. |
-| 267 | Search synonyms | Blocked | No synonym dictionary or normalized query expansion is implemented in the integrated search panel. |
+| 267 | Search synonyms | Implemented | `src/features/ControlCenter.jsx`: saves term-to-synonym groups in encrypted search records and expands query terms during local matching. |
 | 268 | Smart duplicate suggestions | Already present | Customer import duplicate checks identify matching emails/source IDs; fuzzy suggestions need a reviewed matching model. |
 | 269 | Custom tags across modules | Already present | `src/features/ControlCenter.jsx` stores a shared workspace tag list; assigning tags to arbitrary records remains limited. |
-| 270 | Tag hierarchy | Blocked | Tag storage currently creates only root-level entries; no parent editor or hierarchical filtering exists. |
+| 270 | Tag hierarchy | Implemented | `src/features/ControlCenter.jsx`: saves root tags and Parent &gt; Child hierarchy paths in the encrypted tag registry. |
 | 271 | Shared saved views | Already present | Owner-created views use the shared workspace scope in `src/features/ControlCenter.jsx`. |
 | 272 | Personal saved views | Already present | Non-Owner views are saved under the creator scope in `src/features/ControlCenter.jsx`. |
-| 273 | Record relationship explorer | Blocked | Search shows records but lacks a navigable relationship graph across modules. |
-| 274 | Custom list columns | Blocked | No user-configurable column schema exists for record lists. |
-| 275 | Sortable custom lists | Blocked | Search results do not yet offer user-selected sortable table columns. |
-| 276 | Bulk actions from search results | Blocked | Search results support individual pinning; multi-select batch actions are not implemented. |
+| 273 | Record relationship explorer | Implemented | `src/features/ControlCenter.jsx`: each result can expand related records by matching saved ID, customer, project, invoice, or quote references across role-accessible collections. |
+| 274 | Custom list columns | Implemented | `src/features/ControlCenter.jsx`: saves a configurable comma-separated field list for search result details and CSV export. |
+| 275 | Sortable custom lists | Implemented | `src/features/ControlCenter.jsx`: sorts matching search records by a selected field and direction. |
+| 276 | Bulk actions from search results | Implemented | `src/features/ControlCenter.jsx`: pins the current filtered result set in one batch action. |
 | 277 | Search result export | Already present | `src/features/ControlCenter.jsx` exports the current search result set as CSV. |
 | 278 | Record pinning | Already present | `src/features/ControlCenter.jsx` saves pinned record references in the encrypted search collection. |
 | 279 | Configurable record IDs | Blocked | Core IDs are generated by backend entity prefixes; no configurable numbering policy exists. |
-| 280 | Archived-record search | Blocked | There is no record archive lifecycle or archive query path in the audited baseline. |
+| 280 | Archived-record search | Already present | Role-scoped search indexes all accessible feature records without excluding archived records; project archives retain status `Archived` in `src/features/GrowthWorkspace.jsx`. |
 | 281 | Multi-factor authentication options | Blocked | Firebase email verification is present, but MFA requires a configured identity-provider factor and recovery flow. |
 | 282 | Single sign-on support | Blocked | Microsoft data import OAuth is not app sign-on; enterprise SSO requires identity-provider integration. |
 | 283 | Session management controls | Already present | `electron-backend.cjs` tracks sessions and the renderer can lock/sign out the current session. |
@@ -109,4 +109,4 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 
 ## Verification boundary
 
-The report and automation modules are integrated on the 0.3.16 feature branch. The integration and search workspaces use local review and export workflows; live third-party connections, unattended delivery, public API/webhook infrastructure, and missing historical source data remain prerequisites rather than silently simulated behavior. No production build or smoke test was run before all packs were integrated.
+The report and automation modules are integrated on the 0.3.16 feature branch. The integration and search workspaces use local review and export workflows; live third-party connections, unattended delivery, public API/webhook infrastructure, and missing historical source data remain prerequisites rather than silently simulated behavior. The blocked-stage changes received targeted lint and whitespace checks only; no build or smoke test was run in this worktree. Forecast actuals use invoice creation month as a stated local proxy, and project costs remain user-entered estimates.
