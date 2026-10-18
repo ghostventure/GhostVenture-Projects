@@ -2008,6 +2008,8 @@ function ToolsSection({ backendState, refreshBackend, setOperationNotice, operat
   )
 }
 
+const configurableIdEntities = [['cust', 'Customers'], ['task', 'Tasks'], ['quote', 'Quotes'], ['invoice', 'Invoices'], ['expense', 'Expenses'], ['appointment', 'Appointments'], ['document', 'Documents']]
+
 function AccountsSection({ backendState, session, refreshBackend, setOperationNotice }) {
   const firstUser = backendState.userProfiles?.[0]
   const [selectedEmail, setSelectedEmail] = useState(firstUser?.email || '')
@@ -2034,12 +2036,18 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
   const [approvalPolicies, setApprovalPolicies] = useState([])
   const [routeRole, setRouteRole] = useState('Owner')
   const [routeThreshold, setRouteThreshold] = useState('')
+  const [recordIdRules, setRecordIdRules] = useState([])
+  const [recordIdEntity, setRecordIdEntity] = useState('cust')
+  const [recordIdPrefix, setRecordIdPrefix] = useState('')
+  const [recordIdNext, setRecordIdNext] = useState('1')
 
   useEffect(() => {
     if (session?.role !== 'Owner' || !window.overheadBackend?.listFeatureRecords) return
     window.overheadBackend.listFeatureRecords('security').then((records) => {
       const policy = records.find((record) => record.id === 'approval-routing-policy')
       setApprovalPolicies(Array.isArray(policy?.rules) ? policy.rules : [])
+      const idPolicy = records.find((record) => record.id === 'record-id-policy')
+      setRecordIdRules(Array.isArray(idPolicy?.rules) ? idPolicy.rules : [])
     }).catch(() => setApprovalPolicies([]))
   }, [session?.role])
 
@@ -2048,6 +2056,12 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
     setRouteRole(rule?.approver_role || 'Owner')
     setRouteThreshold(rule ? String(rule.threshold) : '')
   }, [approvalDraft.actionType, approvalPolicies])
+
+  useEffect(() => {
+    const rule = recordIdRules.find((item) => item.entity_prefix === recordIdEntity)
+    setRecordIdPrefix(rule?.prefix || '')
+    setRecordIdNext(rule ? String(rule.next_number) : '1')
+  }, [recordIdEntity, recordIdRules])
 
   async function updateUser() {
     if (!window.overheadBackend?.updateUser) return
@@ -2103,6 +2117,24 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
     await window.overheadBackend.upsertFeatureRecord({ collection: 'security', record: { id: 'approval-routing-policy', kind: 'approval-routing-policy', rules } })
     setApprovalPolicies(rules)
     setOperationNotice(`Approval route saved. Requests up to ${threshold} go to ${routeRole}; higher amounts stay with an Owner.`)
+  }
+
+  async function saveRecordIdRule() {
+    const prefix = recordIdPrefix.trim().toUpperCase()
+    const nextNumber = Number(recordIdNext)
+    if (prefix && (!/^[A-Z][A-Z0-9-]{1,7}$/.test(prefix) || !Number.isSafeInteger(nextNumber) || nextNumber < 1 || nextNumber > 999999999)) {
+      setOperationNotice('Use a 2–8 character prefix with letters, numbers, or hyphens and a next number from 1 to 999,999,999.')
+      return
+    }
+    if (prefix && recordIdRules.some((item) => item.entity_prefix !== recordIdEntity && item.prefix === prefix)) {
+      setOperationNotice('That prefix is already assigned to another record type. Choose a unique prefix.')
+      return
+    }
+    const rules = recordIdRules.filter((item) => item.entity_prefix !== recordIdEntity)
+    if (prefix) rules.push({ entity_prefix: recordIdEntity, prefix, next_number: nextNumber })
+    await window.overheadBackend.upsertFeatureRecord({ collection: 'security', record: { id: 'record-id-policy', kind: 'record-id-policy', rules } })
+    setRecordIdRules(rules)
+    setOperationNotice(prefix ? `${configurableIdEntities.find(([key]) => key === recordIdEntity)?.[1]} will use ${prefix}-NNNNN for new records from ${prefix}-${String(nextNumber).padStart(5, '0')}. Existing IDs are unchanged.` : `Custom IDs disabled for ${configurableIdEntities.find(([key]) => key === recordIdEntity)?.[1]}; new records will use the default IDs.`)
   }
 
   async function decideApproval(approvalId, decision) {
@@ -2227,6 +2259,14 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
               </article>
             ))}
           </div>
+          {session?.role === 'Owner' && <div className="backend-health">
+            <strong>Configurable record IDs</strong>
+            <span>Set a prefix and starting number for new records. Existing records keep their IDs; leave the prefix empty to use the default random IDs.</span>
+            <label>Record type<select value={recordIdEntity} onChange={(event) => setRecordIdEntity(event.target.value)}>{configurableIdEntities.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+            <FormField label="Prefix (2–8 characters)" value={recordIdPrefix} onChange={setRecordIdPrefix} placeholder="For example, CUS" />
+            <FormField label="Next number" value={recordIdNext} onChange={setRecordIdNext} placeholder="1" />
+            <button className="ghost-button" type="button" onClick={saveRecordIdRule}>Save ID format</button>
+          </div>}
         </div>
       </div>
       <AccountGovernancePanel backendState={backendState} session={session} setOperationNotice={setOperationNotice} />

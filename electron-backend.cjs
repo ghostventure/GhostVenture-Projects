@@ -106,6 +106,7 @@ const featureRecordSchema = z.object({
   record: z.record(z.string(), z.unknown()).refine((record) => Object.keys(record).length <= 100, 'A feature record can contain up to 100 fields.'),
 })
 const featureDeleteSchema = z.object({ collection: featureCollectionSchema, recordId: z.string().trim().min(1).max(160) })
+const configurableIdPrefixes = new Set(['cust', 'task', 'quote', 'invoice', 'expense', 'appointment', 'document'])
 const featureCollectionRoles = {
   dashboard: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
   tasks: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],
@@ -736,7 +737,31 @@ function now() {
 }
 
 function createId(prefix) {
+  if (state && configurableIdPrefixes.has(prefix)) {
+    const policy = (state.featureRecords?.security || []).find((item) => item?.id === 'record-id-policy')
+    const rule = (Array.isArray(policy?.rules) ? policy.rules : []).find((item) => item?.entity_prefix === prefix)
+    if (rule && /^[A-Z][A-Z0-9-]{1,7}$/.test(rule.prefix) && Number.isSafeInteger(rule.next_number) && rule.next_number > 0) {
+      let next = Math.max(rule.next_number, state.recordIdCounters?.[prefix] || 1)
+      let candidate = `${rule.prefix}-${String(next).padStart(5, '0')}`
+      while (stateContainsId(candidate)) candidate = `${rule.prefix}-${String(++next).padStart(5, '0')}`
+      if (!state.recordIdCounters) state.recordIdCounters = {}
+      state.recordIdCounters[prefix] = next + 1
+      rule.next_number = next + 1
+      return candidate
+    }
+  }
   return `${prefix}_${crypto.randomUUID()}`
+}
+
+function stateContainsId(id) {
+  const seen = new WeakSet()
+  const visit = (value) => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return false
+    seen.add(value)
+    if (value.id === id) return true
+    return Object.values(value).some(visit)
+  }
+  return visit(state)
 }
 
 function hashValue(value) {
@@ -758,6 +783,7 @@ function defaultState() {
       lastSuccessfulSignIn: '',
     },
     approvalRequests: [],
+    recordIdCounters: {},
     savedFormMemory: {
       profile: {},
       billing: {},
@@ -983,6 +1009,7 @@ function seed() {
   if (!Array.isArray(state.emailVerifications)) state.emailVerifications = []
   state.rememberedSignIn = { ...defaultState().rememberedSignIn, ...(state.rememberedSignIn || {}) }
   if (!Array.isArray(state.approvalRequests)) state.approvalRequests = []
+  state.recordIdCounters = state.recordIdCounters && typeof state.recordIdCounters === 'object' && !Array.isArray(state.recordIdCounters) ? state.recordIdCounters : {}
   state.savedFormMemory = { ...defaultState().savedFormMemory, ...(state.savedFormMemory || {}) }
   if (!Array.isArray(state.subscriptions)) state.subscriptions = []
   if (!Array.isArray(state.licenses)) state.licenses = []
@@ -1446,6 +1473,18 @@ function upsertFeatureRecord(payload = {}) {
   const input = featureRecordSchema.parse(payload)
   const { collection } = input
   requireRole(featureCollectionRoles[collection], `${collection} feature data update`)
+  if (collection === 'security' && input.record.id === 'record-id-policy') {
+    const rules = input.record.rules
+    if (!Array.isArray(rules) || rules.length > configurableIdPrefixes.size) throw new Error('Record ID policy must contain a valid list of entity rules.')
+    const entities = new Set()
+    const prefixes = new Set()
+    for (const rule of rules) {
+      if (!rule || !configurableIdPrefixes.has(rule.entity_prefix) || !/^[A-Z][A-Z0-9-]{1,7}$/.test(rule.prefix) || !Number.isSafeInteger(rule.next_number) || rule.next_number < 1 || rule.next_number > 999999999) throw new Error('Record ID rules need a supported entity, a 2–8 character uppercase prefix, and a next number from 1 to 999,999,999.')
+      if (entities.has(rule.entity_prefix) || prefixes.has(rule.prefix)) throw new Error('Each entity and custom prefix can appear only once in the record ID policy.')
+      entities.add(rule.entity_prefix)
+      prefixes.add(rule.prefix)
+    }
+  }
   let serialized
   try { serialized = JSON.stringify(input.record) } catch { throw new Error('Feature data must be a plain JSON record.') }
   if (Buffer.byteLength(serialized, 'utf8') > 65536) throw new Error('A feature record cannot exceed 64 KB.')
