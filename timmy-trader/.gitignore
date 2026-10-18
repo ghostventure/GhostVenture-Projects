@@ -1,6 +1,7 @@
 .env
 .timmy-profile.env
 .venv/
+.firebase/
 *.egg-info/
 __pycache__/
 *.pyc
