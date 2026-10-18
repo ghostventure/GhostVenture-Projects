@@ -86,23 +86,23 @@ Audited against the current main checkout, including `src/features/GrowthWorkspa
 | 80 | Customer account ownership rules | Partial | `src/features/GrowthWorkspace.jsx:9,25` stores an owner name; assignment rules or ownership enforcement are absent. |
 | 81 | Opportunity pipeline board | Implemented | `src/features/GrowthWorkspace.jsx:10,18,140-141`; sales records display as stage columns and move between stages. |
 | 82 | Custom sales stages | Implemented | `src/features/GrowthWorkspace.jsx:18,66-71,130`; saved opportunity stages become columns and drag/drop changes the stage. |
-| 83 | Opportunity probability weighting | Partial | `src/features/GrowthWorkspace.jsx:10,25` stores a probability percentage; no weighted pipeline amount is calculated. |
-| 84 | Deal forecasting | Partial | `src/features/GrowthWorkspace.jsx:10` stores deal amount/probability/close date, but no deal forecast; `src/features/CustomerFinanceWorkspace.jsx:167` is invoice/expense cash-flow planning instead. |
+| 83 | Opportunity probability weighting | Implemented | `src/features/SalesWorkspace.jsx:65,251,270` calculates and displays amount multiplied by probability for open deals. |
+| 84 | Deal forecasting | Implemented | `src/features/SalesWorkspace.jsx:70-83,249-257` groups open deal amounts and probability-weighted totals by expected close month. |
 | 85 | Quote generation | Already present | `src/App.jsx:1265-1276`; creates quotes; `src/App.jsx:198-202` can generate a quote PDF. |
 | 86 | Quote approval workflow | Already present | `src/App.jsx:1969-2130` management approval requests; `electron-backend.cjs:1686-1705,1833-1873` quote and approval operations. |
 | 87 | Product and service catalog | Blocked | Square import exposes catalog counts (`src/App.jsx:2771,2836`), but no editable catalog or product/service selection flow. |
 | 88 | Discount approval limits | Blocked | Quote approval exists, but no numeric discount thresholds or limit enforcement were found in `src/App.jsx`/`electron-backend.cjs`. |
-| 89 | Sales activity logging | Partial | `electron-backend.cjs:1686-1705` audits quote creation, but no opportunity-linked sales activity log/timeline. |
+| 89 | Sales activity logging | Implemented | `src/features/SalesWorkspace.jsx:93-99,283` saves dated call, meeting, demo, proposal, follow-up, and internal-note records linked by opportunity ID. |
 | 90 | Email-to-opportunity capture | Blocked | `src/features/CollaborationWorkspace.jsx:18-29` can save local messages; `:45-50` links email references manually, with no mail provider ingestion or opportunity relation. |
-| 91 | Sales territory rules | Partial | `src/features/GrowthWorkspace.jsx:10,25` stores territory text only; no assignment or visibility rules. |
-| 92 | Lead scoring | Partial | `src/features/GrowthWorkspace.jsx:10,25` stores a lead-score value; no score calculation. |
-| 93 | Lead assignment rules | Partial | `src/features/GrowthWorkspace.jsx:10,25` stores an owner; `src/features/ControlCenter.jsx:17-20,127-130` only saves non-executing automation rules. |
-| 94 | Lead conversion tracking | Partial | `src/features/GrowthWorkspace.jsx:18,66-71` stages records through Won/Lost; no conversion event or linked customer creation tracking. |
-| 95 | Lost-deal reason reports | Partial | `src/features/GrowthWorkspace.jsx:10,25` stores `lost_reason`; no lost-reason report/aggregation. |
-| 96 | Win-rate dashboards | Partial | `src/features/GrowthWorkspace.jsx:139` offers a “Win rate” layout label, but dashboard values are only calculated for Open tasks and Pipeline; other KPI values require manual entry. |
-| 97 | Sales commission estimates | Partial | `src/features/GrowthWorkspace.jsx:10,25` stores commission estimate text; no commission formula or report. |
-| 98 | Renewal opportunity creation | Partial | `src/features/GrowthWorkspace.jsx:143` has a Renewal lead template and customers have renewal fields; no automatic opportunity creation. |
-| 99 | Deal collaboration notes | Partial | `src/features/GrowthWorkspace.jsx:10` stores opportunity notes; `src/features/CollaborationWorkspace.jsx:6-29` stores local team messages but cannot attach them to an opportunity record. |
-| 100 | Sales playbook library | Partial | `src/features/GrowthWorkspace.jsx:143` provides generic New lead/Proposal/Renewal presets and `src/boilerplates.js` has workflow boilerplates; no dedicated sales playbook library. |
+| 91 | Sales territory rules | Implemented | `src/features/SalesWorkspace.jsx:156-167,277` maps territory labels to default owners and applies rules manually to unassigned open deals; it does not enforce data visibility. |
+| 92 | Lead scoring | Implemented | `src/features/SalesWorkspace.jsx:136-147,270` calculates a 0-100 score from explicit fit, need, budget, and timing ratings with documented weights. |
+| 93 | Lead assignment rules | Implemented | `src/features/SalesWorkspace.jsx:169-185,278` stores active territory/source/minimum-score rules and applies the first matching rule on user action; permissions are unchanged. |
+| 94 | Lead conversion tracking | Implemented | `src/features/SalesWorkspace.jsx:201-219,272,279` offers a reviewed Won-deal conversion, creates or matches a customer profile, links the opportunity, and saves a conversion event. |
+| 95 | Lost-deal reason reports | Implemented | `src/features/SalesWorkspace.jsx:85-92,258-261` groups closed Lost opportunities by saved reason, including unspecified reasons. |
+| 96 | Win-rate dashboards | Implemented | `src/features/SalesWorkspace.jsx:66-69,253` calculates Won / (Won + Lost) and shows closed deal counts. |
+| 97 | Sales commission estimates | Implemented | `src/features/SalesWorkspace.jsx:55-58,149-154,259-270` saves a local 0-100% rate and calculates estimates from deal amount; estimates are labeled as planning values. |
+| 98 | Renewal opportunity creation | Implemented | `src/features/SalesWorkspace.jsx:63,187-199,271` reads the customer-profile renewal date, resolves the core customer name when available, prevents duplicate open renewals, and creates a local opportunity. |
+| 99 | Deal collaboration notes | Implemented | `src/features/SalesWorkspace.jsx:93-99,283` logs internal notes against an opportunity using its ID, alongside dated sales activities. |
+| 100 | Sales playbook library | Implemented | `src/features/SalesWorkspace.jsx:221-239,288` manages editable playbook records and applies selected guidance to deal notes with an activity entry. |
 
 This is a code audit, not proof that a feature has been exercised with populated workspace data. No source files were changed and no tests, builds, or smoke checks were run for this documentation task.
