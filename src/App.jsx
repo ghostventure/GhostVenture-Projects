@@ -35,6 +35,11 @@ import { customerDatabaseSchema } from './customerDatabase'
 import { complianceBadges, helpArticles, legalDocuments, marketableFeatures, planTiers, supportChannels } from './productBlueprint'
 import { themes } from './themes'
 import GrowthWorkspace from './features/GrowthWorkspace'
+import CustomerFinanceWorkspace from './features/CustomerFinanceWorkspace'
+import PeopleOperationsWorkspace from './features/PeopleOperationsWorkspace'
+import SchedulingWorkspace from './features/SchedulingWorkspace'
+import DocumentControlWorkspace from './features/DocumentControlWorkspace'
+import CollaborationWorkspace from './features/CollaborationWorkspace'
 import { AccountGovernancePanel, FeatureWavePreferences, FieldAssistSection, SupportOperationsPanel } from './featureWave301400'
 import './App.css'
 
@@ -43,6 +48,11 @@ const navSections = [
   { id: 'reports', label: 'Reports', detail: 'Activity, revenue, and work summaries', icon: BarChart3 },
   { id: 'growth', label: 'Growth & Work', detail: 'Dashboards, tasks, projects, sales', icon: BriefcaseBusiness },
   { id: 'field-assist', label: 'Field & Assist', detail: 'Offline capture and reviewed local help', icon: Sparkles },
+  { id: 'scheduling', label: 'Scheduling', detail: 'Bookings, capacity, time and reminders', icon: CalendarDays },
+  { id: 'documents', label: 'Documents', detail: 'Records, retention and review control', icon: FileText },
+  { id: 'collaboration', label: 'Team & Comms', detail: 'Shared notes, contacts and preferences', icon: MessageSquareText },
+  { id: 'finance', label: 'Finance', detail: 'Invoices, expenses and close workflow', icon: ReceiptText },
+  { id: 'people', label: 'People', detail: 'Staff development and workload', icon: UserRoundCog },
   { id: 'work', label: 'Workflows', detail: 'Scheduling, answers, quotes', icon: Workflow },
   { id: 'customers', label: 'Customers', detail: 'Profiles, rules, service history', icon: Users },
   { id: 'imports', label: 'Import', detail: 'Microsoft 365 and Business Central', icon: CloudDownload },
@@ -540,6 +550,11 @@ function App() {
             {activeSection === 'reports' && <ReportsSection backendState={backendState} />}
             {activeSection === 'growth' && <GrowthWorkspace session={session} />}
             {activeSection === 'field-assist' && <FieldAssistSection backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'scheduling' && <SchedulingWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'documents' && <DocumentControlWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'collaboration' && <CollaborationWorkspace backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'finance' && <CustomerFinanceWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'people' && <PeopleOperationsWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
             {activeSection === 'work' && (
               <WorkflowsSection
                 activeModule={activeModule}
@@ -1342,6 +1357,11 @@ function sectionTitle(section) {
     reports: 'Workspace Reports',
     growth: 'Growth & Work Suite',
     'field-assist': 'Field & Assist',
+    scheduling: 'Scheduling & Time',
+    documents: 'Document Control',
+    collaboration: 'Team Collaboration',
+    finance: 'Finance Operations',
+    people: 'People Operations',
     work: 'Workflow Operations',
     customers: 'Customer Records',
     imports: 'Import From Microsoft',
@@ -1364,9 +1384,9 @@ function displayRole(role) {
 }
 
 function allowedSectionsForRole(role) {
-  const member = ['overview', 'growth', 'field-assist', 'work', 'customers', 'support', 'tools', 'security']
+  const member = ['overview', 'field-assist', 'scheduling', 'collaboration', 'work', 'customers', 'support', 'tools', 'security']
   if (role === 'Owner') return navSections.map((section) => section.id)
-  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, ...(role === 'Bookkeeper' ? ['reports'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
+  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'documents', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
   return member
 }
 
