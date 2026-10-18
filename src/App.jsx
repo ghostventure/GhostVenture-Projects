@@ -994,6 +994,29 @@ function PublicHelp() {
   )
 }
 
+const dashboardWidgets = [
+  ['status', 'Workspace status cards'],
+  ['profile', 'Workspace profile'],
+  ['standards', 'Operating principles'],
+  ['queue', 'Current work queue'],
+  ['checklist', 'Office readiness checklist'],
+  ['live-operations', 'Create appointments, quotes, and invoices'],
+  ['records', 'Operational records'],
+  ['compliance', 'Review badges'],
+]
+
+function readDashboardWidgetPreferences() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem('overhead.dashboard.widgets.v1') || 'null')
+    if (Array.isArray(saved)) {
+      const valid = new Set(dashboardWidgets.map(([id]) => id))
+      const selected = saved.filter((id) => valid.has(id))
+      return selected.length ? selected : dashboardWidgets.map(([id]) => id)
+    }
+  } catch {}
+  return dashboardWidgets.map(([id]) => id)
+}
+
 function OverviewSection({ session, secureView, integrity, backendState, refreshBackend, setOperationNotice }) {
   const queue = backendState.tasks.length ? backendState.tasks : actions
   const health = backendState.health
@@ -1001,6 +1024,24 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
   const [queueFilter, setQueueFilter] = useState('Open')
   const [taskQuery, setTaskQuery] = useState('')
   const [queueError, setQueueError] = useState('')
+  const [visibleWidgets, setVisibleWidgets] = useState(readDashboardWidgetPreferences)
+  const [customizeOpen, setCustomizeOpen] = useState(false)
+  const widgetSet = useMemo(() => new Set(visibleWidgets), [visibleWidgets])
+  useEffect(() => {
+    window.localStorage.setItem('overhead.dashboard.widgets.v1', JSON.stringify(visibleWidgets))
+  }, [visibleWidgets])
+  function toggleWidget(id) {
+    setVisibleWidgets((current) => {
+      if (current.includes(id)) {
+        if (current.length === 1) return current
+        return current.filter((item) => item !== id)
+      }
+      return [...current, id]
+    })
+  }
+  function resetDashboard() {
+    setVisibleWidgets(dashboardWidgets.map(([id]) => id))
+  }
   const taskCounts = useMemo(() => queue.reduce((counts, task) => {
     const status = task.status || 'Open'
     counts[status] = (counts[status] || 0) + 1
@@ -1036,13 +1077,25 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
 
   return (
     <section className="overview-layout">
-      <div className="dashboard-grid">
+      <div className="dashboard-customize-bar">
+        <p>Choose the panels that appear on your dashboard.</p>
+        <button className="ghost-button" type="button" aria-expanded={customizeOpen} onClick={() => setCustomizeOpen((open) => !open)}>{customizeOpen ? 'Done customizing' : 'Customize dashboard'}</button>
+      </div>
+      {customizeOpen && <fieldset className="dashboard-widget-picker">
+        <legend>Dashboard panels</legend>
+        {dashboardWidgets.map(([id, label]) => <label key={id}>
+          <input type="checkbox" checked={widgetSet.has(id)} onChange={() => toggleWidget(id)} />
+          <span>{label}</span>
+        </label>)}
+        <button className="text-button" type="button" onClick={resetDashboard}>Show all panels</button>
+      </fieldset>}
+      {widgetSet.has('status') && <div className="dashboard-grid">
         <StatusCard icon={LockKeyhole} title="Session" value={secureView ? 'Unlocked' : 'Protected'} note="Customer records mask when privacy mode is on." />
         <StatusCard icon={ShieldAlert} title="Review trail" value="Available" note="Use activity and integrity records to review important changes." />
         <StatusCard icon={Database} title="Customer DB" value={`${health?.customerCount ?? Object.keys(customerDatabaseSchema.tables).length} records`} note={health?.databaseExists ? 'Encrypted local store is online.' : 'Profiles, workflow preferences, receipts, and support tickets.'} />
-      </div>
+      </div>}
 
-      <div className="panel hero-panel">
+      {widgetSet.has('profile') && <div className="panel hero-panel">
         <div>
           <p className="eyebrow">Workspace Profile</p>
           <h2>{session.businessName || 'Business workspace'}</h2>
@@ -1054,15 +1107,15 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
           <ProfileItem label="Status" value={secureView ? 'Unlocked' : 'Protected'} />
           <ProfileItem label="Runtime" value={integrity?.status === 'clean' ? 'Clean' : 'Checking'} />
         </div>
-      </div>
+      </div>}
 
-      <section className="operating-standard" aria-label="OverHead operating standard">
+      {widgetSet.has('standards') && <section className="operating-standard" aria-label="OverHead operating standard">
         <div><span>CLARITY</span><strong>Make the next action and owner visible.</strong></div>
         <div><span>CONTROL</span><strong>Keep sensitive decisions explainable.</strong></div>
         <div><span>RECOVERY</span><strong>Leave a usable record and a path forward.</strong></div>
-      </section>
+      </section>}
 
-      <section className="panel action-panel">
+      {widgetSet.has('queue') && <section className="panel action-panel">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Action Queue</p>
@@ -1094,8 +1147,8 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
             </div>
           ))}
         </div>
-      </section>
-      <section className="panel action-panel">
+      </section>}
+      {widgetSet.has('checklist') && <section className="panel action-panel">
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Launch Checklist</p>
@@ -1108,10 +1161,10 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
             <span key={item.id}>{item.label} - {item.status}</span>
           ))}
         </div>
-      </section>
-      <LiveOperations backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />
-      <OperationalRecords backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />
-      <ComplianceBadges />
+      </section>}
+      {widgetSet.has('live-operations') && <LiveOperations backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
+      {widgetSet.has('records') && <OperationalRecords backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
+      {widgetSet.has('compliance') && <ComplianceBadges />}
     </section>
   )
 }
