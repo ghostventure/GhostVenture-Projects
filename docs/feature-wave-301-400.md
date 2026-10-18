@@ -54,7 +54,7 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 346 | Receipt photo capture | Blocked | No camera-to-receipt extraction/review workflow. |
 | 347 | Offline task updates | Already present | `ios/OverHeadIOS/Sources/WorkspaceStore.swift:26` Firestore snapshot listeners and `:51` task writes use Firestore client persistence/queue semantics; local field capture is also supported. |
 | 348 | Offline customer lookup | Already present | `ios/OverHeadIOS/Sources/WorkspaceStore.swift:29` customer snapshots; Firestore local cache supports previously synced records. |
-| 349 | Location-tagged visit notes | Blocked | No explicit location-consent, permission, retention, or data-minimization workflow; capture avoids automatic location. |
+| 349 | Location-tagged visit notes | Implemented | `src/featureWave301400.jsx` allows an optional manually entered site location only after an explicit confirmation, limits it to 300 characters, and stores/displays it with the encrypted local field note. No device location permission or GPS lookup is used. |
 | 350 | Mobile signature capture | Blocked | No native signature consent, capture, storage, or export flow. |
 | 351 | Field visit checklists | Implemented | `src/featureWave301400.jsx:131` encrypted visit checklist records. |
 | 352 | Mobile barcode scanning | Blocked | Requires native camera/scan permissions and barcode-to-record resolution. |

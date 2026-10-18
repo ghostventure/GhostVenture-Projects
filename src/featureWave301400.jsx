@@ -159,7 +159,7 @@ export function FieldAssistSection({ backendState, session, setOperationNotice }
   const [input, setInput] = useState('')
   const [results, setResults] = useState([])
   const [history, setHistory] = useState([])
-  const [fieldDraft, setFieldDraft] = useState({ title: '', note: '', customerId: '', minutes: '', checklist: '' })
+  const [fieldDraft, setFieldDraft] = useState({ title: '', note: '', customerId: '', minutes: '', checklist: '', location: '', locationConsent: false })
   const [mobileRecords, setMobileRecords] = useState([])
   const [undoChecklist, setUndoChecklist] = useState(null)
   const [error, setError] = useState('')
@@ -195,10 +195,11 @@ export function FieldAssistSection({ backendState, session, setOperationNotice }
   }
   async function captureFieldNote() {
     if (!fieldDraft.title.trim() && !fieldDraft.note.trim()) { setError('Add a short visit title or note before saving.'); return }
-    const record = { title: fieldDraft.title.trim() || 'Field visit', note: fieldDraft.note.trim(), customer_id: fieldDraft.customerId, minutes: Math.max(0, Number(fieldDraft.minutes) || 0), checklist: fieldDraft.checklist.split(/\n|,/).map((item) => item.trim()).filter(Boolean).slice(0, 20).map((label) => ({ label, done: false })), captured_at: new Date().toISOString(), captured_by: session.email, sync_status: 'Saved on this device' }
+    if (fieldDraft.location.trim() && !fieldDraft.locationConsent) { setError('Confirm that you are allowed to record this location before saving it.'); return }
+    const record = { title: fieldDraft.title.trim() || 'Field visit', note: fieldDraft.note.trim(), customer_id: fieldDraft.customerId, location: fieldDraft.locationConsent ? fieldDraft.location.trim().slice(0, 300) : '', location_recorded_with_consent: Boolean(fieldDraft.locationConsent && fieldDraft.location.trim()), minutes: Math.max(0, Number(fieldDraft.minutes) || 0), checklist: fieldDraft.checklist.split(/\n|,/).map((item) => item.trim()).filter(Boolean).slice(0, 20).map((label) => ({ label, done: false })), captured_at: new Date().toISOString(), captured_by: session.email, sync_status: 'Saved on this device' }
     try {
       const saved = await window.overheadBackend?.upsertFeatureRecord?.({ collection: 'mobile', record })
-      setMobileRecords((current) => [saved || record, ...current]); setFieldDraft({ title: '', note: '', customerId: '', minutes: '', checklist: '' }); setError('')
+      setMobileRecords((current) => [saved || record, ...current]); setFieldDraft({ title: '', note: '', customerId: '', minutes: '', checklist: '', location: '', locationConsent: false }); setError('')
       setOperationNotice('Field note saved in the encrypted local workspace.')
     } catch (reason) { setError(reason.message) }
   }
@@ -230,19 +231,21 @@ export function FieldAssistSection({ backendState, session, setOperationNotice }
     <div className="feature-wave-grid">
       <div className="backend-health field-capture">
         <strong>Field visit and offline capture</strong>
-        <p>Text and checklists are saved to the encrypted local workspace. When offline, capture stays on this device until OverHead can reach its local store. No location is collected automatically.</p>
+        <p>Text and checklists are saved to the encrypted local workspace. When offline, capture stays on this device until OverHead can reach its local store. Device location is never read. You may type a site location and explicitly confirm you are allowed to record it; omit it when it is not needed.</p>
         <LocalAudioNoteRecorder />
         <label>Visit title<input value={fieldDraft.title} onChange={(event) => setFieldDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Site visit" /></label>
         <label>Customer<select value={fieldDraft.customerId} onChange={(event) => setFieldDraft((current) => ({ ...current, customerId: event.target.value }))}><option value="">No customer selected</option>{(backendState.customers || []).map((customer) => <option key={customer.id} value={customer.id}>{customer.business_name || customer.owner_name || customer.email}</option>)}</select></label>
         {selectedCustomer?.phone && <a href={`tel:${selectedCustomer.phone}`}>Call {selectedCustomer.phone}</a>}
         {selectedCustomer?.service_area && <a href={`https://maps.google.com/?q=${encodeURIComponent(selectedCustomer.service_area)}`} target="_blank" rel="noreferrer">Directions to service area</a>}
         <label>Visit note<textarea value={fieldDraft.note} onChange={(event) => setFieldDraft((current) => ({ ...current, note: event.target.value }))} rows="3" placeholder="Record only the service details needed." /></label>
+        <label>Site location (optional)<input value={fieldDraft.location} maxLength={300} onChange={(event) => setFieldDraft((current) => ({ ...current, location: event.target.value }))} placeholder="Enter only the site detail needed for this visit" /></label>
+        {fieldDraft.location.trim() && <label className="checkbox-line"><input type="checkbox" checked={fieldDraft.locationConsent} onChange={(event) => setFieldDraft((current) => ({ ...current, locationConsent: event.target.checked }))} /><span>I am allowed to record this site location in the encrypted workspace.</span></label>}
         <label>Time spent (minutes)<input type="number" min="0" max="1440" value={fieldDraft.minutes} onChange={(event) => setFieldDraft((current) => ({ ...current, minutes: event.target.value }))} /></label>
         <label>Visit checklist (one step per line)<textarea value={fieldDraft.checklist} onChange={(event) => setFieldDraft((current) => ({ ...current, checklist: event.target.value }))} rows="3" placeholder="Confirm arrival\nReview requested work\nAgree on next step" /></label>
         <button className="mini-button" type="button" onClick={() => setFieldDraft((current) => ({ ...current, checklist: 'Review site access and hazards\nConfirm required protective equipment\nKeep customer and staff clear of active work area\nRecord any incident and notify the responsible manager' }))}>Use worksite safety checklist</button>
         <button className="primary-action" type="button" onClick={captureFieldNote}>Save field note</button>
         {undoChecklist && <button className="mini-button" type="button" onClick={undoChecklistChange}>Undo last checklist change</button>}
-        {mobileRecords.slice(0, 4).map((record) => <article key={record.id}><strong>{record.title}</strong><p>{record.note}</p><small>{record.minutes || 0} minutes · {record.sync_status || 'Saved locally'} · {new Date(record.captured_at || record.created_at).toLocaleString()}</small>{record.checklist?.map((item) => <label className="checkbox-line" key={item.label}><input type="checkbox" checked={item.done} onChange={(event) => updateChecklist(record, item, event.target.checked)} /><span>{item.label}</span></label>)}</article>)}
+        {mobileRecords.slice(0, 4).map((record) => <article key={record.id}><strong>{record.title}</strong><p>{record.note}</p>{record.location && record.location_recorded_with_consent && <p><strong>Site:</strong> {record.location}</p>}<small>{record.minutes || 0} minutes · {record.sync_status || 'Saved locally'} · {new Date(record.captured_at || record.created_at).toLocaleString()}</small>{record.checklist?.map((item) => <label className="checkbox-line" key={item.label}><input type="checkbox" checked={item.done} onChange={(event) => updateChecklist(record, item, event.target.checked)} /><span>{item.label}</span></label>)}</article>)}
         <small>Voice notes, photo/signature capture, barcode scanning, native home-screen widgets and push notifications require platform permissions and signed native integrations; none are simulated here.</small>
       </div>
       <div className="backend-health local-assist">
