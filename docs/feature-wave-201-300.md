@@ -1,6 +1,6 @@
 # OverHead feature wave 201–300
 
-Audited against the integrated OverHead 0.3.17 feature wave and its local workspaces. “Implemented” identifies new work in this wave; “Already present” identifies existing behavior or an integration point. “Blocked” means completing the listed behavior needs a service, data model, or identity/network capability the current desktop workspace does not have. Blocked rows name the missing prerequisite.
+Audited against the integrated OverHead 0.3.18 feature wave and its local workspaces. “Implemented” identifies new work in this wave; “Already present” identifies existing behavior or an integration point. “Blocked” means completing the listed behavior needs a service, data model, or identity/network capability the current desktop workspace does not have. Blocked rows name the missing prerequisite.
 
 The new report and rule modules use the encrypted local feature-record API. Reports include filters and metric definitions, while customer, project, billing, and security records remain in their existing stores. PDF output uses the operating system print dialog; delivery schedules are saved as requests only because the desktop runtime has no background report-delivery service.
 
