@@ -30,8 +30,8 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 222 | Trigger-based task creation | Implemented | `src/AutomationStudio.jsx`: Owner can evaluate matching customer, quote, overdue-invoice, and due-task events; matching records queue local jobs with deduplication. |
 | 223 | Status-change automations | Implemented | `src/AutomationStudio.jsx`: quote status audit events can trigger a task, optionally filtered by status. |
 | 224 | Deadline escalation rules | Implemented | `src/AutomationStudio.jsx`: due-task rule creates a review task; rule execution is Owner-triggered. |
-| 225 | Conditional approval routing | Blocked | Existing approvals are explicit requests, but no rule executor routes them; routing needs a permission-aware approval event model. |
-| 226 | Customer assignment automation | Blocked | Customer records have no assignment/territory ownership field to route against. |
+| 225 | Conditional approval routing | Blocked | `electron-backend.cjs` assigns explicit management requests to the requester manager and gates decisions to Owners, but there is no condition/threshold rule evaluator; task approval-chain transitions are currently renderer-enforced rather than backend-enforced. |
+| 226 | Customer assignment automation | Implemented | `src/features/CustomerManagementWorkspace.jsx`: owner rules match customer industry and health, validate an active staff owner, and apply assignments to customer profiles while preserving existing owners unless override is selected. Application is an explicit local action. |
 | 227 | Scheduled workflow runs | Already present | `electron-backend.cjs` stores `run_at` on workflow jobs and processes due jobs. |
 | 228 | Automation error inbox | Already present | `src/App.jsx` AutomationsSection filters Dead Letter jobs and shows their last error. |
 | 229 | Automation run history | Implemented | `src/AutomationStudio.jsx` records matched and queued run summaries in encrypted local records. |
@@ -41,7 +41,7 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 | 233 | Field update rules | Blocked | No generic field-update event pipeline or allowlisted update-rule executor exists. |
 | 234 | Duplicate record warnings | Already present | Microsoft import preview and commit detect duplicate email/source records in `electron-backend.cjs`. |
 | 235 | Recurring checklist generation | Implemented | `src/features/GrowthWorkspace.jsx`: manually generating a recurring task carries its checklist forward with items reset to unchecked. |
-| 236 | Notification routing rules | Blocked | Desktop notification toggle exists, but no channel/recipient routing model is available. |
+| 236 | Notification routing rules | Blocked | `src/features/GrowthWorkspace.jsx` supports per-task watchers and recipient-scoped local notices, but reusable event/role/channel routing rules and external notification delivery are not available. |
 | 237 | Automated customer follow-ups | Already present | Customer playbooks and follow-up boilerplates exist; automatic external sending remains disabled. |
 | 238 | Automated project status requests | Blocked | No project/status-request domain or project recipients exist. |
 | 239 | Workflow pause and resume | Implemented | `src/AutomationStudio.jsx` enables and pauses saved Owner rules. |
