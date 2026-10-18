@@ -67,13 +67,14 @@ async function main() {
   for (const hash of populated.uploadRequiredHashes || []) {
     if (!contents.has(hash)) throw new Error('Hosting requested an unchanged live file; stopping before release.')
     console.log(`Uploading ${contents.get(hash).length} bytes`)
-    const response = await upload.request({method:'POST', path:`/${hash}`, body:require('node:stream').Readable.from(contents.get(hash)), responseType:'stream', resolveOnHTTPError:true, signal:AbortSignal.timeout(1200000)})
+    const content = contents.get(hash)
+    const response = await upload.request({method:'POST', path:`/${hash}`, body:content, headers:{'content-length':String(content.length)}, responseType:'stream', resolveOnHTTPError:true, signal:AbortSignal.timeout(1200000), retries:3, retryMinTimeout:2500, retryMaxTimeout:10000})
     if (response.status >= 400) throw new Error(`Artifact upload failed: HTTP ${response.status}`)
     response.body.resume()
   }
   await api.patch(`/${created.name}`, {status:'FINALIZED'}, {queryParams:{updateMask:'status'}})
   if ((await liveRelease()).version.name !== source) throw new Error('The live site changed during upload. Re-run to preserve the newer site.')
-  const result = (await api.post(`/sites/${site}/releases`, {message:guideMode ? 'Publish illustrated desktop user guide and PDF with site navigation' : brochureMode ? 'Updated customer and investor brochures for Desktop 0.3.12' : `OverHead Desktop ${version}: Stripe connector improvements`}, {queryParams:{versionName:created.name}})).body
+  const result = (await api.post(`/sites/${site}/releases`, {message:guideMode ? 'Publish illustrated desktop user guide and PDF with site navigation' : brochureMode ? 'Updated customer and investor brochures' : `OverHead Desktop ${version}: local workflow and account controls`}, {queryParams:{versionName:created.name}})).body
   fs.writeFileSync(path.join(release, 'hosting-release.json'), JSON.stringify(result, null, 2))
   console.log(`Released ${result.name}`)
 }

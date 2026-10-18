@@ -6,4 +6,4 @@ These controls run through the desktop scheduler while OverHead is open and the 
 
 The feature audit now records **272 implemented**, **82 already present**, **9 partial**, and **37 blocked** items. See [the 400-item audit](feature-wave-400.md) and its linked range tables for evidence and prerequisites.
 
-Verification: the Vite production build succeeded; Electron opened the compiled app and rendered the OverHead workspace. Oxlint completed with warnings in existing, unrelated files. The Windows installer and live deployment are tracked separately from the source build.
+Verification: the Vite production build succeeded; the packaged Electron app opened and rendered the workspace. The live installer and portable ZIP matched the locally built artifacts, `latest.yml` reported 0.3.18, the prior download URL redirected to 0.3.18, and the refreshed user guide passed live desktop/mobile/search/PDF checks. Oxlint completed with warnings in existing, unrelated files.
