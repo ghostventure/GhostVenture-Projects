@@ -109,4 +109,4 @@ The new report and rule modules use the encrypted local feature-record API. Repo
 
 ## Verification boundary
 
-The report and automation modules are intentionally isolated for integration by the main OverHead agent. No production build or smoke test was run before the integrated project compiles. Provider-dependent integrations, unattended delivery, public API/webhook infrastructure, and absent project/time-history domains remain setup/data-model work rather than silently simulated behavior.
+The report and automation modules are integrated on the 0.3.16 feature branch. The integration and search workspaces use local review and export workflows; live third-party connections, unattended delivery, public API/webhook infrastructure, and missing historical source data remain prerequisites rather than silently simulated behavior. No production build or smoke test was run before all packs were integrated.

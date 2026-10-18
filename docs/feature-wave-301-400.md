@@ -1,6 +1,6 @@
 # Feature wave 301–400 audit
 
-Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API is included at `cda574b`. New components live in `src/featureWave301400.js` and use only the local encrypted API for workspace records. Root integration must mount the exported components in Settings, Support, and a Field & Assist navigation section before these views are reachable in the app. No tests or smoke run were performed before the integrated build, per the integration instruction.
+Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API is in `6df8a0c`. The components in `src/featureWave301400.js` are integrated into Settings, Accounts, Support, and Field & Assist on the 0.3.16 feature branch. No build or smoke run occurred before all four packs were integrated.
 
 “Implemented” means a concrete workflow exists in the new component. “Already present” identifies baseline behavior. “Blocked” means a safe implementation depends on native platform signing/permissions, a missing authenticated billing/mail integration, or backend state transitions the product does not currently expose. Rule-based suggestions are local and offline; no AI provider is configured or contacted.
 
@@ -116,4 +116,4 @@ Exported components for the app shell to mount:
 - `SupportOperationsPanel({ tickets, users, session, setOperationNotice })` inside Support.
 - `FieldAssistSection({ backendState, session, setOperationNotice })` under a role-appropriate Field & Assist section.
 
-`src/App.css` contains compact/responsive rules for these views. The account/accessibility/mobile/support/AI record paths are encrypted in OverHead’s local store and require an active staff session. Before release, integrate these components, globally apply locale changes if desired, and run the integrated lint/build followed by packaged verification.
+`src/App.css` contains compact/responsive rules for these views. The account/accessibility/mobile/support/AI record paths are encrypted in OverHead’s local store and require an active staff session. Locale choices currently show formatted previews; they are not applied globally to every existing date and number view.

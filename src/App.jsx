@@ -41,6 +41,9 @@ import SchedulingWorkspace from './features/SchedulingWorkspace'
 import DocumentControlWorkspace from './features/DocumentControlWorkspace'
 import CollaborationWorkspace from './features/CollaborationWorkspace'
 import ControlCenter from './features/ControlCenter'
+import { IntegrationStudio } from './IntegrationStudio'
+import { AutomationStudio } from './AutomationStudio'
+import { ReportStudio } from './ReportStudio'
 import { AccountGovernancePanel, FeatureWavePreferences, FieldAssistSection, SupportOperationsPanel } from './featureWave301400'
 import './App.css'
 
@@ -552,7 +555,7 @@ function App() {
                 setOperationNotice={setOperationNotice}
               />
             )}
-            {activeSection === 'reports' && <ReportsSection backendState={backendState} />}
+            {activeSection === 'reports' && <><ReportsSection backendState={backendState} /><ReportStudio backendState={backendState} sessionRole={session.role} setOperationNotice={setOperationNotice} /></>}
             {activeSection === 'growth' && <GrowthWorkspace session={session} />}
             {activeSection === 'field-assist' && <FieldAssistSection backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'scheduling' && <SchedulingWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
@@ -560,8 +563,8 @@ function App() {
             {activeSection === 'collaboration' && <CollaborationWorkspace backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'finance' && <CustomerFinanceWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
             {activeSection === 'people' && <PeopleOperationsWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
-            {activeSection === 'rule-center' && <ControlCenter area="automation" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
-            {activeSection === 'integrations' && <ControlCenter area="integrations" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'rule-center' && <AutomationStudio backendState={backendState} sessionRole={session.role} setOperationNotice={setOperationNotice} refreshBackend={refreshBackend} />}
+            {activeSection === 'integrations' && <IntegrationStudio backendState={backendState} sessionRole={session.role} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
             {activeSection === 'search' && <ControlCenter area="search" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'admin-security' && <ControlCenter area="security" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'work' && (
@@ -1399,7 +1402,7 @@ function displayRole(role) {
 function allowedSectionsForRole(role) {
   const member = ['overview', 'field-assist', 'scheduling', 'collaboration', 'search', 'work', 'customers', 'support', 'tools', 'security']
   if (role === 'Owner') return navSections.map((section) => section.id)
-  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'documents', 'rule-center', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
+  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'documents', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
   return member
 }
 
@@ -1886,7 +1889,7 @@ function SupportSection({ activeLegal, selectedLegal, setActiveLegal, session, b
           ))}
         </div>
       </div>
-      <SupportOperationsPanel tickets={sharedTickets} users={backendState.userProfiles || []} session={session} setOperationNotice={setOperationNotice} />
+      {(session.role === 'Owner' || session.role === 'Support') && <SupportOperationsPanel tickets={sharedTickets} users={backendState.userProfiles || []} session={session} setOperationNotice={setOperationNotice} />}
     </section>
   )
 }

@@ -105,4 +105,4 @@ Audit of the original feature inventory against baseline `3578fa7`. Implemented 
 | 199 | Collaboration activity stream | Implemented | Activity stream built from local collaboration records. |
 | 200 | Cross-team handoff notes | Implemented | Collaboration handoff records with source/destination teams. |
 
-Coverage count: 80 implemented in this wave, 11 already present in the baseline, and 9 blocked on infrastructure or binary/media support. The workspaces use the encrypted feature-record API and rely on parent integration to add navigation/rendering and pass backend state.
+Coverage count: 80 implemented in this wave, 11 already present in the baseline, and 9 blocked on infrastructure or binary/media support. The workspaces use the encrypted feature-record API and are now mounted in the app with role-based navigation. Finance is available to Owners and Bookkeepers; People is Owner-only.
