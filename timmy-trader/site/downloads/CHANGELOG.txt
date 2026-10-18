@@ -1,0 +1,12 @@
+Timmy release notes
+
+0.1.1 - October 18, 2026
+- Validate downloaded market-data symbols, fetch options, and OHLCV bars.
+- Improve native GUI navigation at narrower desktop widths.
+- Keep duplicate launches from terminating an existing Timmy session.
+- Coordinate Power Cycle through a lock-release handoff before relaunching.
+- Reject unsafe Debian package version strings before packaging changes files.
+- Keep trading in paper mode by default; no live-order behavior is enabled by this release.
+
+0.1.0 - July 23, 2026
+- Initial public Linux package.

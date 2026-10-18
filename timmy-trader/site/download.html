@@ -28,21 +28,29 @@
             <h2>Debian package</h2>
             <p>For Ubuntu, Debian, Linux Mint, Pop!_OS, and other Debian-style amd64 desktops.</p>
             <div class="actions">
-              <a class="button" href="downloads/timmy-trader_0.1.0_amd64.deb" download>Download .deb</a>
+              <a class="button" href="downloads/timmy-trader_0.1.1_amd64.deb" download>Download .deb</a>
               <a class="button secondary" href="downloads/SHA256SUMS.txt">Checksum</a>
             </div>
           </div>
           <div class="facts">
-            <div class="fact"><strong>File</strong><span>timmy-trader_0.1.0_amd64.deb</span></div>
-            <div class="fact"><strong>Release</strong><span>0.1.0</span></div>
+            <div class="fact"><strong>File</strong><span>timmy-trader_0.1.1_amd64.deb</span></div>
+            <div class="fact"><strong>Release</strong><span>0.1.1</span></div>
             <div class="fact"><strong>Architecture</strong><span>amd64</span></div>
-            <div class="fact"><strong>Built</strong><span>July 23, 2026</span></div>
+            <div class="fact"><strong>Built</strong><span>October 18, 2026</span></div>
           </div>
         </div>
         <h2 style="margin-top: 34px;">Install</h2>
         <pre class="terminal"><code>sha256sum -c SHA256SUMS.txt
-sudo apt install ./timmy-trader_0.1.0_amd64.deb
+sudo apt install ./timmy-trader_0.1.1_amd64.deb
 timmy-trader</code></pre>
+        <h2 style="margin-top: 34px;">What’s new in 0.1.1</h2>
+        <ul>
+          <li>Validates downloaded market symbols and price bars before strategy processing.</li>
+          <li>Adapts the native navigation to narrower desktop windows.</li>
+          <li>Improves duplicate-launch handling and the Power Cycle restart handoff.</li>
+          <li>Hardens package-version validation in the Debian build script.</li>
+        </ul>
+        <p><a href="downloads/CHANGELOG.txt">Read the release notes</a></p>
         <p class="fineprint">Live brokerage depends on your broker permissions, account setup, buying power, market hours, and Timmy's own safety settings.</p>
       </div>
     </main>

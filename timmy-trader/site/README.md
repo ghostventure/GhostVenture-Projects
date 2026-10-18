@@ -22,6 +22,7 @@ npx --yes firebase-tools deploy --only hosting --project timmy-tradesonauto
 
 ## Download Artifact
 
-`site/downloads/timmy-trader_0.1.0_amd64.deb` is intentionally included as the
-public Linux download package. Refresh `site/downloads/SHA256SUMS.txt` after
-replacing the package.
+`site/downloads/timmy-trader_0.1.1_amd64.deb` is the current public Linux
+download package. `site/downloads/CHANGELOG.txt` lists the 0.1.1 changes.
+Refresh `site/downloads/SHA256SUMS.txt` after replacing the package; checksums
+are relative to the `site/downloads/` directory.
