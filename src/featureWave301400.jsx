@@ -46,7 +46,13 @@ function localSuggestions(mode, input, backend = {}) {
     return Object.keys(counts).length ? [`Task counts by owner: ${Object.entries(counts).map(([owner, count]) => `${owner} ${count}`).join('; ')}`, max - min > 3 ? 'Consider reviewing assignments; the count spread is over three tasks.' : 'No large task-count imbalance detected. Complexity and working hours are not modeled.'] : ['No tasks with owner information are loaded.']
   }
   if (mode === 'report') return [`Local counts: ${customers.length} customers, ${tasks.length} tasks, ${appointments.length} appointments, ${quotes.length} quotes, ${invoices.length} invoices.`, `Suggested chart: ${text || 'open versus completed tasks'} grouped by status.`, 'No chart is generated or data sent to a provider; use Reports to filter and export records.']
-  if (mode === 'forecast') return [`Simple scenario from current local records: ${invoices.length} invoices × current average invoice amount.`, 'This is a count-based planning prompt, not a financial forecast; enter verified amounts and review assumptions in Reports.']
+  if (mode === 'forecast') {
+    const amount = Number(text.match(/(?:amount|value|target)\s*[:=]?\s*\$?([\d,]+(?:\.\d{1,2})?)/i)?.[1]?.replaceAll(',', ''))
+    const probability = Number(text.match(/(?:probability|chance|confidence)\s*[:=]?\s*(\d{1,3})\s*%?/i)?.[1])
+    if (!Number.isFinite(amount) || amount < 0 || !Number.isFinite(probability) || probability < 0 || probability > 100) return ['Enter verified assumptions in this format: amount=25000, probability=60%.', `This workspace currently has ${quotes.length} quotes and ${invoices.length} invoices; these counts are context only and are not treated as revenue.`, 'Scenario math is amount × probability. It is not accounting advice or a prediction.']
+    const weighted = amount * probability / 100
+    return [`Base amount: ${amount.toLocaleString()} at ${probability}% probability.`, `Weighted scenario: ${weighted.toLocaleString()}.`, `Range for this single opportunity: 0 to ${amount.toLocaleString()}.`, 'This transparent scenario uses only the assumptions you supplied; it is not a prediction, booked revenue, or accounting advice.']
+  }
   if (mode === 'automation') return ['Trigger: when a task is marked due or overdue.', 'Condition: task has a customer and assigned owner.', 'Action: queue a review reminder; do not send messages or change billing automatically.', `Context: ${text || 'add the workflow you want to describe'}`, 'Confirm the workflow and permissions before configuring it.']
   const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean)
   const clean = sentences.map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim()).filter(Boolean)
@@ -59,7 +65,7 @@ function localSuggestions(mode, input, backend = {}) {
   return ['Enter notes to generate a local draft.']
 }
 
-export function FeatureWavePreferences({ session, backendState, setOperationNotice }) {
+export function FeatureWavePreferences({ session, backendState, setOperationNotice, operationNotice }) {
   const [prefs, setPrefs] = useState({ ...defaultPreferences, notificationDigest: true, renewalReminder: true })
   const [ready, setReady] = useState(false)
   const [tour, setTour] = useState(0)
@@ -100,6 +106,20 @@ export function FeatureWavePreferences({ session, backendState, setOperationNoti
       oscillator.onended = () => context.close()
     } catch { setOperationNotice?.('Audio preview is unavailable in this environment.') }
   }
+  const lastNotice = useMemo(() => ({ value: operationNotice || '' }), [])
+  useEffect(() => {
+    if (!operationNotice || operationNotice === lastNotice.value) return
+    lastNotice.value = operationNotice
+    if (prefs.notificationSound === 'off') return
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      const context = new AudioContextClass()
+      const oscillator = context.createOscillator(); const gain = context.createGain()
+      oscillator.frequency.value = prefs.notificationSound === 'soft' ? 520 : 780
+      gain.gain.value = 0.025; oscillator.connect(gain); gain.connect(context.destination); oscillator.start(); oscillator.stop(context.currentTime + 0.12)
+      oscillator.onended = () => context.close()
+    } catch { /* Audio is optional; the notice remains visible. */ }
+  }, [operationNotice, prefs.notificationSound, lastNotice])
   const dateExample = useMemo(() => new Intl.DateTimeFormat(prefs.locale, { dateStyle: 'long' }).format(new Date()), [prefs.locale])
   const numberExample = useMemo(() => new Intl.NumberFormat(prefs.locale, { style: 'currency', currency: prefs.locale === 'de-DE' ? 'EUR' : prefs.locale === 'en-GB' ? 'GBP' : 'USD' }).format(1234.5), [prefs.locale])
   const tourSteps = ['Dashboard: review priorities and choose one next action.', 'Workflows: create appointments, quotes, invoices, and reminders.', 'Customers: keep only the minimum information needed for service.', 'Security: review access, privacy requests, and recovery.', 'Settings: choose display preferences and create local backups.']
@@ -217,6 +237,7 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
   const [internalNote, setInternalNote] = useState('')
   const [feedback, setFeedback] = useState(5)
   const [outageNotice, setOutageNotice] = useState('')
+  const [routingTarget, setRoutingTarget] = useState('Support lead')
   const [error, setError] = useState('')
   useEffect(() => {
     let active = true
@@ -226,9 +247,10 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
   const ticket = tickets.find((item) => item.id === selectedId) || tickets[0]
   const metadata = records.find((item) => item.ticket_id === ticket?.id) || {}
   const category = metadata.category || 'General inquiry'
+  const firstResponseAt = metadata.first_response_at || ''
   const priorities = { Low: 72, Normal: 24, High: 8, Urgent: 2 }
   const slaDeadline = ticket?.created_at ? new Date(new Date(ticket.created_at).getTime() + (priorities[ticket.priority] || 24) * 3600000) : null
-  const roundRobin = users.filter((user) => ['Owner', 'Support'].includes(user.role) && user.status === 'Active')
+  const roundRobin = users.filter((user) => ['Owner', 'Support', 'Bookkeeper'].includes(user.role) && user.status === 'Active')
   async function saveMeta(patch) {
     if (!ticket?.id) return
     const next = { ...metadata, ticket_id: ticket.id, category, ...patch, updated_by: session.email }
@@ -265,6 +287,10 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
     const currentIndex = roundRobin.findIndex((user) => user.email === metadata.assignee)
     await saveMeta({ assignee: roundRobin[(currentIndex + 1) % roundRobin.length].email })
   }
+  async function recordFirstResponse() {
+    if (firstResponseAt) return
+    await saveMeta({ first_response_at: new Date().toISOString(), first_response_by: session.email })
+  }
   const workload = roundRobin.map((user) => ({ email: user.email, count: records.filter((record) => record.assignee === user.email && !record.closed_at).length }))
   const macros = ['Thanks for the details. We will review the affected workflow and follow up with the next safe step.', 'We need one more detail to investigate: what did you expect to happen, and what happened instead?', 'This request is resolved. Please reply if the issue returns; we can reopen the record for review.']
   const [macroIndex, setMacroIndex] = useState(0)
@@ -277,6 +303,8 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
           <p><strong>{ticket.subject || 'Support request'}</strong> · {ticket.priority || 'Normal'} · {ticket.status || 'Open'}</p>
           <label>Category<select value={category} onChange={(event) => saveMeta({ category: event.target.value })}>{['General inquiry', 'Account access', 'Billing', 'Bug report', 'Data and privacy', 'Feature request', 'Service outage'].map((item) => <option key={item}>{item}</option>)}</select></label>
           <p>First-response target: {slaDeadline ? slaDeadline.toLocaleString() : 'Waiting for ticket timestamp'} · {slaDeadline && slaDeadline < new Date() ? 'Target elapsed — review for escalation.' : 'Target window active.'}</p>
+          <p>First response: {firstResponseAt ? `${new Date(firstResponseAt).toLocaleString()} by ${metadata.first_response_by || 'staff'}` : 'Not recorded'}</p>
+          {!firstResponseAt && <button className="mini-button" type="button" onClick={recordFirstResponse}>Record first response now</button>}
           <label>Escalation path<select value={metadata.escalation_path || 'support_lead'} onChange={(event) => saveMeta({ escalation_path: event.target.value })}><option value="support_lead">Support lead review</option><option value="workspace_owner">Workspace Owner review</option><option value="billing_owner">Billing owner review</option><option value="privacy_lead">Privacy/security owner review</option></select></label>
           <label>Assign support owner<select value={metadata.assignee || ''} onChange={(event) => saveMeta({ assignee: event.target.value })}><option value="">Unassigned</option>{roundRobin.map((user) => <option key={user.email} value={user.email}>{user.owner_name || user.email}</option>)}</select></label>
           <div className="button-row"><button className="mini-button" type="button" onClick={advanceRoundRobin}>Assign next in rotation</button><button className="mini-button" type="button" onClick={convertToProject}>Create follow-up project</button></div>
@@ -292,11 +320,13 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
       </div>
       <div>
         <strong>Workload at a glance</strong>{workload.map((row) => <p key={row.email}>{row.email}: {row.count} active assigned tickets</p>)}
-        <strong>Response-time report</strong><p>{tickets.filter((item) => item.created_at).length} ticket timestamps available. Targets: urgent 2h, high 8h, normal 24h, low 72h. First replies are not stored consistently, so actual response duration cannot be calculated.</p>
+        <strong>Response-time report</strong><p>{tickets.filter((item) => item.created_at).length} ticket timestamps available. Targets: urgent 2h, high 8h, normal 24h, low 72h. First-response durations use staff-recorded timestamps below and exclude tickets without a recorded response.</p>
+        <p>Recorded first responses: {tickets.filter((item) => records.some((record) => record.ticket_id === item.id && record.first_response_at)).length} · average elapsed: {(() => { const durations = tickets.map((item) => { const response = records.find((record) => record.ticket_id === item.id)?.first_response_at; return item.created_at && response ? new Date(response) - new Date(item.created_at) : null }).filter((value) => Number.isFinite(value) && value >= 0); return durations.length ? `${Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length / 60000)} minutes (${durations.length} recorded)` : 'not enough recorded responses' })()}</p>
+        <strong>Local support routing</strong><label>Route selected ticket to<select value={routingTarget} onChange={(event) => setRoutingTarget(event.target.value)}>{['Support lead', 'Workspace Owner', 'Billing owner', 'Privacy/security owner'].map((value) => <option key={value}>{value}</option>)}</select></label><button className="mini-button" type="button" onClick={() => { const role = routingTarget === 'Workspace Owner' ? 'Owner' : routingTarget === 'Billing owner' ? 'Bookkeeper' : routingTarget === 'Privacy/security owner' ? 'Owner' : 'Support'; const target = roundRobin.find((user) => user.role === role); if (!target) return setError(`No active ${role} profile is available for this route.`); saveMeta({ escalation_path: routingTarget.toLowerCase().replaceAll(' ', '_'), assignee: target.email, routed_at: new Date().toISOString() }) }}>Route selected ticket</button>
         <label>Help article feedback topic<input id="support-article-topic" placeholder="Article or FAQ title" /></label><label>Was it helpful?<select id="support-article-rating"><option>Yes</option><option>Partly</option><option>No</option></select></label><button className="mini-button" type="button" onClick={async () => { const topic = document.getElementById('support-article-topic')?.value.trim(); const helpful = document.getElementById('support-article-rating')?.value; if (!topic) return setError('Enter the article title first.'); try { const saved = await window.overheadBackend?.upsertFeatureRecord?.({ collection: 'support', record: { type: 'article_feedback', article: topic, helpful, created_by: session.email } }); setRecords((current) => [saved, ...current]); setOperationNotice?.('Help article feedback saved in the local support workspace.') } catch (reason) { setError(reason.message) } }}>Submit article feedback</button>
         <strong>Service outage notice draft</strong><textarea value={outageNotice} onChange={(event) => setOutageNotice(event.target.value)} rows="3" placeholder="Draft an incident update; do not include private customer details." /><button className="mini-button" type="button" onClick={publishOutageNotice}>Save draft locally</button>
         {records.filter((item) => item.type === 'outage_notice').map((item) => <p key={item.id}>Draft: {item.body}</p>)}
-        <small>Ticket response-time reporting uses available creation timestamps; assignment history and provider email routing are not available in this local-only view. Ticket macros are draft text only. Public notices require an approved publishing channel.</small>
+        <small>First-response reporting uses staff-recorded timestamps; email mailbox ingestion/forwarding are not available in this local-only view. Ticket macros are draft text only. Public notices require an approved publishing channel.</small>
       </div>
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}

@@ -3123,7 +3123,7 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
             <span><strong>Reduce motion</strong><small>Limit interface animation and scrolling effects.</small></span>
           </label>
         </div>
-        <FeatureWavePreferences session={session} backendState={backendState} setOperationNotice={setOperationNotice} />
+        <FeatureWavePreferences session={session} backendState={backendState} operationNotice={operationNotice} setOperationNotice={setOperationNotice} />
         <div className="profile-form">
           <div className="backend-health">
             <strong>Local workspace health</strong>

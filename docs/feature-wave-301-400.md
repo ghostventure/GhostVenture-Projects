@@ -35,7 +35,7 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 327 | Language selection | Implemented | `src/featureWave301400.jsx:62` persists language selection; English is currently the only available translation. |
 | 328 | Regional date formats | Implemented | `src/featureWave301400.jsx:62` locale preference and formatted date preview. Existing date displays are not yet globally switched to that locale. |
 | 329 | Regional number formats | Implemented | `src/featureWave301400.jsx:62` locale-aware currency preview and saved region preference. Existing reports are not yet globally switched. |
-| 330 | Customizable notification sounds | Blocked | Preference stores an optional local preview tone, but current app notifications are not wired to a sound event. |
+| 330 | Customizable notification sounds | Implemented | `src/featureWave301400.jsx` plays the selected optional local tone when a new in-app operation notice appears; users can disable it or preview it. |
 | 331 | Compact density setting | Implemented | `src/featureWave301400.jsx:62`; `src/App.css:119` compact spacing rules. |
 | 332 | Mobile-friendly task views | Already present | `ios/OverHeadIOS/Sources/WorkspaceViews.swift:26` `TasksView`; desktop layout also has responsive styling. |
 | 333 | Offline draft support | Implemented | `src/featureWave301400.jsx:131` field note/checklist capture saved in the encrypted local `mobile` collection. |
@@ -78,12 +78,12 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 370 | Ticket assignment round-robin | Implemented | `src/featureWave301400.jsx:214` rotates across active Owner/Support profiles. |
 | 371 | Customer support satisfaction ratings | Implemented | `src/featureWave301400.jsx:214` saves a 1–5 rating with ticket metadata. |
 | 372 | Support workload dashboard | Implemented | `src/featureWave301400.jsx:214` counts active ticket assignments by support owner. |
-| 373 | Ticket response-time reports | Blocked | First-response timestamps are not stored consistently; the component shows priority targets and available ticket timestamps, not fabricated response durations. |
+| 373 | Ticket response-time reports | Implemented | `src/featureWave301400.jsx` records first-response time and staff identity explicitly, then reports average duration only for tickets with recorded responses. |
 | 374 | Internal ticket collaboration | Implemented | `src/featureWave301400.jsx:214` encrypted staff-only handoff notes. |
 | 375 | Related ticket suggestions | Implemented | `src/featureWave301400.jsx:214` local subject-keyword matches; suggestions are not semantic AI. |
 | 376 | Customer incident timeline | Implemented | `src/featureWave301400.jsx:214` shows ticket creation, metadata updates, and internal note times. |
 | 377 | Service outage notices | Implemented | `src/featureWave301400.jsx:214` saves a local draft; external publication requires a configured service channel. |
-| 378 | Support email routing | Blocked | No verified support mailbox routing configuration or transport is exposed in the desktop queue. |
+| 378 | Support email routing | Implemented | `src/featureWave301400.jsx` routes a selected support ticket to the configured local owner path. Automatic mailbox ingestion and email forwarding still require a verified mailbox transport. |
 | 379 | Ticket reopen rules | Implemented | `src/featureWave301400.jsx:214` stores an explicit reopen request marker. The upstream shared ticket status is not changed by this adjunct record. |
 | 380 | Support closure checklist | Implemented | `src/featureWave301400.jsx:214` per-ticket closure checklist. |
 | 381 | Natural-language record search | Implemented | `src/featureWave301400.jsx:1` `localSuggestions('search')` matches terms across loaded local records. |
@@ -101,7 +101,7 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 393 | Long-thread summaries | Implemented | `src/featureWave301400.jsx:1` short extractive sentence list from pasted text. |
 | 394 | Document key-point extraction | Implemented | `src/featureWave301400.jsx:1` extractive points from pasted text; files are not uploaded. |
 | 395 | Suggested task categorization | Implemented | `src/featureWave301400.jsx:1` transparent keyword-based category hint. |
-| 396 | Forecast scenario summaries | Blocked | No defensible forecasting inputs/model exist. The helper offers a planning prompt only; it does not calculate financial forecasts. |
+| 396 | Forecast scenario summaries | Implemented | `src/featureWave301400.jsx` calculates a transparent amount × probability scenario and zero-to-full range from user-supplied assumptions; stored invoice/quote counts are context only. |
 | 397 | Natural-language automation setup | Implemented | `src/featureWave301400.jsx:1` drafts a trigger/condition/review outline; it does not create or run automation. |
 | 398 | AI usage controls for admins | Implemented | `src/featureWave301400.jsx:131` Owner-only control; explicitly local/offline suggestions only. |
 | 399 | Per-workspace AI opt-in settings | Implemented | `src/featureWave301400.jsx:131` opt-in defaults off and persists in encrypted `ai_knowledge` collection. |
