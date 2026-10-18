@@ -2085,3 +2085,5 @@ html[data-reduced-motion='true'] *::after {
     flex-direction: column;
   }
 }
+
+.nav-group{display:grid;gap:5px}.nav-group-heading{border:0;background:transparent;color:var(--muted);text-align:left;font-weight:700;padding:8px 10px;cursor:pointer}.nav-customizer{padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}.nav-customizer>div{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:6px;margin-top:8px}.nav-customizer label{font-size:11px}.nav-customizer input:not([type=checkbox]){width:62px;max-width:100%;margin-left:4px}.nav-customizer input[type=checkbox]{width:auto}

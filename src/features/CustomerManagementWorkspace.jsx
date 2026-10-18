@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFeatureRecords } from './FeatureWave101Helpers'
 import './CustomerManagementWorkspace.css'
 
-const tabs = ['Segments', 'Customer care', 'Duplicates', 'Feedback']
+const tabs = ['Segments', 'Customer care', 'Duplicates', 'Feedback', 'Profile tools']
 const checklistDefaults = ['Confirm primary contact', 'Record service requirements', 'Agree on preferred contact channel', 'Set first follow-up date']
 const emptyRows = []
 const clean = (value) => String(value || '').trim()
@@ -52,6 +52,10 @@ export default function CustomerManagementWorkspace({ backendState = {}, secureV
   const feedback = records.filter((record) => record.kind === 'customer_feedback').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
   const ownershipRules = records.filter((record) => record.kind === 'customer_ownership_rule')
   const followups = records.filter((record) => record.kind === 'customer_followup').sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))
+  const fieldDefinitions = records.filter((record) => record.kind === 'customer_field_definition')
+  const surveys = records.filter((record) => record.kind === 'customer_survey')
+  const surveyResponses = records.filter((record) => record.kind === 'customer_survey_response')
+  const relationships = records.filter((record) => record.kind === 'customer_relationship')
   const activeStaff = (backendState.userProfiles || []).filter((user) => (user.status || 'Active') === 'Active' && clean(user.email))
   const profileByCustomer = useMemo(() => new Map(profiles.map((profile) => [profile.customerId, profile])), [profiles])
   const selectedCustomer = customers.find((customer) => customer.id === selectedId) || customers[0]
@@ -112,6 +116,69 @@ export default function CustomerManagementWorkspace({ backendState = {}, secureV
     await save({ kind: 'customer_feedback', title: clean(feedbackDraft.subject), customerId: customer?.id || '', customerName: customer ? safeName(customer) : 'Unlinked', details: clean(feedbackDraft.details), status: feedbackDraft.status, createdAt: new Date().toISOString() })
     setFeedbackDraft({ customerId: '', subject: '', details: '', status: 'New' })
     setMessage('Feedback saved to the local customer inbox; no message was sent.')
+  }
+  async function addCustomerNote(event) {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    if (!selectedCustomer) throw new Error('Choose a customer first.')
+    const form = new FormData(event.currentTarget)
+    const body = clean(form.get('note'))
+    if (!body) return
+    const mentions = [...body.matchAll(/@([\w.+-]+@[\w.-]+)/g)].map((match) => match[1].toLowerCase())
+    const current = profileFor(selectedCustomer)
+    const note = { id: newId(), type: 'Internal note', body, mentions, createdAt: new Date().toISOString(), author: clean(backendState.currentUser?.email || '') }
+    await saveProfile(selectedCustomer, { interactions: [note, ...(current.interactions || [])] })
+    if (mentions.length) await save({ kind: 'customer_note_mention', customerId: selectedCustomer.id, noteId: note.id, mentions, body, createdAt: note.createdAt, status: 'Unread' })
+    formElement.reset()
+  }
+  async function addCustomField(event) {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    const form = new FormData(event.currentTarget)
+    const name = clean(form.get('name'))
+    if (!name) return
+    if (fieldDefinitions.some((field) => normalized(field.title) === normalized(name))) throw new Error('A custom field with that name already exists.')
+    await save({ kind: 'customer_field_definition', title: name, fieldType: clean(form.get('type')) || 'text', createdAt: new Date().toISOString() })
+    formElement.reset()
+    setMessage(`Custom field “${name}” is available on the selected customer.`)
+  }
+  async function saveCustomFieldValue(event) {
+    event.preventDefault()
+    if (!selectedCustomer) throw new Error('Choose a customer first.')
+    const form = new FormData(event.currentTarget)
+    const current = profileFor(selectedCustomer)
+    const customFields = { ...(current.customFields || {}), [String(form.get('fieldId'))]: clean(form.get('value')) }
+    await saveProfile(selectedCustomer, { customFields })
+  }
+  async function addSurvey(event) {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    const form = new FormData(event.currentTarget)
+    const title = clean(form.get('title'))
+    const question = clean(form.get('question'))
+    if (!title || !question) return
+    await save({ kind: 'customer_survey', title, question, status: 'Active', createdAt: new Date().toISOString() })
+    formElement.reset()
+  }
+  async function recordSurveyResponse(event, survey) {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    if (!selectedCustomer) throw new Error('Choose a customer first.')
+    const answer = clean(new FormData(event.currentTarget).get('answer'))
+    if (!answer) return
+    await save({ kind: 'customer_survey_response', surveyId: survey.id, surveyTitle: survey.title, customerId: selectedCustomer.id, customerName: safeName(selectedCustomer), answer, createdAt: new Date().toISOString() })
+    formElement.reset()
+  }
+  async function addRelationship(event) {
+    event.preventDefault()
+    const formElement = event.currentTarget
+    if (!selectedCustomer) throw new Error('Choose a customer first.')
+    const form = new FormData(event.currentTarget)
+    const relatedId = clean(form.get('relatedId'))
+    if (!relatedId || relatedId === selectedCustomer.id) throw new Error('Choose a different customer to relate.')
+    const existing = relationships.find((item) => item.customerId === selectedCustomer.id && item.relatedCustomerId === relatedId)
+    await save({ ...(existing || {}), kind: 'customer_relationship', customerId: selectedCustomer.id, relatedCustomerId: relatedId, relationship: clean(form.get('relationship')), createdAt: existing?.createdAt || new Date().toISOString() })
+    formElement.reset()
   }
   async function importWebsiteFeedback(event) {
     const input = event.currentTarget
@@ -229,6 +296,14 @@ export default function CustomerManagementWorkspace({ backendState = {}, secureV
       </>}
     </>}
     {tab === 'Duplicates' && <article className="task-row"><h3>Possible duplicate customers</h3><p>Exact normalized name/email matches from currently loaded local customer records. Review before acting; no records are merged or changed.</p>{duplicateGroups.map(({ key, group }) => <div key={key}><strong>{key.startsWith('email:') ? 'Email match' : 'Name match'}</strong>{group.map((customer) => <p key={customer.id}>{safeName(customer)} · {customer.email || 'no email'} · ID {customer.id}</p>)}</div>)}{!duplicateGroups.length && <p>No exact name or email duplicates found.</p>}</article>}
-    {tab === 'Feedback' && <div className="customer-management-grid"><article className="task-row"><h3>Import verified website feedback JSON</h3><p>Export an array of documents from the website&apos;s <code>product_feedback</code> collection. The importer validates message length, deduplicates by source ID, imports up to 50 records, and keeps the result in encrypted local storage.</p><input type="file" accept="application/json,.json" aria-label="Import website feedback JSON" onChange={(event) => importWebsiteFeedback(event).catch((reason) => setError(reason.message))} /><small>Accepted fields follow the current form: feedback_type, rating, message, follow_up, created_by_email, created_at, status, plus an optional source id.</small></article><form className="profile-form compact-form" onSubmit={(event) => addFeedback(event).catch((reason) => setError(reason.message))}><h3>Enter feedback locally</h3><label>Customer<select value={feedbackDraft.customerId} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, customerId: event.target.value })}><option value="">Unlinked feedback</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{safeName(customer)}</option>)}</select></label><label>Subject<input required value={feedbackDraft.subject} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, subject: event.target.value })} /></label><label>Feedback<textarea required rows="4" value={feedbackDraft.details} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, details: event.target.value })} /></label><button className="primary-action">Add to inbox</button></form><div className="task-list">{feedback.map((item) => <article className="task-row" key={item.id}><strong>{item.title}</strong><span>{item.customerName} · {new Date(item.createdAt || item.created_at).toLocaleString()} · {item.source || 'Local entry'}</span><p>{item.details}</p>{item.rating && <small>Rating: {item.rating}/5 · follow-up permission: {item.followUpPermission ? 'yes' : 'not granted'}</small>}<label>Status<select value={item.status} onChange={(event) => updateFeedback(item, event.target.value).catch((reason) => setError(reason.message))}><option>New</option><option>Reviewing</option><option>Resolved</option></select></label></article>)}{!feedback.length && <p>No customer feedback records.</p>}</div></div>}
+    {tab === 'Profile tools' && <>
+      <label className="customer-picker">Customer<select value={selectedCustomer?.id || ''} onChange={(event) => setSelectedId(event.target.value)}><option value="">Choose a customer</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{safeName(customer)}</option>)}</select></label>
+      <div className="customer-management-grid">
+        <article className="task-row"><h3>Custom customer fields</h3><p>Field definitions and values stay in the encrypted local customer workspace.</p><form className="profile-form compact-form" onSubmit={(event) => addCustomField(event).catch((reason) => setError(reason.message))}><label>Field name<input name="name" required maxLength="60" /></label><label>Type<select name="type"><option>text</option><option>number</option><option>date</option></select></label><button className="primary-action">Add field</button></form>{selectedCustomer && fieldDefinitions.map((field) => <form key={field.id} className="profile-form compact-form" onSubmit={(event) => saveCustomFieldValue(event).catch((reason) => setError(reason.message))}><label>{field.title}<input name="value" defaultValue={selectedProfile?.customFields?.[field.id] || ''} type={field.fieldType === 'number' ? 'number' : field.fieldType === 'date' ? 'date' : 'text'} /></label><input type="hidden" name="fieldId" value={field.id} /><button className="ghost-button">Save value</button></form>)}</article>
+        <article className="task-row"><h3>Internal notes and mentions</h3><p>Use @name@example.com to record an encrypted local mention inbox item. No message is sent.</p>{selectedCustomer && <form className="profile-form compact-form" onSubmit={(event) => addCustomerNote(event).catch((reason) => setError(reason.message))}><label>Note<textarea name="note" required rows="3" maxLength="1200" /></label><button className="primary-action">Save internal note</button></form>}{(selectedProfile?.interactions || []).filter((item) => item.type === 'Internal note').map((note) => <p key={note.id}>{note.createdAt ? new Date(note.createdAt).toLocaleString() : ''} · {note.body}<small>{note.mentions?.length ? ` Mentioned: ${note.mentions.join(', ')}` : ''}</small></p>)}</article>
+        <article className="task-row"><h3>Customer satisfaction surveys</h3><p>Create local question templates and record responses during a customer conversation. No invitations are sent.</p><form className="profile-form compact-form" onSubmit={(event) => addSurvey(event).catch((reason) => setError(reason.message))}><label>Survey title<input name="title" required maxLength="80" /></label><label>Question<input name="question" required maxLength="240" /></label><button className="primary-action">Create survey</button></form>{surveys.filter((survey) => survey.status === 'Active').map((survey) => <div key={survey.id}><strong>{survey.title}</strong><p>{survey.question}</p>{selectedCustomer && <form className="profile-form compact-form" onSubmit={(event) => recordSurveyResponse(event, survey).catch((reason) => setError(reason.message))}><label>Response<input name="answer" required maxLength="1200" /></label><button className="ghost-button">Record response for {safeName(selectedCustomer)}</button></form>}{surveyResponses.filter((response) => response.surveyId === survey.id).map((response) => <small key={response.id}>{response.customerName} � {response.answer}</small>)}</div>)}</article>
+        <article className="task-row"><h3>Customer relationships</h3><p>Maintain an explicit local relationship map between loaded customer records.</p>{selectedCustomer && <form className="profile-form compact-form" onSubmit={(event) => addRelationship(event).catch((reason) => setError(reason.message))}><label>Related customer<select name="relatedId" required defaultValue=""><option value="">Choose customer</option>{customers.filter((customer) => customer.id !== selectedCustomer.id).map((customer) => <option key={customer.id} value={customer.id}>{safeName(customer)}</option>)}</select></label><label>Relationship<input name="relationship" required placeholder="Parent, subsidiary, referral partner" /></label><button className="primary-action">Save relationship</button></form>}{relationships.filter((item) => item.customerId === selectedCustomer?.id).map((item) => <p key={item.id}>{item.relationship} ? {safeName(customers.find((customer) => customer.id === item.relatedCustomerId) || {})}</p>)}</article>
+      </div>
+    </>}    {tab === 'Feedback' && <div className="customer-management-grid"><article className="task-row"><h3>Import verified website feedback JSON</h3><p>Export an array of documents from the website&apos;s <code>product_feedback</code> collection. The importer validates message length, deduplicates by source ID, imports up to 50 records, and keeps the result in encrypted local storage.</p><input type="file" accept="application/json,.json" aria-label="Import website feedback JSON" onChange={(event) => importWebsiteFeedback(event).catch((reason) => setError(reason.message))} /><small>Accepted fields follow the current form: feedback_type, rating, message, follow_up, created_by_email, created_at, status, plus an optional source id.</small></article><form className="profile-form compact-form" onSubmit={(event) => addFeedback(event).catch((reason) => setError(reason.message))}><h3>Enter feedback locally</h3><label>Customer<select value={feedbackDraft.customerId} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, customerId: event.target.value })}><option value="">Unlinked feedback</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{safeName(customer)}</option>)}</select></label><label>Subject<input required value={feedbackDraft.subject} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, subject: event.target.value })} /></label><label>Feedback<textarea required rows="4" value={feedbackDraft.details} onChange={(event) => setFeedbackDraft({ ...feedbackDraft, details: event.target.value })} /></label><button className="primary-action">Add to inbox</button></form><div className="task-list">{feedback.map((item) => <article className="task-row" key={item.id}><strong>{item.title}</strong><span>{item.customerName} · {new Date(item.createdAt || item.created_at).toLocaleString()} · {item.source || 'Local entry'}</span><p>{item.details}</p>{item.rating && <small>Rating: {item.rating}/5 · follow-up permission: {item.followUpPermission ? 'yes' : 'not granted'}</small>}<label>Status<select value={item.status} onChange={(event) => updateFeedback(item, event.target.value).catch((reason) => setError(reason.message))}><option>New</option><option>Reviewing</option><option>Resolved</option></select></label></article>)}{!feedback.length && <p>No customer feedback records.</p>}</div></div>}
   </section>
 }

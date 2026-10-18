@@ -180,6 +180,11 @@ function App() {
   const [launching, setLaunching] = useState(true)
   const [authMode, setAuthMode] = useState('team')
   const [verification, setVerification] = useState({ email: '', code: '', delivery: null })
+  const [navLabels, setNavLabels] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.navLabels.v1') || '{}') } catch { return {} } })
+  const [favoritePages, setFavoritePages] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.favoritePages.v1') || '[]') } catch { return [] } })
+  const [shortcutKeys, setShortcutKeys] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.navShortcuts.v1') || '{}') } catch { return {} } })
+  const [collapsedNavGroups, setCollapsedNavGroups] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.navCollapsed.v1') || '{}') } catch { return {} } })
+  const [navCustomizeOpen, setNavCustomizeOpen] = useState(false)
 
   const selectedModule = useMemo(
     () => modules.find((module) => module.id === activeModule) ?? modules[0],
@@ -191,6 +196,29 @@ function App() {
   )
   const secureView = session.signedIn && !privacyMode
   const teamSections = allowedSectionsForRole(session.role)
+  const navGroups = useMemo(() => {
+    const visibleSections = allowedSectionsForRole(session.role)
+    const groups = { Workspace: [], Operations: [], Administration: [] }
+    const administration = ['accounts', 'licenses', 'plans', 'payments', 'security', 'admin-security', 'settings', 'support']
+    const operations = ['scheduling', 'documents', 'collaboration', 'finance', 'people', 'rule-center', 'integrations', 'automations', 'evidence', 'imports', 'work', 'customers', 'square', 'tools']
+    navSections.filter((section) => visibleSections.includes(section.id)).forEach((section) => groups[administration.includes(section.id) ? 'Administration' : operations.includes(section.id) ? 'Operations' : 'Workspace'].push(section))
+    return Object.entries(groups).filter(([, items]) => items.length)
+  }, [session.role])
+  useEffect(() => { window.localStorage.setItem('overhead.navLabels.v1', JSON.stringify(navLabels)) }, [navLabels])
+  useEffect(() => { window.localStorage.setItem('overhead.favoritePages.v1', JSON.stringify(favoritePages)) }, [favoritePages])
+  useEffect(() => { window.localStorage.setItem('overhead.navShortcuts.v1', JSON.stringify(shortcutKeys)) }, [shortcutKeys])
+  useEffect(() => { window.localStorage.setItem('overhead.navCollapsed.v1', JSON.stringify(collapsedNavGroups)) }, [collapsedNavGroups])
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (!(event.altKey && event.shiftKey) || event.ctrlKey || event.metaKey) return
+      const key = event.key.toLowerCase()
+      const visibleSections = allowedSectionsForRole(session.role)
+      const section = navSections.find((item) => visibleSections.includes(item.id) && String(shortcutKeys[item.id] || '').toLowerCase() === key)
+      if (section) { event.preventDefault(); setActiveSection(section.id) }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [session.role, shortcutKeys])
   const quickCommands = [
     { id: 'today', label: 'Open Current Work', area: 'Navigation', detail: 'Jump to the dashboard queue.', action: () => setActiveSection('overview') },
     { id: 'customers', label: 'Open Customer Records', area: 'Navigation', detail: 'Review profiles and workflow rules.', action: () => setActiveSection('customers') },
@@ -486,7 +514,10 @@ function App() {
           </div>
 
           <nav className="nav-list">
-            {navSections.filter((section) => teamSections.includes(section.id)).map((section) => {
+            <button className="ghost-button" type="button" onClick={() => setNavCustomizeOpen((open) => !open)} aria-expanded={navCustomizeOpen}>{navCustomizeOpen ? 'Close navigation editor' : 'Customize navigation'}</button>
+            {favoritePages.filter((id) => teamSections.includes(id)).length > 0 && <div className="nav-group"><strong>Favorites</strong>{favoritePages.filter((id) => teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; return <button className={section.id === activeSection ? 'nav-item active' : 'nav-item'} type="button" key={`favorite-${id}`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{navLabels[id] || section.label}</strong><small>Favorite page</small></span></button> })}</div>}
+            {navCustomizeOpen && <details className="nav-customizer" open><summary>Labels, favorites and shortcuts</summary>{navSections.filter((section) => teamSections.includes(section.id)).map((section) => <div key={`pref-${section.id}`}><label>{section.label}<input aria-label={`Custom label for ${section.label}`} maxLength={28} value={navLabels[section.id] || ''} placeholder={section.label} onChange={(event) => setNavLabels((current) => ({ ...current, [section.id]: event.target.value }))}/></label><label><input type="checkbox" checked={favoritePages.includes(section.id)} onChange={(event) => setFavoritePages((current) => event.target.checked ? [...new Set([...current, section.id])] : current.filter((id) => id !== section.id))}/>Favorite</label><label>Alt+Shift+<input aria-label={`Shortcut key for ${section.label}`} maxLength={1} value={shortcutKeys[section.id] || ''} onChange={(event) => setShortcutKeys((current) => { const key = event.target.value.slice(-1); const next = Object.fromEntries(Object.entries(current).filter(([id, assigned]) => id === section.id || !key || String(assigned).toLowerCase() !== key.toLowerCase())); return { ...next, [section.id]: key } })}/></label></div>)}</details>}
+            {navGroups.map(([group, groupSections]) => <div className="nav-group" key={group}><button className="nav-group-heading" type="button" aria-expanded={!collapsedNavGroups[group]} onClick={() => setCollapsedNavGroups((current) => ({ ...current, [group]: !current[group] }))}>{group}</button>{!collapsedNavGroups[group] && groupSections.map((section) => {
               const Icon = section.icon
               const badge = navBadge(section.id, backendState)
               return (
@@ -498,13 +529,13 @@ function App() {
                 >
                   <Icon size={18} />
                   <span>
-                    <strong>{section.label}</strong>
+                    <strong>{navLabels[section.id] || section.label}</strong>
                     <small>{section.detail}</small>
                   </span>
                   {badge && <em>{badge}</em>}
                 </button>
               )
-            })}
+            })}</div>)}
           </nav>
 
           <div className="sidebar-account">
@@ -722,7 +753,7 @@ function CommandCenter({ commands, onRun, onClose, backendState }) {
             <p className="eyebrow">Command Center</p>
             <h2>Move fast without hunting</h2>
           </div>
-          <button className="icon-button" type="button" aria-label="Close command center" onClick={onClose}>×</button>
+          <button className="icon-button" type="button" aria-label="Close command center" onClick={onClose}>Ã—</button>
         </div>
         <div className="command-search-readout">
           <Search size={17} />
@@ -768,7 +799,7 @@ function OperationsDrawer({ backendState, integrity, operationNotice, onClose, s
           <p className="eyebrow">Live Desk</p>
           <h2>Operations drawer</h2>
         </div>
-        <button className="icon-button" type="button" aria-label="Close operations drawer" onClick={onClose}>×</button>
+        <button className="icon-button" type="button" aria-label="Close operations drawer" onClick={onClose}>Ã—</button>
       </div>
       <div className="ops-metrics">
         {metrics.map((metric) => (
@@ -901,7 +932,7 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
           OverHead helps a small office see the next action, keep its context, and retain control of sensitive decisions without forcing an enterprise-sized system on the team.
         </p>
         <div className="login-command-stack">
-          <Proof title="Clarity" text="See what needs an answer, approval, payment nudge, or follow-up—and who owns it." />
+          <Proof title="Clarity" text="See what needs an answer, approval, payment nudge, or follow-upâ€”and who owns it." />
           <Proof title="Control" text="Keep important customer context close while roles and review points protect sensitive changes." />
           <Proof title="Recovery" text="Use local backups, support bundles, and activity history to understand and resolve problems." />
         </div>
@@ -1336,12 +1367,12 @@ function ExpenseLedger({ backendState, refreshBackend, setOperationNotice }) {
       <label>Notes<input value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Optional note" /></label>
       <button className="primary-action" type="button" onClick={submitExpense}>Submit expense</button>
     </div>
-    <div className="section-head expense-report-head"><div><p className="eyebrow">Budget vs actual</p><h3>{money(summary.actual)} recorded · {money(summary.budget)} budgeted</h3></div><label>Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label></div>
+    <div className="section-head expense-report-head"><div><p className="eyebrow">Budget vs actual</p><h3>{money(summary.actual)} recorded Â· {money(summary.budget)} budgeted</h3></div><label>Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label></div>
     <div className="profile-form compact-form expense-budget-form"><label>Budget category<select value={budgetDraft.category} onChange={(event) => setBudgetDraft({ ...budgetDraft, category: event.target.value })}>{EXPENSE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label><label>Monthly budget<input type="number" min="0" step="0.01" value={budgetDraft.amount} onChange={(event) => setBudgetDraft({ ...budgetDraft, amount: event.target.value })} placeholder="0.00" /></label><button className="ghost-button" type="button" onClick={saveBudget}>Save category budget</button></div>
     {summary.categories.length > 0 && <div className="task-list">{summary.categories.map((item) => <div className="task-row" key={item.category}><strong>{item.category}</strong><span>Actual {money(item.actual)}</span><span>Budget {money(item.budget)}</span><span>{item.variance >= 0 ? `${money(item.variance)} remaining` : `${money(-item.variance)} over`}</span></div>)}</div>}
     <div className="task-list">{expenses.filter((item) => item.expense_date.startsWith(month)).map((item) => {
       const statuses = item.status === 'Pending' ? ['Pending', 'Approved', 'Rejected'] : item.status === 'Approved' ? ['Pending', 'Approved', 'Rejected', 'Paid'] : item.status === 'Rejected' ? ['Rejected', 'Pending'] : ['Paid']
-      return <div className="task-row" key={item.id}><strong>{item.title}<small className="expense-meta">{item.vendor} · {item.category} · {item.expense_date}</small></strong><span>{money(item.amount)}</span><label><span className="sr-only">Expense status</span><select value={item.status} onChange={(event) => setStatus(item.id, event.target.value)}>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label></div>
+      return <div className="task-row" key={item.id}><strong>{item.title}<small className="expense-meta">{item.vendor} Â· {item.category} Â· {item.expense_date}</small></strong><span>{money(item.amount)}</span><label><span className="sr-only">Expense status</span><select value={item.status} onChange={(event) => setStatus(item.id, event.target.value)}>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label></div>
     })}{!expenses.some((item) => item.expense_date.startsWith(month)) && <p className="queue-empty">No expenses recorded for {month}.</p>}</div>
     {error && <p className="form-error">{error}</p>}
   </section>
@@ -1457,7 +1488,7 @@ function WorkflowsSection({ activeModule, selectedModule, setActiveModule, refre
           <div className="builder-row">
             <Step number="1" title="Capture only what is needed" text="Collect the required context and customer permission; do not add sensitive details by habit." />
             <Step number="2" title="Assign and review" text={`Set the responsible role, then use an owner approval point when ${selectedModule.label.toLowerCase()} could change money, access, records, or a customer outcome.`} />
-            <Step number="3" title="Act and retain context" text="Draft, schedule, invoice, or create the next task—then keep the decision, handoff, and recovery path understandable." />
+            <Step number="3" title="Act and retain context" text="Draft, schedule, invoice, or create the next taskâ€”then keep the decision, handoff, and recovery path understandable." />
           </div>
           <div className="workflow-standard">
             <span><strong>Owner</strong> {selectedModule.owner}</span>
@@ -1575,7 +1606,7 @@ function CustomersSection({ secureView, customers, backendState, refreshBackend,
             {matchingCustomers.map((item) => (
               <button className={item.id === customer.id ? 'customer-list-item active' : 'customer-list-item'} type="button" key={item.id} onClick={() => setSelectedCustomerId(item.id)}>
                 <strong className={!secureView ? 'masked-text' : ''}>{secureView ? item.business_name : 'Protected record'}</strong>
-                <span className={!secureView ? 'masked-text' : ''}>{secureView ? `${item.industry || 'General services'} · ${item.service_area || 'Local'}` : 'Unlock to view details'}</span>
+                <span className={!secureView ? 'masked-text' : ''}>{secureView ? `${item.industry || 'General services'} Â· ${item.service_area || 'Local'}` : 'Unlock to view details'}</span>
               </button>
             ))}
             {!matchingCustomers.length && <p className="customer-empty">No customer records match that search.</p>}
@@ -1584,20 +1615,20 @@ function CustomersSection({ secureView, customers, backendState, refreshBackend,
         <div className="customer-record">
           <span className="customer-record-label">Selected customer</span>
           <strong className={!secureView ? 'masked-text' : ''}>{secureView ? customer.business_name : 'Protected customer record'}</strong>
-          <span className={!secureView ? 'masked-text' : ''}>{secureView ? `${customer.industry || 'General services'} · ${customer.service_area || 'Local'}` : 'Customer details masked until unlock'}</span>
+          <span className={!secureView ? 'masked-text' : ''}>{secureView ? `${customer.industry || 'General services'} Â· ${customer.service_area || 'Local'}` : 'Customer details masked until unlock'}</span>
           <div className="customer-detail-grid">
             <span><small>Contact</small><b className={!secureView ? 'masked-text' : ''}>{secureView ? (customer.preferred_contact || 'Email') : 'Hidden'}</b></span>
             <span><small>Owner</small><b className={!secureView ? 'masked-text' : ''}>{secureView ? (customer.owner_name || 'Not added') : 'Hidden'}</b></span>
             <span><small>Status</small><b>{customer.status || 'Active'}</b></span>
           </div>
           <p><b>Quote rule:</b> {secureView ? (workflow.quote_rules || 'No quote rule has been added yet.') : 'Workflow rules are hidden while protected mode is active.'}</p>
-          <p><b>Operating playbook:</b> {secureView ? (workflow.playbook_name || 'Not selected yet — use Automations to apply one.') : 'Playbook details are hidden while protected mode is active.'}</p>
+          <p><b>Operating playbook:</b> {secureView ? (workflow.playbook_name || 'Not selected yet â€” use Automations to apply one.') : 'Playbook details are hidden while protected mode is active.'}</p>
           <button className="ghost-button" type="button" onClick={createPortalInvite}>Create Customer Access Invitation</button>
           {inviteNotice && <p className="form-error">{inviteNotice}</p>}
           <div className="document-vault">
             <strong>Customer documents</strong>
             <div className="document-upload-row"><FormField label="Document label" value={documentLabel} onChange={setDocumentLabel} placeholder="Optional label" /><button className="ghost-button" type="button" onClick={attachDocument}>Attach Document</button></div>
-            {customerDocuments.map((document) => <button className="text-button" type="button" key={document.id} onClick={() => openDocument(document.id)}>{document.label} · {(Number(document.byte_size || 0) / 1024).toFixed(1)} KB</button>)}
+            {customerDocuments.map((document) => <button className="text-button" type="button" key={document.id} onClick={() => openDocument(document.id)}>{document.label} Â· {(Number(document.byte_size || 0) / 1024).toFixed(1)} KB</button>)}
             {!customerDocuments.length && <small>No documents attached to this customer.</small>}
           </div>
         </div>
@@ -1735,9 +1766,9 @@ function AutomationsSection({ backendState, refreshBackend, setOperationNotice }
           </label>
           <label>Playbook
             <select value={playbookTemplate} onChange={(event) => setPlaybookTemplate(event.target.value)}>
-              <option value="intake-control">Intake Control — collect details before booking</option>
-              <option value="quote-approval">Quote Approval — owner reviews exceptions</option>
-              <option value="payment-followup">Payment Follow-up — clear reminder and escalation rules</option>
+              <option value="intake-control">Intake Control â€” collect details before booking</option>
+              <option value="quote-approval">Quote Approval â€” owner reviews exceptions</option>
+              <option value="payment-followup">Payment Follow-up â€” clear reminder and escalation rules</option>
             </select>
           </label>
           <button className="primary-action" type="button" onClick={applyPlaybook}>Apply Playbook</button>
@@ -1745,7 +1776,7 @@ function AutomationsSection({ backendState, refreshBackend, setOperationNotice }
       </div>
       <div className="job-strip">
         {displayedJobs.slice(0, 6).map((job) => (
-          <span key={job.id}>{job.status} · {job.title}</span>
+          <span key={job.id}>{job.status} Â· {job.title}</span>
         ))}
         {!displayedJobs.length && <span>No automation jobs match that filter.</span>}
       </div>
@@ -1884,7 +1915,7 @@ function SupportSection({ activeLegal, selectedLegal, setActiveLegal, session, b
           <div className="support-item">
             <strong>Shared support queue</strong>
             <button className="ghost-button" type="button" onClick={refreshSharedTickets}>Refresh queue</button>
-            {sharedTickets.slice(0, 8).map((ticket) => <p key={ticket.id}><b>{ticket.priority || 'Normal'}</b> — {ticket.subject || 'Support request'} ({ticket.status || 'Open'})</p>)}
+            {sharedTickets.slice(0, 8).map((ticket) => <p key={ticket.id}><b>{ticket.priority || 'Normal'}</b> â€” {ticket.subject || 'Support request'} ({ticket.status || 'Open'})</p>)}
             {!sharedTickets.length && <p>No shared tickets yet.</p>}
             {supportError && <p className="form-error">{supportError}</p>}
           </div>
@@ -2068,7 +2099,7 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
             <button className={selectedEmail === user.email ? 'support-item profile-card selected' : 'support-item profile-card'} type="button" key={user.id} onClick={() => selectUser(user)}>
               <strong>{user.owner_name || user.email}</strong>
               <span>{user.role} - {user.status} - {user.email_verified ? 'Verified' : 'Email pending'}</span>
-              <p>{user.email} · {user.profile_completion?.percent ?? 0}% profile ready</p>
+              <p>{user.email} Â· {user.profile_completion?.percent ?? 0}% profile ready</p>
               <small>{user.profile_completion?.next_step || 'Select to manage this profile.'}</small>
             </button>
           ))}
@@ -2097,8 +2128,8 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
         <div className="profile-form">
           <div className="backend-health profile-summary">
             <strong>{draft.ownerName || draft.email || 'Selected profile'}</strong>
-            <span>{(backendState.userProfiles || []).find((user) => user.email === draft.email)?.profile_completion?.percent ?? 0}% complete · {(backendState.userProfiles || []).find((user) => user.email === draft.email)?.profile_completion?.next_step || 'Complete profile details.'}</span>
-            <span>Workspace: {(backendState.userProfiles || []).find((user) => user.email === draft.email)?.workspace_id || 'Local workspace'} · License: {(backendState.userProfiles || []).find((user) => user.email === draft.email)?.license_number || 'Pending'}</span>
+            <span>{(backendState.userProfiles || []).find((user) => user.email === draft.email)?.profile_completion?.percent ?? 0}% complete Â· {(backendState.userProfiles || []).find((user) => user.email === draft.email)?.profile_completion?.next_step || 'Complete profile details.'}</span>
+            <span>Workspace: {(backendState.userProfiles || []).find((user) => user.email === draft.email)?.workspace_id || 'Local workspace'} Â· License: {(backendState.userProfiles || []).find((user) => user.email === draft.email)?.license_number || 'Pending'}</span>
             <span>Shared profile: {(backendState.userProfiles || []).find((user) => user.email === draft.email)?.shared_sync_status || 'Local only'}</span>
           </div>
           <label>
@@ -2282,8 +2313,8 @@ function CylinderPlanPanel({ backendState }) {
       <strong>Host and storage</strong>
       <span>Host: {backendState.health.deviceName}</span>
       <span>Local data: {backendState.health.dataRoot}</span>
-      <span>Customers: {entitlement?.usage?.customers ?? 0} / {entitlement?.activePlan?.maxCustomers ?? '—'}</span>
-      <span>Users: {entitlement?.usage?.users ?? 0} / {entitlement?.activePlan?.maxUsers ?? '—'}</span>
+      <span>Customers: {entitlement?.usage?.customers ?? 0} / {entitlement?.activePlan?.maxCustomers ?? 'â€”'}</span>
+      <span>Users: {entitlement?.usage?.users ?? 0} / {entitlement?.activePlan?.maxUsers ?? 'â€”'}</span>
       <span>Updates: Cylinder channel</span>
     </div>}
   </section>
@@ -2364,7 +2395,7 @@ function DesktopPlansSection({ backendState, activePlan, setActivePlan, draftSes
       await window.overheadBackend?.getRemoteEntitlements?.()
       await refreshBackend()
       setActivePlan('gold')
-      setOperationNotice(`Free Gold trial started — no card charged. It ends ${new Date(result.trialEndsAt).toLocaleDateString()}.`)
+      setOperationNotice(`Free Gold trial started â€” no card charged. It ends ${new Date(result.trialEndsAt).toLocaleDateString()}.`)
     } catch (error) { setBillingError(userFacingError(error, 'The free trial could not be started.')) }
     finally { setBillingBusy(false) }
   }
@@ -2471,15 +2502,15 @@ function DesktopPlansSection({ backendState, activePlan, setActivePlan, draftSes
           <input type="checkbox" checked={billing.freeTrialPolicyAcknowledged} onChange={(event) => updateBilling('freeTrialPolicyAcknowledged', event.target.checked)} />
           I have reviewed and accept the Free Trial Policy before starting a free trial.
         </label>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={saveBillingAndTier}>{billingBusy ? 'Saving billing profile…' : 'Save Billing Profile'}</button>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={startFreeGoldTrial}>{billingBusy ? 'Starting trial…' : 'Start Free 90-Day Gold Trial'}</button>
-        <button className="primary-action" type="button" disabled={billingBusy || !billing.billingPolicyAcknowledged} onClick={openEmbeddedCheckout}>{billingBusy ? 'Preparing secure checkout…' : 'Continue To Secure Checkout'}</button>
+        <button className="ghost-button" type="button" disabled={billingBusy} onClick={saveBillingAndTier}>{billingBusy ? 'Saving billing profileâ€¦' : 'Save Billing Profile'}</button>
+        <button className="ghost-button" type="button" disabled={billingBusy} onClick={startFreeGoldTrial}>{billingBusy ? 'Starting trialâ€¦' : 'Start Free 90-Day Gold Trial'}</button>
+        <button className="primary-action" type="button" disabled={billingBusy || !billing.billingPolicyAcknowledged} onClick={openEmbeddedCheckout}>{billingBusy ? 'Preparing secure checkoutâ€¦' : 'Continue To Secure Checkout'}</button>
         <button className="ghost-button" type="button" disabled={billingBusy} onClick={createReceipt}>Create Full Receipt PDF</button>
         <button className="ghost-button" type="button" disabled={billingBusy} onClick={refreshBillingActivity}>Refresh Billing Activity</button>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={cancelWithUnusedTimeRefund}>{billingBusy ? 'Processing cancellation…' : 'Cancel Now & Refund Unused Time'}</button>
+        <button className="ghost-button" type="button" disabled={billingBusy} onClick={cancelWithUnusedTimeRefund}>{billingBusy ? 'Processing cancellationâ€¦' : 'Cancel Now & Refund Unused Time'}</button>
       </div>
       <p className="form-hint">Free trial: one no-card, 90-day Gold-equivalent trial per workspace when secure billing services are enabled. Accept the billing policy above to enable secure checkout. Canceling a paid plan ends access immediately; the intended live flow calculates eligible unused time for a refund to the original payment method. Trial periods have no payment to refund.</p>
-      {billingActivity.length > 0 && <div className="backend-health"><strong>Billing activity</strong>{billingActivity.map(([title, at, detail]) => <span key={`${title}-${at}`}>{title}: {new Date(at).toLocaleString()} {detail ? `— ${detail}` : ''}</span>)}</div>}
+      {billingActivity.length > 0 && <div className="backend-health"><strong>Billing activity</strong>{billingActivity.map(([title, at, detail]) => <span key={`${title}-${at}`}>{title}: {new Date(at).toLocaleString()} {detail ? `â€” ${detail}` : ''}</span>)}</div>}
       <p className="plan-note">Active: {backendState.entitlements?.activePlan?.name || 'Silver'} / {backendState.entitlements?.activePlan?.level || 'Basic'}</p>
       {billingError && <p className="form-error" role="alert">{billingError}</p>}
       {checkout && <EmbeddedBillingCheckout checkout={checkout} onClose={() => setCheckout(null)} onComplete={async () => { setCheckout(null); await window.overheadBackend?.getRemoteEntitlements?.(); await refreshBackend(); setOperationNotice('Payment submitted. Your plan will update after Stripe confirms it.') }} />}
@@ -2574,16 +2605,16 @@ function PaymentsSection({ backendState, refreshBackend, setOperationNotice }) {
       <div className="backend-health" aria-live="polite">
         <strong>Shared billing: {connector.status || 'Not checked'}</strong>
         <span>{connector.sharedSignIn ? 'Shared account signed in' : 'Shared account sign-in required'}</span>
-        <span>{connector.tier ? `${connector.tier.toUpperCase()} — ${String(connector.billing_status || '').replaceAll('_', ' ')}` : 'Sync to check the plan shown on your website account.'}</span>
+        <span>{connector.tier ? `${connector.tier.toUpperCase()} â€” ${String(connector.billing_status || '').replaceAll('_', ' ')}` : 'Sync to check the plan shown on your website account.'}</span>
         <span>{connector.message}</span>
         <small>Last successful sync: {connector.last_synced_at ? new Date(connector.last_synced_at).toLocaleString() : 'Never'}. Refreshes every five minutes while signed in.</small>
-        <button className="primary-action" type="button" disabled={stripeBusy || !connector.sharedSignIn} onClick={() => runStripeAction(syncBilling)}>{stripeBusy ? 'Working…' : 'Sync Shared Plan and License'}</button>
-        <small>This checks OverHead’s shared billing records. It does not authorize a Stripe merchant account or charge a card.</small>
+        <button className="primary-action" type="button" disabled={stripeBusy || !connector.sharedSignIn} onClick={() => runStripeAction(syncBilling)}>{stripeBusy ? 'Workingâ€¦' : 'Sync Shared Plan and License'}</button>
+        <small>This checks OverHeadâ€™s shared billing records. It does not authorize a Stripe merchant account or charge a card.</small>
       </div>
       <div className="tool-grid">
         <div className="backend-health">
           <strong>Step 1: Prepare test mode in browser</strong>
-          <span>OverHead opens Stripe’s test dashboard. Live checkout, webhooks, and payment confirmation stay disabled until the secure server is deployed.</span>
+          <span>OverHead opens Stripeâ€™s test dashboard. Live checkout, webhooks, and payment confirmation stay disabled until the secure server is deployed.</span>
           <button className="primary-action" type="button" disabled={stripeBusy} onClick={() => runStripeAction(openStripe)}>Open Stripe Test Dashboard</button>
         </div>
         <div className="backend-health">
@@ -2715,7 +2746,7 @@ function ImportsSection({ backendState, refreshBackend, setOperationNotice }) {
       <div className="tool-grid">
         <div className="backend-health">
           <strong>1. Connect Microsoft safely</strong>
-          <span>OverHead sends you to Microsoft’s sign-in page. It never collects, stores, or displays your Microsoft password. The encrypted local connection is read-only until you choose records to import.</span>
+          <span>OverHead sends you to Microsoftâ€™s sign-in page. It never collects, stores, or displays your Microsoft password. The encrypted local connection is read-only until you choose records to import.</span>
           <label>
             Source
             <select value={connectionDraft.provider} onChange={(event) => updateConnection('provider', event.target.value)}>
@@ -2726,7 +2757,7 @@ function ImportsSection({ backendState, refreshBackend, setOperationNotice }) {
           <FormField label="Microsoft Entra application (client) ID" value={connectionDraft.clientId} onChange={(value) => updateConnection('clientId', value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
           <FormField label="Tenant ID or domain" value={connectionDraft.tenantId} onChange={(value) => updateConnection('tenantId', value)} placeholder="organizations or your tenant GUID" />
           {connectionDraft.provider === 'business_central' && <FormField label="Business Central environment" value={connectionDraft.environment} onChange={(value) => updateConnection('environment', value)} placeholder="Production" />}
-          <button className="primary-action" type="button" onClick={connect} disabled={connecting}>{connecting ? 'Waiting for Microsoft…' : 'Connect With Microsoft'}</button>
+          <button className="primary-action" type="button" onClick={connect} disabled={connecting}>{connecting ? 'Waiting for Microsoftâ€¦' : 'Connect With Microsoft'}</button>
           <p className="form-hint">The Entra app must allow public-client device sign-in. Grant only Contacts.Read for Outlook contacts, or Business Central delegated user_impersonation for customer imports. Do not enter a client secret.</p>
         </div>
         <div className="backend-health">
@@ -2766,7 +2797,7 @@ function ImportsSection({ backendState, refreshBackend, setOperationNotice }) {
             {preview.records.map((record) => (
               <label className="checkbox-line" key={record.id}>
                 <input type="checkbox" checked={selectedIds.includes(record.id)} onChange={() => toggleRecord(record.id)} />
-                {record.businessName}{record.email ? ` — ${record.email}` : ''}
+                {record.businessName}{record.email ? ` â€” ${record.email}` : ''}
               </label>
             ))}
             <button className="primary-action" type="button" onClick={importSelected} disabled={!selectedIds.length}>Import Selected Records</button>

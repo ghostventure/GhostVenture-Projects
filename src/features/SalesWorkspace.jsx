@@ -29,6 +29,9 @@ const tabs = [
   { id: 'rules', label: 'Territories and leads' },
   { id: 'activities', label: 'Activity and notes' },
   { id: 'playbooks', label: 'Sales playbooks' },
+  { id: 'catalog', label: 'Catalog' },
+  { id: 'email-capture', label: 'Email capture' },
+  { id: 'discount-approval', label: 'Discount approval' },
 ]
 const normalize = (value) => String(value || '').trim().toLowerCase()
 const money = (value) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(value) || 0)
@@ -51,6 +54,9 @@ export default function SalesWorkspace({ backendState = {}, refreshBackend = () 
   const conversionDialogRef = useRef(null)
   const conversionOpenerRef = useRef(null)
   const conversionTitleId = 'sales-conversion-dialog-title'
+  const [emailDraft, setEmailDraft] = useState('')
+  const [emailOpportunityId, setEmailOpportunityId] = useState('')
+  const [discountDraft, setDiscountDraft] = useState({ opportunityId: '', discountPercent: '', rationale: '' })
 
   const opportunities = useMemo(() => records.filter((record) => !record.kind || record.kind === 'opportunity'), [records])
   const settings = records.find((record) => record.kind === 'sales_settings')
@@ -269,6 +275,41 @@ export default function SalesWorkspace({ backendState = {}, refreshBackend = () 
     setNotice('Starter playbooks are ready to edit and reuse.')
   }
 
+  async function captureEmail(event) {
+    event.preventDefault()
+    const raw = emailDraft.trim()
+    if (!raw || !emailOpportunityId) throw new Error('Paste an email and choose an opportunity.')
+    const split = raw.split(/\r?\n\r?\n/)
+    const headers = split.shift() || ''
+    const body = split.join('\n\n').trim()
+    const headerValue = (name) => headers.match(new RegExp(`^${name}:\\s*(.+)$`, 'im'))?.[1]?.trim() || ''
+    const subject = headerValue('Subject') || 'Imported email'
+    const from = headerValue('From')
+    const date = headerValue('Date')
+    const deal = opportunities.find((item) => item.id === emailOpportunityId)
+    if (!deal) throw new Error('The selected opportunity is no longer available.')
+    await saveRecord({ kind: 'sales_activity', opportunityId: deal.id, title: subject, activityType: 'Email capture', date: Number.isFinite(Date.parse(date)) ? new Date(date).toISOString().slice(0, 10) : currentDate(), owner: from, notes: [from ? `From: ${from}` : '', body || 'No message body was included.'].filter(Boolean).join('\n'), captureSource: 'User-pasted email text', createdAt: new Date().toISOString() })
+    setEmailDraft('')
+    setNotice(`Email content saved to ${deal.title}. It was not sent or fetched from a mail provider.`)
+  }
+  async function requestDiscount(event) {
+    event.preventDefault()
+    const deal = opportunities.find((item) => item.id === discountDraft.opportunityId)
+    const percent = Number(discountDraft.discountPercent)
+    if (!deal) throw new Error('Choose an opportunity first.')
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) throw new Error('Discount must be between 0 and 100 percent.')
+    const policy = records.find((item) => item.kind === 'discount_policy' && item.status === 'Active')
+    const limit = Number(policy?.ownerLimitPercent ?? 0)
+    const needsApproval = percent > limit
+    await saveRecord({ kind: 'discount_request', opportunityId: deal.id, title: `${deal.title}: ${percent}% discount`, discountPercent: percent, rationale: discountDraft.rationale.trim(), policyLimitPercent: limit, status: needsApproval ? 'Pending approval' : 'Within limit', requestedAt: new Date().toISOString() })
+    setDiscountDraft({ opportunityId: '', discountPercent: '', rationale: '' })
+    setNotice(needsApproval ? `Discount exceeds the ${limit}% owner limit and is awaiting an explicit local review.` : `Discount is within the configured ${limit}% owner limit.`)
+  }
+  async function reviewDiscount(request, status) {
+    if (!['Approved', 'Rejected'].includes(status)) return
+    await saveRecord({ ...request, status, reviewedAt: new Date().toISOString() })
+  }
+
   const totalOpen = activeDeals.reduce((sum, deal) => sum + asNumber(deal.amount), 0)
 
   return <section className="reports-page sales-workspace">
@@ -317,6 +358,20 @@ export default function SalesWorkspace({ backendState = {}, refreshBackend = () 
     {tab === 'playbooks' && <FeaturePanel eyebrow="Reusable sales guidance" title="Sales playbook library" description="Save editable qualification, proposal, and renewal guidance, then append a chosen playbook to a deal’s notes and activity history.">
       <div className="profile-form compact-form" style={{ maxWidth: 600 }}><label>Apply playbook to opportunity<select value={playbookOpportunityId} onChange={(event) => setPlaybookOpportunityId(event.target.value)}><option value="">Choose an opportunity</option>{opportunities.map((deal) => <option key={deal.id} value={deal.id}>{deal.title}</option>)}</select></label><button className="ghost-button" type="button" onClick={() => addStarterPlaybooks().catch((reason) => setError(reason.message))}>Add starter playbooks</button></div>
       <FeatureRecordManager records={records} kind="sales_playbook" title="Saved playbooks" description="Maintain internal guidance for your sales process; applying content adds it to the selected deal’s notes for review." fields={[{ name: 'title', label: 'Playbook name', required: true }, { name: 'category', label: 'Sales stage or use' }, { name: 'content', label: 'Guidance and checklist', multiline: true, required: true }, { name: 'status', label: 'Status', options: ['Active', 'Archived'], defaultValue: 'Active' }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Active', 'Archived']} emptyText="No playbooks saved." onAction={(playbook) => applyPlaybook(playbook).catch((reason) => setError(reason.message))} actionLabel="Apply to deal" />
+    </FeaturePanel>}
+
+    {tab === 'catalog' && <FeaturePanel eyebrow="Local sales catalog" title="Products and services" description="Maintain a local list for sales reference. Catalog entries are not synchronized with Square, quotes, or an external provider.">
+      <FeatureRecordManager records={records} kind="sales_catalog_item" title="Product and service catalog" description="Save names, codes, descriptions, prices, and active status for use during sales planning." fields={[{ name: 'title', label: 'Product or service name', required: true }, { name: 'sku', label: 'Code / SKU' }, { name: 'category', label: 'Category' }, { name: 'unitPrice', label: 'Unit price', type: 'number', min: 0, step: 0.01, defaultValue: '0' }, { name: 'description', label: 'Description', multiline: true }, { name: 'status', label: 'Status', options: ['Active', 'Archived'], defaultValue: 'Active' }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Active', 'Archived']} emptyText="No catalog items saved." />
+    </FeaturePanel>}
+
+    {tab === 'email-capture' && <FeaturePanel eyebrow="Manual local capture" title="Attach email text to an opportunity" description="Paste a plain-text email or .eml excerpt and save it as a sales activity. This does not connect to, read from, or send through a mail provider.">
+      <form className="profile-form compact-form" onSubmit={(event) => captureEmail(event).catch((reason) => setError(reason.message))}><label>Opportunity<select required value={emailOpportunityId} onChange={(event) => setEmailOpportunityId(event.target.value)}><option value="">Choose opportunity</option>{opportunities.map((deal) => <option key={deal.id} value={deal.id}>{deal.title}</option>)}</select></label><label>Plain text email or .eml excerpt<textarea required rows="9" value={emailDraft} onChange={(event) => setEmailDraft(event.target.value)} placeholder={'From: person@example.com\nSubject: Project inquiry\nDate: Mon, 12 Oct 2026 10:00:00 -0400\n\nMessage body'} /></label><button className="primary-action">Save to opportunity</button></form>
+    </FeaturePanel>}
+
+    {tab === 'discount-approval' && <FeaturePanel eyebrow="Local approval control" title="Discount approval limits" description="Configure the local owner approval threshold, then record and review proposed opportunity discounts. This does not change quote pricing or enforce a provider quote workflow.">
+      <FeatureRecordManager records={records} kind="discount_policy" title="Active discount limit" description="Requests above this percentage require an explicit approval in this local queue." fields={[{ name: 'title', label: 'Policy name', required: true, defaultValue: 'Owner discount limit' }, { name: 'ownerLimitPercent', label: 'Discount allowed without review (%)', type: 'number', min: 0, max: 100, step: 0.1, defaultValue: '10' }, { name: 'status', label: 'Status', options: ['Active', 'Disabled'], defaultValue: 'Active' }]} onSave={saveRecord} onDelete={deleteRecord} statusOptions={['Active', 'Disabled']} emptyText="No discount policy configured; discounts above 0% will be sent to local review." />
+      <form className="profile-form compact-form" onSubmit={(event) => requestDiscount(event).catch((reason) => setError(reason.message))}><h3>Request discount review</h3><label>Opportunity<select required value={discountDraft.opportunityId} onChange={(event) => setDiscountDraft({ ...discountDraft, opportunityId: event.target.value })}><option value="">Choose opportunity</option>{opportunities.map((deal) => <option key={deal.id} value={deal.id}>{deal.title}</option>)}</select></label><label>Discount percent<input required type="number" min="0" max="100" step="0.1" value={discountDraft.discountPercent} onChange={(event) => setDiscountDraft({ ...discountDraft, discountPercent: event.target.value })}/></label><label>Rationale<textarea required rows="2" value={discountDraft.rationale} onChange={(event) => setDiscountDraft({ ...discountDraft, rationale: event.target.value })}/></label><button className="primary-action">Record request</button></form>
+      <div className="task-list">{records.filter((item) => item.kind === 'discount_request').map((request) => <article className="task-row" key={request.id}><strong>{request.title}</strong><span>{request.discountPercent}% · limit {request.policyLimitPercent}% · {request.status}</span><p>{request.rationale}</p>{request.status === 'Pending approval' && <div className="button-row"><button className="primary-action" type="button" onClick={() => reviewDiscount(request, 'Approved').catch((reason) => setError(reason.message))}>Approve</button><button className="ghost-button" type="button" onClick={() => reviewDiscount(request, 'Rejected').catch((reason) => setError(reason.message))}>Reject</button></div>}</article>)}</div>
     </FeaturePanel>}
   </section>
 }
