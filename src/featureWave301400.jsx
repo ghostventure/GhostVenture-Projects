@@ -122,6 +122,9 @@ export function FeatureWavePreferences({ session, backendState, setOperationNoti
   }, [operationNotice, prefs.notificationSound, lastNotice])
   const dateExample = useMemo(() => new Intl.DateTimeFormat(prefs.locale, { dateStyle: 'long' }).format(new Date()), [prefs.locale])
   const numberExample = useMemo(() => new Intl.NumberFormat(prefs.locale, { style: 'currency', currency: prefs.locale === 'de-DE' ? 'EUR' : prefs.locale === 'en-GB' ? 'GBP' : 'USD' }).format(1234.5), [prefs.locale])
+  const trialEndValue = backendState?.entitlements?.subscription?.trial_ends_at || ''
+  const trialEndTime = Date.parse(trialEndValue)
+  const trialDaysRemaining = Number.isFinite(trialEndTime) ? Math.ceil((trialEndTime - Date.now()) / 86400000) : null
   const tourSteps = ['Dashboard: review priorities and choose one next action.', 'Workflows: create appointments, quotes, invoices, and reminders.', 'Customers: keep only the minimum information needed for service.', 'Security: review access, privacy requests, and recovery.', 'Settings: choose display preferences and create local backups.']
   return <div className="feature-wave-preferences">
     <div className="backend-health">
@@ -133,7 +136,8 @@ export function FeatureWavePreferences({ session, backendState, setOperationNoti
       <small>Language selection currently offers English only; full translations are not included. Examples: {dateExample}; {numberExample}. {ready ? saving ? 'Saving…' : 'Saved in this workspace.' : 'Loading saved preferences…'}</small>
       <label className="checkbox-line"><input type="checkbox" checked={prefs.notificationDigest} onChange={(event) => update('notificationDigest', event.target.checked)} /><span>Workspace activity reminders</span></label>
       <label className="checkbox-line"><input type="checkbox" checked={prefs.renewalReminder} onChange={(event) => update('renewalReminder', event.target.checked)} /><span>Renewal/trial reminder preference</span></label>
-      <small>Reminder preference is stored locally; no renewal reminder delivery is scheduled until a notification service is configured.</small>
+      {prefs.renewalReminder && trialDaysRemaining !== null && trialDaysRemaining >= 0 && trialDaysRemaining <= 30 && <p role="status"><strong>Trial ending soon:</strong> {new Intl.DateTimeFormat(prefs.locale, { dateStyle: 'long' }).format(new Date(trialEndTime))} ({trialDaysRemaining === 0 ? 'today' : `in ${trialDaysRemaining} day${trialDaysRemaining === 1 ? '' : 's'}`}). Review Plans and billing before then.</p>}
+      <small>When an active trial ends within 30 days, this reminder appears while you are in Settings. No background push, email, or paid-plan renewal date is scheduled here.</small>
       <div><strong>Seat utilization</strong><p>{(backendState?.licenses || []).filter((license) => license.status === 'Active').length} active licenses · {(backendState?.userProfiles || []).filter((user) => user.status === 'Active').length} active profiles</p><small>Counts reflect local workspace records; plan seat limits and remote membership may differ.</small></div>
       <label>Notification sound<select value={prefs.notificationSound} onChange={(event) => update('notificationSound', event.target.value)}><option value="off">Off</option><option value="soft">Soft tone</option><option value="bright">Bright tone</option></select></label>
       <button className="mini-button" type="button" onClick={previewSound}>Preview sound</button>

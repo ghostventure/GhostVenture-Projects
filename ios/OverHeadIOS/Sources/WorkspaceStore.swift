@@ -2,12 +2,26 @@ import Foundation
 import Observation
 import FirebaseFirestore
 
+struct WorkspaceSyncState: Equatable {
+    var fromCache = true
+    var hasPendingWrites = false
+    var errorMessage = ""
+
+    var label: String {
+        if !errorMessage.isEmpty { return errorMessage }
+        if hasPendingWrites { return "Changes are waiting to sync" }
+        if fromCache { return "Showing cached data; reconnect to refresh" }
+        return "Up to date"
+    }
+}
+
 @Observable
 @MainActor
 final class WorkspaceStore {
     var tasks: [OfficeTask] = []
     var customers: [Customer] = []
     var approvals: [Approval] = []
+    var syncStates: [String: WorkspaceSyncState] = [:]
     var notice = ""
     private var profile: WorkspaceProfile?
     private var actorID = ""
@@ -23,13 +37,13 @@ final class WorkspaceStore {
         self.actorID = actorID
         let root = Firestore.firestore().collection("workspaces").document(profile.workspaceID)
         listeners = [
-            root.collection("tasks").addSnapshotListener { [weak self] snapshot, error in
+            root.collection("tasks").addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
                 Task { @MainActor in self?.receiveTasks(snapshot, error) }
             },
-            root.collection("customers").addSnapshotListener { [weak self] snapshot, error in
+            root.collection("customers").addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
                 Task { @MainActor in self?.receiveCustomers(snapshot, error) }
             },
-            root.collection("approvals").addSnapshotListener { [weak self] snapshot, error in
+            root.collection("approvals").addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
                 Task { @MainActor in self?.receiveApprovals(snapshot, error) }
             }
         ]
@@ -38,7 +52,7 @@ final class WorkspaceStore {
     func stop() {
         listeners.forEach { $0.remove() }
         listeners = []
-        tasks = []; customers = []; approvals = []; profile = nil
+        tasks = []; customers = []; approvals = []; syncStates = [:]; profile = nil
     }
 
     func addTask(_ title: String) async {
@@ -82,16 +96,25 @@ final class WorkspaceStore {
     }
 
     private func receiveTasks(_ snapshot: QuerySnapshot?, _ error: Error?) {
+        syncStates["tasks"] = syncState(snapshot, error)
         if let error { notice = workspaceMessage(for: error); return }
         tasks = (snapshot?.documents ?? []).compactMap { OfficeTask(id: $0.documentID, data: $0.data()) }.sorted { !$0.done && $1.done }
     }
     private func receiveCustomers(_ snapshot: QuerySnapshot?, _ error: Error?) {
+        syncStates["customers"] = syncState(snapshot, error)
         if let error { notice = workspaceMessage(for: error); return }
         customers = (snapshot?.documents ?? []).compactMap { Customer(id: $0.documentID, data: $0.data()) }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
     private func receiveApprovals(_ snapshot: QuerySnapshot?, _ error: Error?) {
+        syncStates["approvals"] = syncState(snapshot, error)
         if let error { notice = workspaceMessage(for: error); return }
         approvals = (snapshot?.documents ?? []).compactMap { Approval(id: $0.documentID, data: $0.data()) }.sorted { $0.status == "Pending" && $1.status != "Pending" }
+    }
+
+    private func syncState(_ snapshot: QuerySnapshot?, _ error: Error?) -> WorkspaceSyncState {
+        if let error { return WorkspaceSyncState(fromCache: true, hasPendingWrites: false, errorMessage: workspaceMessage(for: error)) }
+        guard let metadata = snapshot?.metadata else { return WorkspaceSyncState() }
+        return WorkspaceSyncState(fromCache: metadata.isFromCache, hasPendingWrites: metadata.hasPendingWrites)
     }
 
     private func workspaceMessage(for error: Error) -> String {

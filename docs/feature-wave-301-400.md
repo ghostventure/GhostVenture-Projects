@@ -15,7 +15,7 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 307 | Billing contact settings | Already present | `src/App.jsx:2241` and `:2389`; billing profile fields. |
 | 308 | Subscription invoice history | Already present | `src/App.jsx:2264` and `:2426`; billing activity and generated receipt. |
 | 309 | Trial status dashboard | Already present | `src/App.jsx:2214` and `:2385`; trial state/end date and 90-day policy. |
-| 310 | Renewal date reminders | Blocked | Preference can be saved (see 319), but no authenticated reminder/notification delivery service exists. |
+| 310 | Renewal date reminders | Implemented | `src/featureWave301400.jsx` shows an opt-in in-app reminder in Settings when the active trial end date is within 30 days, using the saved locale. Paid-plan renewal dates without provider fields and background push/email delivery are not included. |
 | 311 | Account recovery workflow | Already present | `src/App.jsx:2806` `SecuritySection`; desktop recovery flow; website reset at `website-next/app/sign-in/sign-in-client.jsx`. |
 | 312 | Login email change process | Blocked | No reauthentication + verified email-change flow; changing a profile email alone could desynchronize Firebase Auth. |
 | 313 | Profile data download | Already present | `src/App.jsx:2492` backend data export invoked from Settings; exports full local workspace data, not a profile-only packet. |
@@ -65,7 +65,7 @@ Baseline: OverHead 0.3.15 at `3578fa7`; the shared encrypted feature-record API 
 | 357 | Mobile approval actions | Already present | `ios/OverHeadIOS/Sources/WorkspaceViews.swift:49` approval review and role-gated approve/decline. |
 | 358 | Mobile document upload | Blocked | Desktop customer attachment exists, but the iOS target has no document picker/upload workflow. |
 | 359 | Mobile calendar agenda | Blocked | iOS target has no calendar/appointment agenda view. |
-| 360 | Device sync status page | Blocked | Host health and customer sync status exist in desktop Settings, but no native page exposes per-device pending/sync status. |
+| 360 | Device sync status page | Implemented | `ios/OverHeadIOS/Sources/WorkspaceStore.swift` exposes Firestore cache/pending-write metadata for tasks, customers, and approvals; `WorkspaceViews.swift` shows current-device status in Account. Other device health is not available. |
 | 361 | Support ticket queue | Already present | `src/App.jsx:1749` `SupportSection`; shared support ticket queue. |
 | 362 | Ticket priority rules | Implemented | `src/featureWave301400.jsx:214` defines review targets by priority; it flags elapsed targets for review. |
 | 363 | Ticket category taxonomy | Implemented | `src/featureWave301400.jsx:214` support category selector persisted in encrypted `support` records. |
