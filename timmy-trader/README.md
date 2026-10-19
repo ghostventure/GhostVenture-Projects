@@ -131,6 +131,8 @@ Build the Linux ELF:
 scripts/build_elf.sh
 ```
 
+The native app checks GitHub Releases after launch and daily. It verifies and installs stable Linux updates automatically into the user's home directory; the update takes effect on the next launch without interrupting the current session. Releases are published from `timmy-v*` tags.
+
 The executable is created at:
 
 ```text
@@ -162,7 +164,7 @@ scripts/package_deb.sh
 Install it locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.0_amd64.deb
+sudo apt install ./dist/timmy-trader_0.1.3_amd64.deb
 ```
 
 After install, launch **Timmy** from the system menu or run:

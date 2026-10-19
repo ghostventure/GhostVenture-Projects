@@ -59,8 +59,9 @@ The browser dashboard remains only a development fallback. The main operating su
 - The Scanner tab filters visible rows as text is entered and shows the number of matches. Press Escape in the filter field to clear it.
 - Large market-data fetches keep a bounded number of requests in flight and queued, rather than creating one future for every symbol up front.
 - The development dashboard reads the journal as a stream and retains only the latest 50 valid events in memory.
+- The native app checks GitHub Releases shortly after launch and once per day. Stable Linux packages are checksum-verified, installed under the user's home directory, and selected automatically the next time Timmy starts. The active session is never restarted. Release tags use `timmy-v*`, with assets named `Timmy-linux-x86_64.tar.gz` and `SHA256SUMS`.
 
-These are source changes. Existing installed binaries need a package rebuild and installation to receive them; deploying the public Firebase Hosting site alone does not update the native application. The public site is [timmy-tradesonauto.web.app](https://timmy-tradesonauto.web.app).
+The first build with the updater must be installed once. After that, stable GitHub releases install automatically for that user; the root-owned system package is left intact. Deploying the public Firebase Hosting site alone does not update the native application. The public site is [timmy-tradesonauto.web.app](https://timmy-tradesonauto.web.app).
 
 ## Launching
 

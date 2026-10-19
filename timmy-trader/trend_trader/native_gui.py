@@ -35,6 +35,7 @@ from .runtime_health import build_runtime_health, pre_market_system_check
 from .sample_data import write_sample_bars
 from .strategy import rank_signals
 from .strategy_presets import list_strategy_presets
+from .updates import check_and_install_update
 from .watchlist import DEFAULT_ROTATION_CANDIDATES, load_watchlist, rotate_watchlist, write_watchlist, write_watchlist_template
 from .webull_watchlists import sync_generated_watchlists
 
@@ -72,6 +73,8 @@ class TimmyNativeApp:
         self.market_open_after_id: str | None = None
         self.refresh_after_id: str | None = None
         self.account_refresh_after_id: str | None = None
+        self.update_check_after_id: str | None = None
+        self.update_check_in_progress = False
         self._refresh_in_progress = False
         self.closing = False
         self.min_score_value = 72
@@ -159,6 +162,7 @@ class TimmyNativeApp:
             self._schedule_automation()
         self.refresh_after_id = self.root.after(AUTO_REFRESH_MS, self._auto_refresh)
         self.account_refresh_after_id = self.root.after(ACCOUNT_REFRESH_MS, self._auto_account_refresh)
+        self.update_check_after_id = self.root.after(5000, self._schedule_update_check)
         self.root.mainloop()
         return 0
 
@@ -284,6 +288,42 @@ class TimmyNativeApp:
             except tk.TclError:
                 pass
 
+    def _schedule_update_check(self) -> None:
+        if self.closing:
+            return
+        self._start_update_check()
+        self.update_check_after_id = self.root.after(24 * 60 * 60 * 1000, self._schedule_update_check)
+
+    def _start_update_check(self) -> None:
+        if self.closing or self.update_check_in_progress:
+            return
+        self.update_check_in_progress = True
+        self.github_update_label.configure(text="Automatic updates: checking…")
+
+        def check() -> None:
+            try:
+                result = check_and_install_update()
+                error = None
+            except Exception as exc:
+                result = None
+                error = str(exc) or exc.__class__.__name__
+            try:
+                self.root.after(0, lambda: self._finish_update_check(result, error))
+            except tk.TclError:
+                pass
+
+        threading.Thread(target=check, name="timmy-update-check", daemon=True).start()
+
+    def _finish_update_check(self, result, error: str | None) -> None:
+        if self.closing:
+            return
+        self.update_check_in_progress = False
+        if error:
+            self.github_update_label.configure(text=f"Automatic update failed: {error[:75]}", fg=self.colors["red"])
+            return
+        color = self.colors["green"] if "installed" in result.status or "up to date" in result.status else self.colors["rail_muted"]
+        self.github_update_label.configure(text=result.status, fg=color)
+
     def close(self) -> None:
         self._save_runtime_settings()
         self.closing = True
@@ -297,6 +337,7 @@ class TimmyNativeApp:
             self.account_refresh_after_id,
             self.automation_after_id,
             self.market_open_after_id,
+            self.update_check_after_id,
         ):
             if after_id:
                 try:
@@ -383,6 +424,10 @@ class TimmyNativeApp:
                                           anchor="center", justify="center")
         self._fit_text(self.last_update_label, min_size=8, max_size=10, padding=20, wrap=True)
         self.last_update_label.pack(fill="x", padx=14, pady=(2, 12))
+        self.github_update_label = tk.Label(runtime, text="Automatic updates enabled", bg=self.colors["runtime"],
+                                            fg=self.colors["rail_muted"], anchor="center", justify="center")
+        self._fit_text(self.github_update_label, min_size=8, max_size=10, padding=20, wrap=True)
+        self.github_update_label.pack(fill="x", padx=14, pady=(0, 12))
 
         main = tk.Frame(self.root, bg=self.colors["bg"])
         main.grid(row=0, column=1, sticky="nsew")
