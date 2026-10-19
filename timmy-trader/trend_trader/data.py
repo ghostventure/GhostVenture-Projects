@@ -26,7 +26,11 @@ def load_csv_bars(path: str | Path) -> dict[str, list[Candle]]:
                 )
             )
 
-    return {symbol: sorted(items, key=lambda candle: candle.timestamp) for symbol, items in bars.items()}
+    # Sort each newly-created list in place. Building a second sorted list per
+    # symbol temporarily duplicates the entire candle set for large histories.
+    for items in bars.values():
+        items.sort(key=lambda candle: candle.timestamp)
+    return dict(bars)
 
 
 def write_csv_bars(path: str | Path, bars_by_symbol: dict[str, list[Candle]]) -> None:
@@ -36,7 +40,13 @@ def write_csv_bars(path: str | Path, bars_by_symbol: dict[str, list[Candle]]) ->
         writer = csv.DictWriter(file, fieldnames=["symbol", "timestamp", "open", "high", "low", "close", "volume"])
         writer.writeheader()
         for symbol in sorted(bars_by_symbol):
-            for bar in sorted(bars_by_symbol[symbol], key=lambda item: item.timestamp):
+            items = bars_by_symbol[symbol]
+            chronological = all(
+                items[index - 1].timestamp <= items[index].timestamp
+                for index in range(1, len(items))
+            )
+            ordered_items = items if chronological else sorted(items, key=lambda item: item.timestamp)
+            for bar in ordered_items:
                 writer.writerow({
                     "symbol": bar.symbol,
                     "timestamp": bar.timestamp.isoformat(),

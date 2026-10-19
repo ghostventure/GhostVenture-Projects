@@ -38,7 +38,7 @@ Do not paste broker usernames, passwords, MFA codes, App Secrets, or tokens into
 ## 3. Advanced Local Environment
 
 ```bash
-cd /home/sniper-lion-main/trading-bots/trend-trader
+cd /path/to/timmy-trader
 . .venv/bin/activate
 cp .env.example .env
 ```

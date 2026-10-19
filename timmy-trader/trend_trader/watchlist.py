@@ -67,6 +67,7 @@ def rotate_watchlist(
 ) -> list[str]:
     current = [symbol.upper() for symbol in current_symbols]
     candidates = {symbol.upper() for symbol in (candidate_symbols or set())}
+    eligible_symbols = candidates | set(current)
     score_by_symbol = {signal.symbol.upper(): signal for signal in signals}
     keep: list[str] = []
     for symbol in current:
@@ -78,7 +79,7 @@ def rotate_watchlist(
         (
             signal
             for signal in signals
-            if signal.symbol.upper() in candidates | set(current)
+            if signal.symbol.upper() in eligible_symbols
             and signal.scout_score >= min_scout_score
         ),
         key=lambda signal: (signal.scout_score, signal.sensible_score, signal.score),

@@ -4,6 +4,7 @@ import csv
 import io
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
 from urllib.request import Request, urlopen
 
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
@@ -102,13 +103,15 @@ def _asset_type(row: dict[str, str]) -> str:
     return "etf" if row.get("ETF", "").strip().upper() == "Y" else "stock"
 
 
-def _rows(payload: str) -> list[dict[str, str]]:
-    clean_lines = [
-        line
-        for line in payload.splitlines()
-        if line.strip() and not line.startswith("File Creation Time:")
-    ]
-    return list(csv.DictReader(io.StringIO("\n".join(clean_lines)), delimiter="|"))
+def _rows(payload: str) -> Iterator[dict[str, str]]:
+    # DictReader can stream directly over the downloaded payload. The old
+    # split/filter/join/list pipeline held several full copies of each listing
+    # in memory while building the final instrument inventory.
+    return (
+        row
+        for row in csv.DictReader(io.StringIO(payload), delimiter="|")
+        if row and any(value.strip() for value in row.values() if value)
+    )
 
 
 def _is_tradeable_symbol(symbol: str) -> bool:

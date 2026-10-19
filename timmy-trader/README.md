@@ -18,6 +18,29 @@ Operational workflows for validation, live brokerage, actual trade placement, fr
 docs/WORKFLOWS.md
 ```
 
+## 0.1.4 Release Notes
+
+This source checkout targets Timmy 0.1.4. The release adds the GUI facelift and
+guided market overview, clearer workflow navigation and responsive scrolling,
+serialized GUI and automation actions, safer handling for unresolved live-order
+responses and invalid exposure limits, and lower-memory market-data processing
+for larger universes. These notes describe the source changes; confirm that
+0.1.4 is available on the [Download page](https://timmy-tradesonauto.web.app/download.html)
+or in GitHub Releases before installing a published build.
+
+For the Debian install, verify the downloaded package with the accompanying
+`SHA256SUMS.txt`, then install it:
+
+```bash
+sha256sum -c SHA256SUMS.txt
+sudo apt install ./timmy-trader_0.1.4_amd64.deb
+```
+
+The native updater expects the GitHub release archive
+`Timmy-linux-x86_64.tar.gz` and its `SHA256SUMS` asset. The Firebase-hosted
+Download page is the intended source for the Debian package; deploying Hosting
+does not publish that updater archive or update an already running app.
+
 ## Current Scope
 
 - Scouts stocks, ETFs, and index proxies from OHLCV bars for above-average change.
@@ -48,8 +71,9 @@ docs/WORKFLOWS.md
 - Blocks live order placement by default.
 - Prioritizes fractional US equity orders when enabled, so Timmy can place decimal-share buys inside the same risk and notional caps.
 - Remembers the last UI runtime settings on the next launch, including target, mode, account lane, score, plan limit, auto interval, trading style, and enabled patterns.
-- Adds a native `Power Cycle` control to save settings, relaunch Timmy, and replace the old process cleanly.
+- Adds a native `Power Cycle` control to save settings and relaunch Timmy after its current process exits.
 - Organizes the native GUI around Timmy's operating model: Universe, Scanner, Strategy, Execution, Broker, and Audit.
+- Refreshes the native dashboard with grouped workflow/operations navigation, a market overview with guided next steps, clearer action placement, keyboard focus cues, and scrolling layouts for smaller windows.
 - Keeps the native window responsive during network market-data refreshes by moving fetch and watchlist-rotation work off the GUI event loop.
 - Adds a live scanner filter for symbols and setup text, with a visible matching-row count.
 - Bounds concurrent market-data requests and queued fetch tasks for large symbol universes.
@@ -71,7 +95,7 @@ docs/WORKFLOWS.md
 ## Setup
 
 ```bash
-cd /home/sniper-lion-main/trading-bots/trend-trader
+cd /path/to/timmy-trader
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -e .
@@ -131,7 +155,7 @@ Build the Linux ELF:
 scripts/build_elf.sh
 ```
 
-The native app checks GitHub Releases after launch and daily. It verifies and installs stable Linux updates automatically into the user's home directory; the update takes effect on the next launch without interrupting the current session. Releases are published from `timmy-v*` tags.
+The native app checks GitHub Releases after launch and daily. It verifies and installs stable x86_64 Linux updates automatically into the user's home directory; the update takes effect on the next launch without interrupting the current session. An installable release must include the archive and checksum assets described below; creating a `timmy-v*` tag alone does not publish one.
 
 The executable is created at:
 
@@ -144,7 +168,7 @@ The ELF does not bundle `.env` or `.timmy-profile.env`; keep local Webull creden
 If launching the ELF from outside the project folder, set `TIMMY_HOME` first:
 
 ```bash
-TIMMY_HOME=/home/sniper-lion-main/trading-bots/trend-trader ./dist/Timmy/Timmy
+TIMMY_HOME=/path/to/timmy-trader ./dist/Timmy/Timmy
 ```
 
 For file-manager launching, use:
@@ -153,7 +177,10 @@ For file-manager launching, use:
 Timmy.desktop
 ```
 
-That launcher sets `TIMMY_HOME` and starts the native ELF. It does not open a browser.
+That desktop entry starts the installed `timmy-trader` command, which selects
+the user-scoped update overlay when available and falls back to the packaged
+system app. It does not open a browser. To launch a development checkout, run
+`scripts/launch_timmy.sh` from a terminal.
 
 Build an installable Debian package:
 
@@ -164,7 +191,7 @@ scripts/package_deb.sh
 Install it locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.3_amd64.deb
+sudo apt install ./dist/timmy-trader_0.1.4_amd64.deb
 ```
 
 After install, launch **Timmy** from the system menu or run:
@@ -191,7 +218,7 @@ The installed app stores runtime config in:
 ~/.config/timmy-trader
 ```
 
-Timmy keeps one active native app instance per runtime home. A new launch checks the existing lock, scans for older native/source Timmy process forms, shuts them down, and opens a fresh instance.
+Timmy keeps one active native app instance per runtime home. A new launch claims a lock and exits with a message if another instance already holds it; it does not terminate that process.
 
 On first installed launch, Timmy seeds `~/.config/timmy-trader/.env` from the packaged safe template only. It does not copy source-checkout secrets or Webull token files into the installed runtime.
 

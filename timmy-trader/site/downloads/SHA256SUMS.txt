@@ -1,1 +1,1 @@
-6a8ae8badb1605a7cd6d8f1ba2e4fc9ef889ef744fd249029c5687e6d7b231ee  site/downloads/timmy-trader_0.1.0_amd64.deb
+a0bd95091217ce5712691d44c681cb5a830a1888f590e3d4e4d246815eeec913  timmy-trader_0.1.4_amd64.deb

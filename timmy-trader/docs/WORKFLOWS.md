@@ -26,15 +26,18 @@ Use this after every source, config, strategy, broker, watchlist, packaging, or 
 scripts/build_elf.sh
 ```
 
-4. Restart Timmy so the running process uses the current source:
+4. If the running process must use the new build, save settings and use the
+   GUI's `Power Cycle`, or exit Timmy normally before launching again:
 
 ```bash
-pkill -f '/home/sniper-lion-main/trading-bots/trend-trader/.venv/bin/timmy-desktop' || true
-setsid scripts/launch_timmy.sh >/tmp/timmy-launch.log 2>&1 &
-pgrep -af 'timmy|Timmy'
+scripts/launch_timmy.sh
 ```
 
-5. From the native GUI, use `Power Cycle` when Timmy should save settings, relaunch through the normal launcher, and replace the old process without using a terminal.
+Do not terminate Timmy by a broad process-name match. The single-instance
+lock protects each runtime home; an active process keeps using its current
+build until it exits.
+
+5. From the native GUI, use `Power Cycle` to save settings and relaunch the current installed executable after the current instance exits.
 
 6. Inspect `/tmp/timmy-launch.log` and `timmy-crash.log` if the process does not stay up.
 
@@ -99,7 +102,7 @@ Verify -> validate profile, credential, or configuration correctness
 Preview -> broker rehearsal for the exact current order payload
 Submit -> broker order placement
 Sync -> update a Timmy-owned external watchlist or cache
-Power Cycle -> restart Timmy through the normal launcher
+Power Cycle -> restart the current Timmy executable
 ```
 
 6. Account Readiness hooks should collect data from the existing runtime state
@@ -138,7 +141,7 @@ info -> paper fill, scan complete, account check passed, power cycle complete
 
 Use this standard when changing Timmy's launch, automation, broker, scanner, or GUI behavior.
 
-1. Timmy should have one active process per `TIMMY_HOME`. Power-cycle or terminal restarts must replace the old process before launching a new one.
+1. Timmy should have one active process per `TIMMY_HOME`. Power Cycle waits for the current process to exit; a manual relaunch is refused while that runtime home's lock remains held.
 
 2. Startup should tolerate missing runtime files by recreating safe defaults, then logging recoverable state in the GUI instead of crashing.
 
@@ -427,9 +430,9 @@ Use this when updating the public mirror.
 2. Run mirror validation:
 
 ```bash
-PYTHONPATH=/home/sniper-lion-main/Documents/GitHub/AdventureCode-Projects/timmy-trader \
-  /home/sniper-lion-main/trading-bots/trend-trader/.venv/bin/pytest \
-  /home/sniper-lion-main/Documents/GitHub/AdventureCode-Projects/timmy-trader/tests
+PYTHONPATH=/path/to/public-mirror/timmy-trader \
+  /path/to/timmy-trader/.venv/bin/pytest \
+  /path/to/public-mirror/timmy-trader/tests
 ```
 
 3. Check the staged diff:
@@ -447,6 +450,13 @@ git status --short
 git push origin HEAD
 git ls-remote origin HEAD
 ```
+
+For the 0.1.4 native updater, publish a GitHub Release containing
+`Timmy-linux-x86_64.tar.gz` and a matching `SHA256SUMS` asset. The Firebase
+Download page is intended to offer `timmy-trader_0.1.4_amd64.deb` with its
+`SHA256SUMS.txt`; verify both artifacts and their checksums before announcing
+availability. Firebase Hosting publication and GitHub Release publication
+are separate actions.
 
 ## 13. GitHub CI Workflow
 

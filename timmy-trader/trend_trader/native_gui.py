@@ -41,6 +41,7 @@ from .webull_watchlists import sync_generated_watchlists
 
 AUTO_REFRESH_MS = max(30, int(os.getenv("TIMMY_DASHBOARD_REFRESH_SECONDS", "60"))) * 1000
 ACCOUNT_REFRESH_MS = max(5, int(os.getenv("TIMMY_ACCOUNT_REFRESH_MINUTES", "15"))) * 60 * 1000
+AUTOMATION_RETRY_MS = 5_000
 LIVE_PREVIEW_TTL_SECONDS = 180
 TRADING_PRINCIPLE = "Make money, but never be reckless, clumsy, or wasteful."
 
@@ -76,6 +77,9 @@ class TimmyNativeApp:
         self.update_check_after_id: str | None = None
         self.update_check_in_progress = False
         self._refresh_in_progress = False
+        self._action_in_progress = False
+        self._active_action_label = ""
+        self._wheel_delta_remainder = 0
         self.closing = False
         self.min_score_value = 72
         self.plan_limit_value = 3
@@ -97,6 +101,7 @@ class TimmyNativeApp:
         self.execution_summary_labels: dict[str, tk.Label] = {}
         self.broker_summary_labels: dict[str, tk.Label] = {}
         self.audit_summary_labels: dict[str, tk.Label] = {}
+        self.overview_stage_labels: dict[str, tuple[tk.Label, tk.Label]] = {}
         self.manual_controls: list[tk.Button] = []
         self.busy_controls: list[tk.Button] = []
         self.execution_events: list[dict] = []
@@ -109,7 +114,7 @@ class TimmyNativeApp:
 
         self.root = tk.Tk()
         self.root.title("Timmy")
-        self.root.geometry("1280x840")
+        self.root.geometry("1360x880")
         self.root.minsize(1120, 720)
         self.colors = self._theme_palette()
         self.root.configure(bg=self.colors["bg"])
@@ -146,6 +151,7 @@ class TimmyNativeApp:
         self._configure_style()
         self.splash = self._build_splash()
         self._build_layout()
+        self.root.bind("<Configure>", self._responsive_layout, add="+")
         self._setup_settings_traces()
         self._setup_profile_traces()
         self.root.withdraw()
@@ -349,6 +355,9 @@ class TimmyNativeApp:
     def _configure_style(self) -> None:
         style = ttk.Style(self.root)
         style.theme_use("clam")
+        style.configure("Vertical.TScrollbar", background=self.colors["panel_2"],
+                        troughcolor=self.colors["bg"], bordercolor=self.colors["bg"],
+                        arrowcolor=self.colors["muted"])
         style.configure("Treeview", background=self.colors["panel"], foreground=self.colors["text"],
                         fieldbackground=self.colors["panel"], rowheight=38, borderwidth=0,
                         font=("Sans", 10))
@@ -384,29 +393,40 @@ class TimmyNativeApp:
                              justify="left", anchor="w", font=("Sans", 8, "bold"))
         brand_sub.pack(anchor="w", pady=(1, 0))
 
-        nav_items = ["Overview", "Setup", "Universe", "Scanner", "Strategy", "Execution", "Broker", "Audit", "Health"]
+        nav_sections = (
+            ("WORKFLOW", ("Overview", "Setup", "Universe", "Scanner", "Strategy", "Execution")),
+            ("OPERATIONS", ("Broker", "Audit", "Health")),
+        )
         nav = tk.Frame(rail, bg=self.colors["rail"])
-        nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(18, 0))
-        for item in nav_items:
-            button = tk.Button(
-                nav,
-                text=item,
-                command=lambda target=item: self._show_tab(target),
-                bg=self.colors["selected"] if item == "Overview" else self.colors["rail"],
-                fg=self.colors["selected_text"] if item == "Overview" else self.colors["rail_muted"],
-                activebackground=self.colors["selected"],
-                activeforeground=self.colors["selected_text"],
-                relief="flat",
-                anchor="center",
-                justify="center",
-                padx=10,
-                pady=11,
-                font=("Sans", 11, "bold"),
-                cursor="hand2",
-            )
-            self._fit_text(button, min_size=9, max_size=11, padding=22, wrap=True)
-            button.pack(fill="x", pady=3)
-            self.nav_buttons[item] = button
+        nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(12, 0))
+        for section, items in nav_sections:
+            label = tk.Label(nav, text=section, bg=self.colors["rail"], fg=self.colors["rail_muted"],
+                             anchor="w", font=("Sans", 8, "bold"))
+            label.pack(fill="x", padx=8, pady=(8, 3))
+            for item in items:
+                button = tk.Button(
+                    nav,
+                    text=item,
+                    command=lambda target=item: self._show_tab(target),
+                    bg=self.colors["selected"] if item == "Overview" else self.colors["rail"],
+                    fg=self.colors["selected_text"] if item == "Overview" else self.colors["rail_muted"],
+                    activebackground=self.colors["selected"],
+                    activeforeground=self.colors["selected_text"],
+                    relief="flat",
+                    anchor="w",
+                    justify="left",
+                    padx=14,
+                    pady=8,
+                    font=("Sans", 10, "bold"),
+                    cursor="hand2",
+                    takefocus=True,
+                    highlightbackground=self.colors["rail_line"],
+                    highlightcolor=self.colors["cyan"],
+                    highlightthickness=2,
+                )
+                self._fit_text(button, min_size=9, max_size=11, padding=22, wrap=True)
+                button.pack(fill="x", pady=3)
+                self.nav_buttons[item] = button
 
         rail.rowconfigure(2, weight=1)
         runtime = tk.Frame(rail, bg=self.colors["runtime"], highlightbackground=self.colors["rail_line"], highlightthickness=1)
@@ -429,8 +449,25 @@ class TimmyNativeApp:
         self._fit_text(self.github_update_label, min_size=8, max_size=10, padding=20, wrap=True)
         self.github_update_label.pack(fill="x", padx=14, pady=(0, 12))
 
-        main = tk.Frame(self.root, bg=self.colors["bg"])
-        main.grid(row=0, column=1, sticky="nsew")
+        content_view = tk.Frame(self.root, bg=self.colors["bg"])
+        content_view.grid(row=0, column=1, sticky="nsew")
+        content_view.rowconfigure(0, weight=1)
+        content_view.columnconfigure(0, weight=1)
+        self.content_canvas = tk.Canvas(content_view, bg=self.colors["bg"], highlightthickness=0, borderwidth=0)
+        self.content_canvas.grid(row=0, column=0, sticky="nsew")
+        content_scrollbar = ttk.Scrollbar(content_view, orient="vertical", command=self.content_canvas.yview,
+                                          style="Vertical.TScrollbar")
+        content_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.content_canvas.configure(yscrollcommand=content_scrollbar.set)
+        main = tk.Frame(self.content_canvas, bg=self.colors["bg"])
+        self._main_canvas_window = self.content_canvas.create_window((0, 0), window=main, anchor="nw")
+        main.bind("<Configure>", lambda _event: self.content_canvas.configure(
+            scrollregion=self.content_canvas.bbox("all")), add="+")
+        self.content_canvas.bind("<Configure>", lambda event: self.content_canvas.itemconfigure(
+            self._main_canvas_window, width=event.width), add="+")
+        self.root.bind_all("<MouseWheel>", self._scroll_content, add="+")
+        self.root.bind_all("<Button-4>", self._scroll_content, add="+")
+        self.root.bind_all("<Button-5>", self._scroll_content, add="+")
         main.columnconfigure(0, weight=1)
         main.rowconfigure(3, weight=1)
 
@@ -443,17 +480,17 @@ class TimmyNativeApp:
         accent.grid(row=0, column=0, rowspan=3, sticky="nsw")
         cyan_rule = tk.Frame(hero, bg=self.colors["cyan"], height=4)
         cyan_rule.grid(row=3, column=0, columnspan=2, sticky="ew")
-        hero_eyebrow = tk.Label(hero, text="UNIVERSE -> SCANNER -> STRATEGY -> EXECUTION", bg=self.colors["panel"],
+        hero_eyebrow = tk.Label(hero, text="YOUR MARKET DESK  /  DISCOVER  ·  REVIEW  ·  EXECUTE", bg=self.colors["panel"],
                                 fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w", justify="left")
         self._fit_text(hero_eyebrow, min_size=8, max_size=9, padding=56, wrap=True)
         hero_eyebrow.grid(row=0, column=0, sticky="ew", padx=(30, 24), pady=(20, 0))
-        hero_title = tk.Label(hero, text="Timmy", bg=self.colors["panel"], fg=self.colors["text"],
-                              font=("Sans", 31, "bold"), anchor="w", justify="left")
-        self._fit_text(hero_title, min_size=24, max_size=31, padding=56, wrap=True)
+        hero_title = tk.Label(hero, text="Market overview", bg=self.colors["panel"], fg=self.colors["text"],
+                              font=("Sans", 28, "bold"), anchor="w", justify="left")
+        self._fit_text(hero_title, min_size=22, max_size=28, padding=56, wrap=True)
         hero_title.grid(row=1, column=0, sticky="ew", padx=(30, 24), pady=(2, 0))
         hero_copy = tk.Label(
             hero,
-            text="Timmy looks for sensible money-making setups, promotes active tickers, builds fractional-first order plans, and trades without being reckless, clumsy, or wasteful.",
+            text="Find promising setups, see why they qualify, then review every order with its risk and broker status in view.",
             bg=self.colors["panel"],
             fg=self.colors["muted"],
             font=("Sans", 12),
@@ -462,50 +499,34 @@ class TimmyNativeApp:
         )
         self._fit_text(hero_copy, min_size=10, max_size=12, padding=56, wrap=True)
         hero_copy.grid(row=2, column=0, sticky="ew", padx=(30, 24), pady=(7, 20))
-        actions = tk.Frame(hero, bg=self.colors["panel_3"], highlightbackground=self.colors["line"], highlightthickness=1)
-        actions.grid(row=0, column=1, rowspan=3, sticky="e", padx=(0, 24), pady=18)
-        self.refresh_button = self._button(actions, "↻ Scan", self.refresh_all, tooltip="Scan market data now")
-        self.refresh_button.pack(fill="x", pady=(0, 7))
-        self.webull_check_button = self._button(
-            actions,
-            "✓ Account",
-            lambda: self._run_action("Checking Webull", self.webull_check),
-            accent="teal",
-            tooltip="Refresh account status and buying power",
-        )
-        self.webull_check_button.pack(fill="x", pady=7)
-        self.preview_button = self._button(
-            actions,
-            "◇ Preview",
-            lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
-            accent="gold",
-            tooltip="Preview current Webull route",
-        )
-        self.preview_button.pack(fill="x", pady=(7, 0))
-        self.manual_controls.append(self.preview_button)
-        self.busy_controls.extend([self.refresh_button, self.webull_check_button, self.preview_button])
+        self.refresh_button = self._button(
+            hero, "↻  Scan", self.refresh_all, accent="teal", tooltip="Refresh market data and rebuild the scan")
+        self.refresh_button.grid(row=0, column=1, rowspan=3, sticky="e", padx=(0, 24), pady=18, ipadx=14, ipady=7)
+        # Broker account actions live on Broker; keep the overview focused on
+        # the market scan instead of mixing account checks into its action rail.
+        self.busy_controls.append(self.refresh_button)
 
         metrics = tk.Frame(main, bg=self.colors["bg"])
         self.metrics = metrics
         metrics.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
-        for idx in range(3):
+        for idx in range(4):
             metrics.columnconfigure(idx, weight=1)
         self.universe_card = self._metric(metrics, 0, 0, "Universe")
         self.active_card = self._metric(metrics, 0, 1, "Active List")
         self.movement_card = self._metric(metrics, 0, 2, "Movement")
-        self.trade_ready_card = self._metric(metrics, 1, 0, "Trade Ready")
-        self.plan_card = self._metric(metrics, 1, 1, "Orders Ready")
-        self.cash_card = self._metric(metrics, 1, 2, "Cash Account", highlight=True)
-        self.paper_cash_card = self._metric(metrics, 2, 0, "Paper Account", highlight=True)
+        self.trade_ready_card = self._metric(metrics, 0, 3, "Trade Ready")
+        self.plan_card = self._metric(metrics, 1, 0, "Orders Ready")
+        self.cash_card = self._metric(metrics, 1, 1, "Cash Account", highlight=True)
+        self.paper_cash_card = self._metric(metrics, 1, 2, "Paper Account", highlight=True)
 
-        controls = self._panel(main)
+        controls = tk.Frame(main, bg=self.colors["panel"], highlightbackground=self.colors["cyan"], highlightthickness=1)
         self.controls = controls
         for idx in range(6):
             controls.columnconfigure(idx, weight=1, minsize=118)
-        controls_title = tk.Label(controls, text="Trade Controls", bg=self.colors["panel"], fg=self.colors["text"],
-                                  font=("Sans", 13, "bold"), anchor="w", justify="left")
+        controls_title = tk.Label(controls, text="Execution controls", bg=self.colors["panel"], fg=self.colors["text"],
+                                  font=("Sans", 15, "bold"), anchor="w", justify="left")
         controls_title.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 0))
-        controls_status = tk.Label(controls, text="Execution keeps the account lane, auto mode, style, and setup filters in one place.",
+        controls_status = tk.Label(controls, text="Tune the scan, choose an account lane, and review order actions.",
                                    bg=self.colors["panel"], fg=self.colors["muted"], font=("Sans", 9),
                                    anchor="e", justify="right")
         controls_status.grid(row=0, column=2, columnspan=4, sticky="ew", padx=18, pady=(14, 0))
@@ -662,29 +683,33 @@ class TimmyNativeApp:
         button_box = tk.Frame(controls, bg=self.colors["panel"])
         button_box.grid(row=2, column=3, columnspan=3, sticky="ew", padx=10, pady=(0, 14))
         button_box.columnconfigure((0, 1, 2, 3), weight=1)
-        self.run_button = self._button(button_box, "▶", self.run_decision_cycle, accent="teal", tooltip="Run decision cycle")
+        self.run_button = self._button(button_box, "Run cycle", self.run_decision_cycle, accent="teal", tooltip="Run decision cycle")
         self.run_button.grid(row=0, column=0, sticky="ew", padx=(0, 7))
         self.execution_preview_button = self._button(
             button_box,
-            "◇",
+            "Preview",
             lambda: self._run_action("Previewing order", self.webull_preview, threaded=False),
             accent="gold",
             tooltip="Preview current Webull route",
         )
         self.execution_preview_button.grid(row=0, column=1, sticky="ew", padx=7)
+        # Shared reference keeps execution enablement rules tied to its single
+        # natural home instead of a duplicate overview button.
+        self.preview_button = self.execution_preview_button
+        self.manual_controls.append(self.preview_button)
         self.execution_paper_button = self._button(
             button_box,
-            "○",
+            "Paper trade",
             lambda: self._run_action("Paper trade", self.paper_trade, threaded=False),
             accent="teal",
             tooltip="Paper trade current queue",
         )
         self.execution_paper_button.grid(row=0, column=2, sticky="ew", padx=7)
-        self.live_button = self._button(button_box, "⚡", self.submit_live_interactive, accent="gold", tooltip="Submit live")
+        self.live_button = self._button(button_box, "Submit live", self.submit_live_interactive, accent="gold", tooltip="Submit live")
         self.live_button.grid(row=0, column=3, sticky="ew", padx=(7, 0))
-        self.stop_button = self._button(button_box, "■", self.stop_automation, tooltip="Stop automation")
+        self.stop_button = self._button(button_box, "Stop automation", self.stop_automation, tooltip="Stop automation")
         self.stop_button.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 7), pady=(8, 0))
-        self.power_cycle_button = self._button(button_box, "⟳", self.power_cycle, tooltip="Power cycle Timmy")
+        self.power_cycle_button = self._button(button_box, "Power cycle", self.power_cycle, tooltip="Save settings and restart Timmy")
         self.power_cycle_button.grid(row=1, column=2, columnspan=2, sticky="ew", padx=(7, 0), pady=(8, 0))
         self.manual_controls.extend([self.run_button, self.execution_preview_button, self.execution_paper_button, self.live_button])
         self.busy_controls.extend([
@@ -736,16 +761,59 @@ class TimmyNativeApp:
 
         overview_panel = self._panel(body)
         self.overview_panel = overview_panel
-        overview_panel.columnconfigure(0, weight=1)
-        overview_panel.columnconfigure(1, weight=1)
-        overview_panel.rowconfigure(2, weight=1)
-        self._section_header(overview_panel, "TODAY'S DESK", "Market Snapshot", "Scan Now", self.refresh_data, compact=True)
-        overview_summary = tk.Frame(overview_panel, bg=self.colors["panel"])
-        overview_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
-        overview_summary.columnconfigure((0, 1, 2, 3), weight=1)
+        overview_panel.columnconfigure(0, weight=3)
+        overview_panel.columnconfigure(1, weight=2)
+        overview_panel.rowconfigure(1, weight=1)
+        self._section_header(overview_panel, "AT A GLANCE", "Your trading workflow", None, None, compact=True)
         self.overview_summary_labels = {}
-        for idx, title in enumerate(("Market Pulse", "Setup Edge", "Orders Ready", "Broker Desk")):
-            self.overview_summary_labels[title] = self._mini_stat(overview_summary, idx, title)
+
+        workflow_panel = tk.Frame(overview_panel, bg=self.colors["panel_2"],
+                                  highlightbackground=self.colors["line"], highlightthickness=1)
+        self.overview_workflow_panel = workflow_panel
+        workflow_panel.grid(row=1, column=0, sticky="nsew", padx=(18, 8), pady=(0, 18))
+        workflow_panel.columnconfigure(0, weight=1)
+        tk.Label(workflow_panel, text="PIPELINE", bg=self.colors["panel_2"], fg=self.colors["gold"],
+                 font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(15, 2))
+        tk.Label(workflow_panel, text="From discovery to order review", bg=self.colors["panel_2"],
+                 fg=self.colors["text"], font=("Sans", 14, "bold"), anchor="w").grid(
+                     row=1, column=0, sticky="ew", padx=16, pady=(0, 12))
+        stages = tk.Frame(workflow_panel, bg=self.colors["panel_2"])
+        stages.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 14))
+        for idx, (key, title) in enumerate((("market", "Data"), ("scan", "Scan"),
+                                            ("strategy", "Model"), ("orders", "Orders"))):
+            stages.columnconfigure(idx, weight=1)
+            tile = tk.Frame(stages, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
+            tile.grid(row=0, column=idx, sticky="nsew", padx=5)
+            tk.Label(tile, text=f"0{idx + 1}  /  {title.upper()}", bg=self.colors["panel"],
+                     fg=self.colors["muted"], font=("Sans", 8, "bold"), anchor="w").pack(
+                         fill="x", padx=11, pady=(11, 5))
+            value = tk.Label(tile, text="—", bg=self.colors["panel"], fg=self.colors["text"],
+                             font=("Sans", 18, "bold"), anchor="w")
+            value.pack(fill="x", padx=11)
+            note = tk.Label(tile, text="Waiting", bg=self.colors["panel"], fg=self.colors["muted"],
+                            font=("Sans", 9), anchor="w")
+            note.pack(fill="x", padx=11, pady=(2, 11))
+            self.overview_stage_labels[key] = (value, note)
+
+        next_panel = tk.Frame(overview_panel, bg=self.colors["panel_2"],
+                              highlightbackground=self.colors["line"], highlightthickness=1)
+        self.overview_next_panel = next_panel
+        next_panel.grid(row=1, column=1, sticky="nsew", padx=(8, 18), pady=(0, 18))
+        tk.Label(next_panel, text="NEXT STEP", bg=self.colors["panel_2"], fg=self.colors["gold"],
+                 font=("Sans", 9, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 7))
+        self.overview_next_title = tk.Label(next_panel, text="Getting your desk ready", bg=self.colors["panel_2"],
+                                            fg=self.colors["text"], font=("Sans", 16, "bold"), anchor="w", justify="left")
+        self._fit_text(self.overview_next_title, min_size=11, max_size=16, padding=36, wrap=True)
+        self.overview_next_title.pack(fill="x", padx=18)
+        self.overview_next_copy = tk.Label(next_panel, text="Timmy will point you to the next useful action.",
+                                           bg=self.colors["panel_2"], fg=self.colors["muted"],
+                                           font=("Sans", 10), anchor="nw", justify="left")
+        self._fit_text(self.overview_next_copy, min_size=8, max_size=10, padding=36, wrap=True)
+        self.overview_next_copy.pack(fill="x", padx=18, pady=(7, 14))
+        self.overview_continue_button = self._button(
+            next_panel, "Continue", lambda: self._show_tab("Setup"), accent="gold")
+        self.overview_continue_button.pack(anchor="w", padx=18, pady=(0, 16))
+        self.overview_next_tab = "Setup"
 
         signals_panel = self._panel(body)
         self.signals_panel = signals_panel
@@ -1099,6 +1167,16 @@ class TimmyNativeApp:
             wrap="word",
         )
         self.execution_gate_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+        recovery_controls = tk.Frame(execution_tab_panel, bg=self.colors["panel"])
+        recovery_controls.grid(row=3, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 18))
+        self.unknown_order_review_button = self._button(
+            recovery_controls,
+            "Review unknown orders",
+            self.review_unknown_live_orders,
+            accent="gold",
+        )
+        self.unknown_order_review_button.configure(width=22)
+        self.unknown_order_review_button.pack(side="left")
 
         health_panel = self._panel(body)
         self.health_panel = health_panel
@@ -1175,10 +1253,21 @@ class TimmyNativeApp:
         broker_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 18))
         broker_panel.columnconfigure(0, weight=1)
         broker_panel.columnconfigure(1, weight=1)
-        broker_panel.rowconfigure(2, weight=1)
+        broker_panel.rowconfigure(3, weight=1)
         self._section_header(broker_panel, "BROKER DESK", "Account And Orders", None, None, compact=True)
+        broker_actions = tk.Frame(broker_panel, bg=self.colors["panel"])
+        broker_actions.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 12))
+        self.webull_check_button = self._button(
+            broker_actions,
+            "✓ Check Webull account",
+            lambda: self._run_action("Checking Webull", self.webull_check),
+            accent="teal",
+            tooltip="Refresh account status and buying power",
+        )
+        self.webull_check_button.pack(side="left")
+        self.busy_controls.append(self.webull_check_button)
         broker_summary = tk.Frame(broker_panel, bg=self.colors["panel"])
-        broker_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        broker_summary.grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         broker_summary.columnconfigure((0, 1, 2, 3, 4), weight=1)
         self.broker_summary_labels = {}
         for idx, title in enumerate(("Account", "Cash Account", "Paper Account", "Live", "Dry Run")):
@@ -1186,11 +1275,11 @@ class TimmyNativeApp:
         self.broker_readiness_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["text"],
                                              insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                              font=("Monospace", 10), wrap="word")
-        self.broker_readiness_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.broker_readiness_text.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.broker_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["broker_text"],
                                    insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                    font=("Monospace", 10), wrap="word")
-        self.broker_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+        self.broker_text.grid(row=3, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
         journal_panel = self._panel(right)
         self.journal_panel = journal_panel
@@ -1215,8 +1304,9 @@ class TimmyNativeApp:
         self.journal_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
         self.status_bar = tk.Label(main, text="Ready", bg=self.colors["panel_3"], fg=self.colors["muted"],
-                                   anchor="center", justify="center", padx=12, pady=8)
-        self._fit_text(self.status_bar, min_size=8, max_size=10, padding=56, wrap=True)
+                                   anchor="w", justify="left", padx=16, pady=9,
+                                   highlightbackground=self.colors["line"], highlightthickness=1)
+        self._fit_text(self.status_bar, min_size=8, max_size=10, padding=32, wrap=True)
         self.status_bar.grid(row=4, column=0, sticky="ew", padx=24, pady=(0, 8))
         self._refresh_webull_account_menu()
         self._sync_profile_save_state()
@@ -1252,6 +1342,7 @@ class TimmyNativeApp:
         return value
 
     def _show_tab(self, tab: str) -> None:
+        self.content_canvas.yview_moveto(0)
         self._set_nav_active(tab)
         overview_active = tab == "Overview"
         if overview_active:
@@ -1322,6 +1413,50 @@ class TimmyNativeApp:
             panel.grid(row=0, column=0, sticky="nsew", pady=0)
 
         self.status_bar.configure(text=f"{tab} tab active.")
+
+    def _responsive_layout(self, event=None) -> None:
+        if event is not None and event.widget is not self.root:
+            return
+        if not hasattr(self, "overview_workflow_panel"):
+            return
+        compact = self.root.winfo_width() < 1240
+        if compact:
+            self.overview_workflow_panel.grid_configure(row=1, column=0, columnspan=2,
+                                                        padx=18, pady=(0, 10))
+            self.overview_next_panel.grid_configure(row=2, column=0, columnspan=2,
+                                                    padx=18, pady=(0, 18))
+            self.overview_panel.rowconfigure(1, weight=0)
+            self.overview_panel.rowconfigure(2, weight=1)
+        else:
+            self.overview_workflow_panel.grid_configure(row=1, column=0, columnspan=1,
+                                                        padx=(18, 8), pady=(0, 18))
+            self.overview_next_panel.grid_configure(row=1, column=1, columnspan=1,
+                                                    padx=(8, 18), pady=(0, 18))
+            self.overview_panel.rowconfigure(1, weight=1)
+            self.overview_panel.rowconfigure(2, weight=0)
+
+    def _scroll_content(self, event) -> str | None:
+        if not hasattr(self, "content_canvas"):
+            return None
+        canvas = self.content_canvas
+        x, y = event.x_root, event.y_root
+        left, top = canvas.winfo_rootx(), canvas.winfo_rooty()
+        if not (left <= x <= left + canvas.winfo_width() and top <= y <= top + canvas.winfo_height()):
+            return None
+        if getattr(event, "num", None) == 4:
+            step = -3
+        elif getattr(event, "num", None) == 5:
+            step = 3
+        else:
+            delta = getattr(event, "delta", 0)
+            self._wheel_delta_remainder += delta
+            wheel_ticks = int(self._wheel_delta_remainder / 120)
+            self._wheel_delta_remainder -= wheel_ticks * 120
+            step = -wheel_ticks
+        if step:
+            canvas.yview_scroll(step, "units")
+            return "break"
+        return None
 
     def _profile_field(self, parent: tk.Widget, row: int, label: str, variable: tk.StringVar, secret: bool = False) -> None:
         tk.Label(parent, text=label, bg=self.colors["panel"], fg=self.colors["muted"],
@@ -1396,7 +1531,8 @@ class TimmyNativeApp:
                            activeforeground=fg, relief="flat", padx=16, pady=10,
                            font=("Sans", 14 if icon_only else 10, "bold"),
                            disabledforeground=self.colors["disabled"], cursor="hand2", anchor="center",
-                           justify="center", highlightbackground=self.colors["line"], highlightthickness=1)
+                           justify="center", takefocus=True, highlightbackground=self.colors["line"],
+                           highlightcolor=self.colors["cyan"], highlightthickness=2)
         if icon_only:
             button.configure(width=3)
         else:
@@ -1519,19 +1655,23 @@ class TimmyNativeApp:
         self._fit_text(title_label, min_size=12, max_size=16, padding=20, wrap=True)
         title_label.grid(row=1, column=0, sticky="ew", pady=(2, 0))
         if button_text and command:
-            display_text, tooltip = {
-                "Refresh Data": ("↻", "Refresh market data"),
-                "Run Model": ("▶", "Run strategy model"),
-                "Run Check": ("✓", "Run desk health check"),
-                "Paper Trade": ("○", "Paper trade current queue"),
-            }.get(button_text, (button_text, button_text))
-            button = self._button(header, display_text, command, accent="teal" if button_text == "Paper Trade" else None, tooltip=tooltip)
+            tooltip = {
+                "Refresh Data": "Refresh market data",
+                "Run Model": "Run strategy model",
+                "Run Check": "Run desk health check",
+                "Paper Trade": "Paper trade current queue",
+            }.get(button_text, button_text)
+            button = self._button(header, button_text, command,
+                                  accent="teal" if button_text == "Paper Trade" else None, tooltip=tooltip)
             button.grid(row=0, column=1, rowspan=2, sticky="e")
             return button
         return None
 
     def refresh_all(self) -> None:
         if self.closing:
+            return
+        if self._action_in_progress:
+            self.status_bar.configure(text="An action is already in progress. Wait for it to finish before refreshing.")
             return
         if self._refresh_in_progress:
             self.status_bar.configure(text="Refresh already in progress.")
@@ -1589,6 +1729,10 @@ class TimmyNativeApp:
             pass
 
     def refresh_data(self) -> None:
+        if self._action_in_progress or self._refresh_in_progress:
+            active = self._active_action_label if self._action_in_progress else "market refresh"
+            self.status_bar.configure(text=f"Cannot refresh sample data while {active} is in progress.")
+            return
         try:
             self.status_bar.configure(text="Refreshing sample data...")
             self.data_file.parent.mkdir(parents=True, exist_ok=True)
@@ -2189,6 +2333,7 @@ class TimmyNativeApp:
         if refresh:
             self._refresh_payload()
         config = self._execution_config(self._load_config_safe())
+        self._plan_limit(config)
         plans = list(self.plans)
         if not plans:
             return "No executable plans at current controls. Live order was not submitted."
@@ -2207,6 +2352,10 @@ class TimmyNativeApp:
         return json.dumps(results, indent=2, sort_keys=True)
 
     def run_decision_cycle(self) -> None:
+        if self._action_in_progress or self._refresh_in_progress:
+            active = self._active_action_label if self._action_in_progress else "market refresh"
+            self.status_bar.configure(text=f"Decision cycle paused while {active} is in progress.")
+            return
         try:
             self.status_bar.configure(text="Running decision cycle...")
             self._refresh_payload()
@@ -2682,7 +2831,7 @@ class TimmyNativeApp:
         return f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}"
 
     def _render_overview_summary(self) -> None:
-        if not getattr(self, "overview_summary_labels", None):
+        if not getattr(self, "overview_summary_labels", None) and not getattr(self, "overview_stage_labels", None):
             return
         config = self.config or self._load_config_safe()
         execution_config = self._execution_config(config)
@@ -2699,6 +2848,49 @@ class TimmyNativeApp:
                 "Broker Desk": broker_label,
             },
         )
+        self._render_overview_workflow(config, execution_config, signal_mix, broker_current)
+
+    def _render_overview_workflow(
+        self,
+        config: BotConfig,
+        execution_config: BotConfig,
+        signal_mix: dict,
+        broker_current: bool,
+    ) -> None:
+        if not getattr(self, "overview_stage_labels", None):
+            return
+        stages = {
+            "market": (len(self.bars_by_symbol), "symbols with market data", bool(self.bars_by_symbol)),
+            "scan": (len(self.signals), "symbols evaluated", bool(self.signals)),
+            "strategy": (signal_mix["sensible_ready"], "tradeable ideas", signal_mix["sensible_ready"] > 0),
+            "orders": (len(self.plans), "orders ready to review", bool(self.plans)),
+        }
+        for key, (count, note, ready) in stages.items():
+            value_label, note_label = self.overview_stage_labels[key]
+            value_label.configure(text=f"{count:,}" if count else "—",
+                                  fg=self.colors["teal"] if ready else self.colors["muted"])
+            note_label.configure(text=note)
+
+        if self.config_error:
+            next_tab, title = "Setup", "Review your setup"
+            copy = "There is a configuration issue. Resolve it before enabling live workflows."
+        elif not self.signals:
+            next_tab, title = "Scanner", "Start with a market scan"
+            copy = "Refresh market data, then review the symbols Timmy found."
+        elif not self.plans:
+            next_tab, title = "Strategy", "Review the strategy"
+            copy = "No orders are ready yet. Check the strategy signals and the gates holding ideas back."
+        elif self.execution_target_var.get() == "Live" and (not broker_current or not self._live_ready(execution_config)):
+            next_tab, title = "Broker", "Check broker readiness"
+            copy = "Refresh the selected account and review any broker or live-order gates before proceeding."
+        else:
+            next_tab, title = "Execution", "Review your order queue"
+            copy = "Inspect the plan, preview the route, and choose paper or live execution from the order desk."
+        self.overview_next_tab = next_tab
+        self.overview_next_title.configure(text=title)
+        self.overview_next_copy.configure(text=copy)
+        self.overview_continue_button.configure(
+            text=f"Open {next_tab}", command=lambda target=next_tab: self._show_tab(target))
 
     def _pipeline_universe_count(self, config: BotConfig) -> int:
         if config.watchlist_universe == "all-us":
@@ -3002,6 +3194,10 @@ class TimmyNativeApp:
         self._set_text(self.execution_gate_text, self._execution_gate_detail(config, execution_config))
 
     def run_system_check(self) -> None:
+        if self._action_in_progress or self._refresh_in_progress:
+            active = self._active_action_label if self._action_in_progress else "market refresh"
+            self.status_bar.configure(text=f"Desk check waiting for {active} to finish.")
+            return
         try:
             self.status_bar.configure(text="Running desk check...")
             self._refresh_payload()
@@ -3508,6 +3704,14 @@ class TimmyNativeApp:
     def _run_action(self, label: str, action, threaded: bool = True) -> None:
         if self.closing:
             return
+        if self._action_in_progress:
+            self.status_bar.configure(text=f"{self._active_action_label} is still in progress. Please wait.")
+            return
+        if self._refresh_in_progress:
+            self.status_bar.configure(text="Market refresh is still in progress. Please wait before starting another action.")
+            return
+        self._action_in_progress = True
+        self._active_action_label = label
         self.status_bar.configure(text=f"{label}...")
         self._set_buttons_state("disabled")
 
@@ -3552,6 +3756,8 @@ class TimmyNativeApp:
         if label == "Paper trade":
             self._load_journal()
         self.status_bar.configure(text=f"{label} complete.")
+        self._action_in_progress = False
+        self._active_action_label = ""
         self._set_buttons_state("normal")
         self._sync_manual_controls()
         self._sync_profile_save_state()
@@ -3562,6 +3768,8 @@ class TimmyNativeApp:
         try:
             self.status_bar.configure(text=f"Recovered UI error: {exc_value}")
             self._set_text(self.broker_text, details)
+            self._action_in_progress = False
+            self._active_action_label = ""
             self._set_buttons_state("normal")
             self._sync_manual_controls()
         except tk.TclError:
@@ -3586,6 +3794,8 @@ class TimmyNativeApp:
             self._render_setup_status()
         self.status_bar.configure(text=f"{label} failed: {exc}")
         self._set_text(self.broker_text, str(exc))
+        self._action_in_progress = False
+        self._active_action_label = ""
         self._set_buttons_state("normal")
         self._sync_manual_controls()
         self._sync_profile_save_state()
@@ -4097,8 +4307,8 @@ class TimmyNativeApp:
         self.plan_limit_value = self._bounded_int(
             self.plan_limit_var,
             config.max_positions,
-            1,
-            max(1, config.max_positions),
+            0,
+            max(0, config.max_positions),
         )
         return self.plan_limit_value
 
@@ -4419,6 +4629,11 @@ class TimmyNativeApp:
         auto_enabled = self.paper_auto_var.get() or self.execution_mode_var.get() == "Auto"
         if self.closing or not auto_enabled:
             return
+        if self._action_in_progress or self._refresh_in_progress:
+            active = self._active_action_label if self._action_in_progress else "market refresh"
+            self.status_bar.configure(text=f"Automation cycle waiting for {active} to finish.")
+            self.automation_after_id = self.root.after(AUTOMATION_RETRY_MS, self._automation_tick)
+            return
         self.run_decision_cycle()
         self._schedule_automation()
 
@@ -4544,6 +4759,9 @@ class TimmyNativeApp:
     def _event_from_broker_result(self, result: dict, mode: str) -> dict:
         plan = result.get("order_plan") or {}
         status = self._broker_event_status(result)
+        request_payload = result.get("request_payload") or {}
+        new_orders = request_payload.get("new_orders") if isinstance(request_payload, dict) else None
+        request_order = new_orders[0] if isinstance(new_orders, list) and new_orders and isinstance(new_orders[0], dict) else {}
         return {
             "mode": mode,
             "robot": "Timmy",
@@ -4552,6 +4770,7 @@ class TimmyNativeApp:
             "event_type": "buy-order",
             "status": status,
             "symbol": plan.get("symbol"),
+            "client_order_id": request_order.get("client_order_id"),
             "quantity": plan.get("quantity"),
             "buy_price": plan.get("limit_price"),
             "sell_target_price": plan.get("target_price"),
@@ -4561,6 +4780,229 @@ class TimmyNativeApp:
             "broker_error": result.get("error"),
             "broker_body": result.get("body"),
         }
+
+    def _unresolved_unknown_live_orders(self) -> list[dict]:
+        """Return unknown live orders not cleared by terminal resolution records."""
+        event_log_path = getattr(self, "event_log_path", None)
+        try:
+            stat = event_log_path.stat() if event_log_path else None
+            file_key = (stat.st_mtime_ns, stat.st_size) if stat else (0, 0)
+        except FileNotFoundError:
+            file_key = (0, 0)
+        except OSError:
+            self._execution_log_unreadable_for_order_safety = True
+            return []
+        cache_key = (file_key, len(getattr(self, "execution_events", [])))
+        if getattr(self, "_unresolved_live_orders_cache_key", None) == cache_key:
+            return list(getattr(self, "_unresolved_live_orders_cache", []))
+
+        events = list(getattr(self, "execution_events", []))
+        trusted_unknown_events: list[dict] = []
+        trusted_resolution_ids: set[str] = set()
+        self._execution_log_unreadable_for_order_safety = False
+        if event_log_path and file_key != (0, 0):
+            # Execution history is displayed as a bounded tail, but safety
+            # blocks must survive even if an unresolved order is older. Stream
+            # the file and retain only relevant order records to bound memory.
+            try:
+                event_stream = event_log_path.open("r", encoding="utf-8", errors="replace")
+            except OSError:
+                self._execution_log_unreadable_for_order_safety = True
+                self._unresolved_live_orders_cache_key = cache_key
+                self._unresolved_live_orders_cache = []
+                return []
+            with event_stream as event_log:
+                previous_hash = "genesis"
+                saw_signed = False
+                chain_valid = True
+                saw_records = False
+                resolution_candidates: set[str] = set()
+                self.audit_status = "Audit chain ok"
+                for line in event_log:
+                    if not line.strip():
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        self.audit_status = "Audit warning: malformed event log line detected"
+                        chain_valid = False
+                        continue
+                    if not isinstance(event, dict):
+                        continue
+                    saw_records = True
+                    event_hash = event.get("event_hash")
+                    if event_hash:
+                        saw_signed = True
+                        expected_hash = self._event_signature(event, event.get("prev_hash"))
+                        if event.get("prev_hash") != previous_hash or not hmac.compare_digest(str(event_hash), expected_hash):
+                            self.audit_status = "Audit warning: execution log may have been edited"
+                            chain_valid = False
+                        previous_hash = str(event_hash)
+                    if (
+                        event.get("mode") == "live"
+                        and event.get("event_type") == "buy-order"
+                        and str(event.get("status", "")).lower() == "unknown"
+                    ):
+                        trusted_unknown_events.append(event)
+                    if (
+                        event_hash
+                        and event.get("event_type") == "order-resolution"
+                        and str(event.get("status", "")).lower() in {"rejected", "cancelled", "canceled", "expired"}
+                        and event.get("client_order_id")
+                    ):
+                        resolution_candidates.add(str(event["client_order_id"]))
+                if not saw_signed and saw_records:
+                    self.audit_status = "Audit warning: legacy unsigned event records"
+                    chain_valid = False
+                if chain_valid:
+                    trusted_resolution_ids = resolution_candidates
+
+            events.extend(trusted_unknown_events)
+
+        # A resolution only clears the guard when it belongs to a valid signed
+        # audit chain; copied or manually edited JSON cannot unlock a symbol.
+        resolved_ids = trusted_resolution_ids
+        unresolved: dict[str, dict] = {}
+        for event in events:
+            if (
+                event.get("mode") != "live"
+                or event.get("event_type") != "buy-order"
+                or str(event.get("status", "")).lower() != "unknown"
+            ):
+                continue
+            client_order_id = str(event.get("client_order_id") or "").strip()
+            if client_order_id and client_order_id not in resolved_ids:
+                unresolved.setdefault(client_order_id, event)
+        result = list(unresolved.values())
+        self._unresolved_live_orders_cache_key = cache_key
+        self._unresolved_live_orders_cache = result
+        return list(result)
+
+    def review_unknown_live_orders(self) -> None:
+        unresolved = self._unresolved_unknown_live_orders()
+        if getattr(self, "_execution_log_unreadable_for_order_safety", False):
+            messagebox.showerror(
+                "Execution log unavailable",
+                "Timmy cannot read the execution log. Live orders remain blocked until the log is readable.",
+            )
+            return
+        if not unresolved:
+            messagebox.showinfo("Unresolved live orders", "No unresolved live order outcomes were found.")
+            return
+        if str(getattr(self, "audit_status", "")).startswith("Audit warning"):
+            messagebox.showerror(
+                "Execution log needs repair",
+                "Timmy found an execution log integrity warning. Resolve the log integrity issue before recording an order resolution.",
+            )
+            return
+
+        window = tk.Toplevel(self.root)
+        window.title("Resolve unknown live orders")
+        window.transient(self.root)
+        window.grab_set()
+        window.configure(bg=self.colors["panel"])
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(1, weight=1)
+
+        tk.Label(
+            window,
+            text=(
+                "Check each client order ID directly in Webull. Resolve only after Webull shows "
+                "Rejected, Cancelled, or Expired. This tool does not contact Webull."
+            ),
+            bg=self.colors["panel"],
+            fg=self.colors["text"],
+            justify="left",
+            wraplength=540,
+            padx=16,
+            pady=14,
+        ).grid(row=0, column=0, sticky="ew")
+
+        tree = ttk.Treeview(window, columns=("symbol", "client_order_id", "recorded"), show="headings", height=7)
+        tree.heading("symbol", text="Symbol")
+        tree.heading("client_order_id", text="Client order ID")
+        tree.heading("recorded", text="Recorded")
+        tree.column("symbol", width=90, stretch=False)
+        tree.column("client_order_id", width=260, stretch=True)
+        tree.column("recorded", width=150, stretch=False)
+        tree.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 10))
+        order_by_id = {}
+        for event in unresolved:
+            order_id = str(event.get("client_order_id"))
+            order_by_id[order_id] = event
+            tree.insert(
+                "",
+                "end",
+                iid=order_id,
+                values=(event.get("symbol") or "-", order_id, event.get("recorded_at") or event.get("submitted_at") or "-"),
+            )
+
+        controls = tk.Frame(window, bg=self.colors["panel"])
+        controls.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 8))
+        status_var = tk.StringVar(value="")
+        status = ttk.Combobox(
+            controls,
+            textvariable=status_var,
+            values=("rejected", "cancelled", "expired"),
+            state="readonly",
+            width=14,
+        )
+        status.pack(side="left", padx=(0, 12))
+        checked_var = tk.BooleanVar(value=False)
+        confirm = tk.Checkbutton(
+            controls,
+            text="I checked this order ID in Webull and confirmed its terminal status.",
+            variable=checked_var,
+            bg=self.colors["panel"],
+            fg=self.colors["text"],
+            selectcolor=self.colors["panel_2"],
+            activebackground=self.colors["panel"],
+            activeforeground=self.colors["text"],
+            wraplength=360,
+            justify="left",
+        )
+        confirm.pack(side="left", fill="x", expand=True)
+
+        buttons = tk.Frame(window, bg=self.colors["panel"])
+        buttons.grid(row=3, column=0, sticky="e", padx=16, pady=(0, 14))
+
+        def record_resolution() -> None:
+            selection = tree.selection()
+            if not selection:
+                messagebox.showwarning("Resolve order", "Select an unresolved order first.", parent=window)
+                return
+            if not checked_var.get():
+                messagebox.showwarning("Resolve order", "Confirm that you checked the order in Webull.", parent=window)
+                return
+            order_id = selection[0]
+            event = order_by_id.get(order_id)
+            terminal_status = status_var.get().lower()
+            if not event or terminal_status not in {"rejected", "cancelled", "expired"}:
+                messagebox.showerror("Resolve order", "A supported terminal status is required.", parent=window)
+                return
+            if not messagebox.askyesno(
+                "Confirm terminal order status",
+                f"Record {order_id} as {terminal_status.upper()} based on your Webull check?\n\n"
+                "This clears Timmy's duplicate-order block for this client order ID.",
+                parent=window,
+            ):
+                return
+            self._append_execution_event({
+                "mode": "live",
+                "robot": "Timmy",
+                "event_type": "order-resolution",
+                "status": terminal_status,
+                "symbol": str(event.get("symbol") or "").upper(),
+                "client_order_id": order_id,
+                "resolution_source": "operator-confirmed-webull-terminal-status",
+                "recorded_at": datetime.now().isoformat(),
+            })
+            self._refresh_payload(skip_market_refresh=True)
+            window.destroy()
+            self.status_bar.configure(text=f"Recorded {order_id} as {terminal_status} after Webull confirmation.")
+
+        self._button(buttons, "Record resolution", record_resolution, accent="gold").pack(side="left", padx=(0, 8))
+        self._button(buttons, "Close", window.destroy).pack(side="left")
 
     def _update_buying_power_from_broker_results(self, results: list[dict]) -> None:
         for result in results:
@@ -4589,7 +5031,7 @@ class TimmyNativeApp:
     @staticmethod
     def _broker_event_status(result: dict) -> str:
         raw_status = str(result.get("status") or "").lower()
-        if raw_status in {"preview-required", "rejected", "failed", "accepted"}:
+        if raw_status in {"preview-required", "rejected", "failed", "accepted", "unknown"}:
             return raw_status
         status_code = result.get("status_code")
         try:
@@ -4787,6 +5229,10 @@ class TimmyNativeApp:
         return safe
 
     def _entry_too_large_for_cash(self, signal, config: BotConfig) -> bool:
+        # A zero/invalid cash cap is an explicit no-entry risk setting. Fail
+        # closed even when account cash is unavailable or reported as zero.
+        if config.max_entry_cash_pct <= 0:
+            return True
         if self.trade_cash_value is None or self.trade_cash_value <= 0:
             return False
         max_entry = self.trade_cash_value * (config.max_entry_cash_pct / 100)
@@ -4803,6 +5249,15 @@ class TimmyNativeApp:
         blocks: list[str] = []
         symbol = signal.symbol.upper()
         today_events = self._today_execution_events()
+
+        # An exception during place_order leaves acceptance uncertain. Keep
+        # that symbol blocked across sessions until an explicit terminal
+        # broker resolution is journaled for the same client order ID.
+        unresolved_orders = self._unresolved_unknown_live_orders()
+        if getattr(self, "_execution_log_unreadable_for_order_safety", False):
+            blocks.append("execution event log unreadable; live-order safety cannot be confirmed")
+        if any(str(event.get("symbol") or "").upper() == symbol for event in unresolved_orders):
+            blocks.append("unresolved live order outcome; reconcile with Webull before submitting this symbol")
 
         if include_session and config.require_market_hours and not self._regular_market_open_now():
             blocks.append("regular market session is closed")
@@ -5106,5 +5561,12 @@ def _format_quantity(value: float) -> str:
 def _restart_command(home: Path) -> list[str]:
     launcher = home / "scripts" / "launch_timmy.sh"
     if launcher.exists():
-        return [str(launcher)]
-    return [sys.executable, "-m", "trend_trader.desktop"]
+        command = [str(launcher)]
+    elif getattr(sys, "frozen", False):
+        # In a packaged install sys.executable is Timmy itself, not Python.
+        command = [sys.executable]
+    else:
+        command = [sys.executable, "-m", "trend_trader.desktop"]
+    # Power Cycle schedules this process to exit shortly after spawning the
+    # replacement. Let the old instance release its lock before relaunching.
+    return ["sh", "-c", 'sleep 1; exec "$@"', "timmy-restart", *command]

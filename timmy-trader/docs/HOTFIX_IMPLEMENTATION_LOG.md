@@ -269,9 +269,9 @@ avoid
 
 Inputs include early movement, trend quality, direction, reward/risk, volatility, expense warnings, cash fit, and recent rejected/failed/stopped events for the same symbol. The native GUI shows this in the `Sensible` column, and order planning requires a local `trade` action before a live or paper order plan is eligible.
 
-### Replace Existing Native Instance
+### Single Native Instance Lock
 
-Timmy now uses the native lock file as a handoff mechanism. On launch, it checks for an existing Timmy PID, sends it a graceful shutdown, waits briefly, force-kills only if needed, then opens the new instance. This prevents duplicate trading loops while still making a launcher click refresh the visible app.
+Timmy now claims a per-runtime-home file lock on launch. If another instance holds it, the new launch exits with a message instead of terminating another process. This prevents duplicate trading loops while preserving unrelated Timmy instances.
 
 ### Operational And Tamper-Resistance Improvements
 
@@ -753,8 +753,8 @@ Notes:
 
 Launcher hardening:
 
-- New launches scan for `/opt/timmy-trader/Timmy`, `timmy-desktop`, and `python -m trend_trader.desktop` process forms.
-- Matching prior Timmy instances receive `SIGTERM`, then `SIGKILL` if needed, before the new instance claims `timmy.lock`.
+- New launches claim a per-runtime-home file lock and refuse to start when it is already held.
+- Timmy does not scan for or terminate existing processes.
 
 ## Asset-Class Knowledge Guardrails
 

@@ -205,6 +205,10 @@ def score_symbol(
     trading_style: str = "adaptive",
     enabled_trade_patterns: set[str] | None = None,
 ) -> Signal:
+    # This score only reads the latest 50 bars (including the current bar).
+    # Avoid materializing closes and a prior-bar copy across an entire CSV
+    # history when a symbol has years of data.
+    bars = bars[-50:]
     style_profile = _style_profile(trading_style)
     patterns = enabled_trade_patterns or SUPPORTED_TRADE_PATTERNS
     values = closes(bars)

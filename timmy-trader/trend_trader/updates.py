@@ -4,8 +4,10 @@ import hashlib
 import hmac
 import json
 import os
+import platform
 import re
 import shutil
+import shlex
 import tarfile
 import tempfile
 from dataclasses import dataclass
@@ -28,6 +30,8 @@ class UpdateResult:
 
 def check_and_install_update(timeout: float = 20.0) -> UpdateResult:
     """Install a verified GitHub release into the user's app directory."""
+    if platform.system() != "Linux" or platform.machine().lower() not in {"x86_64", "amd64"}:
+        return UpdateResult("Automatic updates currently support x86_64 Linux only.")
     release = _github_json(f"{GITHUB_API}/releases/latest", timeout)
     if not isinstance(release, dict) or not release or release.get("draft") or release.get("prerelease"):
         return UpdateResult("No stable GitHub release is available.")
@@ -44,6 +48,8 @@ def check_and_install_update(timeout: float = 20.0) -> UpdateResult:
     current_version = _installed_version(install_root)
     if current_version == tag:
         return UpdateResult(f"Timmy is up to date ({tag}).", tag)
+    if _installed_release_baseline(install_root) == tag:
+        return UpdateResult(f"Local Timmy build is current with GitHub release {tag}.", tag)
 
     archive_url = str(archive_asset.get("browser_download_url") or "")
     checksum_url = str(checksum_asset.get("browser_download_url") or "")
@@ -109,6 +115,16 @@ def _installed_version(install_root: Path) -> str | None:
         return None
 
 
+def _installed_release_baseline(install_root: Path) -> str | None:
+    """Read the release a local build replaces to avoid downgrading it."""
+    baseline = install_root / "current" / "BASE_RELEASE"
+    try:
+        value = baseline.read_text(encoding="ascii").strip()
+    except OSError:
+        return None
+    return value if re.fullmatch(r"[A-Za-z0-9._+-]{1,80}", value) else None
+
+
 def _install_archive(archive_path: Path, install_root: Path, tag: str) -> None:
     versions = install_root / "versions"
     target = versions / tag
@@ -147,10 +163,17 @@ def _install_user_launcher(install_root: Path) -> None:
     bin_dir = home / ".local" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     launcher = bin_dir / "timmy-trader"
+    overlay = install_root / "current" / "Timmy"
+    runtime_home = home / ".config" / "timmy-trader"
     content = (
         "#!/bin/sh\n"
-        f"export TIMMY_HOME=\"${{TIMMY_HOME:-{home}/.config/timmy-trader}}\"\n"
-        f"exec \"{install_root}/current/Timmy\" \"$@\"\n"
+        "set -eu\n"
+        f"if [ -z \"${{TIMMY_HOME:-}}\" ]; then export TIMMY_HOME={shlex.quote(str(runtime_home))}; fi\n"
+        f"OVERLAY={shlex.quote(str(overlay))}\n"
+        "if [ -x \"${OVERLAY}\" ]; then\n"
+        "  exec \"${OVERLAY}\" \"$@\"\n"
+        "fi\n"
+        "exec /usr/bin/timmy-trader \"$@\"\n"
     )
     temporary = launcher.with_suffix(".tmp")
     temporary.write_text(content, encoding="utf-8")

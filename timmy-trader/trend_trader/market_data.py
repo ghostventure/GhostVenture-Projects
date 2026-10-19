@@ -4,7 +4,7 @@ import csv
 import io
 import json
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -14,7 +14,7 @@ STOOQ_DAILY_URL = "https://stooq.com/q/d/l/"
 
 
 def fetch_stooq_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
-    return _fetch_parallel(symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, timeout=timeout), days, max_workers)
+    return _fetch_parallel(symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, days=days, timeout=timeout), days, max_workers)
 
 
 def fetch_yahoo_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
@@ -24,9 +24,11 @@ def fetch_yahoo_daily(symbols: list[str], days: int = 90, timeout: int = 10, max
 def fetch_daily_bars(provider: str, symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
     if provider == "stooq":
         bars = fetch_stooq_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
-        if bars:
-            return bars
-        return fetch_yahoo_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
+        missing_symbols = [symbol.upper() for symbol in symbols if symbol.strip() and symbol.upper() not in bars]
+        if missing_symbols:
+            yahoo_bars = fetch_yahoo_daily(missing_symbols, days=days, timeout=timeout, max_workers=max_workers)
+            bars.update(yahoo_bars)
+        return bars
     if provider == "yahoo":
         return fetch_yahoo_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
     raise ValueError(f"Unsupported market data provider: {provider}")
@@ -37,7 +39,7 @@ def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) 
     clean_symbols = sorted(dict.fromkeys(symbol.upper() for symbol in symbols if symbol.strip()))
     if not clean_symbols:
         return bars
-    workers = max(1, min(max_workers, len(clean_symbols)))
+    workers = max(1, min(int(max_workers), 24, len(clean_symbols)))
     symbols_to_fetch = iter(clean_symbols)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         # Bound queued work as well as worker threads. Watchlists can be large,
@@ -63,9 +65,20 @@ def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) 
     return bars
 
 
-def _fetch_one_stooq_symbol(symbol: str, timeout: int = 10) -> list[Candle]:
+def _fetch_one_stooq_symbol(symbol: str, days: int = 90, timeout: int = 10) -> list[Candle]:
     stooq_symbol = _stooq_symbol(symbol)
-    url = f"{STOOQ_DAILY_URL}?{urlencode({'s': stooq_symbol, 'i': 'd'})}"
+    # Stooq otherwise returns the symbol's entire available history. Request a
+    # bounded window with room for weekends, holidays, and missing sessions.
+    end_date = datetime.now().date()
+    calendar_days = max(30, max(1, days) * 2 + 14)
+    start_date = end_date - timedelta(days=calendar_days)
+    query = {
+        's': stooq_symbol,
+        'i': 'd',
+        'd1': start_date.strftime('%Y%m%d'),
+        'd2': end_date.strftime('%Y%m%d'),
+    }
+    url = f"{STOOQ_DAILY_URL}?{urlencode(query)}"
     request = Request(url, headers={"User-Agent": "Timmy/0.1"})
     with urlopen(request, timeout=timeout) as response:
         payload = response.read().decode("utf-8", errors="replace")

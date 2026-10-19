@@ -360,6 +360,9 @@ Stop Timmy automation and return to `User` plus `Paper` when any of these happen
 
 - Market data is stale, missing, or inconsistent.
 - Broker account, positions, or open orders are unknown.
+- A live order result is `unknown`; check its client order ID in Webull and do
+  not submit that symbol again. The UI currently clears this block only after
+  the broker confirms the order was rejected, cancelled, or expired.
 - Webull preview fails or returns unexpected fields.
 - Multiple Timmy instances are active.
 - Audit warning appears.

@@ -156,7 +156,10 @@ class WebullOpenApiBroker:
             }
         except Exception as exc:
             return {
-                "status": "rejected",
+                # Once place_order has been called, an exception cannot prove
+                # that Webull rejected the order (the response may be lost).
+                # Preserve the request ID so the operator can reconcile it.
+                "status": "unknown",
                 "error": str(exc),
                 "request_payload": self._redacted_payload(payload),
                 "order_plan": asdict(order),

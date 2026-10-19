@@ -1,5 +1,28 @@
 # Timmy Master Documentation
 
+## Release Target: 0.1.4
+
+The current source and package instructions target version 0.1.4. This release
+includes the native GUI facelift and responsive layout, action coordination,
+safer unresolved-order recovery and fail-closed exposure configuration, plus
+reduced intermediate copies when processing larger market-data sets. Treat
+these as source release notes; confirm the package is available on the
+[Download page](https://timmy-tradesonauto.web.app/download.html) or the native
+archive is present in GitHub Releases before installing a published build.
+
+For a downloaded Debian package, run its matching checksum command from the
+download directory, then install the 0.1.4 package:
+
+```bash
+sha256sum -c SHA256SUMS.txt
+sudo apt install ./timmy-trader_0.1.4_amd64.deb
+```
+
+The Debian package is intended to be available through the Firebase-hosted
+Download page. The native updater expects the GitHub Release assets
+`Timmy-linux-x86_64.tar.gz` and `SHA256SUMS`; a Hosting deployment does not
+publish that archive or update a running app.
+
 Timmy is a native Linux trading assistant that scouts market movement, ranks setups, builds guarded order plans, supports paper trading, and can connect to Webull OpenAPI for account checks, order preview, and gated live order submission.
 
 Timmy is not a profit guarantee and does not predict the future. It makes decisions from prior and current market data, then applies risk, account, market-session, and broker gates before an order can become actionable.
@@ -7,7 +30,7 @@ Timmy is not a profit guarantee and does not predict the future. It makes decisi
 ## Project Location
 
 ```text
-/home/sniper-lion-main/trading-bots/trend-trader
+/path/to/timmy-trader
 ```
 
 Important runtime files:
@@ -38,16 +61,16 @@ Timmy is currently packaged as a native Linux ELF executable:
 dist/Timmy/Timmy
 ```
 
-The desktop launch path is:
+The development-checkout launch path is:
 
 ```text
-/home/sniper-lion-main/trading-bots/trend-trader/scripts/launch_timmy.sh
+/path/to/timmy-trader/scripts/launch_timmy.sh
 ```
 
-The launcher sets:
+The development launcher defaults to:
 
 ```text
-TIMMY_HOME=/home/sniper-lion-main/trading-bots/trend-trader
+TIMMY_HOME=/path/to/timmy-trader
 TIMMY_THEME=dark
 ```
 
@@ -55,34 +78,36 @@ The browser dashboard remains only a development fallback. The main operating su
 
 ## Recent Responsiveness And Scaling Changes
 
+- The native GUI groups navigation into workflow and operations sections, presents a guided market overview, places account and order actions in their relevant work areas, and scrolls on smaller displays.
 - Market-data refresh and watchlist rotation run in a background worker so slow network requests do not block native GUI input and redraws. The UI reports refresh progress and returns to cached-data rendering if a refresh fails.
 - The Scanner tab filters visible rows as text is entered and shows the number of matches. Press Escape in the filter field to clear it.
 - Large market-data fetches keep a bounded number of requests in flight and queued, rather than creating one future for every symbol up front.
+- Stooq responses fall back to Yahoo per missing symbol, and market-data worker concurrency is capped at 24.
 - The development dashboard reads the journal as a stream and retains only the latest 50 valid events in memory.
 - The native app checks GitHub Releases shortly after launch and once per day. Stable Linux packages are checksum-verified, installed under the user's home directory, and selected automatically the next time Timmy starts. The active session is never restarted. Release tags use `timmy-v*`, with assets named `Timmy-linux-x86_64.tar.gz` and `SHA256SUMS`.
 
-The first build with the updater must be installed once. After that, stable GitHub releases install automatically for that user; the root-owned system package is left intact. Deploying the public Firebase Hosting site alone does not update the native application. The public site is [timmy-tradesonauto.web.app](https://timmy-tradesonauto.web.app).
+The first build with the updater must be installed once. After that, stable GitHub releases install automatically for that user; the root-owned system package is left intact. An optional `BASE_RELEASE` marker in the installed overlay prevents the updater from replacing that overlay with the same or an older release; locally built overlays without that marker follow the normal latest-release check. Automatic native updates currently support x86_64 Linux only. Deploying the public Firebase Hosting site alone does not update the native application. The public site is [timmy-tradesonauto.web.app](https://timmy-tradesonauto.web.app).
 
 ## Launching
 
 From terminal:
 
 ```bash
-cd /home/sniper-lion-main/trading-bots/trend-trader
+cd /path/to/timmy-trader
 ./scripts/launch_timmy.sh
 ```
 
 Direct ELF launch:
 
 ```bash
-cd /home/sniper-lion-main/trading-bots/trend-trader
-TIMMY_HOME=/home/sniper-lion-main/trading-bots/trend-trader ./dist/Timmy/Timmy
+cd /path/to/timmy-trader
+TIMMY_HOME=/path/to/timmy-trader ./dist/Timmy/Timmy
 ```
 
 Build the ELF:
 
 ```bash
-cd /home/sniper-lion-main/trading-bots/trend-trader
+cd /path/to/timmy-trader
 ./scripts/build_elf.sh
 ```
 
@@ -92,18 +117,21 @@ Build the Debian package:
 ./scripts/package_deb.sh
 ```
 
+Install the resulting 0.1.4 Debian package locally:
+
+```bash
+sudo apt install ./dist/timmy-trader_0.1.4_amd64.deb
+```
+
 ## Single-Instance Rule
 
 Timmy is designed to run as one active instance per runtime home.
 
 On launch, Timmy:
 
-- Checks the runtime lock.
-- Finds older Timmy process forms.
-- Sends shutdown signals to the existing instance.
-- Force-closes stubborn prior instances.
-- Claims the lock before starting the new GUI.
-- Refuses to continue if it cannot safely claim the lock.
+- Claims a file lock inside the selected runtime home.
+- Refuses to start a second instance using that same runtime home.
+- Leaves other Timmy instances and other users' sessions alone.
 
 This matters because trading state, account state, live market data, and automation settings can change every few minutes. Running multiple active copies would create avoidable execution risk.
 
@@ -273,6 +301,17 @@ Live submit remains blocked when:
 - Market-hours gate blocks operation.
 - Risk, cooldown, stale-data, cash, volatility, or daily-limit gates block the plan.
 
+If the connection fails after Timmy sends a live order, the result is recorded
+as `unknown` because Webull may have accepted the order before the response was
+lost. Timmy blocks that symbol until the operator checks the client order ID in
+Webull. Use **Review unresolved live orders** in the Execution Desk to record a
+resolution only after Webull shows the order as rejected, cancelled, or expired.
+Accepted, filled, or still-open orders remain blocked; the current UI does not
+provide a release action for those outcomes. Reconcile them directly in Webull
+and leave the symbol blocked until Timmy has an explicit position/order
+reconciliation flow. This recovery action records the operator's check; it does
+not query Webull or submit another order.
+
 ## Market-Open Behavior
 
 Current conservative gate:
@@ -434,6 +473,10 @@ Plan sizing considers:
 - Maximum quantity.
 - Available cash/buying power when present.
 - Asset-specific quantity precision.
+
+Malformed or non-finite explicitly configured exposure limits fail closed to
+zero, which can block plans. Correct the value in the local profile before
+resuming live use; omitted settings continue to use the documented defaults.
 
 Blocks include:
 

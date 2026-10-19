@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+umask 077
+
 APP_DIR=${TIMMY_APP_DIR:-/opt/timmy-trader}
 TIMMY_HOME=${TIMMY_HOME:-"$HOME/.config/timmy-trader"}
 DOC_DIR=/usr/share/doc/timmy-trader

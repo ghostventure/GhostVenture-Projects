@@ -14,6 +14,10 @@ from .readiness import readiness_flags
 SECRET_PATTERN = re.compile(
     r"(?i)(app[_-]?key|app[_-]?secret|password|passwd|token|account[_-]?id|authorization|bearer)"
 )
+SECRET_VALUE_PATTERN = re.compile(
+    r"(?i)\b(app[_-]?key|app[_-]?secret|password|passwd|token|account[_-]?id|authorization|bearer)"
+    r"(\s*[:=]\s*|\s+)((?:Bearer\s+)?[^\s,;]+)"
+)
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,8 @@ def inspect_single_process(home: str | Path | None = None) -> SingleProcessState
         lines = lock_path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
         return SingleProcessState(str(lock_path), None, None, False, "missing-lock")
+    except OSError:
+        return SingleProcessState(str(lock_path), None, None, False, "unreadable-lock")
 
     for line in lines:
         if line.startswith("pid="):
@@ -189,17 +195,26 @@ def crash_recovery_report(home: str | Path | None = None, max_excerpt_lines: int
     home_path = runtime_home(home)
     log_path = home_path / "timmy-crash.log"
     try:
-        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        # Crash logs can grow across repeated launches. Read only a bounded tail
+        # so opening the health panel does not load an unbounded file.
+        with log_path.open("rb") as log_file:
+            log_file.seek(0, os.SEEK_END)
+            end = log_file.tell()
+            log_file.seek(max(0, end - 64 * 1024))
+            tail = log_file.read(64 * 1024).decode("utf-8", errors="replace")
     except FileNotFoundError:
         return CrashRecoveryReport(str(log_path), False, None, "No crash log found.")
+    except OSError:
+        return CrashRecoveryReport(str(log_path), True, None, "Crash log could not be read.")
 
-    non_empty = [line for line in lines if line.strip()]
+    non_empty = [line for line in tail.splitlines() if line.strip()]
     last_seen_at = None
     for line in reversed(non_empty):
         if line.startswith("[") and "]" in line:
             last_seen_at = line[1:line.index("]")]
             break
-    excerpt = "\n".join(_redact(line) for line in non_empty[-max_excerpt_lines:])
+    excerpt_count = max(1, min(int(max_excerpt_lines), 100))
+    excerpt = "\n".join(_redact(line) for line in non_empty[-excerpt_count:])
     return CrashRecoveryReport(str(log_path), True, last_seen_at, "Last crash details are available locally.", excerpt)
 
 
@@ -243,6 +258,8 @@ def _single_process_signal(state: SingleProcessState) -> HealthSignal:
         return HealthSignal("single_process", "ok", "Single-process guard is active.", f"PID {state.pid}")
     if state.status == "stale-lock":
         return HealthSignal("single_process", "warn", "Single-process lock is stale.", "Watchdog can replace it on next launch.")
+    if state.status == "unreadable-lock":
+        return HealthSignal("single_process", "warn", "Single-process lock could not be read.", "Check file permissions before starting another instance.")
     return HealthSignal("single_process", "warn", "Single-process guard is not visible.", state.status)
 
 
@@ -294,8 +311,9 @@ def _aware_utc(value: datetime | None) -> datetime:
 
 
 def _redact(value: str) -> str:
+    value = SECRET_VALUE_PATTERN.sub(lambda match: f"{match.group(1)}{match.group(2)}[redacted]", str(value))
     parts = []
-    for token in str(value).split():
+    for token in value.split():
         if SECRET_PATTERN.search(token):
             parts.append("[redacted]")
         else:
