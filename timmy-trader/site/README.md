@@ -3,6 +3,9 @@
 Static public website for Timmy's Linux download, support, FAQ, boilerplates,
 and legal/risk pages.
 
+Live Firebase Hosting site: <https://timmy-tradesonauto.web.app>. Hosting serves
+the public website only; it does not install or update the native Linux app.
+
 ## Local Preview
 
 ```sh

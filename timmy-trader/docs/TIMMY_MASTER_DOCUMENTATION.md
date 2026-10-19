@@ -53,6 +53,15 @@ TIMMY_THEME=dark
 
 The browser dashboard remains only a development fallback. The main operating surface is the native GUI.
 
+## Recent Responsiveness And Scaling Changes
+
+- Market-data refresh and watchlist rotation run in a background worker so slow network requests do not block native GUI input and redraws. The UI reports refresh progress and returns to cached-data rendering if a refresh fails.
+- The Scanner tab filters visible rows as text is entered and shows the number of matches. Press Escape in the filter field to clear it.
+- Large market-data fetches keep a bounded number of requests in flight and queued, rather than creating one future for every symbol up front.
+- The development dashboard reads the journal as a stream and retains only the latest 50 valid events in memory.
+
+These are source changes. Existing installed binaries need a package rebuild and installation to receive them; deploying the public Firebase Hosting site alone does not update the native application. The public site is [timmy-tradesonauto.web.app](https://timmy-tradesonauto.web.app).
+
 ## Launching
 
 From terminal:

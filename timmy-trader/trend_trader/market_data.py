@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -38,16 +38,28 @@ def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) 
     if not clean_symbols:
         return bars
     workers = max(1, min(max_workers, len(clean_symbols)))
+    symbols_to_fetch = iter(clean_symbols)
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        future_by_symbol = {executor.submit(fetch_one, symbol): symbol for symbol in clean_symbols}
-        for future in as_completed(future_by_symbol):
-            symbol = future_by_symbol[future]
-            try:
-                candles = future.result()
-            except Exception:
-                continue
-            if candles:
-                bars[symbol] = candles[-days:]
+        # Bound queued work as well as worker threads. Watchlists can be large,
+        # and eagerly creating one Future per symbol needlessly retains memory.
+        pending = {}
+        for _ in range(min(len(clean_symbols), workers * 2)):
+            symbol = next(symbols_to_fetch)
+            pending[executor.submit(fetch_one, symbol)] = symbol
+
+        while pending:
+            completed, _ = wait(pending, return_when=FIRST_COMPLETED)
+            for future in completed:
+                symbol = pending.pop(future)
+                try:
+                    candles = future.result()
+                except Exception:
+                    candles = []
+                if candles:
+                    bars[symbol] = candles[-days:]
+                next_symbol = next(symbols_to_fetch, None)
+                if next_symbol is not None:
+                    pending[executor.submit(fetch_one, next_symbol)] = next_symbol
     return bars
 
 

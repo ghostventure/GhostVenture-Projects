@@ -8,6 +8,10 @@ Start with the full operator documentation here:
 docs/TIMMY_MASTER_DOCUMENTATION.md
 ```
 
+Public website: [timmy-tradesonauto.web.app](https://timmy-tradesonauto.web.app).
+The website provides public downloads and support information; the trading
+application itself runs locally as a native Linux app.
+
 Operational workflows for validation, live brokerage, actual trade placement, fractional trading, all-market scanning, Webull watchlist sync, and source publication live here:
 
 ```text
@@ -46,6 +50,10 @@ docs/WORKFLOWS.md
 - Remembers the last UI runtime settings on the next launch, including target, mode, account lane, score, plan limit, auto interval, trading style, and enabled patterns.
 - Adds a native `Power Cycle` control to save settings, relaunch Timmy, and replace the old process cleanly.
 - Organizes the native GUI around Timmy's operating model: Universe, Scanner, Strategy, Execution, Broker, and Audit.
+- Keeps the native window responsive during network market-data refreshes by moving fetch and watchlist-rotation work off the GUI event loop.
+- Adds a live scanner filter for symbols and setup text, with a visible matching-row count.
+- Bounds concurrent market-data requests and queued fetch tasks for large symbol universes.
+- Loads the dashboard's recent journal events with bounded memory, while retaining the latest 50 valid entries.
 - Adds adaptable trading style presets and pattern toggles for breakout, momentum, pullback, and volume-expansion setups.
 - Bundles a current U.S. listed stock/ETF universe snapshot so all-market rotation can start from known tickers before the live universe refresh completes.
 - Documents practical guardrails for asset-class expansion beyond stocks/ETFs, including crypto, commodity exposure, forex/currencies, index proxies, and unsupported instruments.

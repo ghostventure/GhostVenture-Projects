@@ -11,6 +11,8 @@ import threading
 import tkinter as tk
 import tkinter.font as tkfont
 import traceback
+from collections import deque
+from collections.abc import Iterable
 from dataclasses import is_dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -70,6 +72,7 @@ class TimmyNativeApp:
         self.market_open_after_id: str | None = None
         self.refresh_after_id: str | None = None
         self.account_refresh_after_id: str | None = None
+        self._refresh_in_progress = False
         self.closing = False
         self.min_score_value = 72
         self.plan_limit_value = 3
@@ -108,6 +111,8 @@ class TimmyNativeApp:
         self.colors = self._theme_palette()
         self.root.configure(bg=self.colors["bg"])
         self.min_score_var = tk.StringVar(value="72")
+        self.scanner_filter_var = tk.StringVar(value="")
+        self.scanner_match_var = tk.StringVar(value="All symbols")
         self.plan_limit_var = tk.StringVar(value="3")
         self.auto_interval_var = tk.StringVar(value="1")
         self.paper_auto_var = tk.BooleanVar(value=False)
@@ -700,12 +705,30 @@ class TimmyNativeApp:
         signals_panel = self._panel(body)
         self.signals_panel = signals_panel
         signals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
-        signals_panel.rowconfigure(2, weight=1)
-        signals_panel.rowconfigure(3, weight=0)
+        signals_panel.rowconfigure(3, weight=1)
+        signals_panel.rowconfigure(4, weight=0)
         self._section_header(signals_panel, "SCANNER OUTPUT", "Ticker Activity", "Refresh Data",
                              self.refresh_data)
+        scanner_filter = tk.Frame(signals_panel, bg=self.colors["panel"])
+        scanner_filter.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 10))
+        tk.Label(scanner_filter, text="Filter symbols", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold")).pack(side="left", padx=(0, 10))
+        scanner_filter_entry = tk.Entry(
+            scanner_filter,
+            textvariable=self.scanner_filter_var,
+            bg=self.colors["entry"],
+            fg=self.colors["text"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            font=("Sans", 10),
+        )
+        scanner_filter_entry.pack(side="left", fill="x", expand=True, ipady=5)
+        scanner_filter_entry.bind("<Escape>", lambda _event: self.scanner_filter_var.set(""))
+        tk.Label(scanner_filter, textvariable=self.scanner_match_var, bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9)).pack(side="right", padx=(10, 0))
+        self.scanner_filter_var.trace_add("write", lambda *_args: self._render_signals())
         scanner_summary = tk.Frame(signals_panel, bg=self.colors["panel"])
-        scanner_summary.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
+        scanner_summary.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 12))
         scanner_summary.columnconfigure((0, 1, 2, 3), weight=1)
         self.scanner_summary_labels = {}
         for idx, title in enumerate(("Scanned", "Moving", "Tradeable", "Blocked")):
@@ -724,12 +747,12 @@ class TimmyNativeApp:
             anchor = "w" if key == "symbol" else "center"
             self.signal_tree.heading(key, text=headings[key], anchor="center")
             self.signal_tree.column(key, width=widths[key], anchor=anchor)
-        self.signal_tree.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.signal_tree.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.signal_tree.bind("<<TreeviewSelect>>", self._show_selected_signal)
         self.signal_detail = tk.Text(signals_panel, height=6, bg=self.colors["panel_2"], fg=self.colors["muted"],
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=10,
                                      font=("Monospace", 10), wrap="word")
-        self.signal_detail.grid(row=3, column=0, sticky="ew", padx=18, pady=(0, 18))
+        self.signal_detail.grid(row=4, column=0, sticky="ew", padx=18, pady=(0, 18))
 
         universe_panel = self._panel(body)
         self.universe_panel = universe_panel
@@ -1465,13 +1488,60 @@ class TimmyNativeApp:
     def refresh_all(self) -> None:
         if self.closing:
             return
+        if self._refresh_in_progress:
+            self.status_bar.configure(text="Refresh already in progress.")
+            return
         try:
-            self.status_bar.configure(text="Refreshing...")
-            self._refresh_payload()
-            self.status_bar.configure(text="Refresh complete.")
+            refresh_config = self._runtime_config(self._load_config_safe())
         except Exception as exc:
-            self.status_bar.configure(text=f"Refresh failed: {exc}")
-            self._set_text(self.broker_text, str(exc))
+            self.status_bar.configure(text=f"Refresh setup failed: {exc}")
+            return
+        self._refresh_in_progress = True
+        self.status_bar.configure(text="Refreshing market data...")
+        self._set_buttons_state("disabled")
+        self.config = refresh_config
+
+        def refresh_market_data() -> None:
+            error = None
+            try:
+                # Network requests and watchlist rotation can take several seconds.
+                # Keep them off Tk's event loop so the window remains responsive.
+                self._refresh_market_data_if_needed(config=refresh_config)
+            except Exception as exc:
+                error = exc
+            if not self.closing:
+                try:
+                    self.root.after(0, lambda error=error: finish_refresh(error))
+                except tk.TclError:
+                    pass
+
+        def finish_refresh(error: Exception | None) -> None:
+            self._refresh_in_progress = False
+            if self.closing:
+                return
+            try:
+                if error:
+                    self.status_bar.configure(text=f"Market data refresh failed: {error}")
+                self._refresh_payload(skip_market_refresh=True)
+                self.status_bar.configure(text="Refresh complete." if error is None else "Refresh complete with cached data.")
+            except Exception as exc:
+                self.status_bar.configure(text=f"Refresh failed: {exc}")
+                self._set_text(self.broker_text, str(exc))
+            finally:
+                self._set_buttons_state("normal")
+                self._sync_manual_controls()
+                self._sync_profile_save_state()
+
+        threading.Thread(target=refresh_market_data, daemon=True, name="timmy-market-refresh").start()
+
+    def _set_status_from_worker(self, text: str) -> None:
+        """Queue a status update from background market-data work."""
+        if self.closing:
+            return
+        try:
+            self.root.after(0, lambda text=text: self.status_bar.configure(text=text) if not self.closing else None)
+        except (tk.TclError, RuntimeError):
+            pass
 
     def refresh_data(self) -> None:
         try:
@@ -2194,14 +2264,14 @@ class TimmyNativeApp:
         )
         return "below-expectation" if any(marker in lowered for marker in weak_markers) else "above-expectation"
 
-    def _refresh_payload(self) -> str:
+    def _refresh_payload(self, skip_market_refresh: bool = False) -> str:
         self._splash_step("Loading configuration")
         self.config = self._runtime_config(self._load_config_safe())
         self._splash_step("Reading execution journals")
         self.execution_events = self._load_execution_events()
         self.recent_bad_event_counts = self._build_bad_event_counts(self.execution_events)
         self._splash_step("Scanning market data")
-        self.bars_by_symbol = self._load_bars()
+        self.bars_by_symbol = self._load_bars(skip_market_refresh=skip_market_refresh)
         self.signals = rank_signals(self.bars_by_symbol, self.config)
         self.signal_by_symbol = {signal.symbol: signal for signal in self.signals}
         self._splash_step("Reconciling paper outcomes")
@@ -2222,11 +2292,12 @@ class TimmyNativeApp:
         self._write_paper_training_summary()
         return "Dashboard refreshed."
 
-    def _load_bars(self):
+    def _load_bars(self, skip_market_refresh: bool = False):
         if not self.data_file.exists():
             self.data_file.parent.mkdir(parents=True, exist_ok=True)
             write_sample_bars(self.data_file)
-        self._refresh_market_data_if_needed()
+        if not skip_market_refresh:
+            self._refresh_market_data_if_needed()
         try:
             return load_csv_bars(self.data_file)
         except Exception as exc:
@@ -2234,8 +2305,8 @@ class TimmyNativeApp:
             self.status_bar.configure(text=f"Data repaired after load error: {exc}")
             return load_csv_bars(self.data_file)
 
-    def _refresh_market_data_if_needed(self) -> None:
-        config = self.config or self._load_config_safe()
+    def _refresh_market_data_if_needed(self, config: BotConfig | None = None) -> None:
+        config = config or self.config or self._load_config_safe()
         if config.market_data_provider == "csv":
             return
         if self.data_file.exists():
@@ -2273,7 +2344,7 @@ class TimmyNativeApp:
                 selected_bars = {symbol: bars[symbol] for symbol in symbols if symbol in bars}
                 if selected_bars:
                     write_csv_bars(self.data_file, selected_bars)
-                    self.status_bar.configure(text=f"Market data refreshed for {len(selected_bars)} custom watchlist symbols.")
+                    self._set_status_from_worker(f"Market data refreshed for {len(selected_bars)} custom watchlist symbols.")
                 return
         symbols = load_watchlist(watchlist_path, config.symbol_whitelist)
         bars = fetch_daily_bars(
@@ -2284,7 +2355,7 @@ class TimmyNativeApp:
         )
         if bars:
             write_csv_bars(self.data_file, bars)
-            self.status_bar.configure(text=f"Market data refreshed for {len(bars)} symbols.")
+            self._set_status_from_worker(f"Market data refreshed for {len(bars)} symbols.")
 
     def _write_generated_watchlists(
         self,
@@ -2342,13 +2413,13 @@ class TimmyNativeApp:
         results = sync_generated_watchlists(config, lists)
         failures = [result for result in results if result.status == "failed"]
         if failures:
-            self.status_bar.configure(text=f"Webull watchlist sync failed for {len(failures)} list(s).")
+            self._set_status_from_worker(f"Webull watchlist sync failed for {len(failures)} list(s).")
             return
         synced = [result for result in results if result.status == "synced"]
         if synced:
             added = sum(result.added_count for result in synced)
             removed = sum(result.removed_count for result in synced)
-            self.status_bar.configure(text=f"Webull watchlists synced: +{added} / -{removed}.")
+            self._set_status_from_worker(f"Webull watchlists synced: +{added} / -{removed}.")
 
     def _write_watchlist_exports(self, symbols: list[str], export_name: str = "active-watchlist") -> None:
         clean = sorted(dict.fromkeys(symbol.strip().upper() for symbol in symbols if symbol.strip()))
@@ -2383,7 +2454,7 @@ class TimmyNativeApp:
                     self._refresh_integrity_manifest()
                     return symbols
             except Exception as exc:
-                self.status_bar.configure(text=f"Universe refresh skipped: {exc}")
+                self._set_status_from_worker(f"Universe refresh skipped: {exc}")
         if self.universe_path.exists():
             return load_watchlist(self.universe_path, None)
         bundled = load_bundled_us_listed_symbols()
@@ -2689,6 +2760,7 @@ class TimmyNativeApp:
         tradeable_count = 0
         blocked_count = 0
         config = self.config or self._load_config_safe()
+        filter_text = self.scanner_filter_var.get().strip().upper()
         for signal in self.signals:
             if getattr(signal, "scout_action", "quiet") in {"alert", "watch"}:
                 moving_count += 1
@@ -2701,7 +2773,7 @@ class TimmyNativeApp:
                 tradeable_count += 1
             elif signal.score >= self._min_score(config) or self._local_sensible_action(signal) == "trade":
                 blocked_count += 1
-            self.signal_tree.insert("", "end", values=(
+            row_values = (
                 signal.symbol,
                 self._scout_label(signal),
                 signal.score,
@@ -2711,7 +2783,13 @@ class TimmyNativeApp:
                 self._price_gate_label(signal),
                 f"{signal.change_pct:+.2f}%",
                 money(signal.entry),
-            ))
+            )
+            searchable = " ".join(str(value) for value in (
+                signal.symbol, signal.direction, signal.decision,
+                self._scout_label(signal), self._sensible_label(signal),
+            )).upper()
+            if not filter_text or filter_text in searchable:
+                self.signal_tree.insert("", "end", values=row_values)
         self._update_label_map(
             getattr(self, "scanner_summary_labels", {}),
             {
@@ -2721,11 +2799,15 @@ class TimmyNativeApp:
                 "Blocked": f"{blocked_count:,}",
             },
         )
-        if self.signals:
-            first = self.signal_tree.get_children()[0]
+        visible_rows = self.signal_tree.get_children()
+        self.scanner_match_var.set(f"{len(visible_rows):,} matches" if filter_text else f"{len(visible_rows):,} symbols")
+        if visible_rows:
+            first = visible_rows[0]
             self.signal_tree.selection_set(first)
             self.signal_tree.focus(first)
             self._show_selected_signal()
+        elif filter_text:
+            self._set_text(self.signal_detail, f"No scanner rows match ‘{filter_text}’. Clear the filter or try another symbol or setup label.")
 
     def _render_plans(self) -> None:
         lines = []
@@ -4343,7 +4425,8 @@ class TimmyNativeApp:
                 continue
             lines = self._tail_lines(path, 500)
             if path == self.event_log_path:
-                lines = self._validate_audit_lines(path.read_text(encoding="utf-8", errors="replace").splitlines())[-500:]
+                with path.open("r", encoding="utf-8", errors="replace") as event_log:
+                    lines = self._validate_audit_lines(event_log, limit=500)
             for line in lines:
                 if not line.strip():
                     continue
@@ -4376,8 +4459,10 @@ class TimmyNativeApp:
                 key.append((str(path), 0, 0))
         return tuple(key)
 
-    def _validate_audit_lines(self, lines: list[str]) -> list[str]:
-        validated: list[str] = []
+    def _validate_audit_lines(self, lines: Iterable[str], limit: int | None = None) -> list[str]:
+        # Validate every link in order, but keep only the recent records needed
+        # by the UI when reading a long execution history.
+        validated = deque(maxlen=limit) if limit else []
         prev_hash = "genesis"
         saw_signed = False
         self.audit_status = "Audit chain ok"
@@ -4405,7 +4490,7 @@ class TimmyNativeApp:
             prev_hash = str(event_hash)
         if not saw_signed and validated:
             self.audit_status = "Audit warning: legacy unsigned event records"
-        return validated
+        return list(validated)
 
     @staticmethod
     def _tail_lines(path: Path, limit: int) -> list[str]:
