@@ -46,6 +46,11 @@ docs/WORKFLOWS.md
 - Remembers the last UI runtime settings on the next launch, including target, mode, account lane, score, plan limit, auto interval, trading style, and enabled patterns.
 - Adds a native `Power Cycle` control to save settings, relaunch Timmy, and replace the old process cleanly.
 - Organizes the native GUI around Timmy's operating model: Universe, Scanner, Strategy, Execution, Broker, and Audit.
+- Adds searchable scanner filters, changed-since-scan indicators, local pinned/tagged symbol notes, close-price sparklines, and saved scanner/strategy workspaces.
+- Adds journal search/date filters and daily paper outcome summaries, plus estimated dollar loss at stop and gain at target on order plans.
+- Adds a validated OHLCV CSV import-and-merge workflow and F1 contextual help.
+- Reports market-data provider health and retries transient fetch failures; supports offline read-only cache mode.
+- Adds allowlisted settings backup and restore plus a redacted diagnostics bundle from the Health desk.
 - Adds adaptable trading style presets and pattern toggles for breakout, momentum, pullback, and volume-expansion setups.
 - Bundles a current U.S. listed stock/ETF universe snapshot so all-market rotation can start from known tickers before the live universe refresh completes.
 - Documents practical guardrails for asset-class expansion beyond stocks/ETFs, including crypto, commodity exposure, forex/currencies, index proxies, and unsupported instruments.

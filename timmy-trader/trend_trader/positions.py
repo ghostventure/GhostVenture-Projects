@@ -155,6 +155,21 @@ class PositionBook:
             symbols=symbols,
         )
 
+    def exposure_breakdown(self) -> tuple[dict[str, float | str | None], ...]:
+        """Return a stable per-symbol exposure view for dashboards and reports."""
+        total = sum(position.notional for position in self._positions.values())
+        rows = []
+        for symbol, position in sorted(self._positions.items()):
+            notional = position.notional
+            rows.append({
+                "symbol": symbol,
+                "side": position.side.upper(),
+                "notional": round(notional, 2),
+                "weight_pct": round(notional / total * 100, 2) if total else 0.0,
+                "unrealized_pnl": position.unrealized_pnl,
+            })
+        return tuple(rows)
+
     def duplicate_trade_reason(self, symbol: str, open_order_symbols: Iterable[str] = ()) -> str | None:
         symbol = symbol.upper()
         if self.has_open_position(symbol):

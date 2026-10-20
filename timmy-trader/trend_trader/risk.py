@@ -91,6 +91,45 @@ def create_order_plan(signal: Signal, config: BotConfig) -> OrderPlan | None:
     )
 
 
+def explain_order_plan(signal: Signal, config: BotConfig) -> dict[str, object]:
+    """Explain plan eligibility without submitting or changing an order."""
+    reasons: list[str] = []
+    if signal.decision != "eligible":
+        reasons.append(f"Signal decision is {signal.decision!r}; it must be 'eligible'.")
+    if signal.score < config.min_score_to_trade:
+        reasons.append(f"Score {signal.score} is below the minimum {config.min_score_to_trade}.")
+    if signal.expense_status == "too-expensive":
+        reasons.append("The signal is marked too expensive.")
+    if signal.reward_risk < config.min_reward_risk_to_trade:
+        reasons.append(
+            f"Reward/risk {signal.reward_risk:.2f} is below the minimum "
+            f"{config.min_reward_risk_to_trade:.2f}."
+        )
+    if signal.volatility_pct > config.max_signal_volatility_pct:
+        reasons.append(
+            f"Volatility {signal.volatility_pct:.2f}% exceeds the limit "
+            f"{config.max_signal_volatility_pct:.2f}%."
+        )
+    if config.symbol_whitelist and signal.symbol.upper() not in config.symbol_whitelist:
+        reasons.append(f"{signal.symbol.upper()} is not in the configured symbol allowlist.")
+    profile = asset_profile(signal.symbol, config)
+    if not profile.enabled:
+        reasons.append(f"Trading is disabled for the {profile.instrument_type.lower()} instrument profile.")
+    if signal.entry <= signal.stop:
+        reasons.append("Entry must be above the protective stop to calculate positive per-share risk.")
+
+    plan = create_order_plan(signal, config)
+    if not reasons and plan is None:
+        reasons.append(
+            "The calculated quantity is below the instrument's allowed minimum or configured minimum notional."
+        )
+    return {
+        "eligible": plan is not None,
+        "reasons": reasons,
+        "plan": plan.__dict__ if plan else None,
+    }
+
+
 def enforce_live_guards(config: BotConfig) -> None:
     if config.trader_mode != "live" or not config.trader_live:
         raise RuntimeError("Live trading is disabled. Set TRADER_MODE=live and TRADER_LIVE=1.")

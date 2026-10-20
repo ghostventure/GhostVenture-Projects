@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections import deque
 from dataclasses import asdict
 from pathlib import Path
 
@@ -151,15 +152,17 @@ def _redact_accounts(result: dict) -> dict:
 def _journal_events() -> list[dict]:
     if not JOURNAL_PATH.exists():
         return []
-    events = []
-    for line in JOURNAL_PATH.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return events[-50:]
+    events: deque[dict] = deque(maxlen=50)
+    with JOURNAL_PATH.open("r", encoding="utf-8") as journal:
+        for line in journal:
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            events.append(event)
+    return list(events)
 
 
 def _error(exc: Exception) -> JSONResponse:

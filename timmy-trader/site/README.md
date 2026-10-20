@@ -22,6 +22,7 @@ npx --yes firebase-tools deploy --only hosting --project timmy-tradesonauto
 
 ## Download Artifact
 
-`site/downloads/timmy-trader_0.1.0_amd64.deb` is intentionally included as the
+`site/downloads/timmy-trader_0.1.5_amd64.deb` is intentionally included as the
 public Linux download package. Refresh `site/downloads/SHA256SUMS.txt` after
-replacing the package.
+replacing the package. The checksum file uses the package basename so it works
+when the package and checksum are downloaded into the same directory.

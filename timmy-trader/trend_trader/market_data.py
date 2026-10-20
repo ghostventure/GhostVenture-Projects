@@ -3,36 +3,92 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
+import random
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from .models import Candle
 
 STOOQ_DAILY_URL = "https://stooq.com/q/d/l/"
+_HEALTH_LOCK = threading.Lock()
+_FETCH_LOCK = threading.RLock()
+_HEALTH = {"provider": "csv", "status": "idle", "updated_at": None, "symbols_requested": 0,
+           "symbols_received": 0, "failures": [], "retries": 0, "offline": False}
+
+
+def market_data_health() -> dict:
+    """Return a copy of the latest bounded market-data fetch summary."""
+    with _HEALTH_LOCK:
+        return {**_HEALTH, "failures": list(_HEALTH["failures"])}
 
 
 def fetch_stooq_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
-    return _fetch_parallel(symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, timeout=timeout), days, max_workers)
+    with _FETCH_LOCK:
+        return _fetch_parallel(symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, timeout=timeout), days, max_workers)
 
 
 def fetch_yahoo_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
-    return _fetch_parallel(symbols, lambda symbol: _fetch_one_yahoo_symbol(symbol, days=days, timeout=timeout), days, max_workers)
+    with _FETCH_LOCK:
+        return _fetch_parallel(symbols, lambda symbol: _fetch_one_yahoo_symbol(symbol, days=days, timeout=timeout), days, max_workers)
 
 
 def fetch_daily_bars(provider: str, symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
+    # Fetch counters and fallback status belong to one request. Serialize top-level
+    # provider runs so concurrent UI refreshes cannot mix their diagnostics.
+    with _FETCH_LOCK:
+        return _fetch_daily_bars(provider, symbols, days, timeout, max_workers)
+
+
+def _fetch_daily_bars(provider: str, symbols: list[str], days: int, timeout: int, max_workers: int) -> dict[str, list[Candle]]:
+    clean_symbols = sorted(dict.fromkeys(symbol.upper() for symbol in symbols if symbol.strip()))
+    if not clean_symbols:
+        _set_health(provider, "idle", clean_symbols, {}, [], 0)
+        return {}
+    if os.getenv("TIMMY_OFFLINE_MODE", "0") == "1":
+        _set_health(provider, "offline", clean_symbols, {}, [], 0, offline=True)
+        return {}
     if provider == "stooq":
-        bars = fetch_stooq_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
+        bars = fetch_stooq_daily(clean_symbols, days=days, timeout=timeout, max_workers=max_workers)
         if bars:
+            _set_health("stooq", "ok" if len(bars) == len(clean_symbols) else "partial", clean_symbols, bars, [], _FETCH_RETRIES)
             return bars
-        return fetch_yahoo_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
+        stooq_failures = list(_FETCH_FAILURES)
+        stooq_retries = _FETCH_RETRIES
+        bars = fetch_yahoo_daily(clean_symbols, days=days, timeout=timeout, max_workers=max_workers)
+        failures = [*stooq_failures, *[f"Yahoo: {item}" for item in _FETCH_FAILURES]]
+        _set_health("yahoo (fallback)", "ok" if len(bars) == len(clean_symbols) else "partial" if bars else "unavailable",
+                    clean_symbols, bars, failures, stooq_retries + _FETCH_RETRIES)
+        return bars
     if provider == "yahoo":
-        return fetch_yahoo_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
+        bars = fetch_yahoo_daily(clean_symbols, days=days, timeout=timeout, max_workers=max_workers)
+        _set_health("yahoo", "ok" if len(bars) == len(clean_symbols) else "partial" if bars else "unavailable",
+                    clean_symbols, bars, _FETCH_FAILURES, _FETCH_RETRIES)
+        return bars
     raise ValueError(f"Unsupported market data provider: {provider}")
 
 
+_FETCH_FAILURES: list[str] = []
+_FETCH_RETRIES = 0
+
+
+def _set_health(provider, status, requested, bars, failures, retries, offline=False):
+    global _FETCH_FAILURES, _FETCH_RETRIES
+    with _HEALTH_LOCK:
+        _HEALTH.update(provider=provider, status=status, updated_at=datetime.now(timezone.utc).isoformat(),
+                       symbols_requested=len(requested), symbols_received=len(bars),
+                       failures=list(failures)[:20], retries=retries, offline=offline)
+
+
 def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) -> dict[str, list[Candle]]:
+    global _FETCH_FAILURES, _FETCH_RETRIES
+    _FETCH_FAILURES, _FETCH_RETRIES = [], 0
+    retry_lock = threading.Lock()
     bars: dict[str, list[Candle]] = {}
     clean_symbols = sorted(dict.fromkeys(symbol.upper() for symbol in symbols if symbol.strip()))
     if not clean_symbols:
@@ -44,10 +100,15 @@ def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) 
             symbol = future_by_symbol[future]
             try:
                 candles = future.result()
-            except Exception:
+            except Exception as exc:
+                with retry_lock:
+                    _FETCH_FAILURES.append(f"{symbol}: {type(exc).__name__}")
                 continue
             if candles:
                 bars[symbol] = candles[-days:]
+            else:
+                with retry_lock:
+                    _FETCH_FAILURES.append(f"{symbol}: no bars returned")
     return bars
 
 
@@ -55,8 +116,7 @@ def _fetch_one_stooq_symbol(symbol: str, timeout: int = 10) -> list[Candle]:
     stooq_symbol = _stooq_symbol(symbol)
     url = f"{STOOQ_DAILY_URL}?{urlencode({'s': stooq_symbol, 'i': 'd'})}"
     request = Request(url, headers={"User-Agent": "Timmy/0.1"})
-    with urlopen(request, timeout=timeout) as response:
-        payload = response.read().decode("utf-8", errors="replace")
+    payload = _read_with_backoff(request, timeout)
     if payload.lstrip().startswith("<"):
         return []
     rows = csv.DictReader(io.StringIO(payload))
@@ -86,8 +146,7 @@ def _fetch_one_yahoo_symbol(symbol: str, days: int = 90, timeout: int = 10) -> l
     yahoo_symbol = _yahoo_symbol(symbol)
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?{urlencode({'range': range_value, 'interval': '1d'})}"
     request = Request(url, headers={"User-Agent": "Mozilla/5.0 Timmy/0.1"})
-    with urlopen(request, timeout=timeout) as response:
-        payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    payload = json.loads(_read_with_backoff(request, timeout))
     result = (payload.get("chart", {}).get("result") or [None])[0]
     if not result:
         return []
@@ -141,3 +200,30 @@ def _yahoo_symbol(symbol: str) -> str:
         "DOTUSD": "DOT-USD",
     }
     return aliases.get(clean, clean)
+
+
+def _read_with_backoff(request: Request, timeout: int) -> str:
+    """Retry transient rate-limit/server/network errors with a small capped delay."""
+    global _FETCH_RETRIES
+    for attempt in range(4):
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                return response.read().decode("utf-8", errors="replace")
+        except HTTPError as exc:
+            if exc.code != 429 and exc.code < 500:
+                raise
+            if attempt == 3:
+                raise
+            retry_after = exc.headers.get("Retry-After", "")
+            try:
+                delay = min(3.0, max(0.0, float(retry_after)))
+            except ValueError:
+                delay = min(2.0, 0.25 * (2 ** attempt)) + random.uniform(0, 0.15)
+        except (TimeoutError, URLError):
+            if attempt == 3:
+                raise
+            delay = min(2.0, 0.25 * (2 ** attempt)) + random.uniform(0, 0.15)
+        with _HEALTH_LOCK:
+            _FETCH_RETRIES += 1
+        time.sleep(delay)
+    raise RuntimeError("Market data retry limit reached")

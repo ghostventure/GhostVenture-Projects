@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import secrets
 import subprocess
@@ -14,7 +15,7 @@ import traceback
 from dataclasses import is_dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from zoneinfo import ZoneInfo
 
 from .asset_classes import asset_profile, enabled_asset_classes
@@ -23,7 +24,7 @@ from .brokers.webull_openapi import WebullOpenApiBroker
 from .config import BotConfig, load_config
 from .data import load_csv_bars, write_csv_bars
 from .market_calendar import market_session, seconds_until_next_open
-from .market_data import fetch_daily_bars
+from .market_data import fetch_daily_bars, market_data_health
 from .market_universe import fetch_us_listed_symbols, load_bundled_us_listed_instruments, load_bundled_us_listed_symbols
 from .models import OrderPlan
 from .diagnostics import inspect_trade_ready, why_no_trade
@@ -33,6 +34,7 @@ from .runtime_health import build_runtime_health, pre_market_system_check
 from .sample_data import write_sample_bars
 from .strategy import rank_signals
 from .strategy_presets import list_strategy_presets
+from .support_tools import create_config_backup, create_support_bundle, restore_config_backup
 from .watchlist import DEFAULT_ROTATION_CANDIDATES, load_watchlist, rotate_watchlist, write_watchlist, write_watchlist_template
 from .webull_watchlists import sync_generated_watchlists
 
@@ -60,6 +62,7 @@ class TimmyNativeApp:
         self.universe_path = home / "timmy-watchlist-universe.txt"
         self.rotation_state_path = home / "timmy-watchlist-rotation.json"
         self.crash_log_path = home / "timmy-crash.log"
+        self.watchlist_metadata_path = home / "watchlist-symbol-notes.json"
         self.config: BotConfig | None = None
         self.config_error: str | None = None
         self.signals = []
@@ -98,6 +101,13 @@ class TimmyNativeApp:
         self.recent_bad_event_counts: dict[str, int] = {}
         self._execution_events_cache_key: tuple | None = None
         self._execution_events_cache: list[dict] = []
+        self._scan_render_generation = 0
+        self._skip_market_data_refresh_once = False
+        self._journal_refresh_after_id: str | None = None
+        self._scanner_render_after_id: str | None = None
+        self.previous_scan_snapshot: dict[str, tuple[int, str, str, str]] = {}
+        self.watchlist_metadata = self._load_watchlist_metadata()
+        self.saved_workspaces: dict[str, dict] = {}
         self._tooltip: tk.Toplevel | None = None
         self.audit_status = "Audit chain ready"
 
@@ -107,6 +117,13 @@ class TimmyNativeApp:
         self.root.minsize(1120, 720)
         self.colors = self._theme_palette()
         self.root.configure(bg=self.colors["bg"])
+        self.scanner_search_var = tk.StringVar(value="")
+        self.scanner_filter_var = tk.StringVar(value="All")
+        self.saved_workspace_var = tk.StringVar(value="Default")
+        self.journal_search_var = tk.StringVar(value="")
+        self.journal_mode_var = tk.StringVar(value="All")
+        self.journal_from_var = tk.StringVar(value="")
+        self.journal_to_var = tk.StringVar(value="")
         self.min_score_var = tk.StringVar(value="72")
         self.plan_limit_var = tk.StringVar(value="3")
         self.auto_interval_var = tk.StringVar(value="1")
@@ -145,6 +162,7 @@ class TimmyNativeApp:
         self.root.report_callback_exception = self._handle_tk_exception
         self.root.bind("<F5>", lambda _event: self.refresh_all())
         self.root.bind("<Control-r>", lambda _event: self.run_decision_cycle())
+        self.root.bind("<F1>", lambda _event: self._show_context_help())
 
     def run(self) -> int:
         self.refresh_all()
@@ -432,6 +450,7 @@ class TimmyNativeApp:
             tooltip="Preview current Webull route",
         )
         self.preview_button.pack(fill="x", pady=(7, 0))
+        self._button(actions, "? Help", self._show_context_help, tooltip="Press F1 for help on the current desk").pack(fill="x", pady=(7, 0))
         self.manual_controls.append(self.preview_button)
         self.busy_controls.extend([self.refresh_button, self.webull_check_button, self.preview_button])
 
@@ -700,8 +719,9 @@ class TimmyNativeApp:
         signals_panel = self._panel(body)
         self.signals_panel = signals_panel
         signals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
-        signals_panel.rowconfigure(2, weight=1)
-        signals_panel.rowconfigure(3, weight=0)
+        signals_panel.columnconfigure(0, weight=3)
+        signals_panel.columnconfigure(1, weight=2)
+        signals_panel.rowconfigure(3, weight=1)
         self._section_header(signals_panel, "SCANNER OUTPUT", "Ticker Activity", "Refresh Data",
                              self.refresh_data)
         scanner_summary = tk.Frame(signals_panel, bg=self.colors["panel"])
@@ -710,36 +730,80 @@ class TimmyNativeApp:
         self.scanner_summary_labels = {}
         for idx, title in enumerate(("Scanned", "Moving", "Tradeable", "Blocked")):
             self.scanner_summary_labels[title] = self._mini_stat(scanner_summary, idx, title)
-        columns = ("symbol", "scout", "score", "sense", "direction", "decision", "price", "change", "entry")
+        scanner_tools = tk.Frame(signals_panel, bg=self.colors["panel"])
+        scanner_tools.grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 8))
+        scanner_tools.columnconfigure(1, weight=2)
+        scanner_tools.columnconfigure(3, weight=1)
+        tk.Label(scanner_tools, text="Find", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold")).grid(row=0, column=0, padx=(0, 6))
+        self.scanner_search_entry = ttk.Entry(scanner_tools, textvariable=self.scanner_search_var)
+        self.scanner_search_entry.grid(row=0, column=1, sticky="ew", padx=(0, 6))
+        self.scanner_search_entry.bind("<KeyRelease>", lambda _event: self._queue_scanner_render())
+        self.scanner_search_entry.configure(takefocus=True)
+        self._add_tooltip(self.scanner_search_entry, "Search ticker, setup, bias, decision, and signal reasons")
+        self.scanner_filter_combo = ttk.Combobox(
+            scanner_tools, textvariable=self.scanner_filter_var,
+            values=("All", "Moving", "Tradeable", "Blocked", "Changed", "Pinned"),
+            state="readonly", width=11,
+        )
+        self.scanner_filter_combo.grid(row=0, column=2, sticky="ew", padx=6)
+        self.scanner_filter_combo.bind("<<ComboboxSelected>>", lambda _event: self._queue_scanner_render())
+        self.saved_workspace_combo = ttk.Combobox(
+            scanner_tools, textvariable=self.saved_workspace_var,
+            values=("Default",), state="readonly", width=12,
+        )
+        self.saved_workspace_combo.grid(row=0, column=3, sticky="ew", padx=6)
+        self._refresh_workspace_menu()
+        self._button(scanner_tools, "Save View", self._save_workspace_view, tooltip="Save scanner filters and strategy controls together").grid(row=0, column=4, padx=4)
+        self._button(scanner_tools, "Load", self._load_workspace_view, tooltip="Load a saved scanner and strategy view").grid(row=0, column=5, padx=(4, 0))
+        columns = ("symbol", "scout", "delta", "score", "sense", "direction", "decision", "price", "change", "entry")
         self.signal_tree = ttk.Treeview(signals_panel, columns=columns, show="headings", selectmode="browse")
         headings = {
-            "symbol": "Symbol", "scout": "Scout", "score": "Score", "sense": "Sensible", "direction": "Bias",
+            "symbol": "Symbol", "scout": "Scout", "delta": "Since Scan", "score": "Score", "sense": "Sensible", "direction": "Bias",
             "decision": "Decision", "price": "Price Gate", "change": "Move", "entry": "Buy Limit",
         }
         widths = {
-            "symbol": 72, "scout": 78, "score": 58, "sense": 92, "direction": 74,
+            "symbol": 72, "scout": 78, "delta": 92, "score": 58, "sense": 92, "direction": 74,
             "decision": 80, "price": 96, "change": 74, "entry": 86,
         }
         for key in columns:
             anchor = "w" if key == "symbol" else "center"
             self.signal_tree.heading(key, text=headings[key], anchor="center")
             self.signal_tree.column(key, width=widths[key], anchor=anchor)
-        self.signal_tree.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.signal_tree.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=18, pady=(0, 8))
         self.signal_tree.bind("<<TreeviewSelect>>", self._show_selected_signal)
+        signal_scroll = ttk.Scrollbar(signals_panel, orient="horizontal", command=self.signal_tree.xview)
+        signal_scroll.grid(row=4, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 6))
+        self.signal_tree.configure(xscrollcommand=signal_scroll.set)
         self.signal_detail = tk.Text(signals_panel, height=6, bg=self.colors["panel_2"], fg=self.colors["muted"],
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=10,
                                      font=("Monospace", 10), wrap="word")
-        self.signal_detail.grid(row=3, column=0, sticky="ew", padx=18, pady=(0, 18))
+        self.signal_detail.grid(row=5, column=0, sticky="nsew", padx=(18, 8), pady=(0, 18))
+        detail_actions = tk.Frame(signals_panel, bg=self.colors["panel_2"])
+        detail_actions.grid(row=5, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+        self.signal_chart = tk.Canvas(detail_actions, height=112, bg=self.colors["panel_2"], highlightthickness=0)
+        self.signal_chart.pack(fill="both", expand=True, padx=8, pady=(8, 2))
+        self.signal_chart.bind("<Configure>", lambda _event: self._draw_selected_symbol_chart())
+        detail_buttons = tk.Frame(detail_actions, bg=self.colors["panel_2"])
+        detail_buttons.pack(fill="x", padx=8, pady=(2, 8))
+        self._button(detail_buttons, "Pin / Unpin", self._toggle_selected_symbol_pin, tooltip="Pin this symbol for a quick scanner filter").pack(side="left", padx=(0, 6))
+        self._button(detail_buttons, "Tag / Note", self._edit_selected_symbol_note, tooltip="Add a private local tag and note").pack(side="left", padx=6)
+        self._button(detail_buttons, "↑", lambda: self._move_selected_pin(-1), tooltip="Move this pinned symbol up").pack(side="left", padx=3)
+        self._button(detail_buttons, "↓", lambda: self._move_selected_pin(1), tooltip="Move this pinned symbol down").pack(side="left", padx=3)
 
         universe_panel = self._panel(body)
         self.universe_panel = universe_panel
-        universe_panel.rowconfigure(1, weight=1)
+        universe_panel.rowconfigure(2, weight=1)
         self._section_header(universe_panel, "MARKET INTAKE", "Universe And Watchlists", "Refresh Data",
                              self.refresh_data)
+        universe_actions = tk.Frame(universe_panel, bg=self.colors["panel"])
+        universe_actions.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 8))
+        self._button(universe_actions, "Import market CSV…", self._import_market_data_csv,
+                     tooltip="Preview, validate, and merge a local OHLCV CSV file").pack(side="left")
         self.universe_text = tk.Text(universe_panel, height=18, bg=self.colors["panel_2"], fg=self.colors["text"],
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                      font=("Monospace", 10), wrap="word")
-        self.universe_text.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.universe_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
 
         setup_panel = self._panel(body)
         self.setup_panel = setup_panel
@@ -1036,7 +1100,8 @@ class TimmyNativeApp:
         self.health_panel = health_panel
         health_panel.columnconfigure(0, weight=1)
         health_panel.columnconfigure(1, weight=1)
-        health_panel.rowconfigure(2, weight=1)
+        health_panel.rowconfigure(2, weight=0)
+        health_panel.rowconfigure(3, weight=1)
         self._section_header(health_panel, "DESK HEALTH", "Today's Guardrails", "Run Check", self.run_system_check)
         health_summary = tk.Frame(health_panel, bg=self.colors["panel"])
         health_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
@@ -1044,6 +1109,11 @@ class TimmyNativeApp:
         self.health_summary_labels = {}
         for idx, title in enumerate(("Desk", "Market", "Account", "Watchdog")):
             self.health_summary_labels[title] = self._mini_stat(health_summary, idx, title)
+        health_tools = tk.Frame(health_panel, bg=self.colors["panel"])
+        health_tools.grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 12))
+        self._button(health_tools, "Backup Settings", self._backup_settings).pack(side="left", padx=(0, 8))
+        self._button(health_tools, "Restore Settings", self._restore_settings).pack(side="left", padx=8)
+        self._button(health_tools, "Export Diagnostics", self._export_support_bundle).pack(side="left", padx=8)
         self.health_text = tk.Text(
             health_panel,
             height=16,
@@ -1056,7 +1126,7 @@ class TimmyNativeApp:
             font=("Monospace", 10),
             wrap="word",
         )
-        self.health_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.health_text.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.diagnostics_text = tk.Text(
             health_panel,
             height=16,
@@ -1069,7 +1139,7 @@ class TimmyNativeApp:
             font=("Monospace", 10),
             wrap="word",
         )
-        self.diagnostics_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+        self.diagnostics_text.grid(row=3, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
         right = tk.Frame(body, bg=self.colors["bg"])
         self.right_panel = right
@@ -1129,22 +1199,46 @@ class TimmyNativeApp:
         journal_panel.grid(row=3, column=0, sticky="nsew")
         journal_panel.columnconfigure(0, weight=1)
         journal_panel.columnconfigure(1, weight=2)
-        journal_panel.rowconfigure(2, weight=1)
+        journal_panel.rowconfigure(3, weight=1)
         self._section_header(journal_panel, "TRADE LOG", "Fills And Guardrails", None, None, compact=True)
         audit_summary = tk.Frame(journal_panel, bg=self.colors["panel"])
         audit_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         audit_summary.columnconfigure((0, 1, 2, 3), weight=1)
         self.audit_summary_labels = {}
-        for idx, title in enumerate(("Guardrails", "Events", "Live", "Rejected")):
+        for idx, title in enumerate(("Paper P&L Today", "Win Rate Today", "Live Today", "Rejects Today")):
             self.audit_summary_labels[title] = self._mini_stat(audit_summary, idx, title)
+        journal_filters = tk.Frame(journal_panel, bg=self.colors["panel"])
+        journal_filters.grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 8))
+        journal_filters.columnconfigure(0, weight=2)
+        for column, title in enumerate(("Find", "Mode", "From", "To")):
+            tk.Label(journal_filters, text=title, bg=self.colors["panel"], fg=self.colors["muted"],
+                     font=("Sans", 8, "bold"), anchor="w").grid(row=0, column=column, sticky="w", padx=(0, 5))
+        self.journal_search_entry = ttk.Entry(journal_filters, textvariable=self.journal_search_var, width=16)
+        self.journal_search_entry.grid(row=1, column=0, sticky="ew", padx=(0, 5))
+        self.journal_search_entry.bind("<KeyRelease>", lambda _event: self._queue_journal_refresh())
+        self.journal_mode_combo = ttk.Combobox(
+            journal_filters, textvariable=self.journal_mode_var,
+            values=("All", "Paper", "Live", "Rejected"), state="readonly", width=8,
+        )
+        self.journal_mode_combo.grid(row=1, column=1, sticky="ew", padx=5)
+        self.journal_mode_combo.bind("<<ComboboxSelected>>", lambda _event: self._queue_journal_refresh())
+        journal_from = ttk.Entry(journal_filters, textvariable=self.journal_from_var, width=10)
+        journal_from.grid(row=1, column=2, padx=5)
+        self._add_tooltip(journal_from, "Start date (YYYY-MM-DD)")
+        journal_to = ttk.Entry(journal_filters, textvariable=self.journal_to_var, width=10)
+        journal_to.grid(row=1, column=3, padx=5)
+        self._add_tooltip(journal_to, "End date (YYYY-MM-DD)")
+        self.journal_from_var.trace_add("write", lambda *_args: self._queue_journal_refresh())
+        self.journal_to_var.trace_add("write", lambda *_args: self._queue_journal_refresh())
+        self._button(journal_filters, "Clear", self._clear_journal_filters, tooltip="Clear journal search and date filters").grid(row=1, column=4, padx=(5, 0))
         self.audit_integrity_text = tk.Text(journal_panel, height=8, bg=self.colors["panel_2"], fg=self.colors["text"],
                                             insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                             font=("Monospace", 10), wrap="word")
-        self.audit_integrity_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.audit_integrity_text.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.journal_text = tk.Text(journal_panel, height=8, bg=self.colors["panel_2"], fg=self.colors["muted"],
                                     insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                     font=("Monospace", 10), wrap="word")
-        self.journal_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
+        self.journal_text.grid(row=3, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
         self.status_bar = tk.Label(main, text="Ready", bg=self.colors["panel_3"], fg=self.colors["muted"],
                                    anchor="center", justify="center", padx=12, pady=8)
@@ -1184,6 +1278,7 @@ class TimmyNativeApp:
         return value
 
     def _show_tab(self, tab: str) -> None:
+        self.active_tab = tab
         self._set_nav_active(tab)
         overview_active = tab == "Overview"
         if overview_active:
@@ -1468,12 +1563,15 @@ class TimmyNativeApp:
         try:
             self.status_bar.configure(text="Refreshing...")
             self._refresh_payload()
-            self.status_bar.configure(text="Refresh complete.")
+            self.status_bar.configure(text="Offline read-only cache refreshed." if self._offline_mode() else "Refresh complete.")
         except Exception as exc:
             self.status_bar.configure(text=f"Refresh failed: {exc}")
             self._set_text(self.broker_text, str(exc))
 
     def refresh_data(self) -> None:
+        if self._offline_mode():
+            self.status_bar.configure(text="Offline read-only mode: sample data changes are disabled.")
+            return
         try:
             self.status_bar.configure(text="Refreshing sample data...")
             self.data_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1482,6 +1580,116 @@ class TimmyNativeApp:
             self.status_bar.configure(text=f"Sample data refreshed at {self.data_file}")
         except Exception as exc:
             self.status_bar.configure(text=f"Data refresh failed: {exc}")
+
+    def _import_market_data_csv(self) -> None:
+        if self._offline_mode():
+            self.status_bar.configure(text="Offline read-only mode: market-data imports are disabled.")
+            return
+        source = filedialog.askopenfilename(
+            title="Import OHLCV market data", filetypes=(("CSV files", "*.csv"), ("All files", "*")), parent=self.root
+        )
+        if not source:
+            return
+        try:
+            source_path = Path(source)
+            if source_path.stat().st_size > 50_000_000:
+                raise ValueError("CSV is larger than the 50 MB import limit.")
+            imported = load_csv_bars(source_path)
+            rows = [bar for items in imported.values() for bar in items]
+            if not rows:
+                raise ValueError("No OHLCV rows were found.")
+            invalid = [bar for bar in rows if (
+                not all(math.isfinite(value) for value in (bar.open, bar.high, bar.low, bar.close, bar.volume))
+                or min(bar.open, bar.high, bar.low, bar.close) <= 0
+                or bar.high < max(bar.open, bar.low, bar.close)
+                or bar.low > min(bar.open, bar.high, bar.close)
+                or bar.volume < 0
+            )]
+            if invalid:
+                raise ValueError(f"Found {len(invalid)} invalid OHLCV row(s); nothing was imported.")
+            duplicate_count = sum(len(items) for items in imported.values()) - len({
+                (symbol, bar.timestamp) for symbol, items in imported.items() for bar in items
+            })
+            preview = (
+                f"File: {source_path.name}\nSymbols: {len(imported):,}\nRows: {len(rows):,}\n"
+                f"Duplicate symbol/timestamps: {duplicate_count:,} (last row wins)\n\n"
+                "Merge into Timmy's local bars. Imported timestamps replace matching rows; other symbols and dates stay."
+            )
+            if not messagebox.askyesno("Import preview", preview, parent=self.root):
+                return
+            merged = load_csv_bars(self.data_file) if self.data_file.is_file() else {}
+            for symbol, items in imported.items():
+                by_timestamp = {bar.timestamp: bar for bar in merged.get(symbol, [])}
+                for bar in items:
+                    by_timestamp[bar.timestamp] = bar
+                merged[symbol] = sorted(by_timestamp.values(), key=lambda bar: bar.timestamp)
+            temporary = self.data_file.with_name(f".{self.data_file.name}.{os.getpid()}.import-tmp")
+            try:
+                write_csv_bars(temporary, merged)
+                temporary.chmod(0o600)
+                os.replace(temporary, self.data_file)
+            finally:
+                try:
+                    temporary.unlink()
+                except FileNotFoundError:
+                    pass
+            self._refresh_integrity_manifest()
+            self._skip_market_data_refresh_once = True
+            self.refresh_all()
+            refresh_status = str(self.status_bar.cget("text"))
+            if refresh_status.startswith("Refresh failed:"):
+                self.status_bar.configure(text=f"Imported {len(rows):,} rows; dashboard refresh failed. The local bars file was saved.")
+            else:
+                self.status_bar.configure(text=f"Imported {len(rows):,} rows across {len(imported):,} symbols.")
+        except Exception as exc:
+            messagebox.showerror("CSV import failed", str(exc), parent=self.root)
+            self.status_bar.configure(text="CSV import failed; existing bars were not replaced.")
+
+    @staticmethod
+    def _offline_mode() -> bool:
+        return os.getenv("TIMMY_OFFLINE_MODE", "0") == "1"
+
+    def _backup_settings(self) -> None:
+        output = filedialog.asksaveasfilename(
+            title="Back up Timmy settings", defaultextension=".zip",
+            initialfile=f"timmy-settings-{datetime.now():%Y%m%d-%H%M%S}.zip",
+            filetypes=(("Timmy settings backup", "*.zip"),),
+        )
+        if not output:
+            return
+        try:
+            create_config_backup(self.home, output)
+            self.status_bar.configure(text="Settings backup saved (broker credentials and account ID are excluded).")
+        except Exception as exc:
+            messagebox.showerror("Backup failed", str(exc), parent=self.root)
+
+    def _restore_settings(self) -> None:
+        source = filedialog.askopenfilename(title="Restore Timmy settings", filetypes=(("Timmy settings backup", "*.zip"),))
+        if not source:
+            return
+        if not messagebox.askyesno("Restore settings", "Replace current UI preferences, watchlists, and local symbol notes from this backup?", parent=self.root):
+            return
+        try:
+            restored = restore_config_backup(self.home, source)
+            self._refresh_integrity_manifest()
+            self._refresh_payload()
+            self.status_bar.configure(text=f"Restored {len(restored)} settings file(s). Restart Timmy to apply UI preferences.")
+        except Exception as exc:
+            messagebox.showerror("Restore failed", str(exc), parent=self.root)
+
+    def _export_support_bundle(self) -> None:
+        output = filedialog.asksaveasfilename(
+            title="Export redacted diagnostics", defaultextension=".zip",
+            initialfile=f"timmy-diagnostics-{datetime.now():%Y%m%d-%H%M%S}.zip",
+            filetypes=(("Timmy diagnostics", "*.zip"),),
+        )
+        if not output:
+            return
+        try:
+            create_support_bundle(self.home, output)
+            self.status_bar.configure(text="Redacted diagnostics bundle exported. Review it before sharing.")
+        except Exception as exc:
+            messagebox.showerror("Export failed", str(exc), parent=self.root)
 
     def open_webull_profile(self) -> None:
         config = self._execution_config(self.config or self._load_config_safe())
@@ -1957,6 +2165,8 @@ class TimmyNativeApp:
         return "Account desk is ready for guarded live trading."
 
     def webull_check(self) -> str:
+        if self._offline_mode():
+            return "Offline read-only mode: Webull requests are disabled. Cached account values may be stale."
         config = self._execution_config(self._load_config_safe())
         broker = WebullOpenApiBroker(config)
         result = broker.account_snapshot()
@@ -1977,6 +2187,8 @@ class TimmyNativeApp:
         return json.dumps(redacted, indent=2, sort_keys=True)
 
     def webull_preview(self) -> str:
+        if self._offline_mode():
+            return "Offline read-only mode: order previews are disabled."
         self._refresh_payload()
         config = self._load_config_safe()
         return self._preview_current_plans(config)
@@ -2001,6 +2213,8 @@ class TimmyNativeApp:
         return json.dumps(results, indent=2, sort_keys=True)
 
     def paper_trade(self, refresh: bool = True, refresh_after: bool = True) -> str:
+        if self._offline_mode():
+            return "Offline read-only mode: paper execution and journal writes are disabled."
         if refresh:
             self._refresh_payload()
         plans = list(self.plans)
@@ -2058,6 +2272,8 @@ class TimmyNativeApp:
         self.root.after(250, self.close)
 
     def live_preview_then_submit(self, refresh: bool = True) -> str:
+        if self._offline_mode():
+            return "Offline read-only mode: broker previews and order submission are disabled."
         if refresh:
             self._refresh_payload()
         config = self._load_config_safe()
@@ -2071,6 +2287,8 @@ class TimmyNativeApp:
         ))
 
     def live_submit(self, refresh: bool = True) -> str:
+        if self._offline_mode():
+            return "Offline read-only mode: order submission is disabled."
         if refresh:
             self._refresh_payload()
         config = self._execution_config(self._load_config_safe())
@@ -2092,6 +2310,9 @@ class TimmyNativeApp:
         return json.dumps(results, indent=2, sort_keys=True)
 
     def run_decision_cycle(self) -> None:
+        if self._offline_mode():
+            self.status_bar.configure(text="Offline read-only mode: decision automation is disabled.")
+            return
         try:
             self.status_bar.configure(text="Running decision cycle...")
             self._refresh_payload()
@@ -2202,6 +2423,13 @@ class TimmyNativeApp:
         self.recent_bad_event_counts = self._build_bad_event_counts(self.execution_events)
         self._splash_step("Scanning market data")
         self.bars_by_symbol = self._load_bars()
+        if self.signals:
+            self.previous_scan_snapshot = {
+                signal.symbol.upper(): (
+                    int(signal.score), str(signal.setup), str(signal.decision), str(getattr(signal, "scout_action", "quiet"))
+                )
+                for signal in self.signals
+            }
         self.signals = rank_signals(self.bars_by_symbol, self.config)
         self.signal_by_symbol = {signal.symbol: signal for signal in self.signals}
         self._splash_step("Reconciling paper outcomes")
@@ -2224,6 +2452,8 @@ class TimmyNativeApp:
 
     def _load_bars(self):
         if not self.data_file.exists():
+            if self._offline_mode():
+                return {}
             self.data_file.parent.mkdir(parents=True, exist_ok=True)
             write_sample_bars(self.data_file)
         self._refresh_market_data_if_needed()
@@ -2235,6 +2465,11 @@ class TimmyNativeApp:
             return load_csv_bars(self.data_file)
 
     def _refresh_market_data_if_needed(self) -> None:
+        if self._offline_mode():
+            return
+        if self._skip_market_data_refresh_once:
+            self._skip_market_data_refresh_once = False
+            return
         config = self.config or self._load_config_safe()
         if config.market_data_provider == "csv":
             return
@@ -2684,26 +2919,64 @@ class TimmyNativeApp:
         return f"{self._watchlist_count(path):,} symbols, {minutes}m old"
 
     def _render_signals(self) -> None:
+        if self._scanner_render_after_id:
+            try:
+                self.root.after_cancel(self._scanner_render_after_id)
+            except tk.TclError:
+                pass
+            self._scanner_render_after_id = None
+        self._scan_render_generation += 1
+        generation = self._scan_render_generation
         self.signal_tree.delete(*self.signal_tree.get_children())
         moving_count = 0
         tradeable_count = 0
         blocked_count = 0
+        rows = []
+        query = self.scanner_search_var.get().strip().lower()
+        selected_filter = self.scanner_filter_var.get()
         config = self.config or self._load_config_safe()
         for signal in self.signals:
             if getattr(signal, "scout_action", "quiet") in {"alert", "watch"}:
                 moving_count += 1
             operational_blocks = self._operational_blocks(signal, config)
-            if (
+            is_tradeable = (
                 signal.score >= self._min_score(config)
                 and self._local_sensible_action(signal) == "trade"
                 and not operational_blocks
-            ):
+            )
+            if is_tradeable:
                 tradeable_count += 1
             elif signal.score >= self._min_score(config) or self._local_sensible_action(signal) == "trade":
                 blocked_count += 1
-            self.signal_tree.insert("", "end", values=(
+            change_label = self._signal_change_label(signal)
+            symbol_note = self.watchlist_metadata.get(signal.symbol.upper(), {})
+            is_blocked_candidate = (
+                signal.score >= self._min_score(config)
+                or self._local_sensible_action(signal) == "trade"
+                or signal.decision == "eligible"
+            ) and not is_tradeable
+            if selected_filter == "Moving" and getattr(signal, "scout_action", "quiet") not in {"alert", "watch"}:
+                continue
+            if selected_filter == "Tradeable" and not is_tradeable:
+                continue
+            if selected_filter == "Blocked" and not is_blocked_candidate:
+                continue
+            if selected_filter == "Changed" and change_label in {"No prior scan", "Unchanged"}:
+                continue
+            if selected_filter == "Pinned" and not symbol_note.get("pinned"):
+                continue
+            if query and query not in " ".join((
+                signal.symbol, signal.setup, signal.direction, signal.decision, " ".join(signal.reasons),
+                str(symbol_note.get("tag", "")), str(symbol_note.get("note", "")),
+            )).lower():
+                continue
+            scout_label = self._scout_label(signal)
+            if symbol_note.get("pinned"):
+                scout_label = f"★ {scout_label}"
+            rows.append((
                 signal.symbol,
-                self._scout_label(signal),
+                scout_label,
+                change_label,
                 signal.score,
                 self._sensible_label(signal),
                 signal.direction,
@@ -2711,6 +2984,10 @@ class TimmyNativeApp:
                 self._price_gate_label(signal),
                 f"{signal.change_pct:+.2f}%",
                 money(signal.entry),
+            ))
+        if selected_filter == "Pinned":
+            rows.sort(key=lambda row: (
+                int(self.watchlist_metadata.get(row[0], {}).get("pinned_order", 0) or 0), row[0]
             ))
         self._update_label_map(
             getattr(self, "scanner_summary_labels", {}),
@@ -2721,11 +2998,111 @@ class TimmyNativeApp:
                 "Blocked": f"{blocked_count:,}",
             },
         )
-        if self.signals:
-            first = self.signal_tree.get_children()[0]
-            self.signal_tree.selection_set(first)
-            self.signal_tree.focus(first)
+        self._insert_signal_rows(rows, generation, 0)
+
+    def _queue_scanner_render(self) -> None:
+        if self._scanner_render_after_id:
+            try:
+                self.root.after_cancel(self._scanner_render_after_id)
+            except tk.TclError:
+                pass
+        self._scanner_render_after_id = self.root.after(120, self._render_signals)
+
+    def _signal_change_label(self, signal) -> str:
+        previous = self.previous_scan_snapshot.get(signal.symbol.upper())
+        if previous is None:
+            return "No prior scan"
+        previous_score, previous_setup, previous_decision, previous_action = previous
+        difference = int(signal.score) - previous_score
+        if signal.setup != previous_setup:
+            return f"Setup changed {difference:+d}"
+        current_action = str(getattr(signal, "scout_action", "quiet"))
+        if signal.decision != previous_decision or current_action != previous_action:
+            return f"State {previous_action}→{current_action}"
+        if difference:
+            return f"Score {difference:+d}"
+        return "Unchanged"
+
+    def _refresh_workspace_menu(self) -> None:
+        combo = getattr(self, "saved_workspace_combo", None)
+        if combo is None:
+            return
+        names = ["Default", *sorted(self.saved_workspaces)]
+        combo.configure(values=names)
+        if self.saved_workspace_var.get() not in names:
+            self.saved_workspace_var.set("Default")
+
+    def _save_workspace_view(self) -> None:
+        name = simpledialog.askstring("Save workspace", "Name this scanner and strategy view:", parent=self.root)
+        name = (name or "").strip()[:48]
+        if not name:
+            return
+        if name == "Default":
+            messagebox.showerror("Workspace name", "Default is reserved. Choose another name.", parent=self.root)
+            return
+        if name not in self.saved_workspaces and len(self.saved_workspaces) >= 20:
+            messagebox.showerror("Workspace limit", "Timmy stores up to 20 named views.", parent=self.root)
+            return
+        self.saved_workspaces[name] = {
+            "query": self.scanner_search_var.get().strip(),
+            "filter": self.scanner_filter_var.get(),
+            "min_score": self._coerce_int(self.min_score_var.get(), 72, 0, 100),
+            "plan_limit": self._coerce_int(self.plan_limit_var.get(), 3, 1, 20),
+            "style": self.trading_style_var.get(),
+            "patterns": sorted(self._runtime_strategy_patterns()),
+        }
+        self.saved_workspace_var.set(name)
+        self._refresh_workspace_menu()
+        self._save_runtime_settings()
+        self.status_bar.configure(text=f"Saved workspace: {name}")
+
+    def _load_workspace_view(self) -> None:
+        name = self.saved_workspace_var.get()
+        if name == "Default":
+            self.scanner_search_var.set("")
+            self.scanner_filter_var.set("All")
+            self.status_bar.configure(text="Default scanner view selected.")
+            self._render_signals()
+            return
+        view = self.saved_workspaces.get(name)
+        if not isinstance(view, dict):
+            return
+        self.scanner_search_var.set(str(view.get("query", "")))
+        filter_value = view.get("filter", "All")
+        if filter_value in {"All", "Moving", "Tradeable", "Blocked", "Changed", "Pinned"}:
+            self.scanner_filter_var.set(filter_value)
+        self.min_score_var.set(str(self._coerce_int(view.get("min_score"), 72, 0, 100)))
+        self.plan_limit_var.set(str(self._coerce_int(view.get("plan_limit"), 3, 1, 20)))
+        style = str(view.get("style", "Adaptive"))
+        if style.title() in {"Adaptive", "Aggressive", "Balanced", "Conservative"}:
+            self.trading_style_var.set(style.title())
+        patterns = view.get("patterns", [])
+        if not isinstance(patterns, list):
+            patterns = []
+        pattern_values = {str(item).lower() for item in patterns}
+        for key, variable in self.pattern_vars.items():
+            variable.set(key in pattern_values)
+        self._save_runtime_settings()
+        self.refresh_all()
+        self.status_bar.configure(text=f"Loaded workspace: {name}")
+
+    def _insert_signal_rows(self, rows: list[tuple], generation: int, offset: int) -> None:
+        if generation != self._scan_render_generation:
+            return
+        batch_end = min(len(rows), offset + 120)
+        for values in rows[offset:batch_end]:
+            self.signal_tree.insert("", "end", values=values)
+        if batch_end < len(rows):
+            self.root.after_idle(lambda: self._insert_signal_rows(rows, generation, batch_end))
+            return
+        children = self.signal_tree.get_children()
+        if children:
+            self.signal_tree.selection_set(children[0])
+            self.signal_tree.focus(children[0])
             self._show_selected_signal()
+        elif hasattr(self, "signal_detail"):
+            self._set_text(self.signal_detail, "No symbols match these scanner filters.")
+            self.signal_chart.delete("all")
 
     def _render_plans(self) -> None:
         lines = []
@@ -2742,14 +3119,17 @@ class TimmyNativeApp:
             f"- Max quantity: {config.max_order_quantity:g}",
             f"- Risk per trade: {money(config.risk_per_trade_usd)}",
             f"- Max positions: {config.max_positions}",
+            "- Estimated stop loss and target gain exclude fees, gaps, and slippage.",
             "",
             "Executable queue",
         ])
         for plan in self.plans:
+            risk_at_stop, reward_at_target = self._plan_dollar_outcomes(plan)
             lines.append(
                 f"{plan.side} {_format_quantity(plan.quantity)} {plan.symbol} {plan.instrument_type} {plan.order_type}\n"
                 f"Limit {money(plan.limit_price)} | Notional {money(plan.notional)}\n"
-                f"Stop {money(plan.stop_price)} | Target {money(plan.target_price)}\n"
+                f"Stop {money(plan.stop_price)} | Target {money(plan.target_price)} | "
+                f"Est. loss at stop {money(risk_at_stop)} | Est. gain at target {money(reward_at_target)}\n"
                 f"{plan.reason}"
             )
         if not self.plans:
@@ -2760,6 +3140,19 @@ class TimmyNativeApp:
         self._set_text(self.decision_text, self._decision_summary())
         self._render_strategy_tab()
         self._render_execution_tab()
+
+    def _plan_dollar_outcomes(self, plan) -> tuple[float, float]:
+        signal = self.signal_by_symbol.get(plan.symbol)
+        entry = float(plan.limit_price if plan.limit_price is not None else getattr(signal, "entry", 0.0))
+        quantity = abs(float(plan.quantity))
+        side = str(plan.side).upper()
+        if side == "SELL":
+            risk = max(0.0, float(plan.stop_price) - entry) * quantity
+            reward = max(0.0, entry - float(plan.target_price)) * quantity
+        else:
+            risk = max(0.0, entry - float(plan.stop_price)) * quantity
+            reward = max(0.0, float(plan.target_price) - entry) * quantity
+        return round(risk, 2), round(reward, 2)
 
     def _render_strategy_tab(self) -> None:
         if not hasattr(self, "strategy_decision_text"):
@@ -2924,6 +3317,28 @@ class TimmyNativeApp:
             f"- Market: {'open' if market.get('is_open') else market.get('reason', 'closed')}",
             f"- Watchdog: {watchdog_value.lower()}",
         ]
+        data_health = market_data_health()
+        cache_age = "missing"
+        try:
+            age_seconds = max(0, int(datetime.now().timestamp() - self.data_file.stat().st_mtime))
+            cache_age = f"{age_seconds // 60}m {age_seconds % 60}s old"
+        except OSError:
+            pass
+        signal_lines.extend([
+            "",
+            "Market data",
+            f"- Mode: {'offline/read-only' if self._offline_mode() else 'connected/cache-enabled'}",
+            f"- Provider: {data_health['provider']} | fetch: {data_health['status']}",
+            f"- Symbols: {data_health['symbols_received']}/{data_health['symbols_requested']} | retries: {data_health['retries']}",
+            f"- Last provider fetch: {data_health['updated_at'] or 'not run'} | local cache: {cache_age}",
+        ])
+        if data_health["failures"]:
+            signal_lines.append("- Recent fetch issues: " + "; ".join(data_health["failures"][:3]))
+        if self._offline_mode():
+            signal_lines.append("- Read-only: broker checks, previews, paper entries, and live orders are disabled.")
+        if data_health["status"] in {"unavailable", "partial"}:
+            signal_lines.append("- Data recovery: check network access, wait briefly, then refresh; cached bars remain available.")
+        signal_lines.append("- Broker connection: Setup → Verify Profile → Save Profile → Account Check; review API permissions and token status if verification fails.")
         if system_check is not None:
             signal_lines.extend([
                 "",
@@ -3094,33 +3509,35 @@ class TimmyNativeApp:
         self._set_text(self.broker_text, "\n".join(response_lines))
 
     def _load_journal(self) -> None:
+        self._journal_refresh_after_id = None
         events = self.execution_events
         self._render_audit_summary(events)
         self._render_audit_integrity(events)
         if not events:
             self._set_text(self.journal_text, "Recent trade notes\n\nNo buy/sell events recorded.")
             return
-        live_count = sum(1 for event in events if event.get("mode") == "live")
-        paper_count = sum(1 for event in events if event.get("mode") == "paper")
-        rejected_count = sum(1 for event in events if str(event.get("status", "")).lower() == "rejected")
+        filtered = self._filter_journal_events(events)
         lines = [
             "Trade log summary",
-            f"- Total loaded: {len(events)}",
-            f"- Live: {live_count}",
-            f"- Paper: {paper_count}",
-            f"- Rejected: {rejected_count}",
+            f"- Showing {len(filtered):,} of {len(events):,} events",
             f"- Paper account: {self._paper_account_snapshot()[0]}",
             "",
-            "Recent trade notes",
+            "Matches",
         ]
-        for event in reversed(events[-14:]):
-            symbol = event.get("symbol") or event.get("order", {}).get("symbol") or "-"
-            quantity = event.get("quantity") or event.get("order", {}).get("quantity") or "-"
-            buy_price = event.get("buy_price") or event.get("order", {}).get("limit_price")
+        invalid_dates = [value for value in (self.journal_from_var.get(), self.journal_to_var.get()) if value.strip() and self._journal_date(value) is None]
+        if invalid_dates:
+            lines.append("Date filters must use YYYY-MM-DD.")
+        if not filtered:
+            lines.append("No journal entries match these filters.")
+        for event in reversed(filtered[-100:]):
+            order = event.get("order") if isinstance(event.get("order"), dict) else {}
+            symbol = event.get("symbol") or order.get("symbol") or "-"
+            quantity = event.get("quantity") or order.get("quantity") or "-"
+            buy_price = event.get("buy_price") or order.get("limit_price")
             sold_price = event.get("sold_price")
             sell_status = event.get("sell_status") or "not-sold"
-            target = event.get("sell_target_price") or event.get("order", {}).get("target_price")
-            stop = event.get("stop_price") or event.get("order", {}).get("stop_price")
+            target = event.get("sell_target_price") or order.get("target_price")
+            stop = event.get("stop_price") or order.get("stop_price")
             timestamp = event.get("submitted_at") or event.get("recorded_at") or "-"
             lines.append(
                 f"{timestamp}\n"
@@ -3130,20 +3547,95 @@ class TimmyNativeApp:
             )
         self._set_text(self.journal_text, "\n\n".join(lines))
 
+    @staticmethod
+    def _journal_date(value: str):
+        try:
+            return datetime.strptime(value.strip(), "%Y-%m-%d").date()
+        except (ValueError, AttributeError):
+            return None
+
+    def _filter_journal_events(self, events: list[dict]) -> list[dict]:
+        query = self.journal_search_var.get().strip().lower()
+        mode = self.journal_mode_var.get()
+        from_date = self._journal_date(self.journal_from_var.get())
+        to_date = self._journal_date(self.journal_to_var.get())
+        results = []
+        for event in events:
+            event_mode = str(event.get("mode", "")).lower()
+            status = str(event.get("status", "")).lower()
+            if mode == "Paper" and event_mode != "paper":
+                continue
+            if mode == "Live" and event_mode != "live":
+                continue
+            if mode == "Rejected" and "reject" not in status:
+                continue
+            if query:
+                order = event.get("order") if isinstance(event.get("order"), dict) else {}
+                haystack = " ".join(str(item or "") for item in (
+                    event.get("symbol"), order.get("symbol"), event.get("status"), event.get("sell_status"),
+                    event.get("mode"), event.get("reason"), event.get("message"),
+                )).lower()
+                if query not in haystack:
+                    continue
+            event_date = self._event_local_date(event)
+            if from_date and (event_date is None or event_date < from_date):
+                continue
+            if to_date and (event_date is None or event_date > to_date):
+                continue
+            results.append(event)
+        return results
+
+    def _clear_journal_filters(self) -> None:
+        self.journal_search_var.set("")
+        self.journal_mode_var.set("All")
+        self.journal_from_var.set("")
+        self.journal_to_var.set("")
+        self._queue_journal_refresh()
+
+    def _queue_journal_refresh(self) -> None:
+        pending = self._journal_refresh_after_id
+        if pending:
+            try:
+                self.root.after_cancel(pending)
+            except tk.TclError:
+                pass
+        self._journal_refresh_after_id = self.root.after(150, self._load_journal)
+
     def _render_audit_summary(self, events: list[dict]) -> None:
-        live_count = sum(1 for event in events if event.get("mode") == "live")
-        rejected_count = sum(1 for event in events if str(event.get("status", "")).lower() == "rejected")
-        integrity = "Warn" if str(self.audit_status).startswith("Audit warning") else "OK"
+        today = datetime.now(ZoneInfo("America/New_York")).date()
+        today_events = [event for event in events if self._event_local_date(event) == today]
+        paper_closed = [
+            event for event in events
+            if event.get("mode") == "paper"
+            and event.get("sell_status") in {"target-hit", "stopped"}
+            and self._paper_close_local_date(event) == today
+        ]
+        paper_wins = sum(1 for event in paper_closed if event.get("sell_status") == "target-hit")
+        paper_pnl = sum(self._float_or_none(event.get("paper_pnl")) or 0.0 for event in paper_closed)
+        live_count = sum(1 for event in today_events if event.get("mode") == "live")
+        rejected_count = sum(1 for event in today_events if str(event.get("status", "")).lower() == "rejected")
         self._update_label_map(
             getattr(self, "audit_summary_labels", {}),
             {
-                "Integrity": integrity,
-                "Guardrails": integrity,
-                "Events": f"{len(events):,}",
-                "Live": f"{live_count:,}",
-                "Rejected": f"{rejected_count:,}",
+                "Paper P&L Today": money(paper_pnl),
+                "Win Rate Today": f"{paper_wins / len(paper_closed) * 100:.0f}%" if paper_closed else "-",
+                "Rejects Today": f"{rejected_count:,}",
+                "Live Today": f"{live_count:,}",
             },
         )
+
+    def _event_local_date(self, event: dict):
+        timestamp = self._event_timestamp(event)
+        if timestamp is None:
+            return None
+        return timestamp.astimezone(ZoneInfo("America/New_York")).date() if timestamp.tzinfo else timestamp.date()
+
+    def _paper_close_local_date(self, event: dict):
+        closed_at = event.get("closed_at")
+        if not closed_at:
+            return self._event_local_date(event)
+        timestamp = self._parse_naive_timestamp(str(closed_at))
+        return timestamp.date() if timestamp else self._event_local_date(event)
 
     def _render_audit_integrity(self, events: list[dict]) -> None:
         if not hasattr(self, "audit_integrity_text"):
@@ -3472,11 +3964,14 @@ class TimmyNativeApp:
 
     def _sync_manual_controls(self) -> None:
         locked = self.execution_mode_var.get() == "Auto"
+        offline = self._offline_mode()
         config = self._execution_config(self.config or self._load_config_safe())
         live_target = self.execution_target_var.get() == "Live"
         has_plans = bool(self.plans)
         for button in self.manual_controls:
             state = "disabled" if locked else "normal"
+            if offline and button in {getattr(self, "preview_button", None), getattr(self, "paper_trade_button", None), getattr(self, "live_button", None)}:
+                state = "disabled"
             if button is self.preview_button and not has_plans:
                 state = "disabled"
             if button is self.paper_trade_button and not has_plans:
@@ -3493,6 +3988,8 @@ class TimmyNativeApp:
                 pass
         if locked:
             self.status_bar.configure(text="Auto mode active. Manual execution controls locked.")
+        elif offline:
+            self.status_bar.configure(text="Offline read-only mode active. Showing local cache; broker actions are disabled.")
         self._sync_webull_account_toggle(config)
 
     def _toggle_webull_account_target(self) -> None:
@@ -3715,6 +4212,13 @@ class TimmyNativeApp:
         expense = "\n".join(f"- {reason}" for reason in signal.expense_reasons) or "- price gate clear"
         config = self.config or self._load_config_safe()
         operational = "\n".join(f"- {reason}" for reason in self._operational_blocks(signal, config)) or "- operational gates clear"
+        metadata = self.watchlist_metadata.get(signal.symbol.upper(), {})
+        user_context = [
+            f"Watchlist: {'pinned' if metadata.get('pinned') else 'not pinned'}",
+            f"Tag: {metadata.get('tag') or '-'}",
+            f"Note: {metadata.get('note') or '-'}",
+            f"Since last scan: {self._signal_change_label(signal)}",
+        ]
         self._set_text(
             self.signal_detail,
             f"{signal.symbol} | {signal.decision} | score {signal.score}\n"
@@ -3724,8 +4228,156 @@ class TimmyNativeApp:
             f"Price gate: {self._price_gate_label(signal)}\n"
             f"Close {money(signal.close)} | Latest move {signal.change_pct:+.2f}% | Avg change {signal.volatility_pct:.2f}% | Volume x{signal.volume_ratio or 0:.2f}\n"
             f"Buy limit {money(signal.entry)} | Stop {money(signal.stop)} | Sell target {money(signal.target)} | R/R {signal.reward_risk:.2f}\n"
-            f"Scout reasons:\n{reasons}\nPrice checks:\n{expense}\nOperational checks:\n{operational}",
+            f"Scout reasons:\n{reasons}\nPrice checks:\n{expense}\nOperational checks:\n{operational}\n"
+            f"My watchlist notes\n" + "\n".join(f"- {line}" for line in user_context),
         )
+        self._draw_selected_symbol_chart()
+
+    def _draw_selected_symbol_chart(self) -> None:
+        canvas = getattr(self, "signal_chart", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        selection = getattr(self, "signal_tree", None)
+        symbol = None
+        if selection is not None and selection.selection():
+            values = selection.item(selection.selection()[0], "values")
+            symbol = str(values[0]).upper() if values else None
+        width = max(100, canvas.winfo_width())
+        height = max(70, canvas.winfo_height())
+        bars = self.bars_by_symbol.get(symbol, [])[-60:] if symbol else []
+        if len(bars) < 2:
+            canvas.create_text(width / 2, height / 2, text="Select a symbol · chart needs 2+ bars",
+                               fill=self.colors["muted"], font=("Sans", 9))
+            return
+        prices = [bar.close for bar in bars]
+        low, high = min(prices), max(prices)
+        spread = high - low or max(abs(high) * 0.01, 0.01)
+        left, right, top, bottom = 12, width - 12, 18, height - 20
+        points = []
+        for index, price in enumerate(prices):
+            x = left + index * (right - left) / (len(prices) - 1)
+            y = bottom - (price - low) * (bottom - top) / spread
+            points.extend((x, y))
+        color = self.colors["teal"] if prices[-1] >= prices[0] else self.colors["hot"]
+        canvas.create_text(left, 8, text=f"{symbol} close · {money(prices[-1])}", anchor="w",
+                           fill=self.colors["muted"], font=("Sans", 8, "bold"))
+        canvas.create_line(*points, fill=color, width=2, smooth=True)
+        canvas.create_line(left, bottom, right, bottom, fill=self.colors["line"], width=1)
+
+    def _selected_scanner_symbol(self) -> str | None:
+        selection = getattr(self, "signal_tree", None)
+        if selection is None or not selection.selection():
+            return None
+        values = selection.item(selection.selection()[0], "values")
+        return str(values[0]).strip().upper() if values else None
+
+    def _load_watchlist_metadata(self) -> dict[str, dict[str, object]]:
+        try:
+            raw = json.loads(self.watchlist_metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        result = {}
+        for symbol, value in list(raw.items())[:1000]:
+            if not isinstance(value, dict):
+                continue
+            try:
+                pinned_order = max(0, min(1_000_000, int(value.get("pinned_order", 0) or 0)))
+            except (TypeError, ValueError):
+                pinned_order = 0
+            result[str(symbol).upper()] = {
+                "pinned": bool(value.get("pinned")),
+                "pinned_order": pinned_order,
+                "tag": str(value.get("tag", ""))[:48],
+                "note": str(value.get("note", ""))[:500],
+            }
+        return result
+
+    def _save_watchlist_metadata(self) -> None:
+        self.watchlist_metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        self.watchlist_metadata_path.write_text(
+            json.dumps(self.watchlist_metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        self.watchlist_metadata_path.chmod(0o600)
+        self._refresh_integrity_manifest()
+
+    def _toggle_selected_symbol_pin(self) -> None:
+        symbol = self._selected_scanner_symbol()
+        if not symbol:
+            self.status_bar.configure(text="Select a scanner symbol first.")
+            return
+        metadata = self.watchlist_metadata.setdefault(symbol, {})
+        metadata["pinned"] = not bool(metadata.get("pinned"))
+        if metadata["pinned"]:
+            metadata["pinned_order"] = max(
+                (int(item.get("pinned_order", 0) or 0) for item in self.watchlist_metadata.values()), default=0
+            ) + 1
+        else:
+            metadata["pinned_order"] = 0
+        try:
+            self._save_watchlist_metadata()
+            self._render_signals()
+            self.status_bar.configure(text=f"{symbol} {'pinned' if metadata['pinned'] else 'unpinned'} in your local view.")
+        except OSError as exc:
+            messagebox.showerror("Could not save pin", str(exc), parent=self.root)
+
+    def _move_selected_pin(self, direction: int) -> None:
+        symbol = self._selected_scanner_symbol()
+        if not symbol or not self.watchlist_metadata.get(symbol, {}).get("pinned"):
+            self.status_bar.configure(text="Pin this symbol before changing its order.")
+            return
+        pinned = sorted(
+            (key for key, value in self.watchlist_metadata.items() if value.get("pinned")),
+            key=lambda key: (int(self.watchlist_metadata[key].get("pinned_order", 0) or 0), key),
+        )
+        index = pinned.index(symbol)
+        neighbor = index + (-1 if direction < 0 else 1)
+        if not 0 <= neighbor < len(pinned):
+            return
+        first, second = pinned[index], pinned[neighbor]
+        pinned[index], pinned[neighbor] = pinned[neighbor], pinned[index]
+        for order, pinned_symbol in enumerate(pinned, start=1):
+            self.watchlist_metadata[pinned_symbol]["pinned_order"] = order
+        self._save_watchlist_metadata()
+        self._render_signals()
+        self.status_bar.configure(text=f"Reordered pinned symbols: {first} and {second}.")
+
+    def _edit_selected_symbol_note(self) -> None:
+        symbol = self._selected_scanner_symbol()
+        if not symbol:
+            self.status_bar.configure(text="Select a scanner symbol first.")
+            return
+        metadata = self.watchlist_metadata.setdefault(symbol, {})
+        tag = simpledialog.askstring("Symbol tag", f"Tag for {symbol} (blank clears it):", initialvalue=str(metadata.get("tag", "")), parent=self.root)
+        if tag is None:
+            return
+        note = simpledialog.askstring("Symbol note", f"Private local note for {symbol}:", initialvalue=str(metadata.get("note", "")), parent=self.root)
+        if note is None:
+            return
+        metadata.update(tag=tag.strip()[:48], note=note.strip()[:500])
+        try:
+            self._save_watchlist_metadata()
+            self._show_selected_signal()
+            self.status_bar.configure(text=f"Saved local tag and note for {symbol}.")
+        except OSError as exc:
+            messagebox.showerror("Could not save note", str(exc), parent=self.root)
+
+    def _show_context_help(self) -> None:
+        tab = getattr(self, "active_tab", "Overview")
+        help_text = {
+            "Overview": "Use Scan Now to refresh local market data. Paper remains the default execution target.",
+            "Setup": "Verify Webull keys before saving. Run Account Check before selecting Live. Credentials stay on this machine.",
+            "Universe": "Review active and generated watchlists. CSV import previews and merges valid OHLCV bars into the local cache.",
+            "Scanner": "Search tickers or setups, filter the ranked list, select a symbol for its chart and decision reasons, and save workspace views.",
+            "Strategy": "Review style, patterns, eligibility, and readiness blockers before changing the model.",
+            "Execution": "Preview first. Paper and Live are separate lanes; live order controls remain guarded by profile and account checks.",
+            "Broker": "Refresh account state and inspect broker responses. Webull Desktop is not the order-routing path.",
+            "Audit": "Search the journal by symbol, mode, status, and date. Paper summaries are separate from live activity.",
+            "Health": "Review data freshness and recovery guidance. Backup and restore include only allowlisted local preferences.",
+        }.get(tab, "Use F5 to refresh the desk. F1 opens help for the current section.")
+        messagebox.showinfo(f"Timmy Help · {tab}", help_text, parent=self.root)
 
     def _decision_summary(self) -> str:
         config = self.config or self._load_config_safe()
@@ -4094,6 +4746,16 @@ class TimmyNativeApp:
             settings = json.loads(self.settings_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return
+        saved = settings.get("saved_workspaces")
+        if isinstance(saved, dict):
+            self.saved_workspaces = {
+                str(name)[:48]: value
+                for name, value in list(saved.items())[:20]
+                if isinstance(name, str) and name.strip() and isinstance(value, dict) and name != "Default"
+            }
+        selected_workspace = settings.get("selected_workspace")
+        if isinstance(selected_workspace, str) and selected_workspace in self.saved_workspaces:
+            self.saved_workspace_var.set(selected_workspace)
         self.min_score_var.set(str(self._coerce_int(settings.get("min_score"), 72, 0, 100)))
         self.plan_limit_var.set(str(self._coerce_int(settings.get("plan_limit"), 3, 1, 20)))
         self.auto_interval_var.set(str(self._coerce_int(settings.get("auto_interval_minutes"), 1, 1, 60)))
@@ -4178,6 +4840,8 @@ class TimmyNativeApp:
             "selected_webull_account_id": self._selected_webull_account_override() or "",
             "trading_style": self.trading_style_var.get(),
             "patterns": sorted(self._runtime_strategy_patterns()),
+            "saved_workspaces": self.saved_workspaces,
+            "selected_workspace": self.saved_workspace_var.get(),
             "saved_at": datetime.now().isoformat(),
         }
         try:

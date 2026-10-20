@@ -556,3 +556,50 @@ Orders Ready duplicating Broker Desk credential verification
 Trade Log duplicating Account Readiness one-click check output
 Trading Scoreboard duplicating raw journals instead of summarizing them
 ```
+
+## 16. Offline Cache And Recovery Tools
+
+Set `TIMMY_OFFLINE_MODE=1` before launching the native app to use the local bars
+cache in read-only mode. Timmy labels the offline state and cache age in the
+Health tab and disables broker checks, order previews, paper journal entries,
+and live submissions. If the cache is missing, Timmy shows an empty scanner
+instead of generating replacement data. Unset the variable and relaunch to
+resume network access.
+
+The Health tab can export a settings archive containing only UI preferences,
+watchlists, and local symbol annotations; Webull profile credentials and the
+selected broker account ID are excluded. Restore requires an
+explicit confirmation and accepts only the known settings filenames. The
+diagnostics archive includes a small allowlist of local runtime files and
+redacts credential-like values; review the archive before sharing it.
+
+The scanner table inserts rows in short UI batches so large symbol lists leave
+the rest of the interface responsive. Market-data failures are retried with a
+small capped backoff, and the Health panel reports provider, results, retry
+count, cache age, and a bounded set of failure labels. Provider calls are
+serialized to keep health counters tied to the fetch being shown.
+
+## 17. Scanner, Journal, And Workspace Tools
+
+In `Scanner`, search tickers or signal text and filter by moving, tradeable,
+blocked, changed-since-last-scan, or pinned symbols. Select a row to see the
+cached daily-close sparkline and decision inputs. Pins, tags, and notes are
+machine-local annotations; pin order is controlled with the up/down buttons.
+They do not change strategy ranking or make a symbol eligible to trade.
+
+Use `Save View` to save scanner filters together with minimum score, plan limit,
+style, and enabled patterns. `Load` restores that workspace. Saved views are
+stored with the local UI settings.
+
+The `Audit` journal can be filtered by ticker/status text, Paper/Live/Rejected,
+and start/end date in `YYYY-MM-DD` format. Its top cards summarize today's
+closed paper P&L and win rate plus today's live and rejected event counts.
+These figures describe Timmy's recorded events, not an external account
+statement. Order-plan previews show estimated loss at the stop and gain at the
+target before fees, gaps, and slippage.
+
+In `Universe`, `Import market CSV` previews symbol/row counts, rejects invalid
+OHLCV values, and merges by symbol and timestamp while keeping other cached
+bars. Supported columns are `symbol,timestamp,open,high,low,close,volume`.
+Press `F1` for help on the current desk. Symbol annotations are included in the
+allowlisted local settings backup.
