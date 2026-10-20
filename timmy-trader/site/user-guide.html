@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A practical guide to Timmy's market desk, scanner, paper workflow, alerts, account setup, and live safety gates.">
+    <meta name="theme-color" content="#f5f0e8">
+    <title>Timmy User Guide | Market Desk, Paper, and Live Workflows</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+      .guide-hero { padding: 54px 24px 34px; background: radial-gradient(ellipse at 85% 8%, rgba(15,118,110,.14), transparent 34%), var(--paper); }
+      .guide-hero-inner, .guide-layout { max-width: 1180px; margin: 0 auto; }
+      .guide-hero h1 { max-width: 800px; margin: 0; font-size: clamp(2.2rem, 5vw, 4.5rem); line-height: 1.02; letter-spacing: -.045em; }
+      .guide-hero .lead { max-width: 760px; margin-top: 18px; }
+      .guide-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 34px; align-items: start; padding: 20px 24px 76px; }
+      .guide-toc { position: sticky; top: 88px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+      .guide-toc h2 { margin: 0 0 10px; font-size: .95rem; }
+      .guide-toc ol { margin: 0; padding-left: 20px; }
+      .guide-toc li { padding: 4px 0; color: var(--muted); font-size: .9rem; }
+      .guide-toc a { text-decoration-thickness: 1px; text-underline-offset: 3px; }
+      .guide-content { min-width: 0; }
+      .guide-content section { scroll-margin-top: 92px; padding: 0 0 28px; margin: 0 0 30px; border-bottom: 1px solid var(--line); }
+      .guide-content h2 { margin: 0 0 12px; font-size: clamp(1.45rem, 3vw, 2rem); letter-spacing: -.02em; }
+      .guide-content h3 { margin: 22px 0 8px; font-size: 1.16rem; }
+      .guide-content p, .guide-content li { max-width: 78ch; }
+      .guide-content li + li { margin-top: 7px; }
+      .guide-content a:not(.button) { color: #075f5b; text-underline-offset: 3px; }
+      .guide-callout { margin: 20px 0; padding: 17px 19px; border: 1px solid #bb8a39; border-left: 5px solid #96651c; border-radius: 8px; background: #fff5df; }
+      .guide-callout strong { display: block; margin-bottom: 4px; color: #55370c; }
+      .guide-callout p { margin: 0; color: #453c2f; }
+      .guide-callout.danger { border-color: #ba5a49; border-left-color: #9c3427; background: #fff0ed; }
+      .guide-callout.danger strong { color: #6b2118; }
+      .guide-table-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+      .guide-table { width: 100%; border-collapse: collapse; min-width: 590px; }
+      .guide-table caption { padding: 12px 14px; text-align: left; font-weight: 800; }
+      .guide-table th, .guide-table td { padding: 11px 14px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+      .guide-table thead th { background: #ece3d7; }
+      .guide-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0; padding: 0; list-style: none; counter-reset: desk-step; }
+      .guide-flow li { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); counter-increment: desk-step; }
+      .guide-flow li::before { content: "0" counter(desk-step); display: block; margin-bottom: 6px; color: var(--teal); font-family: monospace; font-weight: 800; }
+      .guide-flow strong { display: block; }
+      .guide-download { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 18px; margin-top: 20px; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+      .guide-download p { margin: 4px 0 0; }
+      .guide-small { color: var(--muted); font-size: .9rem; }
+      .guide-content :target { outline: 0; }
+      @media (max-width: 850px) { .guide-layout { grid-template-columns: 1fr; gap: 22px; } .guide-toc { position: static; } .guide-toc ol { columns: 2; column-gap: 28px; } .guide-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 520px) { .guide-hero { padding-top: 38px; } .guide-layout { padding-inline: 18px; } .guide-toc ol { columns: 1; } .guide-flow { grid-template-columns: 1fr; } }
+      @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to guide content</a>
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="Timmy home"><span class="brand-mark" aria-hidden="true">T</span><span>Timmy</span></a>
+      <button class="icon-button" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="Open navigation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <nav class="nav" id="site-nav" data-nav aria-label="Main navigation">
+        <a href="download.html">Download</a>
+        <a href="user-guide.html" aria-current="page">User Guide</a>
+        <a href="boilerplates.html">Boilerplates</a>
+        <a href="faq.html">FAQ</a>
+        <a href="support.html">Support</a>
+        <a href="legal.html">Legal</a>
+      </nav>
+    </header>
+
+    <main id="main-content" tabindex="-1">
+      <section class="guide-hero" aria-labelledby="guide-title">
+        <div class="guide-hero-inner">
+          <p class="eyebrow">Timmy desktop · operator guide</p>
+          <h1 id="guide-title">A clear path from market scan to guarded action.</h1>
+          <p class="lead">Learn the desk, understand what a signal means, and keep paper activity separate from orders that can reach your broker.</p>
+          <div class="pill-row" aria-label="Guide topics">
+            <span class="pill">Paper-first workflow</span>
+            <span class="pill">Local data and alerts</span>
+            <span class="pill">Explicit live gates</span>
+          </div>
+          <div class="actions">
+            <a class="button" href="#start">Start with the safe workflow</a>
+            <a class="button secondary" href="/downloads/timmy-brochure.pdf" aria-label="Download the Timmy product brochure as a PDF">Brochure PDF</a>
+          </div>
+          <p class="guide-small">The three-page product brochure is available as a printable PDF.</p>
+        </div>
+      </section>
+
+      <div class="guide-layout">
+        <nav class="guide-toc" aria-label="On this page">
+          <h2>Guide contents</h2>
+          <ol>
+            <li><a href="#start">Start safely</a></li>
+            <li><a href="#desk">Navigate the desk</a></li>
+            <li><a href="#scan">Read a scan</a></li>
+            <li><a href="#organization">Groups and pins</a></li>
+            <li><a href="#paper-live">Paper and Live</a></li>
+            <li><a href="#setup">Set up Webull</a></li>
+            <li><a href="#alerts-auto">Alerts and automation</a></li>
+            <li><a href="#troubleshooting">Troubleshooting</a></li>
+            <li><a href="#limits">Current limits</a></li>
+          </ol>
+        </nav>
+
+        <article class="guide-content">
+          <section id="start" aria-labelledby="start-title">
+            <h2 id="start-title">Start safely</h2>
+            <div class="guide-callout" role="note">
+              <strong>Check your installed version.</strong>
+              <p>This guide documents Timmy's current source interface. The website's current Debian download is 0.1.5, built October 19, 2026; newer controls described here may not appear in that package yet. Use the controls present in your installed version and do not assume a website guide means a feature is available in an older build.</p>
+            </div>
+            <ol>
+              <li>Install the Linux package from the <a href="download.html">Download page</a>. Verify its SHA-256 checksum before installation.</li>
+              <li>Launch Timmy from your application menu or the installed desktop launcher.</li>
+              <li>Keep the execution target on <strong>Paper</strong> and mode on <strong>User</strong>. Check the Paper lane indicator: depending on profile settings, paper activity may arm at market open.</li>
+              <li>Select <strong>Scan</strong> on the Market workspace and confirm the candle timestamp and source before using the results.</li>
+              <li>Select a symbol to connect its chart, Decision Brief, and order plan.</li>
+            </ol>
+            <div class="guide-callout" role="note">
+              <strong>First-run data can be synthetic.</strong>
+              <p>If Timmy has no local candle file, it may create sample bars for the demo. Sample bars are not market data. Check the source and timestamps before relying on any price or signal.</p>
+            </div>
+          </section>
+
+          <section id="desk" aria-labelledby="desk-title">
+            <h2 id="desk-title">Navigate the desk</h2>
+            <div class="guide-table-wrap" role="region" aria-label="Workspace descriptions" tabindex="0">
+              <table class="guide-table">
+                <caption>Timmy workspaces and their main purpose</caption>
+                <thead><tr><th scope="col">Workspace</th><th scope="col">Use it for</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row">Market</th><td>Ranked radar, selected-symbol chart, Decision Brief, and order-plan context.</td></tr>
+                  <tr><th scope="row">Scanner</th><td>Search, filter, sort, and inspect signal rows; save scanner filter presets.</td></tr>
+                  <tr><th scope="row">Strategy</th><td>Inspect styles, enabled patterns, score gates, readiness, and blocker reasons.</td></tr>
+                  <tr><th scope="row">Universe</th><td>Review the scanned universe and generated watchlist status.</td></tr>
+                  <tr><th scope="row">Portfolio</th><td>Review the local paper ledger, paper positions/results, and separately checked broker cash.</td></tr>
+                  <tr><th scope="row">Automation</th><td>Review lane readiness and cycle interval; enable paper automation or pause all automation.</td></tr>
+                  <tr><th scope="row">Alerts</th><td>Create local signal rules, pause/remove them, and acknowledge events.</td></tr>
+                  <tr><th scope="row">Execution</th><td>Review target, mode, order queue, risk controls, previews, and order actions.</td></tr>
+                  <tr><th scope="row">Broker</th><td>Check the Webull account, buying-power snapshot, and connection response.</td></tr>
+                  <tr><th scope="row">Setup</th><td>Verify and save the local broker profile and inspect configuration status.</td></tr>
+                  <tr><th scope="row">Audit / Health</th><td>Review execution history, integrity, readiness, and diagnostic blockers.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p><kbd>Ctrl</kbd> + <kbd>K</kbd> opens Quick Jump. <kbd>F5</kbd> refreshes the data and scan state. <kbd>Ctrl</kbd> + <kbd>R</kbd> runs a decision cycle. A cycle can journal paper orders if the Paper lane is enabled; Live/Auto can submit only when every live gate is open.</p>
+          </section>
+
+          <section id="scan" aria-labelledby="scan-title">
+            <h2 id="scan-title">Read a scan, not just a score</h2>
+            <ol class="guide-flow" aria-label="Signal review sequence">
+              <li><strong>Radar</strong>See which symbols are moving and choose a ticker.</li>
+              <li><strong>Read</strong>Check signal score, scout urgency, action, price gates, reasons, and data quality.</li>
+              <li><strong>Risk</strong>Review entry, stop, target, reward/risk, size, and operational blockers.</li>
+              <li><strong>Act</strong>Choose a separate paper action or a fully gated live workflow.</li>
+            </ol>
+            <p>The default data source is local CSV. Remote providers fetch delayed daily bars, not streaming quotes. Timmy refreshes data according to the selected provider and cache age; a failed refresh can leave older local candles in place.</p>
+            <p>Scanner text and category filters, sortable columns, and saved filters help narrow the visible rows. A saved filter stores its query, category, and minimum score. Applying one restores the shared minimum-score setting, which can affect plan eligibility. Applying a filter does not itself submit an order or enable broker access.</p>
+            <p>The selected-symbol chart can show the loaded candles, moving averages, volume, and planned entry/stop/target levels. Remote providers currently supply delayed daily bars. These levels are estimates from Timmy's model and do not ensure execution at those prices.</p>
+            <p>A signal marked “trade” or a high score is not an order approval. Timmy may block a plan for score, overextension, volatility, reward/risk, stale data, market session, cash, order size, cooldown, daily limits, broker response, or asset-class support.</p>
+            <div class="guide-callout" role="note">
+              <strong>Quality estimates need context.</strong>
+              <p>The selected-symbol panel reports candle freshness, estimated gaps, duplicate timestamps, and invalid OHLC bars. Gap estimates use a fixed interval and do not know exchange calendars, weekends, or holidays. Inspect timestamps and the configured provider when flags appear.</p>
+            </div>
+          </section>
+
+          <section id="organization" aria-labelledby="organization-title">
+            <h2 id="organization-title">Keep personal groups separate from trading scope</h2>
+            <p>Select a symbol, create a personal group, then add the selected symbol to that group. Pin a symbol to filter the radar to pinned tickers. These are local organization tools. They do not replace the active trading watchlist, change generated trade-ready lists, or sync to Webull.</p>
+          </section>
+
+          <section id="paper-live" aria-labelledby="paper-live-title">
+            <h2 id="paper-live-title">Paper and Live are different lanes</h2>
+            <div class="grid two">
+              <article class="card">
+                <h3>Paper: simulated and local</h3>
+                <p><strong>Paper Trade</strong> records simulated orders in Timmy's local journal and does not send orders to Webull. Portfolio positions, cash, and results are derived from this paper ledger and loaded candle prices. Simulated fills can differ from real execution.</p>
+                <p>The Paper lane can run on a schedule. Use Automation to check whether it is armed, and use <strong>Pause All Automation</strong> to stop scheduled cycles.</p>
+              </article>
+              <article class="card">
+                <h3>Live: real broker orders</h3>
+                <p>Live requires a configured and checked Webull account, enabled live switches, supported instrument, fresh market/session state, a current eligible plan, risk limits, and broker approval. In User mode, Timmy asks before a manual submit. Auto mode locks manual execution controls.</p>
+                <p>The GUI requires a preview for the exact plan and account; it expires after three minutes and becomes invalid if the plan changes. The adapter's `WEBULL_REQUIRE_PREVIEW=1` setting is an additional hard block on submission. Only after validating the approved account's preview workflow should a local operator change that setting to permit submission; the GUI's exact-plan preview remains required.</p>
+              </article>
+            </div>
+            <div class="guide-callout danger" role="note">
+              <strong>Unknown is not rejected.</strong>
+              <p>If a live order response is unknown, the broker may have received the order. Reconcile Webull order and position state before retrying. Stopping automation cannot cancel an order already sent.</p>
+            </div>
+            <p>Timmy defaults to Paper and User on launch, but saved settings and market-open automation preferences can affect scheduled paper activity. Confirm both the target and lane before each session. Auto-start for Live is off by default.</p>
+          </section>
+
+          <section id="setup" aria-labelledby="setup-title">
+            <h2 id="setup-title">Set up Webull on your computer</h2>
+            <ol>
+              <li>In Setup, enter the Webull OpenAPI App Key, App Secret, account ID, region, and endpoint locally.</li>
+              <li>Select <strong>Verify Profile</strong>. If any value changes, verify the new values before saving.</li>
+              <li>Save the verified profile locally. Timmy returns to Paper and clears the old account check.</li>
+              <li>Open Broker and run <strong>Check Webull account</strong>. Confirm account identity and buying power before considering Live.</li>
+              <li>Keep secrets, tokens, account IDs, passwords, and MFA codes out of screenshots, chats, and public files.</li>
+            </ol>
+            <p>Account Check is a read operation. Preview is a broker rehearsal. Submit is the action that may place a real order. Read the <a href="faq.html">FAQ</a> and <a href="legal.html#risk">risk notes</a> before using a live account.</p>
+          </section>
+
+          <section id="alerts-auto" aria-labelledby="alerts-auto-title">
+            <h2 id="alerts-auto-title">Alerts and automation</h2>
+            <p>Create local alerts for a symbol's price, scout score, or signal action. Alerts are evaluated after scans and saved in the local profile. Select a rule to enable/pause or remove it; select an event to acknowledge it. These rules do not send desktop notifications and never submit orders.</p>
+            <p>Automation schedules refresh and decision cycles. <strong>Enable Paper Automation</strong> enables the paper lane. Live/Auto is a separate route that can submit real orders when live switches and runtime checks pass. Review the Automation readiness panel and selected target before enabling any schedule.</p>
+          </section>
+
+          <section id="troubleshooting" aria-labelledby="troubleshooting-title">
+            <h2 id="troubleshooting-title">Troubleshooting</h2>
+            <ul>
+              <li><strong>Unexpected prices:</strong> check whether the active data is synthetic sample bars, an old CSV, or delayed remote daily data.</li>
+              <li><strong>No executable plan:</strong> open Strategy or Health and review score, price, session, data, risk, and account blockers. Scanning is not the same as planning.</li>
+              <li><strong>Live locked:</strong> verify the profile, run Broker Account Check, confirm the target/account, and resolve readiness issues. Do not bypass a guard to unlock a button.</li>
+              <li><strong>Stale or failed refresh:</strong> verify network/provider availability and the newest candle timestamp. Older local data can remain visible after a fetch failure.</li>
+              <li><strong>Second launch refused:</strong> close the active Timmy instance for that runtime home. Do not remove a lock while the process is running.</li>
+            </ul>
+          </section>
+
+          <section id="limits" aria-labelledby="limits-title">
+            <h2 id="limits-title">Current limits</h2>
+            <p>Timmy focuses on stocks, ETFs, and index proxies. Crypto and futures can be configured for scouting, but live routing requires asset-specific account, data, sizing, and broker support to be verified. Options, event contracts, direct indexes, forex, CFDs, and unsupported instruments do not have a complete live execution path.</p>
+            <p>Timmy does not provide streaming quotes, integrated news or earnings analysis, guaranteed fills, or investment advice. Trading can lose money; you are responsible for reviewing each order and its risk.</p>
+          </section>
+
+          <div class="guide-download">
+            <div><strong>Keep the guide nearby</strong><p class="guide-small">Read the online guide or download the printable three-page brochure.</p></div>
+            <a class="button secondary" href="/downloads/timmy-brochure.pdf">Brochure PDF</a>
+          </div>
+          <p class="guide-small">More: <a href="download.html">downloads</a> · <a href="faq.html">FAQ</a> · <a href="support.html">support</a> · <a href="legal.html#risk">risk notes</a>.</p>
+        </article>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <strong>Timmy by Black Lion Studios</strong>
+        <div class="footer-links"><a href="contact.html">Contact</a><a href="support.html">Support</a><a href="legal.html#privacy">Privacy</a><a href="legal.html#terms">Terms</a></div>
+      </div>
+    </footer>
+    <script src="js/site.js"></script>
+  </body>
+</html>

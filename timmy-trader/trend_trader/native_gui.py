@@ -16,19 +16,26 @@ from collections.abc import Iterable
 from dataclasses import is_dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 from zoneinfo import ZoneInfo
 
 from .asset_classes import asset_profile, enabled_asset_classes
+from .alerts import AlertRule, AlertStore
 from .brokers.paper import PaperBroker
 from .brokers.webull_openapi import WebullOpenApiBroker
 from .config import BotConfig, load_config
 from .data import load_csv_bars, write_csv_bars
+from .data_quality import summarize_candle_quality
 from .market_calendar import market_session, seconds_until_next_open
 from .market_data import fetch_daily_bars
 from .market_universe import fetch_us_listed_symbols, load_bundled_us_listed_instruments, load_bundled_us_listed_symbols
 from .models import OrderPlan
 from .diagnostics import inspect_trade_ready, why_no_trade
+from .decision_insights import chart_context, compare_symbols, explain_blockers, explain_signal, paper_performance, position_what_if
+from .paper_journal_summary import summarize_paper_journal
+from .portfolio_consistency import summarize_closed_paper_events
+from .shortcut_help import ShortcutHelpRegistry
+from .journal_filters import JournalFilterState, filter_journal_events
 from .readiness import readiness_flags
 from .risk import create_order_plan
 from .runtime_health import build_runtime_health, pre_market_system_check
@@ -36,7 +43,16 @@ from .sample_data import write_sample_bars
 from .strategy import rank_signals
 from .strategy_presets import list_strategy_presets
 from .updates import check_and_install_update
+from .symbol_notes import SymbolNotesStore
+from .scanner_presets import ScannerPresetStore
+from .scanner_view_state import make_scanner_view, scanner_view_from_dict, scanner_view_to_dict
+from .trader_profile_score import (
+    calculate_trader_profile_score,
+    recommend_trader_scorecard_next_steps,
+)
 from .watchlist import DEFAULT_ROTATION_CANDIDATES, load_watchlist, rotate_watchlist, write_watchlist, write_watchlist_template
+from .workspace_tools import ActionRegistry, WorkspaceStore
+from .watchlist_organization import WatchlistOrganizationStore
 from .webull_watchlists import sync_generated_watchlists
 
 AUTO_REFRESH_MS = max(30, int(os.getenv("TIMMY_DASHBOARD_REFRESH_SECONDS", "60"))) * 1000
@@ -61,6 +77,13 @@ class TimmyNativeApp:
         self.audit_key_path = home / ".timmy-audit-key"
         self.integrity_manifest_path = home / ".timmy-integrity.json"
         self.settings_path = home / "timmy-ui-settings.json"
+        self.workspace_store = WorkspaceStore(home)
+        self.symbol_notes = SymbolNotesStore(home)
+        self.scanner_presets = ScannerPresetStore(home / "scanner-presets.json")
+        self.alert_store = AlertStore(home / "timmy-alerts.json")
+        self.watchlist_organization = WatchlistOrganizationStore(home)
+        self.action_registry = ActionRegistry()
+        self._palette_rows: list[tuple[str, object]] = []
         self.universe_path = home / "timmy-watchlist-universe.txt"
         self.rotation_state_path = home / "timmy-watchlist-rotation.json"
         self.crash_log_path = home / "timmy-crash.log"
@@ -95,16 +118,26 @@ class TimmyNativeApp:
         self.nav_buttons: dict[str, tk.Button] = {}
         self.profile_field_status_labels: dict[str, tk.Label] = {}
         self.setup_readiness_labels: dict[str, tk.Label] = {}
-        self.overview_summary_labels: dict[str, tk.Label] = {}
         self.scanner_summary_labels: dict[str, tk.Label] = {}
+        self._scanner_sort_column: str | None = None
+        self._scanner_sort_reverse = False
         self.strategy_summary_labels: dict[str, tk.Label] = {}
         self.execution_summary_labels: dict[str, tk.Label] = {}
         self.broker_summary_labels: dict[str, tk.Label] = {}
         self.audit_summary_labels: dict[str, tk.Label] = {}
-        self.overview_stage_labels: dict[str, tuple[tk.Label, tk.Label]] = {}
         self.manual_controls: list[tk.Button] = []
         self.busy_controls: list[tk.Button] = []
         self.execution_events: list[dict] = []
+        self.journal_filter_state = JournalFilterState()
+        self.shortcut_help = ShortcutHelpRegistry()
+        for group, key, action, description in (
+            ("General", "F1", "help", "Open the keyboard and workflow guide"),
+            ("General", "F5", "refresh", "Refresh the market scan"),
+            ("General", "Ctrl+R", "decision-cycle", "Run a decision cycle"),
+            ("Navigation", "Ctrl+K", "quick-search", "Search pages and quick actions"),
+            ("General", "Esc", "clear-close", "Clear scanner search or close a dialog"),
+        ):
+            self.shortcut_help.register(group, key, action, description)
         self.previewed_order_fingerprints: dict[str, dict] = {}
         self.recent_bad_event_counts: dict[str, int] = {}
         self._execution_events_cache_key: tuple | None = None
@@ -113,14 +146,29 @@ class TimmyNativeApp:
         self.audit_status = "Audit chain ready"
 
         self.root = tk.Tk()
-        self.root.title("Timmy")
-        self.root.geometry("1360x880")
-        self.root.minsize(1120, 720)
+        self.root.title("Timmy | Financial Terminal")
+        self.root.geometry("1360x860")
+        self.root.minsize(1024, 680)
         self.colors = self._theme_palette()
         self.root.configure(bg=self.colors["bg"])
         self.min_score_var = tk.StringVar(value="72")
         self.scanner_filter_var = tk.StringVar(value="")
+        self.scanner_category_var = tk.StringVar(value="All")
         self.scanner_match_var = tk.StringVar(value="All symbols")
+        self.scanner_preset_var = tk.StringVar(value="Saved filters")
+        self.chart_sma_var = tk.BooleanVar(value=True)
+        self.chart_volume_var = tk.BooleanVar(value=True)
+        self.chart_levels_var = tk.BooleanVar(value=True)
+        self.chart_window_var = tk.StringVar(value="80")
+        self.trader_experience_years_var = tk.StringVar(value="")
+        self.trader_risk_preference_var = tk.StringVar(value="Not set")
+        self.trader_risk_acknowledged_var = tk.BooleanVar(value=False)
+        self.trader_risk_acknowledged_at = ""
+        self.scanner_column_order: tuple[str, ...] = ()
+        self.scanner_visible_columns: set[str] = set()
+        self._saved_scanner_view = None
+        self.watchlist_group_var = tk.StringVar(value="All signals")
+        self.watchlist_pinned_only_var = tk.BooleanVar(value=False)
         self.plan_limit_var = tk.StringVar(value="3")
         self.auto_interval_var = tk.StringVar(value="1")
         self.paper_auto_var = tk.BooleanVar(value=False)
@@ -151,6 +199,9 @@ class TimmyNativeApp:
         self._configure_style()
         self.splash = self._build_splash()
         self._build_layout()
+        self._register_command_actions()
+        self.scanner_preset_var.trace_add("write", lambda *_args: self._apply_scanner_preset_name())
+        self._refresh_scanner_preset_menu()
         self.root.bind("<Configure>", self._responsive_layout, add="+")
         self._setup_settings_traces()
         self._setup_profile_traces()
@@ -159,6 +210,8 @@ class TimmyNativeApp:
         self.root.report_callback_exception = self._handle_tk_exception
         self.root.bind("<F5>", lambda _event: self.refresh_all())
         self.root.bind("<Control-r>", lambda _event: self.run_decision_cycle())
+        self.root.bind("<Control-k>", self._open_command_palette)
+        self.root.bind("<F1>", self._open_help_guide)
 
     def run(self) -> int:
         self.refresh_all()
@@ -179,7 +232,9 @@ class TimmyNativeApp:
             color_scheme = os.getenv("COLOR_SCHEME", "").lower()
             requested = "dark" if "dark" in f"{gtk_theme} {color_scheme}" else ""
         if not requested:
-            requested = "light" if self._system_background_is_light() else "dark"
+            # Timmy's market desk defaults to its high-contrast trading theme;
+            # users can still opt into the light palette with TIMMY_THEME=light.
+            requested = "dark"
         if requested == "light":
             return {
                 "bg": "#e8edf1",
@@ -211,37 +266,41 @@ class TimmyNativeApp:
                 "rail_line": "#31383a",
                 "hot": "#cf3f4a",
                 "cyan": "#00a6a0",
+                "up_row": "#e6f4eb",
+                "down_row": "#fae8eb",
             }
         return {
-            "bg": "#111315",
-            "rail": "#0a0d0f",
-            "runtime": "#161b1e",
-            "panel": "#1b2024",
-            "panel_2": "#252b30",
-            "panel_3": "#101719",
-            "line": "#394247",
-            "text": "#f4f1e8",
-            "muted": "#b5bab7",
-            "gold": "#efb64e",
-            "gold_text": "#171006",
-            "teal": "#42d8c7",
-            "green": "#8bd58a",
-            "red": "#ff6f7a",
-            "button": "#2b3033",
-            "button_text": "#f4f1e8",
-            "teal_button": "#08746d",
-            "teal_button_text": "#f3fffd",
-            "selected": "#e65c4f",
-            "selected_text": "#ffffff",
-            "disabled": "#777f82",
-            "entry": "#111619",
-            "broker_text": "#dffbf7",
-            "mark_text": "#16100a",
-            "rail_text": "#f4f1e8",
-            "rail_muted": "#929b9a",
-            "rail_line": "#252b2e",
-            "hot": "#ff6f7a",
-            "cyan": "#42d8c7",
+            "bg": "#080b0e",
+            "rail": "#090d10",
+            "runtime": "#11181b",
+            "panel": "#12191d",
+            "panel_2": "#192226",
+            "panel_3": "#0c1215",
+            "line": "#2b383b",
+            "text": "#e8f1ed",
+            "muted": "#92a29a",
+            "gold": "#e9b949",
+            "gold_text": "#101722",
+            "teal": "#00ce84",
+            "green": "#18d996",
+            "red": "#ff5f68",
+            "button": "#1b282b",
+            "button_text": "#e8f1ed",
+            "teal_button": "#087a58",
+            "teal_button_text": "#f1fffd",
+            "selected": "#143b2e",
+            "selected_text": "#72f3b7",
+            "disabled": "#66798c",
+            "entry": "#0c1513",
+            "broker_text": "#caffeb",
+            "mark_text": "#101722",
+            "rail_text": "#e8f0f8",
+            "rail_muted": "#8297ad",
+            "rail_line": "#23302e",
+            "hot": "#00ce84",
+            "cyan": "#00ce84",
+            "up_row": "#10291f",
+            "down_row": "#2a191b",
         }
 
     def _system_background_is_light(self) -> bool:
@@ -359,7 +418,7 @@ class TimmyNativeApp:
                         troughcolor=self.colors["bg"], bordercolor=self.colors["bg"],
                         arrowcolor=self.colors["muted"])
         style.configure("Treeview", background=self.colors["panel"], foreground=self.colors["text"],
-                        fieldbackground=self.colors["panel"], rowheight=38, borderwidth=0,
+                        fieldbackground=self.colors["panel"], rowheight=30, borderwidth=0,
                         font=("Sans", 10))
         style.configure("Treeview.Heading", background=self.colors["panel_2"], foreground=self.colors["muted"],
                         relief="flat", font=("Sans", 10, "bold"), padding=(4, 10))
@@ -373,13 +432,13 @@ class TimmyNativeApp:
         self.root.columnconfigure(1, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        rail = tk.Frame(self.root, bg=self.colors["rail"], width=236)
+        rail = tk.Frame(self.root, bg=self.colors["rail"], width=204)
         rail.grid(row=0, column=0, sticky="nsew")
         rail.grid_propagate(False)
         rail.columnconfigure(0, weight=0)
         rail.columnconfigure(1, weight=1)
 
-        rail_stripe = tk.Frame(rail, bg=self.colors["hot"], width=6)
+        rail_stripe = tk.Frame(rail, bg=self.colors["cyan"], width=4)
         rail_stripe.grid(row=0, column=0, rowspan=4, sticky="nsw")
         mark = tk.Label(rail, text="T", bg=self.colors["gold"], fg=self.colors["mark_text"], font=("Sans", 22, "bold"),
                         width=2, height=1, anchor="center", justify="center", relief="flat")
@@ -389,24 +448,26 @@ class TimmyNativeApp:
         brand = tk.Label(brand_box, text="Timmy", bg=self.colors["rail"], fg=self.colors["rail_text"],
                          justify="left", anchor="w", font=("Sans", 15, "bold"))
         brand.pack(anchor="w")
-        brand_sub = tk.Label(brand_box, text="TRADING MODEL", bg=self.colors["rail"], fg=self.colors["rail_muted"],
+        brand_sub = tk.Label(brand_box, text="FINANCIAL TERMINAL", bg=self.colors["rail"], fg=self.colors["rail_muted"],
                              justify="left", anchor="w", font=("Sans", 8, "bold"))
         brand_sub.pack(anchor="w", pady=(1, 0))
 
         nav_sections = (
-            ("WORKFLOW", ("Overview", "Setup", "Universe", "Scanner", "Strategy", "Execution")),
-            ("OPERATIONS", ("Broker", "Audit", "Health")),
+            ("WORKSPACES", ("Overview", "Portfolio", "Automation", "Alerts")),
+            ("RESEARCH", ("Scanner", "Strategy", "Universe")),
+            ("EXECUTION", ("Execution", "Broker")),
+            ("SYSTEM", ("Setup", "Audit", "Health")),
         )
         nav = tk.Frame(rail, bg=self.colors["rail"])
         nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(12, 0))
         for section, items in nav_sections:
             label = tk.Label(nav, text=section, bg=self.colors["rail"], fg=self.colors["rail_muted"],
                              anchor="w", font=("Sans", 8, "bold"))
-            label.pack(fill="x", padx=8, pady=(8, 3))
+            label.pack(fill="x", padx=8, pady=(6, 2))
             for item in items:
                 button = tk.Button(
                     nav,
-                    text=item,
+                    text="Market" if item == "Overview" else item,
                     command=lambda target=item: self._show_tab(target),
                     bg=self.colors["selected"] if item == "Overview" else self.colors["rail"],
                     fg=self.colors["selected_text"] if item == "Overview" else self.colors["rail_muted"],
@@ -416,7 +477,7 @@ class TimmyNativeApp:
                     anchor="w",
                     justify="left",
                     padx=14,
-                    pady=8,
+                    pady=6,
                     font=("Sans", 10, "bold"),
                     cursor="hand2",
                     takefocus=True,
@@ -425,7 +486,7 @@ class TimmyNativeApp:
                     highlightthickness=2,
                 )
                 self._fit_text(button, min_size=9, max_size=11, padding=22, wrap=True)
-                button.pack(fill="x", pady=3)
+                button.pack(fill="x", pady=1)
                 self.nav_buttons[item] = button
 
         rail.rowconfigure(2, weight=1)
@@ -451,13 +512,32 @@ class TimmyNativeApp:
 
         content_view = tk.Frame(self.root, bg=self.colors["bg"])
         content_view.grid(row=0, column=1, sticky="nsew")
-        content_view.rowconfigure(0, weight=1)
+        content_view.rowconfigure(1, weight=1)
         content_view.columnconfigure(0, weight=1)
+        terminal_strip = tk.Frame(content_view, bg=self.colors["runtime"], height=42,
+                                  highlightbackground=self.colors["line"], highlightthickness=1)
+        terminal_strip.grid(row=0, column=0, columnspan=2, sticky="ew")
+        terminal_strip.grid_propagate(False)
+        terminal_strip.columnconfigure(1, weight=1)
+        terminal_strip.columnconfigure(2, weight=0)
+        terminal_mark = tk.Label(terminal_strip, text="TIMMY  /  US EQUITIES", bg=self.colors["runtime"],
+                                 fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w")
+        terminal_mark.grid(row=0, column=0, sticky="w", padx=(18, 20))
+        self.terminal_session_label = tk.Label(terminal_strip, text="SESSION · CHECKING", bg=self.colors["runtime"],
+                                               fg=self.colors["muted"], font=("Sans", 9, "bold"), anchor="w")
+        self.terminal_session_label.grid(row=0, column=1, sticky="w", padx=(0, 16))
+        self.market_session_label = self.terminal_session_label
+        self.terminal_data_label = tk.Label(terminal_strip, text="DATA · CHECKING", bg=self.colors["runtime"],
+                                            fg=self.colors["muted"], font=("Sans", 8, "bold"), anchor="e")
+        self.terminal_data_label.grid(row=0, column=2, sticky="e", padx=(10, 16))
+        self.terminal_mode_label = tk.Label(terminal_strip, text="PAPER · USER", bg=self.colors["runtime"],
+                                            fg=self.colors["green"], font=("Sans", 8, "bold"), anchor="e")
+        self.terminal_mode_label.grid(row=0, column=3, sticky="e", padx=(6, 18))
         self.content_canvas = tk.Canvas(content_view, bg=self.colors["bg"], highlightthickness=0, borderwidth=0)
-        self.content_canvas.grid(row=0, column=0, sticky="nsew")
+        self.content_canvas.grid(row=1, column=0, sticky="nsew")
         content_scrollbar = ttk.Scrollbar(content_view, orient="vertical", command=self.content_canvas.yview,
                                           style="Vertical.TScrollbar")
-        content_scrollbar.grid(row=0, column=1, sticky="ns")
+        content_scrollbar.grid(row=1, column=1, sticky="ns")
         self.content_canvas.configure(yscrollcommand=content_scrollbar.set)
         main = tk.Frame(self.content_canvas, bg=self.colors["bg"])
         self._main_canvas_window = self.content_canvas.create_window((0, 0), window=main, anchor="nw")
@@ -473,57 +553,100 @@ class TimmyNativeApp:
 
         hero = tk.Frame(main, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
         self.hero = hero
-        hero.grid(row=0, column=0, sticky="ew", padx=24, pady=(24, 14))
+        hero.grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 10))
         hero.columnconfigure(0, weight=1)
         hero.columnconfigure(1, weight=0)
         accent = tk.Frame(hero, bg=self.colors["hot"], width=7)
         accent.grid(row=0, column=0, rowspan=3, sticky="nsw")
         cyan_rule = tk.Frame(hero, bg=self.colors["cyan"], height=4)
         cyan_rule.grid(row=3, column=0, columnspan=2, sticky="ew")
-        hero_eyebrow = tk.Label(hero, text="YOUR MARKET DESK  /  DISCOVER  ·  REVIEW  ·  EXECUTE", bg=self.colors["panel"],
+        hero_eyebrow = tk.Label(hero, text="MARKETS  /  US EQUITIES  /  PAPER TRADING", bg=self.colors["panel"],
                                 fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w", justify="left")
         self._fit_text(hero_eyebrow, min_size=8, max_size=9, padding=56, wrap=True)
-        hero_eyebrow.grid(row=0, column=0, sticky="ew", padx=(30, 24), pady=(20, 0))
-        hero_title = tk.Label(hero, text="Market overview", bg=self.colors["panel"], fg=self.colors["text"],
-                              font=("Sans", 28, "bold"), anchor="w", justify="left")
-        self._fit_text(hero_title, min_size=22, max_size=28, padding=56, wrap=True)
-        hero_title.grid(row=1, column=0, sticky="ew", padx=(30, 24), pady=(2, 0))
+        hero_eyebrow.grid(row=0, column=0, sticky="ew", padx=(30, 24), pady=(12, 0))
+        hero_title = tk.Label(hero, text="Market desk", bg=self.colors["panel"], fg=self.colors["text"],
+                              font=("Sans", 22, "bold"), anchor="w", justify="left")
+        self._fit_text(hero_title, min_size=18, max_size=22, padding=56, wrap=True)
+        hero_title.grid(row=1, column=0, sticky="ew", padx=(30, 24), pady=(0, 0))
         hero_copy = tk.Label(
             hero,
-            text="Find promising setups, see why they qualify, then review every order with its risk and broker status in view.",
+            text="Prices, ranked ideas, risk context, and an execution queue in one trading workspace.",
             bg=self.colors["panel"],
             fg=self.colors["muted"],
-            font=("Sans", 12),
+            font=("Sans", 10),
             justify="left",
             anchor="w",
         )
-        self._fit_text(hero_copy, min_size=10, max_size=12, padding=56, wrap=True)
-        hero_copy.grid(row=2, column=0, sticky="ew", padx=(30, 24), pady=(7, 20))
+        self._fit_text(hero_copy, min_size=9, max_size=10, padding=56, wrap=True)
+        hero_copy.grid(row=2, column=0, sticky="ew", padx=(30, 24), pady=(3, 12))
+        action_box = tk.Frame(hero, bg=self.colors["panel"])
+        action_box.grid(row=0, column=1, rowspan=3, sticky="e", padx=(0, 18), pady=8)
+        action_buttons = tk.Frame(action_box, bg=self.colors["panel"])
+        action_buttons.pack(anchor="e")
         self.refresh_button = self._button(
-            hero, "↻  Scan", self.refresh_all, accent="teal", tooltip="Refresh market data and rebuild the scan")
-        self.refresh_button.grid(row=0, column=1, rowspan=3, sticky="e", padx=(0, 24), pady=18, ipadx=14, ipady=7)
+            action_buttons, "↻  Scan", self.refresh_all, accent="teal", tooltip="Refresh market data and rebuild the scan")
+        self.refresh_button.pack(side="left", padx=(0, 7))
+        self.decision_cycle_button = self._button(
+            action_buttons, "Run cycle", self.run_decision_cycle,
+            tooltip="Refresh the strategy; enabled automation lanes will also run")
+        self.decision_cycle_button.pack(side="left")
+        self.manual_controls.append(self.decision_cycle_button)
+        self.busy_controls.append(self.decision_cycle_button)
         # Broker account actions live on Broker; keep the overview focused on
         # the market scan instead of mixing account checks into its action rail.
         self.busy_controls.append(self.refresh_button)
 
+        # Timmy's market workspace uses a compact signal-to-action masthead
+        # instead of a large landing-page hero and a second row of KPI cards.
+        # The three stages make the workflow legible while leaving room for
+        # the chart, symbol radar, and order context below.
+        self.market_masthead = tk.Frame(main, bg=self.colors["panel"],
+                                       highlightbackground=self.colors["line"], highlightthickness=1)
+        masthead_accent = tk.Frame(self.market_masthead, bg=self.colors["teal"], width=4)
+        masthead_accent.grid(row=0, column=0, rowspan=2, sticky="nsw")
+        masthead_title = tk.Label(self.market_masthead, text="SIGNAL DESK", bg=self.colors["panel"],
+                                  fg=self.colors["text"], font=("Sans", 14, "bold"), anchor="w")
+        masthead_title.grid(row=0, column=1, sticky="w", padx=(16, 8), pady=(9, 0))
+        masthead_subtitle = tk.Label(self.market_masthead, text="Timmy's market read, from radar to risk-checked action",
+                                     bg=self.colors["panel"], fg=self.colors["muted"],
+                                     font=("Sans", 9), anchor="w")
+        masthead_subtitle.grid(row=1, column=1, sticky="w", padx=(16, 8), pady=(0, 9))
+        flow = tk.Frame(self.market_masthead, bg=self.colors["panel"])
+        flow.grid(row=0, column=2, rowspan=2, sticky="e", padx=(8, 16))
+        for index, (number, label) in enumerate((("01", "RADAR"), ("02", "READ"), ("03", "ACT"))):
+            stage = tk.Frame(flow, bg=self.colors["panel_2"],
+                             highlightbackground=self.colors["line"], highlightthickness=1)
+            stage.pack(side="left", padx=(0 if index == 0 else 6, 0))
+            tk.Label(stage, text=number, bg=self.colors["panel_2"], fg=self.colors["teal"],
+                     font=("Monospace", 8, "bold")).pack(side="left", padx=(8, 4), pady=6)
+            tk.Label(stage, text=label, bg=self.colors["panel_2"], fg=self.colors["text"],
+                     font=("Sans", 8, "bold")).pack(side="left", padx=(0, 8), pady=6)
+        palette_button = self._button(self.market_masthead, "⌕  Quick Jump  Ctrl+K",
+                                      self._open_command_palette, accent="teal",
+                                      tooltip="Find a workspace, action, or ticker")
+        palette_button.grid(row=0, column=3, rowspan=2, sticky="e", padx=(0, 14))
+        self.market_masthead.columnconfigure(1, weight=1)
+
         metrics = tk.Frame(main, bg=self.colors["bg"])
         self.metrics = metrics
-        metrics.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
-        for idx in range(4):
+        metrics.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 10))
+        for idx in range(5):
             metrics.columnconfigure(idx, weight=1)
         self.universe_card = self._metric(metrics, 0, 0, "Universe")
         self.active_card = self._metric(metrics, 0, 1, "Active List")
         self.movement_card = self._metric(metrics, 0, 2, "Movement")
         self.trade_ready_card = self._metric(metrics, 0, 3, "Trade Ready")
-        self.plan_card = self._metric(metrics, 1, 0, "Orders Ready")
-        self.cash_card = self._metric(metrics, 1, 1, "Cash Account", highlight=True)
-        self.paper_cash_card = self._metric(metrics, 1, 2, "Paper Account", highlight=True)
+        self.plan_card = self._metric(metrics, 0, 4, "Orders Ready")
+        self.cash_card = self._metric(metrics, 0, 5, "Cash Account", highlight=True)
+        self.paper_cash_card = self._metric(metrics, 0, 6, "Paper Account", highlight=True)
+        self.cash_card[0].master.grid_remove()
+        self.paper_cash_card[0].master.grid_remove()
 
         controls = tk.Frame(main, bg=self.colors["panel"], highlightbackground=self.colors["cyan"], highlightthickness=1)
         self.controls = controls
         for idx in range(6):
             controls.columnconfigure(idx, weight=1, minsize=118)
-        controls_title = tk.Label(controls, text="Execution controls", bg=self.colors["panel"], fg=self.colors["text"],
+        controls_title = tk.Label(controls, text="Lane & risk controls", bg=self.colors["panel"], fg=self.colors["text"],
                                   font=("Sans", 15, "bold"), anchor="w", justify="left")
         controls_title.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 0))
         controls_status = tk.Label(controls, text="Tune the scan, choose an account lane, and review order actions.",
@@ -754,78 +877,35 @@ class TimmyNativeApp:
 
         body = tk.Frame(main, bg=self.colors["bg"])
         self.body = body
-        body.grid(row=3, column=0, sticky="nsew", padx=24, pady=(0, 24))
-        body.columnconfigure(0, weight=3)
-        body.columnconfigure(1, weight=2)
+        body.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 16))
+        body.columnconfigure(0, weight=5)
+        body.columnconfigure(1, weight=3)
         body.rowconfigure(0, weight=1)
-
-        overview_panel = self._panel(body)
-        self.overview_panel = overview_panel
-        overview_panel.columnconfigure(0, weight=3)
-        overview_panel.columnconfigure(1, weight=2)
-        overview_panel.rowconfigure(1, weight=1)
-        self._section_header(overview_panel, "AT A GLANCE", "Your trading workflow", None, None, compact=True)
-        self.overview_summary_labels = {}
-
-        workflow_panel = tk.Frame(overview_panel, bg=self.colors["panel_2"],
-                                  highlightbackground=self.colors["line"], highlightthickness=1)
-        self.overview_workflow_panel = workflow_panel
-        workflow_panel.grid(row=1, column=0, sticky="nsew", padx=(18, 8), pady=(0, 18))
-        workflow_panel.columnconfigure(0, weight=1)
-        tk.Label(workflow_panel, text="PIPELINE", bg=self.colors["panel_2"], fg=self.colors["gold"],
-                 font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(15, 2))
-        tk.Label(workflow_panel, text="From discovery to order review", bg=self.colors["panel_2"],
-                 fg=self.colors["text"], font=("Sans", 14, "bold"), anchor="w").grid(
-                     row=1, column=0, sticky="ew", padx=16, pady=(0, 12))
-        stages = tk.Frame(workflow_panel, bg=self.colors["panel_2"])
-        stages.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 14))
-        for idx, (key, title) in enumerate((("market", "Data"), ("scan", "Scan"),
-                                            ("strategy", "Model"), ("orders", "Orders"))):
-            stages.columnconfigure(idx, weight=1)
-            tile = tk.Frame(stages, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
-            tile.grid(row=0, column=idx, sticky="nsew", padx=5)
-            tk.Label(tile, text=f"0{idx + 1}  /  {title.upper()}", bg=self.colors["panel"],
-                     fg=self.colors["muted"], font=("Sans", 8, "bold"), anchor="w").pack(
-                         fill="x", padx=11, pady=(11, 5))
-            value = tk.Label(tile, text="—", bg=self.colors["panel"], fg=self.colors["text"],
-                             font=("Sans", 18, "bold"), anchor="w")
-            value.pack(fill="x", padx=11)
-            note = tk.Label(tile, text="Waiting", bg=self.colors["panel"], fg=self.colors["muted"],
-                            font=("Sans", 9), anchor="w")
-            note.pack(fill="x", padx=11, pady=(2, 11))
-            self.overview_stage_labels[key] = (value, note)
-
-        next_panel = tk.Frame(overview_panel, bg=self.colors["panel_2"],
-                              highlightbackground=self.colors["line"], highlightthickness=1)
-        self.overview_next_panel = next_panel
-        next_panel.grid(row=1, column=1, sticky="nsew", padx=(8, 18), pady=(0, 18))
-        tk.Label(next_panel, text="NEXT STEP", bg=self.colors["panel_2"], fg=self.colors["gold"],
-                 font=("Sans", 9, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 7))
-        self.overview_next_title = tk.Label(next_panel, text="Getting your desk ready", bg=self.colors["panel_2"],
-                                            fg=self.colors["text"], font=("Sans", 16, "bold"), anchor="w", justify="left")
-        self._fit_text(self.overview_next_title, min_size=11, max_size=16, padding=36, wrap=True)
-        self.overview_next_title.pack(fill="x", padx=18)
-        self.overview_next_copy = tk.Label(next_panel, text="Timmy will point you to the next useful action.",
-                                           bg=self.colors["panel_2"], fg=self.colors["muted"],
-                                           font=("Sans", 10), anchor="nw", justify="left")
-        self._fit_text(self.overview_next_copy, min_size=8, max_size=10, padding=36, wrap=True)
-        self.overview_next_copy.pack(fill="x", padx=18, pady=(7, 14))
-        self.overview_continue_button = self._button(
-            next_panel, "Continue", lambda: self._show_tab("Setup"), accent="gold")
-        self.overview_continue_button.pack(anchor="w", padx=18, pady=(0, 16))
-        self.overview_next_tab = "Setup"
 
         signals_panel = self._panel(body)
         self.signals_panel = signals_panel
         signals_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
+        signals_panel.columnconfigure(0, weight=1)
+        signals_panel.columnconfigure(1, weight=0)
         signals_panel.rowconfigure(3, weight=1)
         signals_panel.rowconfigure(4, weight=0)
-        self._section_header(signals_panel, "SCANNER OUTPUT", "Ticker Activity", "Refresh Data",
-                             self.refresh_data)
+        self._section_header(signals_panel, "SCANNER OUTPUT", "Signal scanner", "Scan Now",
+                             self.refresh_all)
         scanner_filter = tk.Frame(signals_panel, bg=self.colors["panel"])
         scanner_filter.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 10))
-        tk.Label(scanner_filter, text="Filter symbols", bg=self.colors["panel"], fg=self.colors["muted"],
-                 font=("Sans", 9, "bold")).pack(side="left", padx=(0, 10))
+        tk.Label(scanner_filter, text="Show", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold")).pack(side="left", padx=(0, 6))
+        category_menu = tk.OptionMenu(
+            scanner_filter, self.scanner_category_var, "All", "Moving", "Tradeable", "Blocked", "Quiet")
+        category_menu.configure(bg=self.colors["button"], fg=self.colors["button_text"],
+                                activebackground=self.colors["panel_2"], activeforeground=self.colors["text"],
+                                relief="flat", font=("Sans", 9, "bold"), highlightthickness=0)
+        category_menu["menu"].configure(bg=self.colors["panel_2"], fg=self.colors["text"],
+                                         activebackground=self.colors["selected"],
+                                         activeforeground=self.colors["selected_text"])
+        category_menu.pack(side="left", padx=(0, 10))
+        tk.Label(scanner_filter, text="Symbol / setup", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 8, "bold")).pack(side="left", padx=(0, 6))
         scanner_filter_entry = tk.Entry(
             scanner_filter,
             textvariable=self.scanner_filter_var,
@@ -837,6 +917,15 @@ class TimmyNativeApp:
         )
         scanner_filter_entry.pack(side="left", fill="x", expand=True, ipady=5)
         scanner_filter_entry.bind("<Escape>", lambda _event: self.scanner_filter_var.set(""))
+        self._add_tooltip(scanner_filter_entry, "Search ticker, direction, setup, or action. Press Escape to clear.")
+        self.scanner_category_var.trace_add("write", lambda *_args: self._render_signals())
+        self.scanner_preset_menu = tk.OptionMenu(scanner_filter, self.scanner_preset_var, "Saved filters")
+        self.scanner_preset_menu.configure(bg=self.colors["button"], fg=self.colors["button_text"],
+                                           activebackground=self.colors["panel_2"], activeforeground=self.colors["text"],
+                                           relief="flat", font=("Sans", 8, "bold"), highlightthickness=0)
+        self.scanner_preset_menu.pack(side="right", padx=(6, 0))
+        self._button(scanner_filter, "Save filter", self._save_scanner_preset).pack(side="right", padx=(8, 0))
+        self._button(scanner_filter, "Columns", self._open_scanner_columns).pack(side="right", padx=(8, 0))
         tk.Label(scanner_filter, textvariable=self.scanner_match_var, bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Sans", 9)).pack(side="right", padx=(10, 0))
         self.scanner_filter_var.trace_add("write", lambda *_args: self._render_signals())
@@ -848,29 +937,96 @@ class TimmyNativeApp:
             self.scanner_summary_labels[title] = self._mini_stat(scanner_summary, idx, title)
         columns = ("symbol", "scout", "score", "sense", "direction", "decision", "price", "change", "entry")
         self.signal_tree = ttk.Treeview(signals_panel, columns=columns, show="headings", selectmode="browse")
+        self.signal_tree.tag_configure("up", background=self.colors["up_row"])
+        self.signal_tree.tag_configure("down", background=self.colors["down_row"])
         headings = {
-            "symbol": "Symbol", "scout": "Scout", "score": "Score", "sense": "Sensible", "direction": "Bias",
-            "decision": "Decision", "price": "Price Gate", "change": "Move", "entry": "Buy Limit",
+            "symbol": "Symbol", "scout": "Signal", "score": "Score", "sense": "Action", "direction": "Bias",
+            "decision": "Model", "price": "Price Gate", "change": "Move", "entry": "Buy Limit",
         }
+        self.signal_tree_headings = headings
+        self.scanner_column_order = tuple(columns)
+        self.scanner_visible_columns = set(columns)
         widths = {
-            "symbol": 72, "scout": 78, "score": 58, "sense": 92, "direction": 74,
-            "decision": 80, "price": 96, "change": 74, "entry": 86,
+            "symbol": 68, "scout": 68, "score": 50, "sense": 82, "direction": 62,
+            "decision": 72, "price": 88, "change": 62, "entry": 76,
         }
         for key in columns:
             anchor = "w" if key == "symbol" else "center"
-            self.signal_tree.heading(key, text=headings[key], anchor="center")
+            self.signal_tree.heading(
+                key,
+                text=headings[key],
+                anchor="center",
+                command=lambda column=key: self._sort_signal_tree(column),
+            )
             self.signal_tree.column(key, width=widths[key], anchor=anchor)
-        self.signal_tree.grid(row=3, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.signal_tree.grid(row=3, column=0, sticky="nsew", padx=(18, 0), pady=(0, 12))
+        self.signal_tree_scrollbar = ttk.Scrollbar(
+            signals_panel, orient="vertical", command=self.signal_tree.yview, style="Vertical.TScrollbar")
+        self.signal_tree.configure(yscrollcommand=self.signal_tree_scrollbar.set)
+        self.signal_tree_scrollbar.grid(row=3, column=1, sticky="ns", padx=(0, 18), pady=(0, 12))
+        for widget in (self.signal_tree, self.signal_tree_scrollbar):
+            widget.bind("<MouseWheel>", lambda event, target=self.signal_tree: self._scroll_widget(event, target), add="+")
+            widget.bind("<Button-4>", lambda event, target=self.signal_tree: self._scroll_widget(event, target), add="+")
+            widget.bind("<Button-5>", lambda event, target=self.signal_tree: self._scroll_widget(event, target), add="+")
         self.signal_tree.bind("<<TreeviewSelect>>", self._show_selected_signal)
+        if isinstance(self._saved_scanner_view, dict):
+            try:
+                self._apply_scanner_view(scanner_view_from_dict(self._saved_scanner_view, allowed_columns=columns), save=False)
+            except ValueError:
+                self._saved_scanner_view = None
         self.signal_detail = tk.Text(signals_panel, height=6, bg=self.colors["panel_2"], fg=self.colors["muted"],
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=10,
-                                     font=("Monospace", 10), wrap="word")
-        self.signal_detail.grid(row=4, column=0, sticky="ew", padx=18, pady=(0, 18))
+                                     font=("Monospace", 9), wrap="word")
+        self.signal_detail.grid(row=4, column=0, sticky="ew", padx=(18, 0), pady=(0, 14))
+        self.signal_detail_scrollbar = ttk.Scrollbar(
+            signals_panel, orient="vertical", command=self.signal_detail.yview, style="Vertical.TScrollbar")
+        self.signal_detail.configure(yscrollcommand=self.signal_detail_scrollbar.set)
+        self.signal_detail_scrollbar.grid(row=4, column=1, sticky="ns", padx=(0, 18), pady=(0, 14))
+        for widget in (self.signal_detail, self.signal_detail_scrollbar):
+            widget.bind("<MouseWheel>", lambda event, target=self.signal_detail: self._scroll_widget(event, target), add="+")
+            widget.bind("<Button-4>", lambda event, target=self.signal_detail: self._scroll_widget(event, target), add="+")
+            widget.bind("<Button-5>", lambda event, target=self.signal_detail: self._scroll_widget(event, target), add="+")
+
+        # Keep the Overview focused on a compact ranked list; the full scanner
+        # remains available on its own tab with every diagnostic column.
+        market_watchlist = self._panel(body)
+        self.market_watchlist_panel = market_watchlist
+        market_watchlist.columnconfigure(0, weight=1)
+        market_watchlist.rowconfigure(2, weight=1)
+        self._section_header(market_watchlist, "MARKET RADAR", "Ranked Watchlist", "Open Scanner",
+                             lambda: self._show_tab("Scanner"), compact=True)
+        watch_tools = tk.Frame(market_watchlist, bg=self.colors["panel"])
+        watch_tools.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 6))
+        self.watchlist_group_menu = ttk.Combobox(watch_tools, textvariable=self.watchlist_group_var,
+                                                 state="readonly", width=17)
+        self.watchlist_group_menu.pack(side="left", fill="x", expand=True)
+        self.watchlist_group_menu.bind("<<ComboboxSelected>>", lambda _event: self._render_signals())
+        self._button(watch_tools, "New", self._create_watchlist_group).pack(side="left", padx=(5, 0))
+        self._button(watch_tools, "+ Group", self._add_selected_to_watchlist_group).pack(side="left", padx=(5, 0))
+        self._button(watch_tools, "Pin", self._toggle_selected_watchlist_pin).pack(side="left", padx=(5, 0))
+        watch_columns = ("symbol", "score", "move", "signal")
+        self.market_watch_tree = ttk.Treeview(
+            market_watchlist, columns=watch_columns, show="headings", selectmode="browse", height=16)
+        for key, title, width, anchor in (
+            ("symbol", "Ticker", 74, "w"), ("score", "Score", 52, "center"),
+            ("move", "Move", 68, "e"), ("signal", "Signal", 74, "center"),
+        ):
+            self.market_watch_tree.heading(key, text=title)
+            self.market_watch_tree.column(key, width=width, minwidth=42, anchor=anchor, stretch=key == "symbol")
+        self.market_watch_tree.tag_configure("up", background=self.colors["up_row"])
+        self.market_watch_tree.tag_configure("down", background=self.colors["down_row"])
+        self.market_watch_tree.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        self.market_watch_tree.bind("<<TreeviewSelect>>", self._show_market_watch_selection)
+        self.market_watch_footer = tk.Label(
+            market_watchlist, text="Select a ticker to inspect its chart and decision.",
+            bg=self.colors["panel"], fg=self.colors["muted"], anchor="w", justify="left",
+            font=("Sans", 8), wraplength=240)
+        self.market_watch_footer.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 12))
 
         universe_panel = self._panel(body)
         self.universe_panel = universe_panel
         universe_panel.rowconfigure(1, weight=1)
-        self._section_header(universe_panel, "MARKET INTAKE", "Universe And Watchlists", "Refresh Data",
+        self._section_header(universe_panel, "MARKET INTAKE", "Universe And Watchlists", "Use Sample Bars",
                              self.refresh_data)
         self.universe_text = tk.Text(universe_panel, height=18, bg=self.colors["panel_2"], fg=self.colors["text"],
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
@@ -1043,6 +1199,7 @@ class TimmyNativeApp:
                              font=("Sans", 10, "bold"), anchor="center")
             value.pack(fill="x", padx=8, pady=(0, 8))
             self.setup_account_labels[label] = value
+        account_strip.grid_remove()
 
         readiness = tk.Frame(setup_status, bg=self.colors["panel_2"])
         readiness.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 12))
@@ -1217,27 +1374,248 @@ class TimmyNativeApp:
         )
         self.diagnostics_text.grid(row=2, column=1, sticky="nsew", padx=(0, 18), pady=(0, 18))
 
+        portfolio_panel = self._panel(body)
+        self.portfolio_panel = portfolio_panel
+        portfolio_panel.columnconfigure((0, 1), weight=1, uniform="portfolio-columns")
+        portfolio_panel.rowconfigure(3, weight=1)
+        self._section_header(portfolio_panel, "ACCOUNT PERFORMANCE", "Portfolio", "Check Broker",
+                             lambda: self._run_action("Checking Webull", self.webull_check), compact=False)
+        portfolio_stats = tk.Frame(portfolio_panel, bg=self.colors["panel"])
+        portfolio_stats.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        portfolio_stats.columnconfigure((0, 1, 2, 3, 4), weight=1)
+        self.portfolio_summary_labels = {}
+        for idx, title in enumerate(("Paper Equity", "Net P&L", "Available Cash", "Broker Cash", "Open Positions")):
+            self.portfolio_summary_labels[title] = self._mini_stat(portfolio_stats, idx, title)
+        self.portfolio_account_context = tk.Label(
+            portfolio_panel, text="Broker snapshot has not been checked.", bg=self.colors["panel"],
+            fg=self.colors["muted"], font=("Sans", 8), anchor="w")
+        self.portfolio_account_context.grid(row=2, column=0, columnspan=2, sticky="ew", padx=20, pady=(0, 8))
+        holdings_box = tk.Frame(portfolio_panel, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+        holdings_box.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=18, pady=(0, 12))
+        holdings_box.columnconfigure(0, weight=1)
+        holdings_box.columnconfigure(1, weight=0)
+        holdings_box.rowconfigure(1, weight=1)
+        tk.Label(holdings_box, text="PAPER POSITIONS · MARKED TO LATEST LOADED PRICE",
+                 bg=self.colors["panel_2"], fg=self.colors["teal"], font=("Sans", 9, "bold"),
+                 anchor="w").grid(row=0, column=0, sticky="ew", padx=14, pady=(10, 6))
+        holding_columns = ("symbol", "qty", "entry", "last", "value", "pnl", "state")
+        self.portfolio_holdings_tree = ttk.Treeview(
+            holdings_box, columns=holding_columns, show="headings", selectmode="browse", height=7)
+        for key, title, width, anchor in (
+            ("symbol", "Symbol", 90, "w"), ("qty", "Qty", 72, "e"),
+            ("entry", "Avg Cost", 105, "e"), ("last", "Last", 105, "e"),
+            ("value", "Market Value", 120, "e"), ("pnl", "Open P&L", 110, "e"),
+            ("state", "Status", 120, "center"),
+        ):
+            self.portfolio_holdings_tree.heading(key, text=title)
+            self.portfolio_holdings_tree.column(key, width=width, minwidth=54, anchor=anchor, stretch=key == "symbol")
+        self.portfolio_holdings_tree.tag_configure("up", foreground=self.colors["green"])
+        self.portfolio_holdings_tree.tag_configure("down", foreground=self.colors["red"])
+        self.portfolio_holdings_tree.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.portfolio_holdings_scrollbar = ttk.Scrollbar(
+            holdings_box, orient="vertical", command=self.portfolio_holdings_tree.yview, style="Vertical.TScrollbar")
+        self.portfolio_holdings_tree.configure(yscrollcommand=self.portfolio_holdings_scrollbar.set)
+        self.portfolio_holdings_scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 12), pady=(0, 12))
+        portfolio_bottom = tk.Frame(portfolio_panel, bg=self.colors["panel"])
+        portfolio_bottom.grid(row=4, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 18))
+        portfolio_bottom.columnconfigure((0, 1, 2), weight=1, uniform="portfolio-bottom")
+        equity_box = tk.Frame(portfolio_bottom, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+        equity_box.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        tk.Label(equity_box, text="REALIZED EQUITY CURVE · PAPER LEDGER", bg=self.colors["panel_2"],
+                 fg=self.colors["muted"], font=("Sans", 8, "bold"), anchor="w").pack(fill="x", padx=12, pady=(9, 2))
+        self.portfolio_equity_chart = tk.Canvas(equity_box, height=150, bg=self.colors["panel_2"],
+                                                highlightthickness=0, borderwidth=0)
+        self.portfolio_equity_chart.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.portfolio_equity_chart.bind("<Configure>", lambda _event: self._draw_portfolio_equity(), add="+")
+        activity_box = tk.Frame(portfolio_bottom, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+        activity_box.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        tk.Label(activity_box, text="RECENT PAPER CLOSES", bg=self.colors["panel_2"], fg=self.colors["muted"],
+                 font=("Sans", 8, "bold"), anchor="w").pack(fill="x", padx=12, pady=(9, 2))
+        self.portfolio_activity_text = tk.Text(activity_box, height=8, bg=self.colors["panel_2"], fg=self.colors["text"],
+                                               insertbackground=self.colors["text"], relief="flat", padx=12, pady=8,
+                                               font=("Monospace", 9), wrap="word")
+        self.portfolio_activity_text.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.trader_scorecard = tk.Frame(portfolio_bottom, bg=self.colors["panel_2"],
+                                        highlightbackground=self.colors["line"], highlightthickness=1)
+        self.trader_scorecard.grid(row=0, column=2, sticky="nsew", padx=(8, 0))
+        self.trader_scorecard.columnconfigure(0, weight=1)
+        tk.Label(self.trader_scorecard, text="TRADER SCORECARD", bg=self.colors["panel_2"],
+                 fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=12, pady=(10, 2))
+        self.trader_score_value = tk.Label(self.trader_scorecard, text="—", bg=self.colors["panel_2"],
+                                           fg=self.colors["text"], font=("Sans", 20, "bold"), anchor="w")
+        self.trader_score_value.grid(row=1, column=0, sticky="ew", padx=12)
+        self.trader_score_grade = tk.Label(self.trader_scorecard, text="BUILDING PROFILE", bg=self.colors["panel_2"],
+                                           fg=self.colors["gold"], font=("Sans", 9, "bold"), anchor="w")
+        self.trader_score_grade.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 4))
+        self.trader_live_score_value = tk.Label(self.trader_scorecard, text="LIVE  — / 100", bg=self.colors["panel_2"],
+                                                fg=self.colors["muted"], font=("Sans", 12, "bold"), anchor="w")
+        self.trader_live_score_value.grid(row=3, column=0, sticky="ew", padx=12)
+        self.trader_live_score_grade = tk.Label(self.trader_scorecard, text="BUILDING PROFILE", bg=self.colors["panel_2"],
+                                                fg=self.colors["muted"], font=("Sans", 8, "bold"), anchor="w")
+        self.trader_live_score_grade.grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 2))
+        self._button(self.trader_scorecard, "Edit profile", self._edit_trader_profile).grid(
+            row=5, column=0, sticky="w", padx=12, pady=(3, 4))
+        self.trader_score_detail = tk.Text(self.trader_scorecard, height=11, bg=self.colors["panel_2"],
+                                           fg=self.colors["muted"], relief="flat", padx=12, pady=4,
+                                           font=("Monospace", 8), wrap="word")
+        self.trader_score_detail.grid(row=6, column=0, sticky="nsew", padx=(4, 0), pady=(0, 8))
+        self.trader_score_scroll = ttk.Scrollbar(self.trader_scorecard, orient="vertical",
+                                                 command=self.trader_score_detail.yview,
+                                                 style="Vertical.TScrollbar")
+        self.trader_score_detail.configure(yscrollcommand=self.trader_score_scroll.set, state="disabled")
+        self.trader_score_scroll.grid(row=6, column=1, sticky="ns", padx=(0, 4), pady=(0, 8))
+
+        automation_panel = self._panel(body)
+        self.automation_panel = automation_panel
+        automation_panel.columnconfigure((0, 1), weight=1, uniform="automation-columns")
+        automation_panel.rowconfigure(2, weight=1)
+        self._section_header(automation_panel, "AUTOMATION CONTROL ROOM", "Strategy And Automation", None, None)
+        automation_stats = tk.Frame(automation_panel, bg=self.colors["panel"])
+        automation_stats.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        automation_stats.columnconfigure((0, 1, 2, 3), weight=1)
+        self.automation_summary_labels = {}
+        for idx, title in enumerate(("Operating Mode", "Paper Lane", "Live Lane", "Next Cycle")):
+            self.automation_summary_labels[title] = self._mini_stat(automation_stats, idx, title)
+        automation_guidance = tk.Frame(automation_panel, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+        automation_guidance.grid(row=2, column=0, sticky="nsew", padx=(18, 9), pady=(0, 18))
+        automation_guidance.columnconfigure(0, weight=1)
+        tk.Label(automation_guidance, text="AUTOMATION READINESS", bg=self.colors["panel_2"], fg=self.colors["teal"],
+                 font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=14, pady=(12, 6))
+        self.automation_readiness_text = tk.Text(automation_guidance, height=16, bg=self.colors["panel_2"],
+                                                 fg=self.colors["text"], insertbackground=self.colors["text"],
+                                                 relief="flat", padx=14, pady=8, font=("Monospace", 10), wrap="word")
+        self.automation_readiness_text.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 12))
+        automation_workflow = tk.Frame(automation_panel, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
+        automation_workflow.grid(row=2, column=1, sticky="nsew", padx=(9, 18), pady=(0, 18))
+        automation_workflow.columnconfigure(0, weight=1)
+        tk.Label(automation_workflow, text="YOUR CONTROL SEQUENCE", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
+        self.automation_sequence_text = tk.Text(automation_workflow, height=14, bg=self.colors["panel"], fg=self.colors["text"],
+                                                insertbackground=self.colors["text"], relief="flat", padx=16, pady=10,
+                                                font=("Monospace", 10), wrap="word")
+        self.automation_sequence_text.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 8))
+        automation_actions = tk.Frame(automation_workflow, bg=self.colors["panel"])
+        automation_actions.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 14))
+        self.automation_enable_button = self._button(
+            automation_actions, "Enable Paper Automation", self._enable_paper_automation, accent="teal")
+        self.automation_enable_button.pack(side="left", padx=(0, 8))
+        self.automation_pause_button = self._button(
+            automation_actions, "Pause All Automation", self.stop_automation, accent="gold")
+        self.automation_pause_button.pack(side="left")
+        self.busy_controls.extend([self.automation_enable_button, self.automation_pause_button])
+
+        alerts_panel = self._panel(body)
+        self.alerts_panel = alerts_panel
+        alerts_panel.columnconfigure((0, 1), weight=1, uniform="alert-columns")
+        alerts_panel.rowconfigure(2, weight=1)
+        self._section_header(alerts_panel, "LOCAL SIGNAL MONITOR", "Alerts And Triggers", "New Rule",
+                             self._create_alert_rule)
+        alert_actions = tk.Frame(alerts_panel, bg=self.colors["panel"])
+        alert_actions.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 10))
+        self._button(alert_actions, "Enable / pause rule", self._toggle_selected_alert_rule).pack(side="left", padx=(0, 8))
+        self._button(alert_actions, "Remove rule", self._remove_selected_alert_rule, accent="gold").pack(side="left", padx=(0, 8))
+        self._button(alert_actions, "Acknowledge event", self._acknowledge_selected_alert).pack(side="left")
+        rules_box = tk.Frame(alerts_panel, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+        rules_box.grid(row=2, column=0, sticky="nsew", padx=(18, 8), pady=(0, 18))
+        rules_box.columnconfigure(0, weight=1)
+        rules_box.rowconfigure(1, weight=1)
+        tk.Label(rules_box, text="RULES · EVALUATED AFTER EACH SCAN", bg=self.colors["panel_2"],
+                 fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=12, pady=(10, 6))
+        self.alert_rules_tree = ttk.Treeview(rules_box, columns=("name", "condition", "state"),
+                                             show="headings", selectmode="browse", height=10)
+        for key, title, width in (("name", "Rule", 130), ("condition", "Condition", 210), ("state", "State", 72)):
+            self.alert_rules_tree.heading(key, text=title)
+            self.alert_rules_tree.column(key, width=width, anchor="w", stretch=key != "state")
+        self.alert_rules_tree.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        events_box = tk.Frame(alerts_panel, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
+        events_box.grid(row=2, column=1, sticky="nsew", padx=(8, 18), pady=(0, 18))
+        events_box.columnconfigure(0, weight=1)
+        events_box.rowconfigure(1, weight=1)
+        tk.Label(events_box, text="TRIGGER HISTORY · LOCAL ONLY", bg=self.colors["panel_2"],
+                 fg=self.colors["muted"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=12, pady=(10, 6))
+        self.alert_events_tree = ttk.Treeview(events_box, columns=("time", "symbol", "rule", "state"),
+                                              show="headings", selectmode="browse", height=10)
+        for key, title, width in (("time", "Triggered", 145), ("symbol", "Ticker", 70),
+                                  ("rule", "Rule", 130), ("state", "State", 82)):
+            self.alert_events_tree.heading(key, text=title)
+            self.alert_events_tree.column(key, width=width, anchor="w", stretch=key == "rule")
+        self.alert_events_tree.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.alert_events_tree.tag_configure("new", foreground=self.colors["gold"])
+
         right = tk.Frame(body, bg=self.colors["bg"])
         self.right_panel = right
         right.grid(row=0, column=1, sticky="nsew")
-        right.rowconfigure(0, weight=0)
-        right.rowconfigure(1, weight=1)
-        right.rowconfigure(2, weight=1)
+        right.rowconfigure(0, weight=3)
+        right.rowconfigure(1, weight=2)
         right.rowconfigure(3, weight=0)
-        right.columnconfigure(0, weight=1)
+        right.columnconfigure((0, 1), weight=1, uniform="desk-insights")
+
+        chart_panel = self._panel(right)
+        self.market_chart_panel = chart_panel
+        chart_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 10))
+        chart_panel.columnconfigure(0, weight=1)
+        chart_panel.rowconfigure(1, weight=1)
+        chart_header = tk.Frame(chart_panel, bg=self.colors["panel"])
+        chart_header.grid(row=0, column=0, sticky="ew", padx=14, pady=(11, 4))
+        chart_header.columnconfigure(0, weight=1)
+        tk.Label(chart_header, text="PRICE ACTION · LOCAL CANDLES", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 8, "bold"), anchor="w").grid(row=0, column=0, sticky="w")
+        self.market_chart_title = tk.Label(chart_header, text="Select a symbol", bg=self.colors["panel"],
+                                           fg=self.colors["text"], font=("Sans", 12, "bold"), anchor="w")
+        self.market_chart_title.grid(row=1, column=0, sticky="w", pady=(3, 0))
+        self.market_chart_move = tk.Label(chart_header, text="—", bg=self.colors["panel"],
+                                          fg=self.colors["muted"], font=("Sans", 10, "bold"), anchor="e")
+        self.market_chart_move.grid(row=0, column=1, rowspan=2, sticky="e", padx=(10, 0))
+        chart_tools = tk.Frame(chart_header, bg=self.colors["panel"])
+        chart_tools.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        for label, variable in (("MA 20 / 50", self.chart_sma_var), ("Volume", self.chart_volume_var),
+                                ("Trade levels", self.chart_levels_var)):
+            tk.Checkbutton(chart_tools, text=label, variable=variable, command=self._draw_market_chart,
+                           bg=self.colors["panel"], fg=self.colors["muted"], selectcolor=self.colors["panel_2"],
+                           activebackground=self.colors["panel"], activeforeground=self.colors["text"],
+                           font=("Sans", 8, "bold"), padx=4).pack(side="left", padx=(0, 6))
+        self._button(chart_tools, "Compare", self._open_symbol_comparison).pack(side="left", padx=(8, 0))
+        tk.Label(chart_tools, text="Range", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 8, "bold")).pack(side="left", padx=(10, 4))
+        chart_range = ttk.Combobox(chart_tools, textvariable=self.chart_window_var, values=("20", "40", "80", "120"),
+                                   state="readonly", width=5)
+        chart_range.pack(side="left")
+        chart_range.bind("<<ComboboxSelected>>", lambda _event: self._chart_window_selected())
+        self.market_chart_data_quality = tk.Label(
+            chart_header, text="DATA · refresh to inspect feed quality", bg=self.colors["panel"],
+            fg=self.colors["muted"], font=("Sans", 8, "bold"), anchor="w")
+        self.market_chart_data_quality.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        self.market_chart = tk.Canvas(chart_panel, height=270, bg=self.colors["panel_2"],
+                                      highlightthickness=0, borderwidth=0)
+        self.market_chart.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.market_chart.bind("<Configure>", lambda _event: self._draw_market_chart(), add="+")
+        self.market_chart.bind("<Motion>", self._market_chart_hover, add="+")
+        self.market_chart.bind("<Leave>", lambda _event: self.market_chart.delete("hover"), add="+")
 
         decision_panel = self._panel(right)
         self.decision_panel = decision_panel
-        decision_panel.grid(row=0, column=0, sticky="ew", pady=(0, 18))
-        self._section_header(decision_panel, "STRATEGY MODEL", "Decision Brief", None, None, compact=True)
+        decision_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 6), pady=(0, 10))
+        decision_panel.columnconfigure(0, weight=1)
+        decision_panel.rowconfigure(1, weight=1)
+        self._section_header(decision_panel, "STRATEGY MODEL", "Decision Brief", "Sizing preview",
+                             self._open_sizing_preview, compact=True)
         self.decision_text = tk.Text(decision_panel, height=7, bg=self.colors["panel_2"], fg=self.colors["text"],
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                      font=("Monospace", 10), wrap="word")
-        self.decision_text.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 18))
+        self.decision_text.grid(row=1, column=0, sticky="nsew", padx=(14, 0), pady=(0, 12))
+        decision_scrollbar = ttk.Scrollbar(decision_panel, orient="vertical", command=self.decision_text.yview,
+                                           style="Vertical.TScrollbar")
+        self.decision_text.configure(yscrollcommand=decision_scrollbar.set)
+        decision_scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 10), pady=(0, 12))
 
         order_panel = self._panel(right)
         self.order_panel = order_panel
-        order_panel.grid(row=1, column=0, sticky="ew", pady=(0, 18))
+        order_panel.grid(row=1, column=1, sticky="nsew", padx=(6, 0), pady=(0, 10))
+        order_panel.columnconfigure(0, weight=1)
+        order_panel.rowconfigure(1, weight=1)
         self.paper_trade_button = self._section_header(order_panel, "EXECUTION QUEUE", "Order Plan", "Paper Trade",
                                                        lambda: self._run_action("Paper trade", self.paper_trade, threaded=False), compact=True)
         if self.paper_trade_button:
@@ -1246,7 +1624,11 @@ class TimmyNativeApp:
         self.plan_text = tk.Text(order_panel, height=7, bg=self.colors["panel_2"], fg=self.colors["text"],
                                  insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                  font=("Monospace", 10), wrap="word")
-        self.plan_text.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 18))
+        self.plan_text.grid(row=1, column=0, sticky="nsew", padx=(14, 0), pady=(0, 12))
+        plan_scrollbar = ttk.Scrollbar(order_panel, orient="vertical", command=self.plan_text.yview,
+                                       style="Vertical.TScrollbar")
+        self.plan_text.configure(yscrollcommand=plan_scrollbar.set)
+        plan_scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 10), pady=(0, 12))
 
         broker_panel = self._panel(right)
         self.broker_panel = broker_panel
@@ -1254,23 +1636,21 @@ class TimmyNativeApp:
         broker_panel.columnconfigure(0, weight=1)
         broker_panel.columnconfigure(1, weight=1)
         broker_panel.rowconfigure(3, weight=1)
-        self._section_header(broker_panel, "BROKER DESK", "Account And Orders", None, None, compact=True)
+        self._section_header(broker_panel, "BROKER DESK", "Connection Diagnostics", "Portfolio",
+                             lambda: self._show_tab("Portfolio"), compact=True)
         broker_actions = tk.Frame(broker_panel, bg=self.colors["panel"])
         broker_actions.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 12))
         self.webull_check_button = self._button(
-            broker_actions,
-            "✓ Check Webull account",
-            lambda: self._run_action("Checking Webull", self.webull_check),
-            accent="teal",
-            tooltip="Refresh account status and buying power",
-        )
+            broker_actions, "Check Webull account", lambda: self._run_action("Checking Webull", self.webull_check),
+            accent="teal", tooltip="Refresh account status and buying power")
         self.webull_check_button.pack(side="left")
         self.busy_controls.append(self.webull_check_button)
+        broker_actions.grid_remove()
         broker_summary = tk.Frame(broker_panel, bg=self.colors["panel"])
         broker_summary.grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         broker_summary.columnconfigure((0, 1, 2, 3, 4), weight=1)
         self.broker_summary_labels = {}
-        for idx, title in enumerate(("Account", "Cash Account", "Paper Account", "Live", "Dry Run")):
+        for idx, title in enumerate(("Account", "API Check", "Region", "Live Gate", "Preview Gate")):
             self.broker_summary_labels[title] = self._mini_stat(broker_summary, idx, title)
         self.broker_readiness_text = tk.Text(broker_panel, height=13, bg=self.colors["panel_2"], fg=self.colors["text"],
                                              insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
@@ -1294,6 +1674,8 @@ class TimmyNativeApp:
         self.audit_summary_labels = {}
         for idx, title in enumerate(("Guardrails", "Events", "Live", "Rejected")):
             self.audit_summary_labels[title] = self._mini_stat(audit_summary, idx, title)
+        self._button(audit_summary, "Filter journal", self._open_journal_filter).grid(
+            row=0, column=4, sticky="e", padx=(8, 0), pady=4)
         self.audit_integrity_text = tk.Text(journal_panel, height=8, bg=self.colors["panel_2"], fg=self.colors["text"],
                                             insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                             font=("Monospace", 10), wrap="word")
@@ -1307,7 +1689,7 @@ class TimmyNativeApp:
                                    anchor="w", justify="left", padx=16, pady=9,
                                    highlightbackground=self.colors["line"], highlightthickness=1)
         self._fit_text(self.status_bar, min_size=8, max_size=10, padding=32, wrap=True)
-        self.status_bar.grid(row=4, column=0, sticky="ew", padx=24, pady=(0, 8))
+        self.status_bar.grid(row=4, column=0, sticky="ew", padx=18, pady=(0, 6))
         self._refresh_webull_account_menu()
         self._sync_profile_save_state()
         self._sync_manual_controls()
@@ -1342,20 +1724,32 @@ class TimmyNativeApp:
         return value
 
     def _show_tab(self, tab: str) -> None:
+        self.active_tab = tab
         self.content_canvas.yview_moveto(0)
         self._set_nav_active(tab)
-        overview_active = tab == "Overview"
+        overview_active = tab in {"Overview", "Market"}
         if overview_active:
-            self.hero.grid(row=0, column=0, sticky="ew", padx=24, pady=(24, 14))
-            self.metrics.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
-            self.body.grid_configure(pady=(0, 24))
+            self.body.master.rowconfigure(1, weight=1)
+            self.body.master.rowconfigure(3, weight=0)
+            self.hero.grid_remove()
+            self.metrics.grid_remove()
+            self.market_masthead.grid(row=0, column=0, sticky="ew", padx=18, pady=(12, 8))
+            self.controls.grid_remove()
+            self.body.grid_configure(row=1, pady=(0, 16))
         else:
+            self.body.master.rowconfigure(1, weight=0)
+            self.body.master.rowconfigure(3, weight=1)
+            self.market_masthead.grid_remove()
             self.hero.grid_remove()
             self.metrics.grid_remove()
             self.controls.grid_remove()
-            self.body.grid_configure(pady=(24, 24))
-        self.overview_panel.grid_remove()
+            self.body.grid_configure(row=3, pady=(16, 16))
         self.signals_panel.grid_remove()
+        self.market_watchlist_panel.grid_remove()
+        self.portfolio_panel.grid_remove()
+        self.automation_panel.grid_remove()
+        self.alerts_panel.grid_remove()
+        self.market_chart_panel.grid_remove()
         self.universe_panel.grid_remove()
         self.setup_panel.grid_remove()
         self.strategy_tab_panel.grid_remove()
@@ -1369,10 +1763,19 @@ class TimmyNativeApp:
         self.body.columnconfigure(1, weight=1)
 
         if overview_active:
-            self.body.columnconfigure(0, weight=1)
-            self.body.columnconfigure(1, weight=1)
-            self._render_overview_summary()
-            self.overview_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+            # Left rail is the radar; the broad right work area follows the
+            # selected symbol through chart, model read, and order plan.
+            self.body.columnconfigure(0, weight=2, uniform="signal-desk")
+            self.body.columnconfigure(1, weight=7, uniform="signal-desk")
+            self.right_panel.rowconfigure(0, weight=3)
+            self.right_panel.rowconfigure(1, weight=2)
+            self.right_panel.columnconfigure(0, weight=2, uniform="desk-workbench")
+            self.right_panel.columnconfigure(1, weight=1, uniform="desk-workbench")
+            self.market_watchlist_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+            self.right_panel.grid(row=0, column=1, sticky="nsew")
+            self.market_chart_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 10), pady=(0, 10))
+            self.decision_panel.grid(row=0, column=1, sticky="nsew", pady=(0, 6))
+            self.order_panel.grid(row=1, column=1, sticky="nsew", pady=(6, 10))
         elif tab == "Setup":
             self.body.columnconfigure(0, weight=1)
             self._sync_profile_form(self.config or self._load_config_safe())
@@ -1384,6 +1787,19 @@ class TimmyNativeApp:
         elif tab == "Scanner":
             self.body.columnconfigure(0, weight=1)
             self.signals_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Portfolio":
+            self.body.columnconfigure(0, weight=1)
+            self._render_portfolio_panel()
+            self.portfolio_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Automation":
+            self.body.columnconfigure(0, weight=1)
+            self._render_automation_panel()
+            self.automation_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
+        elif tab == "Alerts":
+            self.body.columnconfigure(0, weight=1)
+            self._render_alerts_panel()
+            self.alerts_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         elif tab == "Strategy":
             self.body.columnconfigure(0, weight=1)
             self._render_strategy_tab()
@@ -1412,28 +1828,53 @@ class TimmyNativeApp:
             self.right_panel.grid(row=0, column=0, columnspan=2, sticky="nsew")
             panel.grid(row=0, column=0, sticky="nsew", pady=0)
 
-        self.status_bar.configure(text=f"{tab} tab active.")
+        self._responsive_layout()
+        self.status_bar.configure(text=f"{'Market' if overview_active else tab} workspace active.")
 
     def _responsive_layout(self, event=None) -> None:
         if event is not None and event.widget is not self.root:
             return
-        if not hasattr(self, "overview_workflow_panel"):
+        if not hasattr(self, "metrics") or getattr(self, "active_tab", None) != "Overview":
             return
-        compact = self.root.winfo_width() < 1240
+        compact = self.root.winfo_width() < 1120
         if compact:
-            self.overview_workflow_panel.grid_configure(row=1, column=0, columnspan=2,
-                                                        padx=18, pady=(0, 10))
-            self.overview_next_panel.grid_configure(row=2, column=0, columnspan=2,
-                                                    padx=18, pady=(0, 18))
-            self.overview_panel.rowconfigure(1, weight=0)
-            self.overview_panel.rowconfigure(2, weight=1)
+            for idx in range(3):
+                self.metrics.columnconfigure(idx, weight=1)
+            for idx in range(3, 5):
+                self.metrics.columnconfigure(idx, weight=0)
+            for card, row, column in (
+                (self.universe_card, 0, 0), (self.active_card, 0, 1),
+                (self.movement_card, 0, 2), (self.trade_ready_card, 1, 0),
+                (self.plan_card, 1, 1),
+            ):
+                card[0].master.grid_configure(row=row, column=column)
+            self.body.columnconfigure(0, weight=2, uniform="signal-desk")
+            self.body.columnconfigure(1, weight=7, uniform="signal-desk")
+            self.market_watchlist_panel.grid_configure(row=0, column=0, columnspan=1, padx=(0, 8), pady=0)
+            self.right_panel.grid_configure(row=0, column=1, columnspan=1, padx=0, pady=0)
+            self.right_panel.columnconfigure(0, weight=2, uniform="desk-workbench")
+            self.right_panel.columnconfigure(1, weight=1, uniform="desk-workbench")
+            self.market_chart_panel.grid_configure(row=0, column=0, rowspan=2, padx=(0, 8), pady=0)
+            self.decision_panel.grid_configure(row=0, column=1, padx=0, pady=(0, 5))
+            self.order_panel.grid_configure(row=1, column=1, padx=0, pady=(5, 0))
         else:
-            self.overview_workflow_panel.grid_configure(row=1, column=0, columnspan=1,
-                                                        padx=(18, 8), pady=(0, 18))
-            self.overview_next_panel.grid_configure(row=1, column=1, columnspan=1,
-                                                    padx=(8, 18), pady=(0, 18))
-            self.overview_panel.rowconfigure(1, weight=1)
-            self.overview_panel.rowconfigure(2, weight=0)
+            for idx in range(5):
+                self.metrics.columnconfigure(idx, weight=1)
+            for card, column in (
+                (self.universe_card, 0), (self.active_card, 1),
+                (self.movement_card, 2), (self.trade_ready_card, 3),
+                (self.plan_card, 4),
+            ):
+                card[0].master.grid_configure(row=0, column=column)
+            self.body.columnconfigure(0, weight=2, uniform="signal-desk")
+            self.body.columnconfigure(1, weight=7, uniform="signal-desk")
+            self.market_watchlist_panel.grid_configure(row=0, column=0, columnspan=1, padx=(0, 10), pady=0)
+            self.right_panel.grid_configure(row=0, column=1, columnspan=1, padx=0, pady=0)
+            self.right_panel.columnconfigure(0, weight=2, uniform="desk-workbench")
+            self.right_panel.columnconfigure(1, weight=1, uniform="desk-workbench")
+            self.market_chart_panel.grid_configure(row=0, column=0, rowspan=2, padx=(0, 10), pady=(0, 10))
+            self.decision_panel.grid_configure(row=0, column=1, padx=0, pady=(0, 6))
+            self.order_panel.grid_configure(row=1, column=1, padx=0, pady=(6, 10))
 
     def _scroll_content(self, event) -> str | None:
         if not hasattr(self, "content_canvas"):
@@ -1457,6 +1898,21 @@ class TimmyNativeApp:
             canvas.yview_scroll(step, "units")
             return "break"
         return None
+
+    def _scroll_widget(self, event, target: tk.Widget) -> str:
+        if getattr(event, "num", None) == 4:
+            step = -3
+        elif getattr(event, "num", None) == 5:
+            step = 3
+        else:
+            delta = getattr(event, "delta", 0)
+            self._wheel_delta_remainder += delta
+            ticks = int(self._wheel_delta_remainder / 120)
+            self._wheel_delta_remainder -= ticks * 120
+            step = -ticks
+        if step:
+            target.yview_scroll(step, "units")
+        return "break"
 
     def _profile_field(self, parent: tk.Widget, row: int, label: str, variable: tk.StringVar, secret: bool = False) -> None:
         tk.Label(parent, text=label, bg=self.colors["panel"], fg=self.colors["muted"],
@@ -1579,6 +2035,190 @@ class TimmyNativeApp:
             pass
         self._tooltip = None
 
+    def _register_command_actions(self) -> None:
+        pages = (
+            ("Overview", "Market", "quotes symbols chart"), ("Scanner", "Signal Scanner", "scan filter"),
+            ("Portfolio", "Portfolio", "holdings paper pnl"), ("Automation", "Automation", "paper pause"),
+            ("Alerts", "Alerts", "rules notifications"), ("Execution", "Execution Desk", "orders preview"),
+            ("Strategy", "Strategy Settings", "risk patterns"), ("Universe", "Universe", "watchlist symbols"),
+            ("Setup", "Broker Setup", "profile account"), ("Broker", "Connection Diagnostics", "broker status"),
+            ("Audit", "Trade Journal", "history audit"), ("Health", "System Health", "diagnostics"),
+        )
+        for tab, label, keywords in pages:
+            self.action_registry.register(
+                f"page:{tab.lower()}", f"Open {label}", lambda target=tab: self._show_tab(target),
+                category="Workspace", keywords=keywords.split(),
+            )
+        for action_id, label, callback, shortcut, keywords in (
+            ("market:refresh", "Refresh market scan", self.refresh_all, "F5", ("quotes", "update")),
+            ("market:cycle", "Run decision cycle", self.run_decision_cycle, "Ctrl+R", ("evaluate", "strategy")),
+            ("help:guide", "Open keyboard and workflow guide", self._open_help_guide, "F1", ("help", "shortcuts", "learn")),
+            ("workspace:save", "Save current workspace", self._save_workspace_preset, "", ("layout", "preset")),
+            ("symbol:note", "Edit note for selected ticker", self._edit_selected_symbol_note, "", ("research", "remember")),
+        ):
+            self.action_registry.register(action_id, label, callback, category="Actions",
+                                          shortcut=shortcut, keywords=keywords)
+
+    def _open_command_palette(self, _event=None):
+        if getattr(self, "_palette_window", None) is not None:
+            try:
+                self._palette_window.destroy()
+            except tk.TclError:
+                pass
+        window = tk.Toplevel(self.root)
+        self._palette_window = window
+        window.title("Timmy Quick Jump")
+        window.transient(self.root)
+        window.configure(bg=self.colors["panel"])
+        window.geometry("560x430")
+        window.minsize(420, 300)
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(2, weight=1)
+        tk.Label(window, text="QUICK JUMP  /  WORKSPACES · ACTIONS · SYMBOLS",
+                 bg=self.colors["panel"], fg=self.colors["teal"],
+                 font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
+        query = tk.StringVar()
+        search = tk.Entry(window, textvariable=query, bg=self.colors["entry"], fg=self.colors["text"],
+                          insertbackground=self.colors["text"], relief="flat", font=("Sans", 13))
+        search.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 10), ipady=9)
+        results = tk.Listbox(window, bg=self.colors["panel_2"], fg=self.colors["text"],
+                             selectbackground=self.colors["selected"], selectforeground=self.colors["selected_text"],
+                             relief="flat", font=("Sans", 10), activestyle="none", height=12)
+        results.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 14))
+
+        def invoke(_event=None):
+            selection = results.curselection()
+            if not selection and self._palette_rows:
+                selection = (0,)
+            if selection:
+                _label, callback = self._palette_rows[selection[0]]
+                window.destroy()
+                self._palette_window = None
+                try:
+                    callback()
+                except Exception as exc:
+                    self.status_bar.configure(text=f"Quick Jump action failed: {exc}")
+            return "break"
+
+        query.trace_add("write", lambda *_args: self._update_command_palette(query.get(), results))
+        search.bind("<Return>", invoke)
+        search.bind("<Escape>", lambda _event: (window.destroy(), setattr(self, "_palette_window", None), "break")[-1])
+        search.bind("<Down>", lambda _event: (results.focus_set(), results.selection_set(0), "break")[-1])
+        results.bind("<Return>", invoke)
+        results.bind("<Double-Button-1>", invoke)
+        results.bind("<Escape>", lambda _event: (window.destroy(), setattr(self, "_palette_window", None), "break")[-1])
+        self._update_command_palette("", results)
+        window.protocol("WM_DELETE_WINDOW", lambda: (window.destroy(), setattr(self, "_palette_window", None)))
+        search.focus_set()
+        window.grab_set()
+        return "break"
+
+    def _update_command_palette(self, query: str, results: tk.Listbox) -> None:
+        rows: list[tuple[str, object]] = []
+        actions = self.action_registry.search(query, limit=30)
+        for action in actions:
+            shortcut = f"  ·  {action.shortcut}" if action.shortcut else ""
+            rows.append((f"{action.category}   /   {action.label}{shortcut}",
+                         lambda action_id=action.action_id: self.action_registry.invoke(action_id)))
+        presets = self.workspace_store.list_presets()
+        for preset in presets:
+            label = f"Workspace   /   Load {preset.name}"
+            if not query or all(term in label.lower() for term in query.lower().split()):
+                rows.append((label, lambda name=preset.name: self._load_workspace_preset(name)))
+        symbols = list(self.workspace_store.recent_symbols())
+        symbols.extend(symbol for symbol in sorted(self.signal_by_symbol) if symbol not in symbols)
+        for symbol in symbols:
+            signal = self.signal_by_symbol.get(symbol)
+            label = f"Symbol   /   {symbol}" + (f"  ·  {signal.decision} {signal.score}" if signal else "  ·  recent")
+            if not query or all(term in f"{symbol} {label}".lower() for term in query.lower().split()):
+                rows.append((label, lambda target=symbol: self._open_symbol_from_palette(target)))
+        self._palette_rows = rows[:40]
+        results.delete(0, tk.END)
+        for label, _callback in self._palette_rows:
+            results.insert(tk.END, label)
+        if self._palette_rows:
+            results.selection_set(0)
+
+    def _open_symbol_from_palette(self, symbol: str) -> None:
+        self._show_tab("Overview")
+        self._display_selected_signal(symbol)
+        try:
+            self.workspace_store.remember_symbol(symbol)
+        except ValueError:
+            pass
+
+    def _open_help_guide(self, _event=None):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Timmy quick guide")
+        dialog.transient(self.root)
+        dialog.configure(bg=self.colors["panel"])
+        dialog.columnconfigure(0, weight=1)
+        tk.Label(dialog, text="TIMMY QUICK GUIDE", bg=self.colors["panel"], fg=self.colors["teal"],
+                 font=("Sans", 12, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 5))
+        tk.Label(dialog, text="KEYBOARD SHORTCUTS", bg=self.colors["panel"], fg=self.colors["gold"],
+                 font=("Sans", 9, "bold"), anchor="w").grid(row=1, column=0, sticky="ew", padx=18, pady=(8, 3))
+        shortcuts = [(item.key, item.description) for item in self.shortcut_help.list_items()]
+        shortcuts_box = tk.Frame(dialog, bg=self.colors["panel"])
+        shortcuts_box.grid(row=2, column=0, sticky="ew", padx=18)
+        for key, action in shortcuts:
+            line = tk.Frame(shortcuts_box, bg=self.colors["panel"])
+            line.pack(fill="x", pady=2)
+            tk.Label(line, text=key, bg=self.colors["panel_2"], fg=self.colors["text"],
+                     font=("Monospace", 9, "bold"), padx=7, pady=4, width=10, anchor="w").pack(side="left")
+            tk.Label(line, text=action, bg=self.colors["panel"], fg=self.colors["muted"],
+                     font=("Sans", 9), anchor="w").pack(side="left", padx=10)
+        workflow_text = (
+            "MARKET RADAR\nSelect a ticker to inspect its chart and decision brief. Pin it or add it to a personal group.\n\n"
+            "CHART\nChoose a history range, toggle moving averages, volume, or trade levels, and compare local symbols.\n\n"
+            "SCANNER\nSearch or filter results. Click a heading to sort; use Columns to choose and arrange what you see.\n\n"
+            "ALERTS & NOTES\nCreate local signal rules in Alerts and save private ticker notes from Quick Jump. These do not submit orders."
+        )
+        tk.Label(dialog, text=workflow_text, bg=self.colors["panel_2"], fg=self.colors["text"],
+                 font=("Sans", 9), justify="left", anchor="w", wraplength=560, padx=12, pady=10).grid(
+                     row=3, column=0, sticky="ew", padx=18, pady=(12, 12))
+        self._button(dialog, "Close", dialog.destroy).grid(row=4, column=0, sticky="e", padx=18, pady=(0, 16))
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.bind("<F1>", lambda _event: dialog.destroy())
+        dialog.grab_set()
+        return "break"
+
+    def _save_workspace_preset(self) -> None:
+        name = simpledialog.askstring("Save workspace", "Name this workspace preset:", parent=self.root)
+        if name is None:
+            return
+        state = {
+            "workspace": getattr(self, "active_tab", "Overview"),
+            "density": "compact" if self.root.winfo_width() < 1120 else "standard",
+        }
+        selected_symbol = getattr(self, "selected_chart_symbol", "")
+        if selected_symbol:
+            state["selected_symbol"] = selected_symbol
+        try:
+            preset = self.workspace_store.save_preset(name, state)
+        except ValueError as exc:
+            messagebox.showerror("Workspace not saved", str(exc), parent=self.root)
+            return
+        self.status_bar.configure(text=f"Workspace '{preset.name}' saved.")
+
+    def _load_workspace_preset(self, name: str) -> None:
+        preset = self.workspace_store.load_preset(name)
+        if preset is None:
+            self.status_bar.configure(text=f"Workspace '{name}' was not found.")
+            return
+        workspace = preset.state.get("workspace", "Overview")
+        if workspace not in {item for _section, items in (
+            ("WORKSPACES", ("Overview", "Portfolio", "Automation", "Alerts")),
+            ("RESEARCH", ("Scanner", "Strategy", "Universe")),
+            ("EXECUTION", ("Execution", "Broker")),
+            ("SYSTEM", ("Setup", "Audit", "Health")),
+        ) for item in items}:
+            workspace = "Overview"
+        self._show_tab(str(workspace))
+        symbol = preset.state.get("selected_symbol")
+        if isinstance(symbol, str) and symbol in self.signal_by_symbol:
+            self._display_selected_signal(symbol)
+        self.status_bar.configure(text=f"Workspace '{name}' loaded.")
+
     def _fit_text(
         self,
         widget: tk.Widget,
@@ -1616,17 +2256,17 @@ class TimmyNativeApp:
         stripe = tk.Frame(frame, bg=self.colors["gold"] if highlight else self.colors["cyan"], height=4)
         stripe.pack(fill="x")
         title_label = tk.Label(frame, text=title, bg=self.colors["panel"], fg=self.colors["muted"],
-                               font=("Sans", 10), anchor="center", justify="center")
-        self._fit_text(title_label, min_size=8, max_size=10, padding=36, wrap=True)
-        title_label.pack(fill="x", padx=18, pady=(10, 3))
+                               font=("Sans", 9), anchor="center", justify="center")
+        self._fit_text(title_label, min_size=8, max_size=9, padding=20, wrap=True)
+        title_label.pack(fill="x", padx=8, pady=(6, 2))
         value = tk.Label(frame, text="-", bg=self.colors["panel"], fg=self.colors["text"],
-                         font=("Sans", 18, "bold"), anchor="center", justify="center")
-        self._fit_text(value, min_size=12, max_size=18, padding=36, wrap=True)
-        value.pack(fill="x", padx=18)
+                         font=("Sans", 16, "bold"), anchor="center", justify="center")
+        self._fit_text(value, min_size=11, max_size=16, padding=20, wrap=True)
+        value.pack(fill="x", padx=8)
         sub = tk.Label(frame, text="-", bg=self.colors["panel"], fg=self.colors["muted"],
-                       font=("Sans", 10), anchor="center", justify="center")
-        self._fit_text(sub, min_size=8, max_size=10, padding=36, wrap=True)
-        sub.pack(fill="x", padx=18, pady=(2, 12))
+                       font=("Sans", 9), anchor="center", justify="center")
+        self._fit_text(sub, min_size=7, max_size=9, padding=20, wrap=True)
+        sub.pack(fill="x", padx=8, pady=(1, 7))
         return value, sub
 
     def _control_entry(self, parent: tk.Widget, column: int, title: str, variable: tk.StringVar) -> None:
@@ -1656,7 +2296,8 @@ class TimmyNativeApp:
         title_label.grid(row=1, column=0, sticky="ew", pady=(2, 0))
         if button_text and command:
             tooltip = {
-                "Refresh Data": "Refresh market data",
+                "Scan Now": "Refresh market data and rebuild the ranked scanner",
+                "Use Sample Bars": "Switch to generated sample market history",
                 "Run Model": "Run strategy model",
                 "Run Check": "Run desk health check",
                 "Paper Trade": "Paper trade current queue",
@@ -2468,6 +3109,24 @@ class TimmyNativeApp:
         self.bars_by_symbol = self._load_bars(skip_market_refresh=skip_market_refresh)
         self.signals = rank_signals(self.bars_by_symbol, self.config)
         self.signal_by_symbol = {signal.symbol: signal for signal in self.signals}
+        try:
+            new_alerts = self.alert_store.evaluate(self.signals)
+        except (OSError, ValueError) as exc:
+            new_alerts = []
+            self._alert_storage_error = str(exc)
+        else:
+            self._alert_storage_error = ""
+            if new_alerts:
+                self.status_bar.configure(text=f"{len(new_alerts)} local alert(s) triggered. Review Alerts workspace.")
+        try:
+            new_alerts = self.alert_store.evaluate(self.signals)
+        except (OSError, ValueError) as exc:
+            new_alerts = []
+            self._alert_storage_error = str(exc)
+        else:
+            self._alert_storage_error = ""
+            if new_alerts:
+                self.status_bar.configure(text=f"{len(new_alerts)} local alert(s) triggered. Review Alerts workspace.")
         self._splash_step("Reconciling paper outcomes")
         if self._reconcile_paper_outcomes(self.bars_by_symbol):
             self.execution_events = self._load_execution_events()
@@ -2476,13 +3135,16 @@ class TimmyNativeApp:
         self.plans = self._load_plans(self.config)
         self._splash_step("Rendering dashboard")
         self._render_status()
-        self._render_overview_summary()
         self._render_universe()
         self._render_signals()
         self._render_plans()
         self._render_broker_summary()
         self._load_journal()
         self._render_health_tab()
+        self._render_portfolio_panel()
+        self._render_automation_panel()
+        self._render_alerts_panel()
+        self._render_alerts_panel()
         self._write_paper_training_summary()
         return "Dashboard refreshed."
 
@@ -2818,6 +3480,33 @@ class TimmyNativeApp:
         self.eligible_label.configure(text=f"Plans {len(self.plans)}")
         self.runtime_label.configure(text="Ready" if not self.config_error else "Safe fallback")
         self.last_update_label.configure(text=self._data_freshness_line())
+        session = market_session()
+        if session.is_open and session.closes_at:
+            session_text = f"US EQUITIES · OPEN TILL {session.closes_at.strftime('%I:%M %p').lstrip('0')} ET"
+            session_color = self.colors["green"]
+        elif session.opens_at:
+            session_text = f"US EQUITIES · OPENS {session.opens_at.strftime('%a %I:%M %p').lstrip('0')} ET"
+            session_color = self.colors["gold"]
+        else:
+            session_text = "US EQUITIES · CLOSED"
+            session_color = self.colors["muted"]
+        self.market_session_label.configure(text=session_text, fg=session_color)
+        terminal_session = getattr(self, "terminal_session_label", None)
+        if terminal_session is not None:
+            terminal_session.configure(text=session_text, fg=session_color)
+        terminal_data = getattr(self, "terminal_data_label", None)
+        if terminal_data is not None:
+            terminal_data.configure(text=f"DATA · {self._data_freshness_line()}".upper())
+        terminal_mode = getattr(self, "terminal_mode_label", None)
+        if terminal_mode is not None:
+            mode_text = self.execution_mode_var.get().upper()
+            target_text = self.execution_target_var.get().upper()
+            if target_text == "LIVE" and not self._live_ready(execution_config):
+                terminal_mode.configure(text="LIVE · LOCKED", fg=self.colors["gold"])
+            else:
+                lane_text = "PAPER" if target_text != "LIVE" else "LIVE"
+                lane_color = self.colors["green"] if lane_text == "PAPER" else self.colors["red"]
+                terminal_mode.configure(text=f"{lane_text} · {mode_text}", fg=lane_color)
         self._sync_webull_account_toggle(execution_config)
 
     def _lane_mode_label(self) -> str:
@@ -2830,67 +3519,476 @@ class TimmyNativeApp:
             return " + ".join(lanes) + " / Auto"
         return f"{self.execution_target_var.get()} / {self.execution_mode_var.get()}"
 
-    def _render_overview_summary(self) -> None:
-        if not getattr(self, "overview_summary_labels", None) and not getattr(self, "overview_stage_labels", None):
+    def _paper_portfolio_records(self) -> list[dict]:
+        records: dict[tuple[str, str], dict] = {}
+        for event in getattr(self, "execution_events", []):
+            if event.get("mode") != "paper":
+                continue
+            order = event.get("order") or {}
+            symbol = str(event.get("symbol") or order.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            trade_key = (str(event.get("submitted_at") or event.get("recorded_at") or ""), symbol)
+            previous = records.get(trade_key)
+            terminal = event.get("sell_status") in {"target-hit", "stopped"}
+            previous_terminal = previous and previous.get("sell_status") in {"target-hit", "stopped"}
+            if previous is None or (terminal and not previous_terminal):
+                records[trade_key] = event
+        return list(records.values())
+
+    def _edit_trader_profile(self) -> None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Trader scorecard profile")
+        dialog.transient(self.root)
+        dialog.configure(bg=self.colors["panel"])
+        dialog.columnconfigure(1, weight=1)
+        tk.Label(dialog, text="SELF-REPORTED CONTEXT", bg=self.colors["panel"], fg=self.colors["teal"],
+                 font=("Sans", 10, "bold"), anchor="w").grid(row=0, column=0, columnspan=2,
+                                                               sticky="ew", padx=16, pady=(14, 8))
+        tk.Label(dialog, text="Years trading", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold")).grid(row=1, column=0, sticky="w", padx=16, pady=7)
+        years_var = tk.StringVar(value=self.trader_experience_years_var.get())
+        years_entry = tk.Entry(dialog, textvariable=years_var, width=10, bg=self.colors["entry"],
+                               fg=self.colors["text"], insertbackground=self.colors["text"], relief="flat")
+        years_entry.grid(row=1, column=1, sticky="w", padx=8, pady=7, ipady=4)
+        tk.Label(dialog, text="Risk preference", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold")).grid(row=2, column=0, sticky="w", padx=16, pady=7)
+        preference_var = tk.StringVar(value=self.trader_risk_preference_var.get())
+        ttk.Combobox(dialog, textvariable=preference_var,
+                     values=("Not set", "Conservative", "Moderate", "Aggressive"),
+                     state="readonly", width=16).grid(row=2, column=1, sticky="w", padx=8, pady=7)
+        disclosure = (
+            "Trading can lose money. Margin and other leverage can magnify losses. "
+            "This scorecard is an educational summary, not a credit score, broker rating, "
+            "or assessment that a strategy is suitable for you."
+        )
+        tk.Label(dialog, text=disclosure, bg=self.colors["panel_2"], fg=self.colors["text"],
+                 font=("Sans", 9), justify="left", wraplength=470, padx=12, pady=10).grid(
+                     row=3, column=0, columnspan=2, sticky="ew", padx=16, pady=(8, 6))
+        acknowledged = tk.BooleanVar(value=self.trader_risk_acknowledged_var.get())
+        tk.Checkbutton(dialog, text="I have reviewed and understand this risk summary.", variable=acknowledged,
+                       bg=self.colors["panel"], fg=self.colors["text"], selectcolor=self.colors["panel_2"],
+                       activebackground=self.colors["panel"], activeforeground=self.colors["text"],
+                       font=("Sans", 9), wraplength=460, justify="left").grid(
+                           row=4, column=0, columnspan=2, sticky="w", padx=16, pady=8)
+        buttons = tk.Frame(dialog, bg=self.colors["panel"])
+        buttons.grid(row=5, column=0, columnspan=2, sticky="e", padx=16, pady=(8, 14))
+
+        def save_profile() -> None:
+            raw_years = years_var.get().strip()
+            if raw_years:
+                try:
+                    years = int(raw_years)
+                except ValueError:
+                    messagebox.showerror("Profile not saved", "Years trading must be a whole number from 0 to 80.", parent=dialog)
+                    return
+                if not 0 <= years <= 80:
+                    messagebox.showerror("Profile not saved", "Years trading must be between 0 and 80.", parent=dialog)
+                    return
+            else:
+                years = None
+            self.trader_experience_years_var.set("" if years is None else str(years))
+            self.trader_risk_preference_var.set(preference_var.get())
+            self.trader_risk_acknowledged_var.set(bool(acknowledged.get()))
+            self.trader_risk_acknowledged_at = datetime.now().isoformat() if acknowledged.get() else ""
+            self._save_runtime_settings()
+            dialog.destroy()
+            self._render_portfolio_panel()
+
+        self._button(buttons, "Cancel", dialog.destroy).pack(side="right", padx=(8, 0))
+        self._button(buttons, "Save profile", save_profile, accent="teal").pack(side="right")
+        dialog.bind("<Return>", lambda _event: save_profile())
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.grab_set()
+        years_entry.focus_set()
+
+    def _render_portfolio_panel(self) -> None:
+        if not hasattr(self, "portfolio_holdings_tree"):
             return
-        config = self.config or self._load_config_safe()
-        execution_config = self._execution_config(config)
-        signal_mix = self._strategy_signal_mix(config)
-        live_ready = self._live_ready(execution_config)
-        broker_current = not self._broker_check_required(execution_config)
-        broker_label = "Ready" if live_ready and broker_current else "Guarded"
+        records = self._paper_portfolio_records()
+        closed = [event for event in records if event.get("sell_status") in {"target-hit", "stopped"}]
+        opened = [event for event in records if event.get("sell_status") == "target-pending"]
+        realized = round(sum(self._float_or_none(event.get("paper_pnl")) or 0.0 for event in closed), 2)
+        unrealized = 0.0
+        market_value = 0.0
+        pending_cost = 0.0
+        self.portfolio_holdings_tree.delete(*self.portfolio_holdings_tree.get_children())
+        for event in sorted(opened, key=lambda item: str(item.get("submitted_at", "")), reverse=True):
+            order = event.get("order") or {}
+            symbol = str(event.get("symbol") or order.get("symbol") or "").upper()
+            quantity = self._float_or_none(event.get("quantity") or order.get("quantity")) or 0.0
+            entry = self._float_or_none(event.get("buy_price") or order.get("limit_price")) or 0.0
+            signal = self.signal_by_symbol.get(symbol)
+            bars = self.bars_by_symbol.get(symbol, [])
+            last = float(signal.close) if signal is not None else (float(bars[-1].close) if bars else entry)
+            value = quantity * last
+            open_pnl = (last - entry) * quantity
+            market_value += value
+            pending_cost += quantity * entry
+            unrealized += open_pnl
+            tag = "up" if open_pnl > 0 else "down" if open_pnl < 0 else ""
+            self.portfolio_holdings_tree.insert(
+                "", "end",
+                values=(symbol, f"{quantity:g}", money(entry), money(last), money(value), money(open_pnl), "OPEN · PAPER"),
+                tags=(tag,) if tag else (),
+            )
+        if not opened:
+            self.portfolio_holdings_tree.insert(
+                "", "end", values=("No open paper positions", "-", "-", "-", "-", "-", "Waiting"))
+        available_cash = round(self._paper_starting_balance() + realized - pending_cost, 2)
+        paper_cash_label = money(available_cash)
+        equity = available_cash + market_value
+        net_pnl = realized + unrealized
         self._update_label_map(
-            getattr(self, "overview_summary_labels", {}),
+            self.portfolio_summary_labels,
             {
-                "Market Pulse": f"{len(self.signals):,} scanned",
-                "Setup Edge": f"{signal_mix['sensible_ready']:,} trade",
-                "Orders Ready": f"{len(self.plans):,} queued",
-                "Broker Desk": broker_label,
+                "Paper Equity": money(equity),
+                "Net P&L": money(net_pnl),
+                "Available Cash": paper_cash_label,
+                "Broker Cash": self.trade_cash_snapshot[0],
+                "Open Positions": f"{len(opened):,}",
             },
         )
-        self._render_overview_workflow(config, execution_config, signal_mix, broker_current)
-
-    def _render_overview_workflow(
-        self,
-        config: BotConfig,
-        execution_config: BotConfig,
-        signal_mix: dict,
-        broker_current: bool,
-    ) -> None:
-        if not getattr(self, "overview_stage_labels", None):
-            return
-        stages = {
-            "market": (len(self.bars_by_symbol), "symbols with market data", bool(self.bars_by_symbol)),
-            "scan": (len(self.signals), "symbols evaluated", bool(self.signals)),
-            "strategy": (signal_mix["sensible_ready"], "tradeable ideas", signal_mix["sensible_ready"] > 0),
-            "orders": (len(self.plans), "orders ready to review", bool(self.plans)),
-        }
-        for key, (count, note, ready) in stages.items():
-            value_label, note_label = self.overview_stage_labels[key]
-            value_label.configure(text=f"{count:,}" if count else "—",
-                                  fg=self.colors["teal"] if ready else self.colors["muted"])
-            note_label.configure(text=note)
-
-        if self.config_error:
-            next_tab, title = "Setup", "Review your setup"
-            copy = "There is a configuration issue. Resolve it before enabling live workflows."
-        elif not self.signals:
-            next_tab, title = "Scanner", "Start with a market scan"
-            copy = "Refresh market data, then review the symbols Timmy found."
-        elif not self.plans:
-            next_tab, title = "Strategy", "Review the strategy"
-            copy = "No orders are ready yet. Check the strategy signals and the gates holding ideas back."
-        elif self.execution_target_var.get() == "Live" and (not broker_current or not self._live_ready(execution_config)):
-            next_tab, title = "Broker", "Check broker readiness"
-            copy = "Refresh the selected account and review any broker or live-order gates before proceeding."
+        config = self.config or self._load_config_safe()
+        paper_stats = paper_performance(self.execution_events, starting_balance=self._paper_starting_balance())
+        score_journal = summarize_paper_journal(self.execution_events)
+        paper_return = (f"{paper_stats.return_pct:+.2f}%" if paper_stats.return_pct is not None
+                        else "no closed trades" if paper_stats.closed_trades == 0 else "incomplete")
+        drawdown = money(paper_stats.max_drawdown_usd) if paper_stats.max_drawdown_usd is not None else "-"
+        self.portfolio_account_context.configure(
+            text=f"Broker: {self._webull_account_card_value(config)} · {self.trade_cash_snapshot[1]}  |  "
+                 f"Closed paper return: {paper_return} · realized drawdown: {drawdown}  |  "
+                 "Open paper P&L is shown separately; no live holdings are inferred.")
+        account_ready = self.trade_cash_value is not None and not self._broker_check_required(config)
+        trader_score = calculate_trader_profile_score(
+            closed_paper_trades=score_journal.closed_trade_count,
+            paper_return_pct=paper_stats.return_pct,
+            max_drawdown_pct=paper_stats.max_drawdown_pct,
+            starting_balance=paper_stats.starting_balance,
+            risk_per_trade=config.risk_per_trade_usd,
+            max_daily_loss=config.max_daily_loss_usd,
+            account_snapshot_available=account_ready,
+            experience_years=(float(self.trader_experience_years_var.get())
+                              if self.trader_experience_years_var.get().isdigit() else None),
+            risk_profile_complete=(self.trader_risk_preference_var.get() != "Not set"
+                                   and self.trader_risk_acknowledged_var.get()),
+            closed_trades_missing_pnl=max(
+                score_journal.closed_trades_missing_pnl,
+                1 if score_journal.closed_trade_count != paper_stats.closed_trades else 0,
+            ),
+        )
+        live_score = calculate_trader_profile_score(
+            closed_paper_trades=0,
+            paper_return_pct=None,
+            max_drawdown_pct=None,
+            starting_balance=None,
+            risk_per_trade=config.risk_per_trade_usd,
+            max_daily_loss=config.max_daily_loss_usd,
+            account_snapshot_available=account_ready,
+            experience_years=(float(self.trader_experience_years_var.get())
+                              if self.trader_experience_years_var.get().isdigit() else None),
+            risk_profile_complete=(self.trader_risk_preference_var.get() != "Not set"
+                                   and self.trader_risk_acknowledged_var.get()),
+            lane_label="Live",
+        )
+        self.trader_score_value.configure(
+            text=f"PAPER  {trader_score.score} / 100" if trader_score.score is not None else "PAPER  — / 100"
+        )
+        grade_colors = {"Poor": self.colors["red"], "OK": self.colors["gold"],
+                        "Good": self.colors["teal"], "Excellent": self.colors["green"],
+                        "Building profile": self.colors["muted"]}
+        self.trader_score_grade.configure(
+            text=(f"{trader_score.grade.upper()} · {trader_score.closed_paper_trades}/20 CLOSED · "
+                  f"{trader_score.coverage_pct}% DATA"),
+            fg=grade_colors.get(trader_score.grade, self.colors["muted"]),
+        )
+        self.trader_live_score_value.configure(
+            text=f"LIVE  {live_score.score} / 100" if live_score.score is not None else "LIVE  — / 100"
+        )
+        self.trader_live_score_grade.configure(
+            text=(f"{live_score.grade.upper()} · {live_score.coverage_pct}% DATA COVERAGE"
+                  if live_score.grade != "Building profile" else "BUILDING · NO CLOSED LIVE P&L DATA"),
+            fg=grade_colors.get(live_score.grade, self.colors["muted"]),
+        )
+        score_lines = [
+            f"Paper equity: {money(equity)} (local)",
+            f"Broker buying power: {self.trade_cash_snapshot[0]} · {self.trade_cash_snapshot[1]} · "
+            f"{'current' if account_ready else 'refresh needed'}",
+            "Broker equity: unavailable in current snapshot",
+            "Margin use: unavailable in current snapshot",
+            f"History sample: {paper_stats.closed_trades} closed paper trades (separate from self-report)",
+            f"Self-reported experience: {self.trader_experience_years_var.get() or 'not set'} years · "
+            f"risk preference: {self.trader_risk_preference_var.get()}",
+            f"Risk summary acknowledged: {'yes' if self.trader_risk_acknowledged_var.get() else 'no'}",
+            f"Risk controls: {money(config.risk_per_trade_usd)}/trade · {money(config.max_daily_loss_usd)}/day",
+            "Live lane: closed live P&L and equity history are not currently recorded by Timmy",
+            "",
+            "COMPONENTS",
+        ]
+        score_lines.extend(
+            (f"{part.name}: {part.score:.0f}/100 · {part.detail}" if part.score is not None
+             else f"{part.name}: unavailable · {part.detail}")
+            for part in trader_score.components
+        )
+        paper_next_steps = recommend_trader_scorecard_next_steps(
+            scorecard=trader_score,
+            lane_label="Paper",
+            realized_return_pct=paper_stats.return_pct,
+            max_drawdown_pct=paper_stats.max_drawdown_pct,
+            closed_trades_missing_pnl=max(
+                score_journal.closed_trades_missing_pnl,
+                1 if score_journal.closed_trade_count != paper_stats.closed_trades else 0,
+            ),
+        )
+        live_next_steps = recommend_trader_scorecard_next_steps(
+            scorecard=live_score,
+            lane_label="Live",
+            realized_return_pct=None,
+            max_drawdown_pct=None,
+        )
+        score_lines.extend(("", "WHAT TO DO NEXT · OPTIONAL REVIEW STEPS",
+                            *[f"Paper: {step}" for step in paper_next_steps],
+                            *[f"Live: {step}" for step in live_next_steps],
+                            "",
+                            "Bands: Poor 0–39 · OK 40–59 · Good 60–79 · Excellent 80–100",
+                            f"Rubric: 50% return and 50% drawdown; at least 20 closed trades required.",
+                            "Return: -10% to +10% maps to 0-100; drawdown: 10% to 0% maps to 0-100.",
+                            "Profile answers, account wealth, buying power, and configured limits do not change the score.",
+                            "Paper and Live histories stay separate. Internal educational indicator; not a credit score."))
+        self.trader_score_detail.configure(state="normal")
+        self.trader_score_detail.delete("1.0", "end")
+        self.trader_score_detail.insert("1.0", "\n".join(score_lines))
+        self.trader_score_detail.configure(state="disabled")
+        self._portfolio_curve_values = [self._paper_starting_balance()]
+        for event in sorted(closed, key=lambda item: str(item.get("closed_at") or item.get("submitted_at") or "")):
+            self._portfolio_curve_values.append(
+                self._portfolio_curve_values[-1] + (self._float_or_none(event.get("paper_pnl")) or 0.0))
+        recent = sorted(closed, key=lambda item: str(item.get("closed_at") or item.get("submitted_at") or ""), reverse=True)[:8]
+        if recent:
+            lines = []
+            for event in recent:
+                symbol = str(event.get("symbol") or (event.get("order") or {}).get("symbol") or "?").upper()
+                pnl = self._float_or_none(event.get("paper_pnl")) or 0.0
+                state = "TARGET" if event.get("sell_status") == "target-hit" else "STOP"
+                when = str(event.get("closed_at") or event.get("submitted_at") or "")[:16].replace("T", " ")
+                lines.append(f"{when}  {symbol:<7} {state:<7} {money(pnl):>12}")
+            self._set_text(self.portfolio_activity_text, "\n".join(lines))
         else:
-            next_tab, title = "Execution", "Review your order queue"
-            copy = "Inspect the plan, preview the route, and choose paper or live execution from the order desk."
-        self.overview_next_tab = next_tab
-        self.overview_next_title.configure(text=title)
-        self.overview_next_copy.configure(text=copy)
-        self.overview_continue_button.configure(
-            text=f"Open {next_tab}", command=lambda target=next_tab: self._show_tab(target))
+            self._set_text(self.portfolio_activity_text, "No closed paper trades yet.\n\nCompleted paper outcomes will appear here after market bars reach a stop or target.")
+        self._draw_portfolio_equity()
+
+    def _draw_portfolio_equity(self) -> None:
+        canvas = getattr(self, "portfolio_equity_chart", None)
+        if canvas is None:
+            return
+        try:
+            canvas.delete("all")
+            width, height = max(1, canvas.winfo_width()), max(1, canvas.winfo_height())
+        except tk.TclError:
+            return
+        values = getattr(self, "_portfolio_curve_values", [])
+        if len(values) < 2:
+            baseline = height * 0.55
+            canvas.create_line(24, baseline, width - 16, baseline, fill=self.colors["line"], dash=(3, 4))
+            canvas.create_text(width / 2, height / 2, text="Closed trade history will draw here",
+                               fill=self.colors["muted"], font=("Sans", 9), anchor="center")
+            return
+        low, high = min(values), max(values)
+        spread = max(high - low, abs(high) * 0.002, 1.0)
+        low -= spread * 0.18
+        high += spread * 0.18
+        left, right, top, bottom = 38, max(39, width - 12), 12, max(13, height - 20)
+        for fraction in (0.0, 0.5, 1.0):
+            y = bottom - fraction * (bottom - top)
+            value = low + fraction * (high - low)
+            canvas.create_line(left, y, right, y, fill=self.colors["line"])
+            canvas.create_text(2, y, text=f"${value:,.0f}", fill=self.colors["muted"],
+                               font=("Sans", 7), anchor="w")
+        points = []
+        for index, value in enumerate(values):
+            x = left + index * (right - left) / (len(values) - 1)
+            y = bottom - (value - low) * (bottom - top) / max(high - low, 1e-9)
+            points.extend((x, y))
+        color = self.colors["green"] if values[-1] >= values[0] else self.colors["red"]
+        canvas.create_line(*points, fill=color, width=2, smooth=True, splinesteps=12)
+        canvas.create_oval(points[-2] - 3, points[-1] - 3, points[-2] + 3, points[-1] + 3,
+                           fill=color, outline=color)
+
+    def _render_automation_panel(self) -> None:
+        if not hasattr(self, "automation_readiness_text"):
+            return
+        config = self.config or self._load_config_safe()
+        live_ready = self._live_ready(self._execution_config(config))
+        interval = self._bounded_int(self.auto_interval_var, 1, 1, 60)
+        next_cycle = f"Every {interval} min" if self.paper_auto_var.get() or self.execution_mode_var.get() == "Auto" else "Manual"
+        self._update_label_map(
+            self.automation_summary_labels,
+            {
+                "Operating Mode": self.execution_mode_var.get(),
+                "Paper Lane": "ARMED" if self.paper_auto_var.get() else "PAUSED",
+                "Live Lane": "READY · GUARDED" if live_ready else "LOCKED",
+                "Next Cycle": next_cycle,
+            },
+        )
+        readiness = readiness_flags(config, plans_count=len(self.plans), events_count=len(self.execution_events))
+        lines = [
+            f"Operating mode: {self.execution_mode_var.get()}",
+            f"Paper simulation: {'enabled' if self._paper_simulation_enabled(config) else 'disabled'}",
+            f"Paper auto lane: {'armed' if self.paper_auto_var.get() else 'paused'}",
+            f"Live submission: {'guarded and ready' if live_ready else 'locked'}",
+            f"Fresh account check: {'yes' if not self._broker_check_required(self._execution_config(config)) else 'no'}",
+            f"Current executable plans: {len(self.plans):,}",
+            f"Market data: {self._data_freshness_line()}",
+            "",
+            "What Timmy will do",
+            "- Refresh the strategy at the selected interval.",
+            "- Paper lane records simulated orders only.",
+            "- Live lane remains behind account checks, preview, and live-order guards.",
+            "- Use Pause All Automation to return to user-controlled cycles.",
+        ]
+        if readiness.get("red_flags"):
+            lines.extend(("", "Needs attention"))
+            lines.extend(f"- {item}" for item in readiness["red_flags"][:5])
+        self._set_text(self.automation_readiness_text, "\n".join(lines))
+        self._set_text(
+            self.automation_sequence_text,
+            "1  REFRESH\n   Load the latest bars and rebuild the signal list.\n\n"
+            "2  REVIEW\n   Check score, price gates, risk, and account readiness.\n\n"
+            "3  SIMULATE\n   Enable the Paper Lane to record simulated trades on schedule.\n\n"
+            "4  ADVANCE\n   Live trading stays locked until profile, account, preview, and risk gates pass.\n\n"
+            "Automation interval is configured below. Timmy keeps the live lane guarded.",
+        )
+
+    def _enable_paper_automation(self) -> None:
+        self.paper_auto_var.set(True)
+        self._sync_automation()
+        self._render_automation_panel()
+
+    def _render_alerts_panel(self) -> None:
+        if not hasattr(self, "alert_rules_tree"):
+            return
+        for tree in (self.alert_rules_tree, self.alert_events_tree):
+            for item in tree.get_children():
+                tree.delete(item)
+        for rule in self.alert_store.rules:
+            conditions = []
+            if rule.symbol:
+                conditions.append(rule.symbol)
+            if rule.price is not None:
+                op = {"above": ">", "at_or_above": "≥", "below": "<", "at_or_below": "≤"}[rule.price_op]
+                conditions.append(f"price {op} {rule.price:g}")
+            if rule.score is not None:
+                op = {"above": ">", "at_or_above": "≥", "below": "<", "at_or_below": "≤"}[rule.score_op]
+                conditions.append(f"score {op} {rule.score:g}")
+            if rule.action:
+                conditions.append(f"action = {rule.action}")
+            self.alert_rules_tree.insert("", "end", iid=rule.id,
+                                         values=(rule.name, " · ".join(conditions), "Enabled" if rule.enabled else "Paused"))
+        for event in reversed(self.alert_store.events[-500:]):
+            self.alert_events_tree.insert(
+                "", "end", iid=event.id,
+                values=(event.triggered_at[:19].replace("T", " "), event.symbol, event.rule_name,
+                        "Seen" if event.acknowledged_at else "New"),
+                tags=() if event.acknowledged_at else ("new",),
+            )
+        error = getattr(self, "_alert_storage_error", "")
+        pending = sum(1 for event in self.alert_store.events if not event.acknowledged_at)
+        if hasattr(self, "status_bar"):
+            if error:
+                status = f"Alert store issue: {error}"
+            elif pending:
+                status = f"{pending} unacknowledged alert event(s) · evaluated after scans · no order actions"
+            else:
+                status = "Alerts evaluate after market scans; they never submit orders."
+            self.status_bar.configure(text=status)
+
+    def _create_alert_rule(self) -> None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Create local alert")
+        dialog.transient(self.root)
+        dialog.configure(bg=self.colors["panel"])
+        dialog.columnconfigure(1, weight=1)
+        name, symbol = tk.StringVar(value="Signal alert"), tk.StringVar()
+        trigger, value = tk.StringVar(value="Price at or above"), tk.StringVar()
+        tk.Label(dialog, text="LOCAL SIGNAL RULE", bg=self.colors["panel"], fg=self.colors["teal"],
+                 font=("Sans", 10, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(14, 8))
+        for row, (label, var) in enumerate((("Name", name), ("Symbol · optional", symbol)), start=1):
+            tk.Label(dialog, text=label, bg=self.colors["panel"], fg=self.colors["muted"]).grid(row=row, column=0, sticky="w", padx=16, pady=6)
+            tk.Entry(dialog, textvariable=var, bg=self.colors["entry"], fg=self.colors["text"],
+                     insertbackground=self.colors["text"], relief="flat", width=30).grid(row=row, column=1, sticky="ew", padx=16, pady=6, ipady=5)
+        tk.Label(dialog, text="Trigger", bg=self.colors["panel"], fg=self.colors["muted"]).grid(row=3, column=0, sticky="w", padx=16, pady=6)
+        menu = tk.OptionMenu(dialog, trigger, "Price at or above", "Price at or below", "Scout score at or above",
+                             "Scout score at or below", "Signal action equals")
+        menu.configure(bg=self.colors["button"], fg=self.colors["button_text"], relief="flat", highlightthickness=0)
+        menu.grid(row=3, column=1, sticky="ew", padx=16, pady=6)
+        menu["menu"].configure(bg=self.colors["panel_2"], fg=self.colors["text"])
+        tk.Label(dialog, text="Threshold / action", bg=self.colors["panel"], fg=self.colors["muted"]).grid(row=4, column=0, sticky="w", padx=16, pady=6)
+        tk.Entry(dialog, textvariable=value, bg=self.colors["entry"], fg=self.colors["text"],
+                 insertbackground=self.colors["text"], relief="flat", width=30).grid(row=4, column=1, sticky="ew", padx=16, pady=6, ipady=5)
+        tk.Label(dialog, text="Evaluated against data already loaded by Timmy.", bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Sans", 8)).grid(row=5, column=0, columnspan=2, sticky="w", padx=16, pady=6)
+
+        def save() -> None:
+            selected, raw = trigger.get(), value.get().strip()
+            ticker = symbol.get().strip().upper() or None
+            try:
+                if selected.startswith("Price"):
+                    rule = AlertRule(name.get(), symbol=ticker,
+                                     price_op="at_or_above" if selected.endswith("above") else "at_or_below",
+                                     price=float(raw))
+                elif selected.startswith("Scout"):
+                    rule = AlertRule(name.get(), symbol=ticker,
+                                     score_op="at_or_above" if selected.endswith("above") else "at_or_below",
+                                     score=float(raw))
+                else:
+                    if raw.lower() not in {"trade", "watch", "avoid"}:
+                        raise ValueError("Action must be trade, watch, or avoid.")
+                    rule = AlertRule(name.get(), symbol=ticker, action=raw.lower())
+                self.alert_store.add_rule(rule)
+            except (ValueError, OSError) as exc:
+                messagebox.showerror("Alert not saved", str(exc), parent=dialog)
+                return
+            dialog.destroy()
+            self._render_alerts_panel()
+
+        actions = tk.Frame(dialog, bg=self.colors["panel"])
+        actions.grid(row=6, column=0, columnspan=2, sticky="e", padx=16, pady=(8, 14))
+        self._button(actions, "Cancel", dialog.destroy).pack(side="right", padx=(8, 0))
+        self._button(actions, "Save rule", save, accent="teal").pack(side="right")
+        dialog.bind("<Return>", lambda _event: save())
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.grab_set()
+
+    def _selected_alert_rule(self):
+        selected = self.alert_rules_tree.selection()
+        return next((item for item in self.alert_store.rules if selected and item.id == selected[0]), None)
+
+    def _toggle_selected_alert_rule(self) -> None:
+        rule = self._selected_alert_rule()
+        if rule is not None:
+            self.alert_store.set_enabled(rule.id, not rule.enabled)
+            self._render_alerts_panel()
+        else:
+            self.status_bar.configure(text="Select an alert rule first.")
+
+    def _remove_selected_alert_rule(self) -> None:
+        rule = self._selected_alert_rule()
+        if rule is not None:
+            self.alert_store.remove_rule(rule.id)
+            self._render_alerts_panel()
+        else:
+            self.status_bar.configure(text="Select an alert rule first.")
+
+    def _acknowledge_selected_alert(self) -> None:
+        selected = self.alert_events_tree.selection()
+        if not selected:
+            self.status_bar.configure(text="Select an alert event first.")
+            return
+        try:
+            self.alert_store.acknowledge(selected[0])
+        except (KeyError, OSError) as exc:
+            self.status_bar.configure(text=f"Could not acknowledge alert: {exc}")
+        self._render_alerts_panel()
 
     def _pipeline_universe_count(self, config: BotConfig) -> int:
         if config.watchlist_universe == "all-us":
@@ -2993,23 +4091,31 @@ class TimmyNativeApp:
 
     def _render_signals(self) -> None:
         self.signal_tree.delete(*self.signal_tree.get_children())
+        self._refresh_watchlist_group_menu()
+        if hasattr(self, "market_watch_tree"):
+            self.market_watch_tree.delete(*self.market_watch_tree.get_children())
         moving_count = 0
         tradeable_count = 0
         blocked_count = 0
         config = self.config or self._load_config_safe()
         filter_text = self.scanner_filter_var.get().strip().upper()
+        category_filter = self.scanner_category_var.get()
         for signal in self.signals:
-            if getattr(signal, "scout_action", "quiet") in {"alert", "watch"}:
+            is_moving = getattr(signal, "scout_action", "quiet") in {"alert", "watch"}
+            if is_moving:
                 moving_count += 1
             operational_blocks = self._operational_blocks(signal, config)
-            if (
+            is_tradeable = (
                 signal.score >= self._min_score(config)
                 and self._local_sensible_action(signal) == "trade"
                 and not operational_blocks
-            ):
+            )
+            is_blocked = False
+            if is_tradeable:
                 tradeable_count += 1
             elif signal.score >= self._min_score(config) or self._local_sensible_action(signal) == "trade":
                 blocked_count += 1
+                is_blocked = True
             row_values = (
                 signal.symbol,
                 self._scout_label(signal),
@@ -3021,12 +4127,37 @@ class TimmyNativeApp:
                 f"{signal.change_pct:+.2f}%",
                 money(signal.entry),
             )
+            selected_group = self._watchlist_group_for_selection()
+            group_filter = self.watchlist_group_var.get()
+            pinned = set(self.watchlist_organization.pinned_symbols)
+            watch_allowed = (
+                group_filter == "All signals"
+                or (group_filter == "Pinned" and signal.symbol in pinned)
+                or (selected_group is not None and signal.symbol in selected_group.symbols)
+            )
+            if hasattr(self, "market_watch_tree") and watch_allowed:
+                movement_tag = "up" if signal.change_pct > 0 else "down" if signal.change_pct < 0 else ""
+                self.market_watch_tree.insert(
+                    "", "end",
+                    values=(signal.symbol, signal.score, f"{signal.change_pct:+.2f}%", self._scout_label(signal)),
+                    tags=(movement_tag,) if movement_tag else (),
+                )
             searchable = " ".join(str(value) for value in (
                 signal.symbol, signal.direction, signal.decision,
                 self._scout_label(signal), self._sensible_label(signal),
             )).upper()
-            if not filter_text or filter_text in searchable:
-                self.signal_tree.insert("", "end", values=row_values)
+            category_match = (
+                category_filter == "All"
+                or (category_filter == "Moving" and is_moving)
+                or (category_filter == "Tradeable" and is_tradeable)
+                or (category_filter == "Blocked" and is_blocked)
+                or (category_filter == "Quiet" and not is_moving and not is_tradeable and not is_blocked)
+            )
+            if category_match and (not filter_text or filter_text in searchable):
+                movement_tag = "up" if signal.change_pct > 0 else "down" if signal.change_pct < 0 else ""
+                self.signal_tree.insert("", "end", values=row_values, tags=(movement_tag,) if movement_tag else ())
+        if self._scanner_sort_column:
+            self._sort_signal_tree(self._scanner_sort_column, toggle=False)
         self._update_label_map(
             getattr(self, "scanner_summary_labels", {}),
             {
@@ -3037,14 +4168,199 @@ class TimmyNativeApp:
             },
         )
         visible_rows = self.signal_tree.get_children()
-        self.scanner_match_var.set(f"{len(visible_rows):,} matches" if filter_text else f"{len(visible_rows):,} symbols")
+        if filter_text:
+            match_text = f"{len(visible_rows):,} matches"
+        elif category_filter == "All":
+            match_text = f"{len(visible_rows):,} symbols"
+        else:
+            match_text = f"{len(visible_rows):,} {category_filter.lower()}"
+        self.scanner_match_var.set(match_text)
         if visible_rows:
             first = visible_rows[0]
             self.signal_tree.selection_set(first)
             self.signal_tree.focus(first)
             self._show_selected_signal()
-        elif filter_text:
-            self._set_text(self.signal_detail, f"No scanner rows match ‘{filter_text}’. Clear the filter or try another symbol or setup label.")
+            if hasattr(self, "market_watch_tree"):
+                watch_rows = self.market_watch_tree.get_children()
+                if watch_rows:
+                    self.market_watch_tree.selection_set(watch_rows[0])
+                    self.market_watch_tree.focus(watch_rows[0])
+                    self._show_market_watch_selection()
+        else:
+            self._show_selected_signal()
+            if filter_text:
+                detail = f"No rows match ‘{filter_text}’. Clear the search or choose another scanner category."
+            elif category_filter != "All":
+                detail = f"No {category_filter.lower()} signals currently match the strategy gates."
+            else:
+                detail = "No signals are available yet. Refresh market data to build the scanner list."
+            self._set_text(self.signal_detail, detail)
+
+    def _sort_signal_tree(self, column: str, toggle: bool = True) -> None:
+        if toggle:
+            if self._scanner_sort_column == column:
+                self._scanner_sort_reverse = not self._scanner_sort_reverse
+            else:
+                self._scanner_sort_column = column
+                self._scanner_sort_reverse = column in {"score", "change"}
+        reverse = self._scanner_sort_reverse
+        items = self.signal_tree.get_children("")
+        if column in {"score", "change", "entry"}:
+            numeric_rows = []
+            missing_rows = []
+            for item in items:
+                value = self.signal_tree.set(item, column)
+                try:
+                    numeric = float(value.replace("$", "").replace(",", "").replace("%", "").replace("+", ""))
+                except ValueError:
+                    missing_rows.append(item)
+                else:
+                    numeric_rows.append((numeric, item))
+            rows = [item for _value, item in sorted(numeric_rows, reverse=reverse)] + missing_rows
+        else:
+            rows = sorted(items, key=lambda item: self.signal_tree.set(item, column).casefold(), reverse=reverse)
+        for index, item in enumerate(rows):
+            self.signal_tree.move(item, "", index)
+        for key, title in self.signal_tree_headings.items():
+            marker = (" ▼" if reverse else " ▲") if key == column else ""
+            self.signal_tree.heading(key, text=title + marker)
+
+    def _open_scanner_columns(self) -> None:
+        order = list(self.scanner_column_order)
+        visible = set(self.scanner_visible_columns)
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Scanner columns")
+        dialog.transient(self.root)
+        dialog.configure(bg=self.colors["panel"])
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(2, weight=1)
+        tk.Label(dialog, text="PERSONALIZE YOUR SCANNER", bg=self.colors["panel"], fg=self.colors["teal"],
+                 font=("Sans", 10, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 4))
+        tk.Label(dialog, text="Select a column and use Show / Hide or move it in the displayed order.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], font=("Sans", 8), anchor="w").grid(
+                     row=1, column=0, sticky="ew", padx=14, pady=(0, 8))
+        listbox = tk.Listbox(dialog, width=34, height=len(order), bg=self.colors["panel_2"], fg=self.colors["text"],
+                             selectbackground=self.colors["selected"], selectforeground=self.colors["selected_text"],
+                             relief="flat", activestyle="none", font=("Sans", 10))
+        listbox.grid(row=2, column=0, sticky="nsew", padx=14)
+
+        def redraw(selected: int = 0) -> None:
+            listbox.delete(0, "end")
+            for key in order:
+                marker = "Shown" if key in visible else "Hidden"
+                listbox.insert("end", f"{self.signal_tree_headings[key]:<14}  {marker}")
+            if order:
+                selected = max(0, min(selected, len(order) - 1))
+                listbox.selection_set(selected)
+                listbox.activate(selected)
+
+        def selected_index() -> int | None:
+            selection = listbox.curselection()
+            return int(selection[0]) if selection else None
+
+        def toggle_visibility(show: bool) -> None:
+            index = selected_index()
+            if index is None:
+                return
+            key = order[index]
+            if show:
+                visible.add(key)
+            else:
+                if len(visible) <= 1 and key in visible:
+                    messagebox.showinfo("Scanner columns", "Keep at least one column visible.", parent=dialog)
+                    return
+                visible.discard(key)
+            redraw(index)
+
+        def move(delta: int) -> None:
+            index = selected_index()
+            if index is None or not 0 <= index + delta < len(order):
+                return
+            order[index], order[index + delta] = order[index + delta], order[index]
+            redraw(index + delta)
+
+        actions = tk.Frame(dialog, bg=self.colors["panel"])
+        actions.grid(row=3, column=0, sticky="ew", padx=14, pady=8)
+        self._button(actions, "Show", lambda: toggle_visibility(True)).pack(side="left")
+        self._button(actions, "Hide", lambda: toggle_visibility(False)).pack(side="left", padx=5)
+        self._button(actions, "Move up", lambda: move(-1)).pack(side="left")
+        self._button(actions, "Move down", lambda: move(1)).pack(side="left", padx=5)
+        foot = tk.Frame(dialog, bg=self.colors["panel"])
+        foot.grid(row=4, column=0, sticky="e", padx=14, pady=(0, 14))
+        self._button(foot, "Cancel", dialog.destroy).pack(side="right", padx=(8, 0))
+
+        def apply_view() -> None:
+            sort_column = self._scanner_sort_column if self._scanner_sort_column in visible else next(
+                (key for key in order if key in visible), "symbol")
+            view = make_scanner_view("My scanner", order, visible, sort_column,
+                                     self._scanner_sort_reverse if self._scanner_sort_column else True,
+                                     allowed_columns=self.scanner_column_order)
+            self._apply_scanner_view(view)
+            dialog.destroy()
+
+        self._button(foot, "Apply view", apply_view, accent="teal").pack(side="right")
+        redraw()
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.grab_set()
+
+    def _apply_scanner_view(self, view, *, save: bool = True) -> None:
+        self.scanner_column_order = view.columns
+        self.scanner_visible_columns = set(view.visible_columns)
+        self.signal_tree.configure(displaycolumns=view.visible_order)
+        self._scanner_sort_column = view.sort_column
+        self._scanner_sort_reverse = view.descending
+        if save:
+            self._saved_scanner_view = scanner_view_to_dict(view)
+            self._save_runtime_settings()
+        self._sort_signal_tree(view.sort_column, toggle=False)
+        if save:
+            self._render_signals()
+
+    def _refresh_scanner_preset_menu(self) -> None:
+        menu = getattr(self, "scanner_preset_menu", None)
+        if menu is None:
+            return
+        widget_menu = menu["menu"]
+        widget_menu.delete(0, "end")
+        presets = self.scanner_presets.presets
+        if not presets:
+            widget_menu.add_command(label="No saved filters", command=lambda: self.scanner_preset_var.set("Saved filters"))
+        for preset in presets:
+            widget_menu.add_command(label=preset.name, command=lambda name=preset.name: self.scanner_preset_var.set(name))
+        widget_menu.configure(bg=self.colors["panel_2"], fg=self.colors["text"],
+                              activebackground=self.colors["selected"], activeforeground=self.colors["selected_text"])
+
+    def _save_scanner_preset(self) -> None:
+        name = simpledialog.askstring("Save scanner filter", "Name this filter:", parent=self.root)
+        if name is None:
+            return
+        category = self.scanner_category_var.get().strip().lower()
+        if category == "all":
+            category = None
+        score = self._coerce_int(self.min_score_var.get(), 72, 0, 100)
+        try:
+            preset = self.scanner_presets.create(
+                name, self.scanner_filter_var.get(), category=category, min_score=score)
+        except (ValueError, OSError) as exc:
+            messagebox.showerror("Filter not saved", str(exc), parent=self.root)
+            return
+        self.scanner_preset_var.set(preset.name)
+        self._refresh_scanner_preset_menu()
+        self.status_bar.configure(text=f"Scanner filter '{preset.name}' saved.")
+
+    def _apply_scanner_preset_name(self) -> None:
+        name = self.scanner_preset_var.get()
+        if name == "Saved filters":
+            return
+        preset = next((item for item in self.scanner_presets.presets if item.name == name), None)
+        if preset is None:
+            return
+        self.scanner_filter_var.set(preset.query)
+        self.scanner_category_var.set((preset.category or "all").title())
+        if preset.min_score is not None:
+            self.min_score_var.set(str(preset.min_score))
+        self._render_signals()
+        self.status_bar.configure(text=f"Scanner filter '{preset.name}' applied.")
 
     def _render_plans(self) -> None:
         lines = []
@@ -3076,7 +4392,11 @@ class TimmyNativeApp:
             lines.append("")
             lines.append("Common blockers: no trade-ready symbol, stale data, score below threshold, cooldown, daily cap, buying power, fractional minimum, preview rejection, or broker rejection.")
         self._set_text(self.plan_text, "\n\n".join(lines))
-        self._set_text(self.decision_text, self._decision_summary())
+        selected_signal = self.signal_by_symbol.get(getattr(self, "selected_chart_symbol", ""))
+        if getattr(self, "active_tab", None) == "Overview" and selected_signal is not None:
+            self._set_text(self.decision_text, self._market_decision_brief(selected_signal))
+        else:
+            self._set_text(self.decision_text, self._decision_summary())
         self._render_strategy_tab()
         self._render_execution_tab()
 
@@ -3366,34 +4686,32 @@ class TimmyNativeApp:
         config = self.config or self._load_config_safe()
         execution_config = self._execution_config(config)
         account_value = self._webull_account_card_value(execution_config)
-        cash_value = self.trade_cash_snapshot[0]
-        paper_cash_value, paper_cash_detail = self._paper_account_snapshot()
         live_value = "On" if self._live_ready(execution_config) else "Locked"
         preview_value = "Req" if config.webull_require_preview else "Off"
         self._update_label_map(
             getattr(self, "broker_summary_labels", {}),
             {
                 "Account": account_value,
-                "Cash Account": cash_value,
-                "Paper Account": paper_cash_value,
-                "Live": live_value,
-                "Dry Run": preview_value,
+                "API Check": "N/A" if not execution_config.webull_account_id else (
+                    "Needed" if self._broker_check_required(execution_config) else "Fresh"),
+                "Region": config.webull_region.upper(),
+                "Live Gate": live_value,
+                "Preview Gate": preview_value,
             },
         )
         readiness_lines = [
-            "Account readiness",
-            f"- Account lane: {self._account_lane()}",
-            f"- Account target: {account_value}",
-            f"- Account detail: {self._webull_account_card_detail(execution_config)}",
-            f"- Cash account: {cash_value} ({self.trade_cash_snapshot[1]})",
-            f"- Paper account: {paper_cash_value} ({paper_cash_detail})",
-            f"- Live switches: {'enabled' if live_value == 'On' else 'locked'}",
-            f"- Dry run required: {'yes' if config.webull_require_preview else 'no'}",
-            f"- OpenAPI live submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
+            "Connection diagnostics",
+            f"- Account: {account_value}",
+            f"- Status: {self._webull_account_card_detail(execution_config)}",
+            f"- API region: {config.webull_region}",
+            f"- Credential profile: {'configured' if config.webull_app_key and config.webull_app_secret else 'incomplete'}",
+            f"- Live submission gate: {'enabled' if live_value == 'On' else 'locked'}",
+            f"- Preview gate: {'required' if config.webull_require_preview else 'optional'}",
+            f"- OpenAPI submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
             f"- Watchlist sync: {'on' if config.webull_sync_watchlists else 'off'}",
-            f"- Account check: {'needed' if self._broker_check_required(execution_config) else 'fresh'}",
+            f"- Last account check: {self.trade_cash_snapshot[1]}",
             "",
-            "Order desk",
+            "Execution readiness",
             f"- Orders ready: {len(self.plans):,}",
             f"- Target / mode: {self._lane_mode_label()}",
             f"- Fresh dry runs: {self._fresh_preview_count(execution_config):,}",
@@ -3407,10 +4725,9 @@ class TimmyNativeApp:
             "- No broker note loaded in this pane yet.",
             "- Account Check, Preview Route, paper orders, and live orders show here.",
             "",
-            "Current account lane",
+            "Current connection",
             f"- Account: {account_value}",
-            f"- Cash account: {cash_value}",
-            f"- Paper account: {paper_cash_value}",
+            f"- API region: {config.webull_region}",
             f"- Live: {live_value}",
             f"- Dry run: {preview_value}",
         ]
@@ -3418,6 +4735,7 @@ class TimmyNativeApp:
 
     def _load_journal(self) -> None:
         events = self.execution_events
+        filtered_events = filter_journal_events(events, self.journal_filter_state)
         self._render_audit_summary(events)
         self._render_audit_integrity(events)
         if not events:
@@ -3426,6 +4744,10 @@ class TimmyNativeApp:
         live_count = sum(1 for event in events if event.get("mode") == "live")
         paper_count = sum(1 for event in events if event.get("mode") == "paper")
         rejected_count = sum(1 for event in events if str(event.get("status", "")).lower() == "rejected")
+        paper_summary = summarize_paper_journal(events)
+        consistency = summarize_closed_paper_events(events)
+        win_rate = f"{paper_summary.win_rate:.0%}" if paper_summary.win_rate is not None else "incomplete"
+        expectancy = money(paper_summary.expectancy) if paper_summary.expectancy is not None else "incomplete"
         lines = [
             "Trade log summary",
             f"- Total loaded: {len(events)}",
@@ -3434,9 +4756,21 @@ class TimmyNativeApp:
             f"- Rejected: {rejected_count}",
             f"- Paper account: {self._paper_account_snapshot()[0]}",
             "",
+            "Closed paper performance",
+            f"- Closed trades: {paper_summary.closed_trade_count} | W/L/BE: {paper_summary.wins}/{paper_summary.losses}/{paper_summary.breakeven}",
+            f"- Win rate: {win_rate} | Expectancy/trade: {expectancy}",
+            (f"- Consistency: profit factor "
+             f"{f'{consistency.profit_factor:.2f}' if consistency.profit_factor is not None else 'n/a'} | "
+             f"best/worst {money(consistency.best_trade)}/{money(consistency.worst_trade)} · {consistency.status}"
+             if consistency.status == "complete"
+             else f"- Consistency: {consistency.status} · {consistency.note}"),
+            f"- Current streak: {paper_summary.current_win_streak} wins / {paper_summary.current_loss_streak} losses",
+            (f"- Data note: {'; '.join(paper_summary.incomplete_reasons)}" if paper_summary.incomplete_data else "- Results include only explicitly closed paper trades."),
+            "",
             "Recent trade notes",
+            f"- Showing {len(filtered_events)} of {len(events)} journal rows",
         ]
-        for event in reversed(events[-14:]):
+        for event in reversed(filtered_events[-14:]):
             symbol = event.get("symbol") or event.get("order", {}).get("symbol") or "-"
             quantity = event.get("quantity") or event.get("order", {}).get("quantity") or "-"
             buy_price = event.get("buy_price") or event.get("order", {}).get("limit_price")
@@ -3452,6 +4786,54 @@ class TimmyNativeApp:
                 f"sell {sell_status} | target {money(target)} | stop {money(stop)}"
             )
         self._set_text(self.journal_text, "\n\n".join(lines))
+
+    def _open_journal_filter(self) -> None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Filter trade journal")
+        dialog.transient(self.root)
+        dialog.configure(bg=self.colors["panel"])
+        dialog.columnconfigure(1, weight=1)
+        current = self.journal_filter_state
+        mode_var = tk.StringVar(value=current.mode or "All")
+        symbol_var = tk.StringVar(value=current.symbol or "")
+        status_var = tk.StringVar(value=current.status or "")
+        start_var = tk.StringVar(value=current.start.strftime("%Y-%m-%d") if current.start else "")
+        end_var = tk.StringVar(value=current.end.strftime("%Y-%m-%d") if current.end else "")
+        query_var = tk.StringVar(value=current.query or "")
+        fields = (("Mode", mode_var), ("Symbol", symbol_var), ("Status", status_var),
+                  ("Start date (UTC)", start_var), ("End date (UTC)", end_var), ("Text search", query_var))
+        tk.Label(dialog, text="FILTER JOURNAL ROWS", bg=self.colors["panel"], fg=self.colors["teal"],
+                 font=("Sans", 11, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=16, pady=(14, 8))
+        for row, (label, variable) in enumerate(fields, start=1):
+            tk.Label(dialog, text=label, bg=self.colors["panel"], fg=self.colors["muted"],
+                     font=("Sans", 9)).grid(row=row, column=0, sticky="w", padx=16, pady=5)
+            if label == "Mode":
+                ttk.Combobox(dialog, textvariable=variable, values=("All", "Paper", "Live"),
+                             state="readonly", width=24).grid(row=row, column=1, sticky="ew", padx=16, pady=5)
+            else:
+                tk.Entry(dialog, textvariable=variable, bg=self.colors["entry"], fg=self.colors["text"],
+                         insertbackground=self.colors["text"], relief="flat").grid(
+                             row=row, column=1, sticky="ew", padx=16, pady=5, ipady=5)
+        buttons = tk.Frame(dialog, bg=self.colors["panel"])
+        buttons.grid(row=7, column=0, columnspan=2, sticky="e", padx=16, pady=(10, 14))
+
+        def apply_filter() -> None:
+            try:
+                self.journal_filter_state = JournalFilterState(
+                    mode=None if mode_var.get() == "All" else mode_var.get(),
+                    symbol=symbol_var.get() or None, status=status_var.get() or None,
+                    start=start_var.get() or None, end=end_var.get() or None,
+                    query=query_var.get() or None,
+                )
+            except ValueError as exc:
+                messagebox.showerror("Invalid journal filter", str(exc), parent=dialog)
+                return
+            self._load_journal()
+            dialog.destroy()
+
+        self._button(buttons, "Clear", lambda: [setattr(self, "journal_filter_state", JournalFilterState()),
+                                                  self._load_journal(), dialog.destroy()]).pack(side="left", padx=4)
+        self._button(buttons, "Apply", apply_filter).pack(side="left", padx=4)
 
     def _render_audit_summary(self, events: list[dict]) -> None:
         live_count = sum(1 for event in events if event.get("mode") == "live")
@@ -3753,6 +5135,7 @@ class TimmyNativeApp:
             self.cash_card[1].configure(text=self.trade_cash_snapshot[1])
             self._render_status()
             self._render_setup_status()
+            self._render_portfolio_panel()
         if label == "Paper trade":
             self._load_journal()
         self.status_bar.configure(text=f"{label} complete.")
@@ -4043,11 +5426,114 @@ class TimmyNativeApp:
         selection = self.signal_tree.selection()
         if not selection:
             self._set_text(self.signal_detail, "Select a signal to inspect the decision inputs.")
+            self.selected_chart_symbol = ""
+            self.market_chart_title.configure(text="Select a symbol")
+            self.market_chart_move.configure(text="—", fg=self.colors["muted"])
+            self._draw_market_chart()
             return
         symbol = self.signal_tree.item(selection[0], "values")[0]
+        self._display_selected_signal(symbol)
+
+    def _show_market_watch_selection(self, _event=None) -> None:
+        selection = self.market_watch_tree.selection()
+        if not selection:
+            return
+        symbol = self.market_watch_tree.item(selection[0], "values")[0]
+        self._display_selected_signal(symbol)
+        signal = self.signal_by_symbol.get(symbol)
+        if signal is not None:
+            self.market_watch_footer.configure(
+                text=f"{signal.decision} · {signal.direction} bias · {self._price_gate_label(signal)}")
+
+    def _watchlist_group_for_selection(self):
+        label = self.watchlist_group_var.get()
+        return next((group for group in self.watchlist_organization.groups if group.name == label), None)
+
+    def _refresh_watchlist_group_menu(self) -> None:
+        if not hasattr(self, "watchlist_group_menu"):
+            return
+        labels = ["All signals", "Pinned"] + [group.name for group in self.watchlist_organization.groups]
+        self.watchlist_group_menu.configure(values=labels)
+        if self.watchlist_group_var.get() not in labels:
+            self.watchlist_group_var.set("All signals")
+
+    def _create_watchlist_group(self) -> None:
+        name = simpledialog.askstring("New watchlist group", "Name this personal ticker group:", parent=self.root)
+        if not name:
+            return
+        try:
+            group = self.watchlist_organization.create_group(name)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Watchlist group", str(exc), parent=self.root)
+            return
+        self.watchlist_group_var.set(group.name)
+        self._refresh_watchlist_group_menu()
+        self._render_signals()
+        self.status_bar.configure(text=f"Personal group '{group.name}' created. It does not change trading scope.")
+
+    def _add_selected_to_watchlist_group(self) -> None:
+        group = self._watchlist_group_for_selection()
+        symbol = getattr(self, "selected_chart_symbol", "")
+        if group is None or not symbol:
+            messagebox.showinfo("Watchlist group", "Choose a personal group and select a ticker first.", parent=self.root)
+            return
+        try:
+            self.watchlist_organization.add_symbol(group.id, symbol)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Watchlist group", str(exc), parent=self.root)
+            return
+        self._render_signals()
+        self.status_bar.configure(text=f"{symbol} added to personal group '{group.name}'.")
+
+    def _toggle_selected_watchlist_pin(self) -> None:
+        symbol = getattr(self, "selected_chart_symbol", "")
+        if not symbol:
+            return
+        try:
+            if symbol in self.watchlist_organization.pinned_symbols:
+                self.watchlist_organization.unpin_symbol(symbol)
+                state = "unpinned"
+            else:
+                self.watchlist_organization.pin_symbol(symbol)
+                state = "pinned"
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Pinned ticker", str(exc), parent=self.root)
+            return
+        self._render_signals()
+        self.status_bar.configure(text=f"{symbol} {state} in your personal watchlist.")
+
+    def _display_selected_signal(self, symbol: str) -> None:
         signal = self.signal_by_symbol.get(symbol)
         if signal is None:
             return
+        self.selected_chart_symbol = symbol
+        try:
+            self.workspace_store.remember_symbol(symbol)
+        except ValueError:
+            pass
+        self.market_chart_title.configure(text=f"{symbol} · {signal.close:,.2f}")
+        self.market_chart_move.configure(
+            text=f"{signal.change_pct:+.2f}%",
+            fg=self.colors["green"] if signal.change_pct >= 0 else self.colors["red"],
+        )
+        try:
+            quality = summarize_candle_quality(self.bars_by_symbol.get(symbol, []), interval_minutes=1440,
+                                               stale_after_minutes=4320)
+            item = next((row for row in quality.symbols if row.symbol == symbol.upper()), None)
+            if item is None:
+                quality_text, quality_color = "DATA · NO DATA", self.colors["muted"]
+            else:
+                age = f"{item.age_minutes / 60:.0f}h old" if item.age_minutes is not None else "age unknown"
+                issues = item.missing_bars_estimate + item.duplicate_timestamps + item.invalid_ohlc_bars
+                detail = f" · {issues} quality flags" if issues else ""
+                quality_text, quality_color = f"DATA · {item.label} · {age}{detail}", {
+                    "CURRENT": self.colors["green"], "AGING": self.colors["gold"],
+                    "STALE": self.colors["red"], "CHECK DATA": self.colors["red"],
+                }.get(item.label, self.colors["muted"])
+            self.market_chart_data_quality.configure(text=quality_text, fg=quality_color)
+        except (ValueError, TypeError, OverflowError):
+            self.market_chart_data_quality.configure(text="DATA · quality unavailable", fg=self.colors["muted"])
+        self._draw_market_chart()
         reasons = "\n".join(f"- {reason}" for reason in signal.reasons)
         expense = "\n".join(f"- {reason}" for reason in signal.expense_reasons) or "- price gate clear"
         config = self.config or self._load_config_safe()
@@ -4063,6 +5549,281 @@ class TimmyNativeApp:
             f"Buy limit {money(signal.entry)} | Stop {money(signal.stop)} | Sell target {money(signal.target)} | R/R {signal.reward_risk:.2f}\n"
             f"Scout reasons:\n{reasons}\nPrice checks:\n{expense}\nOperational checks:\n{operational}",
         )
+        if getattr(self, "active_tab", None) == "Overview":
+            self._set_text(self.decision_text, self._market_decision_brief(signal))
+
+    def _market_decision_brief(self, signal) -> str:
+        config = self.config or self._load_config_safe()
+        blockers = self._operational_blocks(signal, config)
+        status = "READY FOR REVIEW" if not blockers else "GATED · REVIEW REQUIRED"
+        explanation = explain_signal(signal)
+        gate = self._price_gate_label(signal)
+        lines = [
+            status,
+            f"{signal.symbol} · {signal.decision} · score {signal.score}/100",
+            f"{signal.direction} bias · {signal.setup} · {gate}",
+            "",
+            f"ENTRY   {money(signal.entry)}",
+            f"STOP    {money(signal.stop)}",
+            f"TARGET  {money(signal.target)} · R/R {signal.reward_risk:.2f}",
+            "",
+            "SUPPORT / CAUTION",
+        ]
+        lines.extend(f"{factor.status.upper()} · {factor.detail}" for factor in explanation.factors[:3])
+        note = self.symbol_notes.get(signal.symbol)
+        if note is not None:
+            lines.extend(("", "YOUR NOTE", note.text))
+        guidance = explain_blockers(blockers)
+        if guidance:
+            lines.extend(("", "GATE · NEXT STEP", f"{guidance[0].message}: {guidance[0].next_step}"))
+        else:
+            lines.extend(("", "GATE", "No operational blocks"))
+        return (
+            "\n".join(lines)
+        )
+
+    def _open_sizing_preview(self) -> None:
+        symbol = getattr(self, "selected_chart_symbol", "")
+        signal = self.signal_by_symbol.get(symbol)
+        if signal is None:
+            messagebox.showinfo("Sizing preview", "Select a symbol in the Market radar first.", parent=self.root)
+            return
+        config = self.config or self._load_config_safe()
+        preview = position_what_if(signal, config, available_cash=self.trade_cash_value)
+        lines = [f"{preview.symbol} · hypothetical sizing", ""]
+        if not preview.rows:
+            lines.append(preview.note)
+        else:
+            lines.append(f"Entry {money(preview.entry)} · Stop {money(preview.stop)} · Target {money(preview.target)}")
+            lines.append("")
+            lines.extend(
+                f"{row.size_multiplier:g}× risk · {row.quantity:g} shares · {money(row.notional)} notional · "
+                f"{money(row.estimated_stop_loss)} stop risk · {money(row.estimated_target_gain)} target gain · {row.binding_limit}"
+                for row in preview.rows
+            )
+        lines.extend(("", preview.note, "No order is created or sent by this preview."))
+        messagebox.showinfo("Sizing preview", "\n".join(lines), parent=self.root)
+
+    def _edit_selected_symbol_note(self) -> None:
+        symbol = getattr(self, "selected_chart_symbol", "")
+        if not symbol:
+            messagebox.showinfo("Ticker note", "Select a symbol in the Market radar first.", parent=self.root)
+            return
+        existing = self.symbol_notes.get(symbol)
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"{symbol} research note")
+        dialog.transient(self.root)
+        dialog.configure(bg=self.colors["panel"])
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        tk.Label(dialog, text=f"YOUR NOTE · {symbol}", bg=self.colors["panel"], fg=self.colors["teal"],
+                 font=("Sans", 10, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
+        note_text = tk.Text(dialog, width=56, height=10, bg=self.colors["panel_2"], fg=self.colors["text"],
+                            insertbackground=self.colors["text"], relief="flat", wrap="word", padx=10, pady=8)
+        note_text.grid(row=1, column=0, sticky="nsew", padx=16)
+        if existing:
+            note_text.insert("1.0", existing.text)
+        tk.Label(dialog, text="Stored locally with Timmy's workspace data.", bg=self.colors["panel"],
+                 fg=self.colors["muted"], font=("Sans", 8), anchor="w").grid(row=2, column=0, sticky="ew", padx=16, pady=6)
+
+        def save_note() -> None:
+            text = note_text.get("1.0", "end-1c").strip()
+            if not text:
+                if existing:
+                    self.symbol_notes.delete(symbol)
+                dialog.destroy()
+                self._refresh_selected_decision_note(symbol)
+                return
+            try:
+                self.symbol_notes.save(symbol, text)
+            except (ValueError, OSError) as exc:
+                messagebox.showerror("Note not saved", str(exc), parent=dialog)
+                return
+            dialog.destroy()
+            self._refresh_selected_decision_note(symbol)
+
+        actions = tk.Frame(dialog, bg=self.colors["panel"])
+        actions.grid(row=3, column=0, sticky="e", padx=16, pady=(0, 14))
+        self._button(actions, "Cancel", dialog.destroy).pack(side="right", padx=(8, 0))
+        self._button(actions, "Save note", save_note, accent="teal").pack(side="right")
+        dialog.bind("<Control-Return>", lambda _event: save_note())
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.grab_set()
+        note_text.focus_set()
+
+    def _refresh_selected_decision_note(self, symbol: str) -> None:
+        signal = self.signal_by_symbol.get(symbol)
+        if signal is not None and getattr(self, "active_tab", None) == "Overview":
+            self._set_text(self.decision_text, self._market_decision_brief(signal))
+        self.status_bar.configure(text=f"Ticker note for {symbol} saved locally.")
+
+    def _draw_market_chart(self) -> None:
+        canvas = getattr(self, "market_chart", None)
+        if canvas is None:
+            return
+        try:
+            canvas.delete("all")
+            width = max(1, canvas.winfo_width())
+            height = max(1, canvas.winfo_height())
+        except tk.TclError:
+            return
+        symbol = getattr(self, "selected_chart_symbol", "")
+        all_bars = self.bars_by_symbol.get(symbol, []) if symbol else []
+        signal = self.signal_by_symbol.get(symbol)
+        chart_limit = self._coerce_int(self.chart_window_var.get(), 80, 20, 120)
+        context = chart_context(all_bars, signal, symbol=symbol, limit=chart_limit) if symbol else None
+        if context is None or len(context.candles) < 2:
+            canvas.create_text(width / 2, height / 2, text="Price history appears after a market data refresh",
+                               fill=self.colors["muted"], font=("Sans", 9), anchor="center")
+            return
+        bars = [bar for bar in all_bars if getattr(bar, "symbol", "").upper() == symbol.upper()][-chart_limit:]
+        left, right = 42, max(43, width - 12)
+        top, bottom = 12, max(30, height - (48 if self.chart_volume_var.get() else 22))
+        self._chart_render_context = context
+        self._chart_render_bars = bars
+        self._chart_plot_bounds = (left, right, top, bottom)
+        low, high = context.price_min, context.price_max
+        for fraction in (0.0, 0.5, 1.0):
+            y = bottom - fraction * (bottom - top)
+            value = low + fraction * (high - low)
+            canvas.create_line(left, y, right, y, fill=self.colors["line"], width=1)
+            canvas.create_text(left - 5, y, text=f"{value:.2f}", fill=self.colors["muted"],
+                               font=("Sans", 7), anchor="w")
+        candle_step = (right - left) / max(len(context.candles) - 1, 1)
+        candle_width = max(3, min(11, candle_step * 0.56))
+        def chart_xy(x_value: float, y_value: float) -> tuple[float, float]:
+            return left + x_value * (right - left), bottom - y_value * (bottom - top)
+
+        for candle in context.candles:
+            x, y_high = chart_xy(candle["x"], candle["high"])
+            _, y_low = chart_xy(candle["x"], candle["low"])
+            _, y_open = chart_xy(candle["x"], candle["open"])
+            _, y_close = chart_xy(candle["x"], candle["close"])
+            candle_color = self.colors["green"] if candle["close_value"] >= candle["open_value"] else self.colors["red"]
+            canvas.create_line(x, y_high, x, y_low, fill=candle_color, width=1)
+            body_top = min(y_open, y_close)
+            body_bottom = max(y_open, y_close)
+            if body_bottom - body_top < 2:
+                body_bottom = body_top + 2
+            canvas.create_rectangle(x - candle_width / 2, body_top, x + candle_width / 2, body_bottom,
+                                    fill=candle_color, outline=candle_color)
+        if self.chart_sma_var.get():
+            for points, color in ((context.sma20, self.colors["gold"]), (context.sma50, self.colors["teal"])):
+                coords = [chart_xy(point.x, point.y) for point in points]
+                if len(coords) > 1:
+                    canvas.create_line(*[coordinate for point in coords for coordinate in point],
+                                       fill=color, width=1.5, smooth=False)
+        if self.chart_levels_var.get():
+            level_colors = {"Entry": self.colors["teal"], "Stop": self.colors["red"], "Target": self.colors["green"]}
+            for level in context.levels:
+                _, y = chart_xy(0, level.y)
+                color = level_colors.get(level.name, self.colors["muted"])
+                canvas.create_line(left, y, right, y, fill=color, dash=(5, 3), width=1)
+                canvas.create_text(right - 2, y - 7, text=f"{level.name} {level.value:.2f}",
+                                   fill=color, font=("Sans", 7, "bold"), anchor="e")
+        last_y = chart_xy(0, context.candles[-1]["close"])[1]
+        canvas.create_line(left, last_y, right, last_y, fill=self.colors["muted"], dash=(2, 4))
+        first_day = getattr(bars[0], "timestamp", None)
+        last_day = getattr(bars[-1], "timestamp", None)
+        if hasattr(first_day, "strftime") and hasattr(last_day, "strftime"):
+            canvas.create_text(left, height - 1, text=first_day.strftime("%b %d"),
+                               fill=self.colors["muted"], font=("Sans", 7), anchor="s")
+            canvas.create_text(right, height - 1, text=last_day.strftime("%b %d"),
+                               fill=self.colors["muted"], font=("Sans", 7), anchor="s")
+        if self.chart_volume_var.get():
+            volume_top = bottom + 10
+            volume_bottom = height - 18
+            canvas.create_line(left, volume_top, right, volume_top, fill=self.colors["line"], width=1)
+            for candle, volume in zip(context.candles, context.volume_bars):
+                x, _ = chart_xy(candle["x"], 0)
+                bar_height = max(1, volume.height * max(1, volume_bottom - volume_top))
+                color = self.colors["green"] if candle["close_value"] >= candle["open_value"] else self.colors["red"]
+                canvas.create_rectangle(x - candle_width / 2, volume_bottom - bar_height,
+                                        x + candle_width / 2, volume_bottom, fill=color, outline="")
+
+    def _market_chart_hover(self, event) -> None:
+        context = getattr(self, "_chart_render_context", None)
+        bounds = getattr(self, "_chart_plot_bounds", None)
+        bars = getattr(self, "_chart_render_bars", [])
+        if context is None or bounds is None or not context.candles:
+            return
+        left, right, top, bottom = bounds
+        if not left <= event.x <= right or not top <= event.y <= bottom:
+            self.market_chart.delete("hover")
+            return
+        fraction = (event.x - left) / max(right - left, 1)
+        index = max(0, min(len(context.candles) - 1, round(fraction * (len(context.candles) - 1))))
+        candle = context.candles[index]
+        price_fraction = (bottom - event.y) / max(bottom - top, 1)
+        cursor_price = context.price_min + price_fraction * (context.price_max - context.price_min)
+        x = left + candle["x"] * (right - left)
+        self.market_chart.delete("hover")
+        self.market_chart.create_line(x, top, x, bottom, fill=self.colors["muted"], dash=(3, 3), tags="hover")
+        self.market_chart.create_line(left, event.y, right, event.y, fill=self.colors["muted"], dash=(3, 3), tags="hover")
+        bar = bars[index] if index < len(bars) else None
+        timestamp = getattr(bar, "timestamp", None)
+        date_label = timestamp.strftime("%b %d %Y") if hasattr(timestamp, "strftime") else "Date unavailable"
+        volume = getattr(bar, "volume", None)
+        volume_label = f"{volume:,.0f}" if isinstance(volume, (int, float)) else "—"
+        detail = (
+            f"{date_label}  O {candle['open_value']:.2f}  H {candle['high_value']:.2f}  "
+            f"L {candle['low_value']:.2f}  C {candle['close_value']:.2f}  V {volume_label}  Cursor {cursor_price:.2f}"
+        )
+        text_width = min(680, max(220, len(detail) * 5.5), max(80, right - left))
+        box_x = min(max(left, event.x + 10), max(left, right - text_width))
+        box_y = top + 4 if event.y > top + 35 else top + 26
+        self.market_chart.create_rectangle(box_x, box_y, box_x + text_width, box_y + 20,
+                                           fill=self.colors["panel"], outline=self.colors["line"], tags="hover")
+        self.market_chart.create_text(box_x + 7, box_y + 10, text=detail, fill=self.colors["text"],
+                                      font=("Monospace", 8), anchor="w", tags="hover")
+
+    def _chart_window_selected(self) -> None:
+        self._save_runtime_settings()
+        self._draw_market_chart()
+
+    def _open_symbol_comparison(self) -> None:
+        selected = getattr(self, "selected_chart_symbol", "")
+        raw = simpledialog.askstring(
+            "Compare symbols", "Enter up to six tickers separated by commas (same local candle dates):",
+            initialvalue=", ".join(([selected] if selected else []) + ["SPY"]), parent=self.root,
+        )
+        if not raw:
+            return
+        symbols = list(dict.fromkeys(token.strip().upper() for token in raw.split(",") if token.strip()))[:6]
+        if len(symbols) < 2:
+            messagebox.showinfo("Compare symbols", "Choose at least two tickers.", parent=self.root)
+            return
+        rows = compare_symbols(self.bars_by_symbol, symbols, window=20)
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Local symbol comparison")
+        dialog.transient(self.root)
+        dialog.configure(bg=self.colors["panel"])
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        tk.Label(dialog, text="RELATIVE PERFORMANCE · SHARED LOCAL CANDLES", bg=self.colors["panel"],
+                 fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
+        columns = ("symbol", "return", "relative", "volatility", "range", "bars", "status")
+        table = ttk.Treeview(dialog, columns=columns, show="headings", height=max(3, len(rows)))
+        headings = (("symbol", "Ticker"), ("return", "Return"), ("relative", "vs first"),
+                    ("volatility", "Volatility"), ("range", "Range"), ("bars", "Bars"), ("status", "Data"))
+        for key, label in headings:
+            table.heading(key, text=label)
+            table.column(key, width=105 if key == "symbol" else 92, anchor="w" if key in {"symbol", "status"} else "e")
+        table.grid(row=1, column=0, sticky="nsew", padx=14)
+
+        def percent(value: float | None) -> str:
+            return f"{value:+.2f}%" if value is not None else "—"
+
+        for row in rows:
+            table.insert("", "end", values=(row.symbol, percent(row.return_pct), percent(row.relative_return_pct_points),
+                                                percent(row.volatility_pct), percent(row.range_pct), row.bars_used,
+                                                "Ready" if row.status == "complete" else "Need data"))
+        note = "Return, volatility, and range use only the last 20 shared candle timestamps. Relative return is measured against the first ticker."
+        tk.Label(dialog, text=note, bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 8), anchor="w", wraplength=650, justify="left").grid(
+                     row=2, column=0, sticky="ew", padx=14, pady=8)
+        self._button(dialog, "Close", dialog.destroy).grid(row=3, column=0, sticky="e", padx=14, pady=(0, 14))
 
     def _decision_summary(self) -> str:
         config = self.config or self._load_config_safe()
@@ -4431,7 +6192,13 @@ class TimmyNativeApp:
             settings = json.loads(self.settings_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return
+        saved_scanner_view = settings.get("scanner_view")
+        if isinstance(saved_scanner_view, dict):
+            self._saved_scanner_view = saved_scanner_view
         self.min_score_var.set(str(self._coerce_int(settings.get("min_score"), 72, 0, 100)))
+        chart_window = str(settings.get("chart_window", "80"))
+        if chart_window in {"20", "40", "80", "120"}:
+            self.chart_window_var.set(chart_window)
         self.plan_limit_var.set(str(self._coerce_int(settings.get("plan_limit"), 3, 1, 20)))
         self.auto_interval_var.set(str(self._coerce_int(settings.get("auto_interval_minutes"), 1, 1, 60)))
         if settings.get("execution_mode") in {"User", "Auto"}:
@@ -4450,6 +6217,14 @@ class TimmyNativeApp:
             enabled = {str(item).strip().lower() for item in patterns}
             for key, var in self.pattern_vars.items():
                 var.set(key in enabled)
+        raw_experience = settings.get("trader_experience_years")
+        if isinstance(raw_experience, int) and not isinstance(raw_experience, bool) and 0 <= raw_experience <= 80:
+            self.trader_experience_years_var.set(str(raw_experience))
+        preference = settings.get("trader_risk_preference")
+        if preference in {"Not set", "Conservative", "Moderate", "Aggressive"}:
+            self.trader_risk_preference_var.set(preference)
+        self.trader_risk_acknowledged_var.set(settings.get("trader_risk_acknowledged") is True)
+        self.trader_risk_acknowledged_at = str(settings.get("trader_risk_acknowledged_at") or "")
 
     def _setup_settings_traces(self) -> None:
         for var in (
@@ -4502,6 +6277,10 @@ class TimmyNativeApp:
 
     def _settings_changed(self) -> None:
         self._save_runtime_settings()
+        if getattr(self, "config", None) is not None:
+            self._render_status()
+        if getattr(self, "active_tab", None) == "Automation":
+            self._render_automation_panel()
 
     def _save_runtime_settings(self) -> None:
         settings = {
@@ -4515,8 +6294,16 @@ class TimmyNativeApp:
             "selected_webull_account_id": self._selected_webull_account_override() or "",
             "trading_style": self.trading_style_var.get(),
             "patterns": sorted(self._runtime_strategy_patterns()),
+            "chart_window": self.chart_window_var.get(),
+            "trader_experience_years": (int(self.trader_experience_years_var.get())
+                                        if self.trader_experience_years_var.get().isdigit() else None),
+            "trader_risk_preference": self.trader_risk_preference_var.get(),
+            "trader_risk_acknowledged": bool(self.trader_risk_acknowledged_var.get()),
+            "trader_risk_acknowledged_at": self.trader_risk_acknowledged_at,
             "saved_at": datetime.now().isoformat(),
         }
+        if isinstance(self._saved_scanner_view, dict):
+            settings["scanner_view"] = self._saved_scanner_view
         try:
             self.settings_path.write_text(json.dumps(settings, indent=2, sort_keys=True), encoding="utf-8")
             self.settings_path.chmod(0o600)

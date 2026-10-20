@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Timmy product brochure: a guarded Linux desktop trading assistant with market scanning, risk-capped plans, paper workflow, and optional guarded broker execution.">
+  <title>Timmy | Product Brochure</title>
+  <style>
+    :root { --navy:#101d2c; --navy2:#172b3e; --ink:#182433; --muted:#526477; --teal:#30c3b0; --lime:#a7e58c; --gold:#e8bd6e; --paper:#f6f8fa; --line:#dbe3e9; --white:#fff; }
+    * { box-sizing:border-box; }
+    html { background:#dfe5ea; }
+    body { margin:0; color:var(--ink); font:14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .toolbar { position:sticky; top:0; z-index:5; display:flex; justify-content:center; gap:12px; padding:12px; background:#101d2cf2; }
+    .toolbar a,.toolbar button { border:1px solid #637689; border-radius:999px; padding:9px 16px; background:transparent; color:white; font:600 13px inherit; text-decoration:none; cursor:pointer; }
+    .toolbar .primary { background:var(--teal); color:#071e24; border-color:var(--teal); }
+    .sheet { position:relative; width:210mm; min-height:297mm; margin:18px auto; padding:18mm 18mm 16mm; overflow:hidden; background:white; box-shadow:0 16px 44px #172b3e24; page-break-after:always; }
+    .cover { display:flex; min-height:297mm; flex-direction:column; padding:0; color:white; background:radial-gradient(ellipse at 82% 27%,#1d5260 0,transparent 37%),linear-gradient(145deg,var(--navy),#0b1520 72%); }
+    .cover-inner { position:relative; z-index:1; display:flex; min-height:297mm; flex-direction:column; justify-content:space-between; padding:20mm 18mm 17mm; }
+    .brand { display:flex; align-items:center; gap:11px; font-size:15px; font-weight:800; letter-spacing:.06em; }
+    .brand-mark { display:grid; width:38px; height:38px; place-items:center; border:1px solid #ffffff70; border-radius:12px; background:#ffffff12; color:var(--teal); font-size:21px; }
+    .kicker { color:var(--teal); font-size:10px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; }
+    h1 { max-width:620px; margin:15px 0 14px; font-size:51px; line-height:1.02; letter-spacing:-.045em; }
+    .cover .lead { max-width:520px; margin:0; color:#d2dee8; font-size:18px; }
+    .market-art { position:absolute; top:34mm; right:-8mm; width:112mm; height:76mm; opacity:.68; }
+    .market-art svg { width:100%; height:100%; }
+    .cover-facts { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:660px; }
+    .cover-facts div { padding:12px 14px; border:1px solid #ffffff28; border-radius:12px; background:#ffffff0b; }
+    .cover-facts strong { display:block; margin-bottom:3px; color:var(--lime); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+    .cover-facts span { color:#d4e0e8; font-size:12px; }
+    .cover-foot { display:flex; justify-content:space-between; gap:18px; color:#9eb0c0; font-size:10px; }
+    .eyebrow { margin:0 0 8px; color:#158b83; font-size:10px; font-weight:800; letter-spacing:.17em; text-transform:uppercase; }
+    h2 { margin:0 0 10px; color:var(--navy); font-size:29px; line-height:1.12; letter-spacing:-.03em; }
+    h3 { margin:0 0 6px; color:var(--navy); font-size:14px; }
+    p { margin:0 0 10px; }
+    .intro { max-width:620px; margin-bottom:22px; color:var(--muted); font-size:15px; }
+    .section-title { display:flex; align-items:end; justify-content:space-between; gap:20px; margin:0 0 20px; }
+    .section-title .ref { color:#718294; font-size:10px; font-weight:700; letter-spacing:.13em; }
+    .steps { display:grid; grid-template-columns:1fr 1fr; gap:11px; margin:20px 0 22px; }
+    .step { display:grid; grid-template-columns:30px 1fr; gap:10px; padding:13px; border:1px solid var(--line); border-radius:12px; background:#fbfcfd; }
+    .num { display:grid; width:28px; height:28px; place-items:center; border-radius:9px; background:#e3f5f2; color:#087f78; font-weight:800; }
+    .step p,.card p { margin:0; color:var(--muted); font-size:11.5px; }
+    .step h3 { font-size:12.5px; }
+    .feature-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .feature { min-height:105px; padding:13px; border-radius:11px; background:#eef4f6; }
+    .feature .icon { margin-bottom:7px; color:#07877f; font-size:17px; font-weight:800; }
+    .split { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:21px 0; }
+    .lane { padding:16px; border:1px solid var(--line); border-radius:13px; }
+    .lane.paper { background:#eff9f5; border-color:#cde7db; }
+    .lane.live { background:#fff8ed; border-color:#efdfbd; }
+    .lane .label { margin-bottom:6px; font-size:10px; font-weight:800; letter-spacing:.13em; text-transform:uppercase; }
+    .lane.paper .label { color:#14785c; }
+    .lane.live .label { color:#98631d; }
+    .lane p { margin:0; color:var(--muted); font-size:12px; }
+    .callout { margin:16px 0; padding:14px 16px; border-left:4px solid var(--teal); border-radius:0 10px 10px 0; background:#edf8f7; color:#26414a; font-size:12px; }
+    .callout strong { color:var(--navy); }
+    .spec-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; margin:16px 0; }
+    .spec { padding:9px 0; border-bottom:1px solid var(--line); }
+    .spec strong { display:block; color:var(--navy); font-size:11px; }
+    .spec span { color:var(--muted); font-size:11px; }
+    ul { margin:7px 0 0; padding-left:18px; color:var(--muted); font-size:11.5px; }
+    li { margin:0 0 5px; }
+    .closing { display:grid; grid-template-columns:1.15fr .85fr; gap:18px; align-items:center; margin-top:18px; padding:18px; border-radius:14px; color:white; background:linear-gradient(120deg,var(--navy),var(--navy2)); }
+    .closing h3 { color:white; font-size:18px; }
+    .closing p { margin:0; color:#c4d2de; font-size:11.5px; }
+    .url { color:var(--lime); font-weight:800; font-size:13px; }
+    .footer { position:absolute; right:18mm; bottom:9mm; left:18mm; display:flex; justify-content:space-between; padding-top:8px; border-top:1px solid var(--line); color:#8190a0; font-size:9px; }
+    .cover .footer { right:18mm; bottom:9mm; left:18mm; border-color:#ffffff28; color:#a6b6c4; }
+    .fine { margin-top:11px; color:#6a7784; font-size:9px; line-height:1.45; }
+    @page { size:A4; margin:0; }
+    @media print { html,body { background:white; } .toolbar { display:none; } .sheet { width:210mm; height:297mm; min-height:297mm; margin:0; box-shadow:none; page-break-after:always; } .sheet:last-child { page-break-after:auto; } }
+    @media screen and (max-width:760px) { .sheet { width:100%; min-height:0; margin:0 0 12px; padding:36px 24px 58px; } .cover { min-height:90vh; } .cover-inner { min-height:90vh; padding:34px 24px 56px; } .market-art { top:35%; right:-20%; width:90%; } h1 { font-size:40px; } .cover-facts,.feature-grid { grid-template-columns:1fr; } .steps,.split,.spec-grid,.closing { grid-template-columns:1fr; } .footer,.cover .footer { right:24px; left:24px; bottom:14px; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar" aria-label="Brochure actions">
+    <a href="index.html">Timmy website</a>
+    <a href="user-guide.html">User guide</a>
+    <a class="primary" href="downloads/timmy-brochure.pdf" download>Download brochure PDF</a>
+    <button class="primary" type="button" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  <main>
+    <section class="sheet cover" aria-labelledby="cover-title">
+      <div class="market-art" aria-hidden="true">
+        <svg viewBox="0 0 720 540" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs><linearGradient id="area" x1="360" y1="84" x2="360" y2="448" gradientUnits="userSpaceOnUse"><stop stop-color="#30C3B0" stop-opacity=".31"/><stop offset="1" stop-color="#30C3B0" stop-opacity="0"/></linearGradient><linearGradient id="line" x1="45" y1="290" x2="675" y2="140" gradientUnits="userSpaceOnUse"><stop stop-color="#A7E58C"/><stop offset="1" stop-color="#30C3B0"/></linearGradient></defs>
+          <g stroke="#B6D9E4" stroke-opacity=".12"><path d="M20 80H700M20 160H700M20 240H700M20 320H700M20 400H700M20 480H700"/><path d="M100 30V510M220 30V510M340 30V510M460 30V510M580 30V510"/></g>
+          <path d="M28 360L80 320L125 335L170 250L218 286L265 220L310 253L359 170L405 196L452 123L498 150L544 104L590 131L636 68L685 84V500H28V360Z" fill="url(#area)"/>
+          <path d="M28 360L80 320L125 335L170 250L218 286L265 220L310 253L359 170L405 196L452 123L498 150L544 104L590 131L636 68L685 84" stroke="url(#line)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <g fill="#A7E58C"><circle cx="170" cy="250" r="5"/><circle cx="359" cy="170" r="5"/><circle cx="544" cy="104" r="5"/><circle cx="685" cy="84" r="6"/></g>
+          <g stroke="#E8BD6E" stroke-opacity=".55"><path d="M170 235V390M359 150V330M544 90V255" stroke-dasharray="4 6"/></g>
+          <g fill="#C8D8E2" font-family="sans-serif" font-size="11"><text x="24" y="523">MARKET DATA / ILLUSTRATIVE GRAPHIC</text><text x="584" y="523">NO LIVE QUOTES</text></g>
+        </svg>
+      </div>
+      <div class="cover-inner">
+        <div class="brand"><span class="brand-mark">T</span><span>TIMMY <span style="color:#8fa4b6;font-weight:500">BY BLACK LION STUDIOS</span></span></div>
+        <div>
+          <p class="kicker">A guarded trading desk for Linux</p>
+          <h1 id="cover-title">Watch the market.<br>Keep your rules.</h1>
+          <p class="lead">Timmy brings scanning, trade planning, paper practice, and guarded execution controls into one native desktop workflow.</p>
+        </div>
+        <div>
+          <div class="cover-facts">
+            <div><strong>01 / Discover</strong><span>Scan a focused market universe for movement and setups.</span></div>
+            <div><strong>02 / Review</strong><span>Inspect plans, sizing, cash checks, and risk gates.</span></div>
+            <div><strong>03 / Record</strong><span>Keep a local event journal for review and follow-through.</span></div>
+          </div>
+          <div class="cover-foot" style="margin-top:22px"><span>DESKTOP PRODUCT OVERVIEW</span><span>Stocks & ETFs first · Optional Webull connection</span></div>
+        </div>
+      </div>
+      <div class="footer"><span>TIMMY · PRODUCT BROCHURE</span><span>01 / 03</span></div>
+    </section>
+
+    <section class="sheet" aria-labelledby="workflow-title">
+      <div class="section-title"><div><p class="eyebrow">A clear operating rhythm</p><h2 id="workflow-title">From watchlist to review.</h2></div><span class="ref">02 / WORKFLOW</span></div>
+      <p class="intro">Timmy is built to make each step visible. It can scan and prepare plans, but users stay in control of account setup, lane selection, and whether an order is ever submitted.</p>
+      <div class="steps">
+        <article class="step"><span class="num">1</span><div><h3>Set up locally</h3><p>Configure market preferences in the desktop app. Webull credentials, if used, are entered locally and are not sent to this website.</p></div></article>
+        <article class="step"><span class="num">2</span><div><h3>Scan and inspect</h3><p>Review active symbols, setup context, data quality, and the reasons a plan may be ready, watch-only, or blocked.</p></div></article>
+        <article class="step"><span class="num">3</span><div><h3>Check the plan</h3><p>Inspect the proposed entry, stop, target, quantity, and configured exposure limits before proceeding.</p></div></article>
+        <article class="step"><span class="num">4</span><div><h3>Choose a lane</h3><p>Use Paper to record simulated outcomes. Live remains gated by account checks, broker permissions, market rules, and explicit settings.</p></div></article>
+      </div>
+      <div class="feature-grid">
+        <article class="feature"><div class="icon">◌</div><h3>Market scanning</h3><p>Focuses attention on symbols with notable movement and strategy context.</p></article>
+        <article class="feature"><div class="icon">⌁</div><h3>Risk-aware plans</h3><p>Applies configured quantity, notional, per-trade, and account-cash limits.</p></article>
+        <article class="feature"><div class="icon">▤</div><h3>Local journal</h3><p>Records paper and execution events so users can review outcomes and data quality.</p></article>
+        <article class="feature"><div class="icon">⌖</div><h3>Broker checks</h3><p>Supports guarded Webull account verification and order preview workflows.</p></article>
+        <article class="feature"><div class="icon">⌘</div><h3>Operator controls</h3><p>Shows readiness, safety gates, and reasons an action is unavailable.</p></article>
+        <article class="feature"><div class="icon">◷</div><h3>Reviewable activity</h3><p>Provides a record of submissions, outcomes, and guardrail events for follow-up.</p></article>
+      </div>
+      <div class="footer"><span>TIMMY · PRODUCT BROCHURE</span><span>02 / 03</span></div>
+    </section>
+
+    <section class="sheet" aria-labelledby="lanes-title">
+      <div class="section-title"><div><p class="eyebrow">Control stays with the user</p><h2 id="lanes-title">Two lanes. Separate records.</h2></div><span class="ref">03 / SAFETY & FIT</span></div>
+      <div class="split">
+        <article class="lane paper"><div class="label">Paper · Simulated</div><p>Practice the workflow and review simulated results in Timmy's local journal. Simulated outcomes may differ from real execution and do not establish what a live account would have earned.</p></article>
+        <article class="lane live"><div class="label">Live · Broker guarded</div><p>Live order placement is disabled by default. It requires explicit settings, a verified supported account path, buying power, market eligibility, and the relevant Timmy and broker gates.</p></article>
+      </div>
+      <div class="callout"><strong>Designed for review, not blind trust.</strong> Timmy can organize market information and apply configured checks. It does not know your complete financial circumstances and cannot guarantee a result.</div>
+      <div class="spec-grid">
+        <div class="spec"><strong>Platform</strong><span>Native Linux desktop application</span></div>
+        <div class="spec"><strong>Primary coverage</strong><span>U.S. stocks, ETFs, and index proxies by default</span></div>
+        <div class="spec"><strong>Broker workflow</strong><span>Optional Webull OpenAPI account check and guarded order flow</span></div>
+        <div class="spec"><strong>Data and records</strong><span>Local application configuration and execution journal</span></div>
+      </div>
+      <div class="closing">
+        <div><p class="eyebrow" style="color:var(--lime)">Explore Timmy</p><h3>Start with the guide.<br>Keep live locked until ready.</h3><p>Read setup instructions, understand the lane controls, and review the operating limits before connecting an account.</p></div>
+        <div><p class="url">timmy-tradesonauto.web.app</p><p style="margin-top:9px">Download the app · Read the user guide · Review the risk notes</p></div>
+      </div>
+      <p class="fine">Important: Timmy is software, not an investment adviser, broker, or guarantee of performance. This brochure is product information, not individualized investment, tax, or legal advice. Trading can result in loss, including loss of principal. Margin and other leverage can magnify losses. Confirm instrument support, market-data freshness, broker permissions, fees, order handling, and account restrictions independently. Features depend on the installed version, configuration, data source, and broker availability.</p>
+      <div class="footer"><span>TIMMY BY BLACK LION STUDIOS · PRODUCT OVERVIEW</span><span>03 / 03</span></div>
+    </section>
+  </main>
+</body>
+</html>
