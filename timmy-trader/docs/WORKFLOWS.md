@@ -33,9 +33,11 @@ scripts/build_elf.sh
 scripts/launch_timmy.sh
 ```
 
-Do not terminate Timmy by a broad process-name match. The single-instance
-lock protects each runtime home; an active process keeps using its current
-build until it exits.
+Do not terminate Timmy by a broad process-name match. A per-user OS lock at
+`${XDG_CONFIG_HOME:-~/.config}/timmy-trader/timmy-instance.lock` prevents a
+second launch even if it selects another runtime home. An active process keeps
+using its current build until it exits; the lock file may remain, but its OS
+lock is released automatically.
 
 5. From the native GUI, use `Power Cycle` to save settings and relaunch the current installed executable after the current instance exits.
 
@@ -141,7 +143,7 @@ info -> paper fill, scan complete, account check passed, power cycle complete
 
 Use this standard when changing Timmy's launch, automation, broker, scanner, or GUI behavior.
 
-1. Timmy should have one active process per `TIMMY_HOME`. Power Cycle waits for the current process to exit; a manual relaunch is refused while that runtime home's lock remains held.
+1. Timmy should have one active process per Linux user, across `TIMMY_HOME` values. Power Cycle waits for the current process to exit; a manual relaunch is refused while the user's OS lock remains held.
 
 2. Startup should tolerate missing runtime files by recreating safe defaults, then logging recoverable state in the GUI instead of crashing.
 
@@ -374,30 +376,30 @@ WEBULL_EQUITY_FRACTIONAL_QUANTITY_DECIMALS=5
 
 Use this to keep Timmy looking across the U.S. listed universe instead of a fixed watchlist.
 
-1. Enable rotation:
+1. Enable the all-US movement scan by selecting its universe. This scan is separate from automatic active-watchlist rotation:
 
 ```text
-ENABLE_WATCHLIST_ROTATION=1
 WATCHLIST_UNIVERSE=all-us
-WATCHLIST_UNIVERSE_BATCH_SIZE=250
-WATCHLIST_UNIVERSE_REFRESH_HOURS=24
+WATCHLIST_UNIVERSE_BATCH_SIZE=100
 ```
 
-2. Timmy refreshes the listed-symbol universe, scans a rotating batch, scores movement, and writes generated watchlists.
+2. When cached candles are stale, Timmy scans a rotating batch from the configured universe (100 symbols by default). It can scan even when `ENABLE_WATCHLIST_ROTATION=0`. The scan uses daily bars and is partial; provider limits and errors can delay or leave coverage incomplete. This scan alone does not change the active strategy watchlist or make every symbol tradable.
 
-3. Timmy ships `trend_trader/resources/us-listed-symbols.csv` as a warm-start snapshot. Use it when the runtime cache is missing so discovery does not start from the small default list.
+3. To separately rotate the active custom watchlist based on the candidate pool, set `ENABLE_WATCHLIST_ROTATION=1`. Review its active-list and broker whitelist settings before use.
 
-4. The mutable runtime cache remains `timmy-watchlist-universe.txt`; it is refreshed from Nasdaq Trader when reachable and kept out of source control.
+4. Timmy ships `trend_trader/resources/us-listed-symbols.csv` as a warm-start snapshot. Use it when the runtime cache is missing so discovery does not start from the small default list.
 
-5. `active-watchlist.txt` is the custom list Timmy trades from.
+5. The mutable runtime cache remains `timmy-watchlist-universe.txt`; it is refreshed from Nasdaq Trader when reachable and kept out of source control.
 
-6. `movement-watchlist.txt` tracks symbols with enough activity to monitor.
+6. `active-watchlist.txt` is the custom list Timmy trades from.
 
-7. `trade-ready-watchlist.txt` tracks active symbols whose strategy signal is eligible before broker/risk submission checks.
+7. `movement-watchlist.txt` tracks symbols with enough activity to monitor.
 
-8. `quiet-watchlist.txt` tracks symbols removed because activity fell below the quiet threshold.
+8. `trade-ready-watchlist.txt` tracks active symbols whose strategy signal is eligible before broker/risk submission checks.
 
-9. If Timmy scans but does not trade, check `trade-ready-watchlist.txt`, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
+9. `quiet-watchlist.txt` tracks symbols removed because activity fell below the quiet threshold.
+
+10. If Timmy scans but does not trade, check `trade-ready-watchlist.txt`, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
 
 ## 11. Webull Watchlist Sync Workflow
 
@@ -451,9 +453,9 @@ git push origin HEAD
 git ls-remote origin HEAD
 ```
 
-For the 0.1.4 native updater, publish a GitHub Release containing
+For the 0.1.6 native updater, publish a GitHub Release containing
 `Timmy-linux-x86_64.tar.gz` and a matching `SHA256SUMS` asset. The Firebase
-Download page is intended to offer `timmy-trader_0.1.4_amd64.deb` with its
+Download page offers `timmy-trader_0.1.6_amd64.deb` with its
 `SHA256SUMS.txt`; verify both artifacts and their checksums before announcing
 availability. Firebase Hosting publication and GitHub Release publication
 are separate actions.

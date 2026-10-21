@@ -25,14 +25,14 @@ npx --yes firebase-tools deploy --only hosting --project timmy-tradesonauto
 
 ## Download Artifact
 
-`site/downloads/timmy-trader_0.1.5_amd64.deb` is the public Linux download
-package for release 0.1.5. Keep the checksum file in sync with that artifact
+`site/downloads/timmy-trader_0.1.6_amd64.deb` is the public Linux download
+package for release 0.1.6. Keep the checksum file in sync with that artifact
 before deploying so it contains the basename and can be checked in the same
 download directory:
 
 ```sh
 cd site/downloads
-sha256sum timmy-trader_0.1.5_amd64.deb > SHA256SUMS.txt
+sha256sum timmy-trader_0.1.6_amd64.deb > SHA256SUMS.txt
 ```
 
 Do not deploy until the package and matching checksum are both present.

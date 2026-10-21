@@ -29,7 +29,9 @@ def _load_runtime_env(home: Path) -> None:
 
 def _claim_single_instance(home: Path) -> object | None:
     home.mkdir(parents=True, exist_ok=True)
-    lock_file = (home / "timmy.lock").open("a+", encoding="utf-8")
+    lock_dir = Path.home() / ".config" / "timmy-trader"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_file = (lock_dir / "timmy-instance.lock").open("a+", encoding="utf-8")
     try:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -38,7 +40,7 @@ def _claim_single_instance(home: Path) -> object | None:
 
     lock_file.seek(0)
     lock_file.truncate()
-    lock_file.write(f"pid={os.getpid()}\nmode=native\n")
+    lock_file.write(f"pid={os.getpid()}\nmode=native\nruntime_home={home}\n")
     lock_file.flush()
 
     def cleanup() -> None:
@@ -66,14 +68,17 @@ def _write_crash_log(home: Path, details: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Launch Timmy as a native Linux desktop app.")
-    parser.add_argument("--allow-second-instance", action="store_true", help=argparse.SUPPRESS)
-    args = parser.parse_args()
+    parser.parse_args()
 
     home = _runtime_home()
     _load_runtime_env(home)
-    lock_file = None if args.allow_second_instance else _claim_single_instance(home)
-    if lock_file is None and not args.allow_second_instance:
-        print(f"Timmy is already running for runtime home: {home}", file=sys.stderr)
+    try:
+        lock_file = _claim_single_instance(home)
+    except OSError as exc:
+        print(f"Unable to secure Timmy's single-instance lock: {exc}", file=sys.stderr)
+        return 1
+    if lock_file is None:
+        print("Timmy is already running for this user; close it before starting another copy.", file=sys.stderr)
         return 1
 
     try:

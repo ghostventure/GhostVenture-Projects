@@ -1,6 +1,6 @@
 [project]
 name = "timmy-trader"
-version = "0.1.4"
+version = "0.1.6"
 description = "Timmy: guarded trend and pattern trading engine with Webull OpenAPI adapter."
 requires-python = ">=3.11"
 dependencies = [

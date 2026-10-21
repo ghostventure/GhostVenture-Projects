@@ -293,16 +293,33 @@ def paper_performance(
     positive starting balance; no account balance is inferred here.
     """
     paper = [event for event in events if str(event.get("mode", "")).lower() == "paper"]
-    deduped: dict[tuple[str, str], Mapping[str, object]] = {}
+    deduped: dict[tuple[str, ...], Mapping[str, object]] = {}
     for index, event in enumerate(paper):
         symbol = str(event.get("symbol") or _nested_order_symbol(event) or "").upper()
-        submitted = str(event.get("submitted_at") or event.get("recorded_at") or f"row:{index}")
-        key = (submitted, symbol)
+        order = event.get("order")
+        order = order if isinstance(order, Mapping) else {}
+        order_id = str(event.get("client_order_id") or event.get("order_id") or order.get("client_order_id") or "").strip()
+        if order_id:
+            key = ("id", order_id)
+        else:
+            submitted = str(event.get("submitted_at") or event.get("recorded_at") or "")
+            key = (("row", str(index)) if not symbol or not submitted else
+                   ("legacy", symbol, submitted,
+                    str(event.get("quantity") or order.get("quantity") or ""),
+                    str(event.get("buy_price") or order.get("limit_price") or "")))
         previous = deduped.get(key)
         terminal = event.get("sell_status") in {"target-hit", "stopped"}
         prev_terminal = previous and previous.get("sell_status") in {"target-hit", "stopped"}
         if previous is None or (terminal and not prev_terminal):
             deduped[key] = event
+        elif terminal and prev_terminal:
+            current_time = str(event.get("closed_at") or event.get("recorded_at") or "")
+            previous_time = str(previous.get("closed_at") or previous.get("recorded_at") or "")
+            if current_time >= previous_time:
+                if (_finite_number(event.get("paper_pnl")) is None
+                        and _finite_number(previous.get("paper_pnl")) is not None):
+                    event = {**event, "paper_pnl": previous.get("paper_pnl")}
+                deduped[key] = event
 
     closed = [event for event in deduped.values() if event.get("sell_status") in {"target-hit", "stopped"}]
     closed.sort(key=lambda event: str(event.get("closed_at") or event.get("submitted_at") or ""))

@@ -11,7 +11,9 @@ Integration::
     store.pin_symbol("SPY")
 
 Limits: 100 groups, 100 symbols per group, 100 pinned symbols, 64-character
-group names, 32-character symbols, and a 64 KiB JSON file.
+group names, 32-character symbols, 500 locally quieted symbols, and a 64 KiB
+JSON file. Local quieting only affects research/radar visibility and local
+signal-alert evaluation; it never changes generated trading watchlists.
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ from typing import Iterable
 MAX_GROUPS = 100
 MAX_SYMBOLS_PER_GROUP = 100
 MAX_PINNED_SYMBOLS = 100
+MAX_QUIET_SYMBOLS = 500
 MAX_GROUP_NAME_LENGTH = 64
 MAX_SYMBOL_LENGTH = 32
 MAX_FILE_BYTES = 64 * 1024
@@ -91,6 +94,8 @@ class WatchlistOrganizationStore:
         self._lock = threading.RLock()
         self._groups: list[WatchlistGroup] = []
         self._pins: list[str] = []
+        self._quiet_symbols: list[str] = []
+        self.load_error: str | None = None
         self._load()
 
     @property
@@ -102,6 +107,46 @@ class WatchlistOrganizationStore:
     def pinned_symbols(self) -> tuple[str, ...]:
         with self._lock:
             return tuple(self._pins)
+
+    @property
+    def quiet_symbols(self) -> tuple[str, ...]:
+        """Locally hidden symbols; independent from generated Quiet Removed."""
+        with self._lock:
+            return tuple(self._quiet_symbols)
+
+    def is_quiet(self, symbol: str) -> bool:
+        normalized = _normalize_symbol(symbol)
+        with self._lock:
+            return normalized in self._quiet_symbols
+
+    def set_quiet(self, symbol: str, quiet: bool = True) -> bool:
+        """Quiet/unquiet one symbol locally; return whether state changed."""
+        if not isinstance(quiet, bool):
+            raise ValueError("quiet must be a boolean")
+        normalized = _normalize_symbol(symbol)
+        with self._lock:
+            current = normalized in self._quiet_symbols
+            if current == quiet:
+                return False
+            previous = list(self._quiet_symbols)
+            if quiet:
+                if len(self._quiet_symbols) >= MAX_QUIET_SYMBOLS:
+                    raise ValueError(f"A maximum of {MAX_QUIET_SYMBOLS} locally quieted symbols is allowed")
+                self._quiet_symbols.append(normalized)
+            else:
+                self._quiet_symbols.remove(normalized)
+            try:
+                self._save()
+            except Exception:
+                self._quiet_symbols = previous
+                raise
+            return True
+
+    def quiet_symbol(self, symbol: str) -> bool:
+        return self.set_quiet(symbol, True)
+
+    def unquiet_symbol(self, symbol: str) -> bool:
+        return self.set_quiet(symbol, False)
 
     def get_group(self, group_id: str) -> WatchlistGroup:
         with self._lock:
@@ -233,38 +278,58 @@ class WatchlistOrganizationStore:
     def _load(self) -> None:
         try:
             if self.path.stat().st_size > MAX_FILE_BYTES:
+                self.load_error = "Saved watchlist organization exceeds the 64 KiB safety limit."
                 return
             payload = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(payload, dict) or payload.get("version") != 1:
+                self.load_error = "Saved watchlist organization has an unsupported format."
                 return
             raw_groups = payload.get("groups")
             raw_pins = payload.get("pinned_symbols")
             if not isinstance(raw_groups, list) or len(raw_groups) > MAX_GROUPS or not isinstance(raw_pins, list):
+                self.load_error = "Saved watchlist organization has invalid collections."
                 return
             groups: list[WatchlistGroup] = []
             for raw in raw_groups:
                 if not isinstance(raw, dict) or set(raw) != {"id", "name", "symbols"}:
+                    self.load_error = "Saved watchlist organization has an invalid group record."
                     return
                 if not isinstance(raw["symbols"], list):
+                    self.load_error = "Saved watchlist organization has invalid group symbols."
                     return
                 group_id = raw["id"]
                 if not isinstance(group_id, str) or not group_id or len(group_id) > 64:
+                    self.load_error = "Saved watchlist organization has an invalid group ID."
                     return
                 symbols = _normalize_symbols(raw["symbols"], limit=MAX_SYMBOLS_PER_GROUP)
                 groups.append(WatchlistGroup(group_id, _normalize_name(raw["name"]), symbols))
             if len({group.id for group in groups}) != len(groups):
+                self.load_error = "Saved watchlist organization has duplicate group IDs."
                 return
             if len({group.name.casefold() for group in groups}) != len(groups):
+                self.load_error = "Saved watchlist organization has duplicate group names."
                 return
             if not isinstance(raw_pins, list):
+                self.load_error = "Saved watchlist organization has invalid pins."
                 return
             pins = _normalize_symbols(raw_pins, limit=MAX_PINNED_SYMBOLS)
-            self._groups, self._pins = groups, list(pins)
-        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+            raw_quiet = payload.get("quiet_symbols", [])
+            if not isinstance(raw_quiet, list):
+                self.load_error = "Saved local quiet-symbol list is invalid."
+                return
+            quiet_symbols = _normalize_symbols(raw_quiet, limit=MAX_QUIET_SYMBOLS)
+            self._groups, self._pins, self._quiet_symbols = groups, list(pins), list(quiet_symbols)
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
             # A malformed or oversized profile file should not prevent startup.
-            self._groups, self._pins = [], []
+            self._groups, self._pins, self._quiet_symbols = [], [], []
+            self.load_error = f"{type(exc).__name__}: {exc}"
 
     def _save(self) -> None:
+        if self.load_error:
+            raise OSError(
+                "Saved watchlist organization could not be loaded; the original file is preserved. "
+                "Back it up and repair it before changing groups, pins, or local quiet settings."
+            )
         payload = {
             "version": 1,
             "groups": [
@@ -272,6 +337,7 @@ class WatchlistOrganizationStore:
                 for group in self._groups
             ],
             "pinned_symbols": self._pins,
+            "quiet_symbols": self._quiet_symbols,
         }
         encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
         if len(encoded.encode("utf-8")) > MAX_FILE_BYTES:

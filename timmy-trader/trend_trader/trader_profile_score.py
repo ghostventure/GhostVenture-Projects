@@ -78,6 +78,21 @@ def calculate_trader_profile_score(
             if complete and dd is not None else "Requires a complete realized equity history.",
         ),
     )
+    coverage = sum(c.weight for c in components if c.score is not None)
+    raw = (sum(c.weight * c.score for c in components if c.score is not None) / coverage
+           if coverage else None)
+    if not complete or count < MIN_GRADED_CLOSED_TRADES or raw is None:
+        score, grade = None, "Building profile"
+    else:
+        score = round(raw)
+        grade = "Poor" if score < 40 else "OK" if score < 60 else "Good" if score < 80 else "Excellent"
+    return TraderProfileScore(
+        score=score, grade=grade, coverage_pct=coverage, closed_paper_trades=count,
+        components=components,
+        methodology=("Internal Timmy rubric: 50% realized return and 50% drawdown; "
+                     "grade requires at least 20 closed trades with complete P&L. "
+                     "Bands: Poor 0-39, OK 40-59, Good 60-79, Excellent 80-100."),
+    )
 
 
 def recommend_trader_scorecard_next_steps(
@@ -108,6 +123,14 @@ def recommend_trader_scorecard_next_steps(
         remaining = MIN_GRADED_CLOSED_TRADES - count
         steps.append(f"The grade is provisional until {remaining} more closed {lane} record(s) are available. Let normal activity build the sample; do not trade more just to reach the threshold.")
     if scorecard.score is not None:
+        band_review = {
+            "Poor": "Poor band: reconcile losing closes and drawdown rows against the journal before relying on this summary.",
+            "OK": "OK band: check whether the return and drawdown came from a small cluster of closes or a broader period.",
+            "Good": "Good band: confirm the result holds across the dates shown and that modeled costs are represented in the journal.",
+            "Excellent": "Excellent band: verify the sample is representative and costs are included; this historical score does not establish future performance or Live readiness.",
+        }.get(scorecard.grade)
+        if band_review:
+            steps.append(band_review)
         components = [component for component in scorecard.components if component.score is not None]
         weakest = min((component.score for component in components), default=None)
         focus = [component for component in components if component.score == weakest]
@@ -124,21 +147,6 @@ def recommend_trader_scorecard_next_steps(
         steps.append(f"Review the {lane} journal for complete realized closes and confirm that its return and drawdown reflect the period you want to assess.")
     steps.append("These are optional history-review prompts, not financial or trade instructions. You decide whether to act.")
     return tuple(steps[:5])
-    coverage = sum(c.weight for c in components if c.score is not None)
-    raw = (sum(c.weight * c.score for c in components if c.score is not None) / coverage
-           if coverage else None)
-    if not complete or count < MIN_GRADED_CLOSED_TRADES or raw is None:
-        score, grade = None, "Building profile"
-    else:
-        score = round(raw)
-        grade = "Poor" if score < 40 else "OK" if score < 60 else "Good" if score < 80 else "Excellent"
-    return TraderProfileScore(
-        score=score, grade=grade, coverage_pct=coverage, closed_paper_trades=count,
-        components=components,
-        methodology=("Internal Timmy rubric: 50% realized return and 50% drawdown; "
-                     "grade requires at least 20 closed trades with complete P&L. "
-                     "Bands: Poor 0-39, OK 40-59, Good 60-79, Excellent 80-100."),
-    )
 
 
 def _finite(value: float | None) -> float | None:

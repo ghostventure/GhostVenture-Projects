@@ -3,43 +3,97 @@ from __future__ import annotations
 import csv
 import io
 import json
+import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from typing import Callable
 
 from .models import Candle
 
 STOOQ_DAILY_URL = "https://stooq.com/q/d/l/"
 
 
-def fetch_stooq_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
-    return _fetch_parallel(symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, days=days, timeout=timeout), days, max_workers)
+def fetch_stooq_daily(
+    symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 6,
+    progress_callback: Callable[[dict], None] | None = None,
+) -> dict[str, list[Candle]]:
+    return _fetch_parallel(
+        symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, days=days, timeout=timeout),
+        days, max_workers, provider="stooq", progress_callback=progress_callback,
+    )
 
 
-def fetch_yahoo_daily(symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
-    return _fetch_parallel(symbols, lambda symbol: _fetch_one_yahoo_symbol(symbol, days=days, timeout=timeout), days, max_workers)
+def fetch_yahoo_daily(
+    symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 6,
+    progress_callback: Callable[[dict], None] | None = None,
+) -> dict[str, list[Candle]]:
+    return _fetch_parallel(
+        symbols, lambda symbol: _fetch_one_yahoo_symbol(symbol, days=days, timeout=timeout),
+        days, max_workers, provider="yahoo", progress_callback=progress_callback,
+    )
 
 
-def fetch_daily_bars(provider: str, symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 12) -> dict[str, list[Candle]]:
+def fetch_daily_bars(
+    provider: str, symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 6,
+    progress_callback: Callable[[dict], None] | None = None,
+) -> dict[str, list[Candle]]:
     if provider == "stooq":
-        bars = fetch_stooq_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
+        bars = fetch_stooq_daily(
+            symbols, days=days, timeout=timeout, max_workers=max_workers,
+            progress_callback=progress_callback,
+        )
         missing_symbols = [symbol.upper() for symbol in symbols if symbol.strip() and symbol.upper() not in bars]
         if missing_symbols:
-            yahoo_bars = fetch_yahoo_daily(missing_symbols, days=days, timeout=timeout, max_workers=max_workers)
+            yahoo_bars = fetch_yahoo_daily(
+                missing_symbols, days=days, timeout=timeout, max_workers=max_workers,
+                progress_callback=progress_callback,
+            )
             bars.update(yahoo_bars)
         return bars
     if provider == "yahoo":
-        return fetch_yahoo_daily(symbols, days=days, timeout=timeout, max_workers=max_workers)
+        return fetch_yahoo_daily(
+            symbols, days=days, timeout=timeout, max_workers=max_workers,
+            progress_callback=progress_callback,
+        )
     raise ValueError(f"Unsupported market data provider: {provider}")
 
 
-def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) -> dict[str, list[Candle]]:
+def _fetch_parallel(
+    symbols: list[str], fetch_one, days: int, max_workers: int, *, provider: str,
+    progress_callback: Callable[[dict], None] | None = None,
+) -> dict[str, list[Candle]]:
     bars: dict[str, list[Candle]] = {}
     clean_symbols = sorted(dict.fromkeys(symbol.upper() for symbol in symbols if symbol.strip()))
     if not clean_symbols:
         return bars
-    workers = max(1, min(int(max_workers), 24, len(clean_symbols)))
+    workers = max(1, min(int(max_workers), 6, len(clean_symbols)))
+    completed_count = 0
+    failed_count = 0
+
+    def report(phase: str, symbol: str | None = None) -> None:
+        if progress_callback is None:
+            return
+        snapshot = {
+            "phase": phase,
+            "provider": provider,
+            "requested": len(clean_symbols),
+            "completed": completed_count,
+            "returned": len(bars),
+            "failed": failed_count,
+        }
+        if symbol:
+            snapshot["symbol"] = symbol
+        try:
+            progress_callback(snapshot)
+        except Exception:
+            # Progress reporting must never interrupt market-data retrieval.
+            pass
+
+    report("started")
     symbols_to_fetch = iter(clean_symbols)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         # Bound queued work as well as worker threads. Watchlists can be large,
@@ -47,7 +101,7 @@ def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) 
         pending = {}
         for _ in range(min(len(clean_symbols), workers * 2)):
             symbol = next(symbols_to_fetch)
-            pending[executor.submit(fetch_one, symbol)] = symbol
+            pending[executor.submit(_fetch_one_with_retry, fetch_one, symbol)] = symbol
 
         while pending:
             completed, _ = wait(pending, return_when=FIRST_COMPLETED)
@@ -57,12 +111,48 @@ def _fetch_parallel(symbols: list[str], fetch_one, days: int, max_workers: int) 
                     candles = future.result()
                 except Exception:
                     candles = []
+                    failed_count += 1
                 if candles:
                     bars[symbol] = candles[-days:]
+                completed_count += 1
+                report("progress", symbol)
                 next_symbol = next(symbols_to_fetch, None)
                 if next_symbol is not None:
-                    pending[executor.submit(fetch_one, next_symbol)] = next_symbol
+                    pending[executor.submit(_fetch_one_with_retry, fetch_one, next_symbol)] = next_symbol
+    report("completed")
     return bars
+
+
+def _fetch_one_with_retry(fetch_one, symbol: str) -> list[Candle]:
+    """Retry transient provider failures at most twice with bounded delay."""
+    transient_http_codes = {408, 425, 429, 500, 502, 503, 504}
+    for attempt in range(3):
+        try:
+            return fetch_one(symbol)
+        except HTTPError as exc:
+            if exc.code not in transient_http_codes or attempt >= 2:
+                raise
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            delay = _retry_delay(retry_after, attempt)
+        except (URLError, TimeoutError, ConnectionError, OSError):
+            if attempt >= 2:
+                raise
+            delay = min(2.0, 0.4 * (2 ** attempt))
+        time.sleep(delay)
+    return []
+
+
+def _retry_delay(retry_after: str | None, attempt: int) -> float:
+    if retry_after:
+        try:
+            return min(5.0, max(0.1, float(retry_after)))
+        except ValueError:
+            try:
+                seconds = (parsedate_to_datetime(retry_after) - datetime.now().astimezone()).total_seconds()
+                return min(5.0, max(0.1, seconds))
+            except (TypeError, ValueError, OverflowError):
+                pass
+    return min(2.0, 0.4 * (2 ** attempt))
 
 
 def _fetch_one_stooq_symbol(symbol: str, days: int = 90, timeout: int = 10) -> list[Candle]:

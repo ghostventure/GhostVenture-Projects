@@ -8,7 +8,7 @@ Timmy is a decision and order-planning tool. It does not guarantee profits, and 
 
 ## 1. Daily Setup
 
-- Confirm only one Timmy instance is running for the active runtime home.
+- Confirm only one Timmy instance is running for this Linux user. The lock is global across `TIMMY_HOME` runtime directories.
 - Confirm the `.env` file belongs to this machine and account; do not paste broker credentials, secrets, tokens, MFA codes, or screenshots into chat.
 - Use `Setup` -> `Boilerplates` for starter examples only; real broker keys
   still go through `Verify Keys` and `Save Account` in the Setup tab.
@@ -58,7 +58,7 @@ Timmy is a decision and order-planning tool. It does not guarantee profits, and 
   - Futures symbols in a separate futures watchlist for context only until futures support is deliberately enabled.
 - Confirm market data freshness and timestamps. Do not act on stale, duplicated, missing, or malformed candles.
 - Confirm market data and watchlist defaults fit the session:
-  - `MARKET_DATA_PROVIDER=csv` keeps local CSV data as the predictable default.
+  - Yahoo daily bars and the all-US discovery universe are the built-in defaults; set `MARKET_DATA_PROVIDER=csv` to use only a local CSV explicitly.
   - `MARKET_DATA_MAX_AGE_MINUTES=15` controls when the native app treats local market data as stale.
   - `WATCHLIST_PATH=watchlist.txt` and `WATCHLIST_TEMPLATE=equity` keep the default watchlist on equities/ETFs.
 - Check market calendar status:
@@ -93,7 +93,7 @@ timmy webull-check
   - Last scan.
   - Last broker response.
   - Watchdog state.
-- Confirm there are no duplicate Timmy processes, background services, or stale locks controlling the same runtime home.
+- Confirm there are no duplicate Timmy processes or background services for this user. A leftover lock file alone does not mean the app is running; the OS lock is released when the process exits.
 - Confirm broker state is known before any live path:
   - Account selected.
   - Available cash or buying power visible.

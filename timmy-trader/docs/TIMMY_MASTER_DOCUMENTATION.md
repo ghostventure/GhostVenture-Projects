@@ -1,21 +1,19 @@
 # Timmy Master Documentation
 
-## Release Target: 0.1.4
+## Release Target: 0.1.6
 
-The current source and package instructions target version 0.1.4. This release
-includes the native GUI facelift and responsive layout, action coordination,
-safer unresolved-order recovery and fail-closed exposure configuration, plus
-reduced intermediate copies when processing larger market-data sets. Treat
-these as source release notes; confirm the package is available on the
-[Download page](https://timmy-tradesonauto.web.app/download.html) or the native
-archive is present in GitHub Releases before installing a published build.
+The current source and Debian package target version 0.1.6. This release adds
+the current operator workspace, saved local views, watchlist organization,
+alert history, recovery backups, and clearer market-data and readiness status.
+The hosted package and checksum are available on the
+[Download page](https://timmy-tradesonauto.web.app/download.html).
 
 For a downloaded Debian package, run its matching checksum command from the
-download directory, then install the 0.1.4 package:
+download directory, then install the 0.1.6 package:
 
 ```bash
 sha256sum -c SHA256SUMS.txt
-sudo apt install ./timmy-trader_0.1.4_amd64.deb
+sudo apt install ./timmy-trader_0.1.6_amd64.deb
 ```
 
 The Debian package is intended to be available through the Firebase-hosted
@@ -117,21 +115,21 @@ Build the Debian package:
 ./scripts/package_deb.sh
 ```
 
-Install the resulting 0.1.4 Debian package locally:
+Install the resulting 0.1.6 Debian package locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.4_amd64.deb
+sudo apt install ./dist/timmy-trader_0.1.6_amd64.deb
 ```
 
 ## Single-Instance Rule
 
-Timmy is designed to run as one active instance per runtime home.
+Timmy runs one active native app instance per Linux user, across all runtime homes.
 
 On launch, Timmy:
 
-- Claims a file lock inside the selected runtime home.
-- Refuses to start a second instance using that same runtime home.
-- Leaves other Timmy instances and other users' sessions alone.
+- Claims an OS file lock at `${XDG_CONFIG_HOME:-~/.config}/timmy-trader/timmy-instance.lock`.
+- Refuses to start another instance for the same Linux user, even if it selects a different `TIMMY_HOME`.
+- Leaves other users' sessions alone. The lock file can remain after exit; the OS lock is released when the process closes it.
 
 This matters because trading state, account state, live market data, and automation settings can change every few minutes. Running multiple active copies would create avoidable execution risk.
 
@@ -531,7 +529,9 @@ Event contracts:
 Default:
 
 ```text
-MARKET_DATA_PROVIDER=csv
+MARKET_DATA_PROVIDER=yahoo
+WATCHLIST_UNIVERSE=all-us
+WATCHLIST_UNIVERSE_BATCH_SIZE=100
 WATCHLIST_PATH=watchlist.txt
 WATCHLIST_TEMPLATE=equity
 MARKET_DATA_MAX_AGE_MINUTES=15

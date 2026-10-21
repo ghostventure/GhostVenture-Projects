@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION=${1:-0.1.4}
+VERSION=${1:-0.1.6}
 ARCH=amd64
 PKG_NAME=timmy-trader
 PKG_ROOT="build/deb/${PKG_NAME}_${VERSION}_${ARCH}"
@@ -23,6 +23,7 @@ cp -a dist/Timmy/. "$PKG_ROOT/opt/timmy-trader/"
 install -m 0755 packaging/timmy-trader "$PKG_ROOT/usr/bin/timmy-trader"
 install -m 0644 packaging/timmy-trader.desktop "$PKG_ROOT/usr/share/applications/timmy-trader.desktop"
 install -m 0644 README.md "$PKG_ROOT/usr/share/doc/timmy-trader/README.md"
+install -m 0644 docs/USER_GUIDE.md "$PKG_ROOT/usr/share/doc/timmy-trader/USER_GUIDE.md"
 install -m 0644 .env.example "$PKG_ROOT/usr/share/doc/timmy-trader/env.example"
 install -m 0644 docs/WEBULL_SETUP.md "$PKG_ROOT/usr/share/doc/timmy-trader/WEBULL_SETUP.md"
 install -m 0644 docs/HOTFIX_IMPLEMENTATION_LOG.md "$PKG_ROOT/usr/share/doc/timmy-trader/HOTFIX_IMPLEMENTATION_LOG.md"

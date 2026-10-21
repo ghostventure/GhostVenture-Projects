@@ -11,10 +11,9 @@ installed release. For live trading, read the [Operator Checklist](OPERATOR_CHEC
 and [Webull Setup guide](WEBULL_SETUP.md) first. Public product page:
 [Timmy User Guide](https://timmy-tradesonauto.web.app/user-guide.html).
 
-**Version compatibility:** this guide documents Timmy's current source
-interface. The website's current Debian download is 0.1.5, built October 19,
-2026; newer controls described here may not appear in that package yet. Use the
-controls present in your installed version, and do not assume a feature is
+**Version compatibility:** this guide documents Timmy 0.1.6, built October 21,
+2026. If you use an older installed build, some controls may differ. Use the
+controls present in your installed version rather than assuming a feature is
 available in an older build because it appears in this guide.
 
 ## Start safely
@@ -48,7 +47,7 @@ timestamps shown by Timmy before relying on a scan.
 | **Universe** | Inspect the symbol universe and generated watchlist status. |
 | **Portfolio** | Review the local paper ledger and a separately checked broker-cash snapshot. Portfolio positions and P&L are paper-ledger data. |
 | **Automation** | Review lane readiness, cycle interval, and pause or enable the paper automation lane. |
-| **Alerts** | Create local signal rules, pause or remove them, and acknowledge triggered events. Alerts never place orders. |
+| **Alerts** | Create local signal rules, pause or remove them, and acknowledge one or all new events. Alerts never place orders. |
 | **Execution** | Review the plan queue, target, User/Auto mode, risk controls, previews, and order actions. |
 | **Broker** | Verify the configured Webull account, refresh account/buying-power information, and inspect connection results. |
 | **Setup** | Configure market-data and trading preferences, and verify/save a local Webull profile. |
@@ -64,8 +63,9 @@ the live path. Review the target and mode before using it.
 ## Read a scan and a plan
 
 1. **Scan** refreshes market data when the configured provider and cache rules
-   call for it, then recalculates signals. The default provider is local CSV;
-   remote providers use delayed daily bars rather than a streaming quote feed.
+   call for it, then recalculates signals. The default provider is Yahoo delayed
+   daily bars; choose CSV to use a local file instead. Remote providers do not
+   provide a streaming quote feed.
 2. The **radar** summarizes ranked symbols. Personal **Pinned** and named
    watchlist groups change which signals are shown in this view; they do not
    replace Timmy's active trading watchlist or change generated trade-ready
@@ -103,6 +103,51 @@ timestamps, and invalid OHLC ranges. Gap counts are estimates based on a fixed
 bar interval and do not account for exchange sessions, weekends, or holidays.
 Check the raw timestamps and provider if a warning appears. The dashboard's
 latest-candle timestamp is not proof of a live quote.
+
+The header distinguishes `FRESH`, `STALE`, `MISSING`, and synthetic data and
+shows the provider, latest candle timestamp, and approximate candle age. Use
+**Scan** or **F5** for a manual refresh. Automatic refresh runs at the interval
+set by `TIMMY_DASHBOARD_REFRESH_SECONDS`; provider requests are skipped while
+the saved market-data cache is younger than `MARKET_DATA_MAX_AGE_MINUTES`.
+The Signal Desk status line reports live batch progress and the most recent
+scan coverage, returned symbols, provider failures, and an approximate full
+universe pass time. A full pass estimate assumes each configured batch refresh
+succeeds at the current cache cadence; rate limits, outages, and unsupported
+symbols can make actual coverage slower or incomplete.
+
+### Rolling 96-hour movers and upside shortlist
+
+The Universe workspace reports Timmy's rolling 96-hour mover list. Yahoo data
+and the all-US universe are now the built-in defaults, so the normal dashboard
+refresh checks a rotating batch automatically. Timmy records tickers whose
+daily OHLC bars show price movement and drops entries after their latest
+observed movement ages beyond 96 hours. The scan has a separate cursor and
+does not change the active trade watchlist; automatic watchlist rotation stays
+off by default. The default batch is 100 symbols; provider rate limits or
+failed requests can delay coverage. To include provider-supported symbols
+outside the exchange directory, add one symbol per line to
+`movement-universe-extra.txt`.
+
+Adjust `WATCHLIST_UNIVERSE_BATCH_SIZE` to change requests per scan. Larger
+batches cover the configured universe in fewer successful refreshes, while
+raising the number of provider requests in each cycle. Timmy retries selected
+temporary network and server failures with bounded delays; permanent provider
+errors are reported as unavailable symbols and are not counted as returned
+market data.
+
+The source universe includes US exchange-listed stocks and ETFs, plus a small
+set of index benchmarks, Treasury-yield symbols, bond ETF proxies, crypto
+pairs, and futures. It does not enumerate individual bonds, every global
+listing, every option contract, or every instrument in the market. Daily bars
+also mean the 96-hour check is based on daily movement observations, not a
+continuous intraday feed. The files `timmy-movement-tracker.json` and
+`recent-movers-96h.txt` hold the local history and current list.
+
+The Universe workspace's **Fresh Bullish Shortlist · Top 10** section ranks bullish signals
+only among current 96-hour movers. Its relative score combines Timmy's existing
+technical, sensible, and scout scores. It is not a calibrated probability or
+forecast of return; review the price data, risk controls, and your own judgment
+before acting. Timmy does not submit orders from this shortlist.
 
 ## Paper and Live are separate
 
@@ -171,8 +216,15 @@ Webull setup and authorization details, use [Webull Setup](WEBULL_SETUP.md).
 Alerts are local informational rules evaluated after a scan, using the loaded
 signal's price, scout score, or action (`trade`, `watch`, or `avoid`). Create a
 rule in **Alerts**, select a rule to pause/resume or remove it, and select a
-triggered event to acknowledge it. Trigger history is local. Alerts do not send
-desktop notifications, contact a broker, or create orders.
+triggered event to acknowledge it. Use **Acknowledge all new** to clear the
+current unacknowledged event backlog in one action; the new-event count appears
+above Trigger History. Trigger history is local. Alerts do not send desktop
+notifications, contact a broker, or create orders.
+
+If the saved alert file cannot be read, Timmy leaves it untouched, warns that
+rules and history could not be loaded, and blocks alert writes until the file is
+backed up and repaired. This protects the previous rules from being replaced by
+an empty alert store.
 
 Automation controls schedule refresh/decision cycles. The **Enable Paper
 Automation** action enables only the paper lane. A Live/Auto combination is a
@@ -184,8 +236,12 @@ either lane.
 
 Timmy keeps UI preferences, watchlist and scanner organization, profiles,
 journals, and audit state under its runtime home (`TIMMY_HOME`). If no custom
-runtime home is configured, the launcher uses its configured default. The
-desktop app is designed for one active process per runtime home.
+runtime home is configured, the launcher uses its configured default. Timmy
+allows one active native app process per Linux user across all runtime homes.
+A second launch exits with a message; it does not stop the active process. The
+OS lock is held at `${XDG_CONFIG_HOME:-~/.config}/timmy-trader/timmy-instance.lock`
+and released when the process exits. The small lock file may remain afterward;
+do not delete it while Timmy is running.
 
 - **No data or synthetic-looking prices:** verify the configured provider and
   CSV file in the runtime home/environment. A new profile may be using
@@ -193,16 +249,23 @@ desktop app is designed for one active process per runtime home.
 - **Stale data:** check the last candle timestamp and provider status. Remote
   refresh depends on network access and the provider; failed fetches can leave
   older local data in place.
+- **CSV will not load:** inspect the row number and required OHLCV values in
+  the diagnostic. Timmy preserves an invalid file and does not silently replace
+  it with demo bars. Correct the source or deliberately choose another provider.
 - **No order plan:** review Scanner and Strategy blockers, score threshold,
   market hours, cash, cooldowns, and risk caps. A scan result alone is not an
   executable order.
 - **Live is locked:** run profile verification and Broker Account Check, confirm
   the selected account, and review Setup/Health readiness. Do not bypass a gate
   just to make a button available.
-- **Order outcome unknown:** reconcile the broker's order and position state
-  before retrying.
-- **Timmy refuses a second launch:** close the existing instance for that same
-  runtime home rather than deleting its lock file while it is running.
+- **Order outcome unknown:** timeouts and server errors may not prove whether
+  the broker received an order. Reconcile the client order ID in Webull and
+  check order/position state before retrying; Timmy blocks unresolved symbols.
+  Timmy records a signed order intent before each broker call, so a shutdown in
+  the middle of submission remains visible for review after restart.
+- **Timmy refuses a second launch:** close the active instance for this Linux
+  user, even if it uses a different runtime home. Do not delete the lock file
+  while Timmy is running.
 
 Timmy currently focuses on equities, ETFs, and index proxies. Crypto and
 futures remain disabled or scouting-only unless asset-specific support and

@@ -42,6 +42,8 @@ def make_scanner_view(
     clean_name = str(name).strip()
     if not _NAME_RE.fullmatch(clean_name):
         raise ValueError("View name must be 1 to 48 printable characters.")
+    if not isinstance(descending, bool):
+        raise ValueError("Sort direction must be a boolean.")
     order = _unique_columns(columns, allowed)
     visible = frozenset(_unique_columns(visible_columns, allowed))
     sort = str(sort_column).strip()
@@ -51,9 +53,11 @@ def make_scanner_view(
         raise ValueError("A scanner view must include at least one column.")
     if not visible:
         raise ValueError("A scanner view must show at least one column.")
+    if not visible.issubset(order):
+        raise ValueError("Visible columns must also appear in the saved column order.")
     if sort not in visible:
         raise ValueError("The sort column must be visible in the saved view.")
-    return ScannerViewState(clean_name, order, visible, sort, bool(descending))
+    return ScannerViewState(clean_name, order, visible, sort, descending)
 
 
 def scanner_view_to_dict(view: ScannerViewState) -> dict[str, object]:

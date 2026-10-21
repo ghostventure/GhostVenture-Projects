@@ -29,6 +29,7 @@ _SAFE_STATE_KEYS = {
     "density",
     "panels",
     "split_sizes",
+    "overview_radar_visible",
 }
 
 
@@ -92,6 +93,17 @@ class WorkspaceStore:
         value = self._read()["active_preset"]
         return value or None
 
+    def remember_last_state(self, state: dict[str, object]) -> dict[str, object]:
+        """Persist the most recently used page, ticker, and watchlist group."""
+        clean_state = _sanitize_state(state)
+        payload = self._read()
+        payload["last_state"] = clean_state
+        self._write(payload)
+        return dict(clean_state)
+
+    def last_state(self) -> dict[str, object]:
+        return dict(self._read()["last_state"])
+
     def remember_symbol(self, symbol: str) -> list[str]:
         clean = str(symbol).strip().upper()
         if not _SYMBOL_RE.fullmatch(clean):
@@ -134,7 +146,17 @@ class WorkspaceStore:
                     break
         active = raw.get("active_preset", "")
         active = active if isinstance(active, str) and active in presets else ""
-        return {"version": _SCHEMA_VERSION, "presets": presets, "active_preset": active, "recent_symbols": recent}
+        try:
+            last_state = _sanitize_state(raw.get("last_state", {}))
+        except ValueError:
+            last_state = {}
+        return {
+            "version": _SCHEMA_VERSION,
+            "presets": presets,
+            "active_preset": active,
+            "recent_symbols": recent,
+            "last_state": last_state,
+        }
 
     def _write(self, payload: dict[str, object]) -> None:
         self.home.mkdir(parents=True, exist_ok=True)
@@ -216,7 +238,7 @@ class ActionRegistry:
 
 
 def _empty_payload() -> dict[str, object]:
-    return {"version": _SCHEMA_VERSION, "presets": {}, "active_preset": "", "recent_symbols": []}
+    return {"version": _SCHEMA_VERSION, "presets": {}, "active_preset": "", "recent_symbols": [], "last_state": {}}
 
 
 def _sanitize_state(state: dict[str, object]) -> dict[str, object]:
@@ -234,6 +256,9 @@ def _sanitize_state(state: dict[str, object]) -> dict[str, object]:
             if not _SYMBOL_RE.fullmatch(symbol):
                 raise ValueError("Selected symbol is invalid.")
             clean[key] = symbol
+        elif key == "overview_radar_visible":
+            if isinstance(value, bool):
+                clean[key] = value
         elif key == "timeframe":
             timeframe = str(value).strip().lower()
             if not re.fullmatch(r"(?:1|2|5|10|15|30|60|90|120|240|1d|1w|1mo)(?:m|h)?", timeframe):

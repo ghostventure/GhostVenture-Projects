@@ -23,12 +23,95 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Sequence
 
 from .models import Signal
 
 NumberOp = Literal["above", "at_or_above", "below", "at_or_below"]
 _MAX_EVENTS = 1000
+_MAX_RULES = 500
+_MAX_STORE_BYTES = 2_000_000
+
+
+@dataclass(frozen=True)
+class AlertRuleTemplate:
+    """Reusable starting point for a local signal alert rule."""
+
+    id: str
+    label: str
+    description: str
+    name: str
+    kind: Literal["price", "score", "action"]
+    operator: NumberOp | None = None
+    default_value: str = ""
+
+
+ALERT_RULE_TEMPLATES: tuple[AlertRuleTemplate, ...] = (
+    AlertRuleTemplate("price_level_up", "Price reaches a level", "Alert when close is at or above a price.",
+                      "Price level reached", "price", "at_or_above"),
+    AlertRuleTemplate("price_level_down", "Price falls to a level", "Alert when close is at or below a price.",
+                      "Price level crossed down", "price", "at_or_below"),
+    AlertRuleTemplate("strong_score", "Strong scout score", "Alert when scout score reaches 75 or more.",
+                      "Strong scout score", "score", "at_or_above", "75"),
+    AlertRuleTemplate("weak_score", "Low scout score", "Alert when scout score is 45 or lower.",
+                      "Low scout score", "score", "at_or_below", "45"),
+    AlertRuleTemplate("trade_action", "Signal action is Trade", "Alert when the signal action is trade.",
+                      "Trade signal", "action", default_value="trade"),
+    AlertRuleTemplate("watch_action", "Signal action is Watch", "Alert when the signal action is watch.",
+                      "Watch signal", "action", default_value="watch"),
+    AlertRuleTemplate("avoid_action", "Signal action is Avoid", "Alert when the signal action is avoid.",
+                      "Avoid signal", "action", default_value="avoid"),
+)
+
+
+def alert_rule_from_template(template_id: str, *, name: str | None = None,
+                             symbol: str | None = None, value: str | float | None = None) -> "AlertRule":
+    """Build a validated rule from a built-in template and optional edits."""
+    template = next((item for item in ALERT_RULE_TEMPLATES if item.id == template_id), None)
+    if template is None:
+        raise ValueError(f"Unknown alert template: {template_id}")
+    raw = template.default_value if value is None else str(value).strip()
+    common = {"name": name or template.name, "symbol": symbol}
+    if template.kind == "price":
+        return AlertRule(**common, price_op=template.operator, price=float(raw))
+    if template.kind == "score":
+        return AlertRule(**common, score_op=template.operator, score=float(raw))
+    if raw.lower() not in {"trade", "watch", "avoid"}:
+        raise ValueError("Action must be trade, watch, or avoid.")
+    return AlertRule(**common, action=raw.lower())
+
+
+def filter_alert_events(events: Sequence["AlertEvent"], *, state: str = "All",
+                        query: str = "", sort: str = "Newest") -> list["AlertEvent"]:
+    """Filter bounded local alert history by state/query and stable sort order."""
+    if state not in {"All", "New", "Seen"}:
+        raise ValueError("state must be All, New, or Seen")
+    if sort not in {"Newest", "Oldest", "Symbol"}:
+        raise ValueError("sort must be Newest, Oldest, or Symbol")
+    query = str(query).strip().casefold()
+    if len(query) > 100:
+        raise ValueError("Alert history search is limited to 100 characters")
+    selected = [event for event in events
+                if (state == "All" or (state == "New") == (event.acknowledged_at is None))
+                and (not query or query in " ".join((event.symbol, event.rule_name, event.action)).casefold())]
+    def time_key(event: "AlertEvent") -> tuple[int, str]:
+        stamp = event.triggered_at
+        try:
+            parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return (0, parsed.astimezone(timezone.utc).isoformat())
+        except (TypeError, ValueError):
+            return (1, str(stamp))
+    if sort == "Symbol":
+        selected.sort(key=lambda event: (event.symbol.casefold(), time_key(event)), reverse=False)
+    else:
+        dated = [event for event in selected if time_key(event)[0] == 0]
+        undated = [event for event in selected if time_key(event)[0] != 0]
+        dated.sort(key=time_key, reverse=(sort == "Newest"))
+        undated.sort(key=lambda event: str(event.triggered_at))
+        selected = dated + undated
+    return selected
 
 
 def _utc_now() -> datetime:
@@ -126,6 +209,7 @@ class AlertStore:
         self._rules: dict[str, AlertRule] = {}
         self._events: list[AlertEvent] = []
         self._active: set[str] = set()
+        self.load_error: str | None = None
         self._load()
 
     @property
@@ -143,25 +227,43 @@ class AlertStore:
             if rule.id in self._rules:
                 raise ValueError(f"Alert rule id already exists: {rule.id}")
             self._rules[rule.id] = rule
-            self._save()
+            try:
+                self._save()
+            except Exception:
+                self._rules.pop(rule.id, None)
+                raise
             return rule
 
     def remove_rule(self, rule_id: str) -> bool:
         with self._lock:
-            removed = self._rules.pop(rule_id, None) is not None
-            if removed:
-                self._active = {key for key in self._active if not key.startswith(f"{rule_id}:")}
+            previous_rules = self._rules.copy()
+            rule = self._rules.pop(rule_id, None)
+            if rule is None:
+                return False
+            previous_active = self._active
+            self._active = {key for key in previous_active if not key.startswith(f"{rule_id}:")}
+            try:
                 self._save()
-            return removed
+            except Exception:
+                self._rules = previous_rules
+                self._active = previous_active
+                raise
+            return True
 
     def set_enabled(self, rule_id: str, enabled: bool) -> AlertRule:
         with self._lock:
             rule = self._rules[rule_id]
             updated = AlertRule(**{**asdict(rule), "enabled": bool(enabled)})
             self._rules[rule_id] = updated
+            previous_active = self._active
             if not enabled:
-                self._active = {key for key in self._active if not key.startswith(f"{rule_id}:")}
-            self._save()
+                self._active = {key for key in previous_active if not key.startswith(f"{rule_id}:")}
+            try:
+                self._save()
+            except Exception:
+                self._rules[rule_id] = rule
+                self._active = previous_active
+                raise
             return updated
 
     def evaluate(self, signals: Iterable[Signal]) -> list[AlertEvent]:
@@ -175,6 +277,7 @@ class AlertStore:
         created: list[AlertEvent] = []
         with self._lock:
             previous_active = self._active
+            previous_events = list(self._events)
             next_active = set(previous_active)
             for rule in self._rules.values():
                 if not rule.enabled:
@@ -209,7 +312,14 @@ class AlertStore:
                     created.append(event)
             self._active = next_active
             if created or next_active != previous_active:
-                self._save()
+                try:
+                    self._save()
+                except Exception:
+                    # Do not consume an edge-trigger when its event could not
+                    # be committed. The next scan can retry after storage recovers.
+                    self._active = previous_active
+                    self._events = previous_events
+                    raise
         return created
 
     @staticmethod
@@ -229,26 +339,81 @@ class AlertStore:
                     if event.acknowledged_at is None:
                         updated = AlertEvent(**{**asdict(event), "acknowledged_at": _iso(when or _utc_now())})
                         self._events[index] = updated
-                        self._save()
+                        try:
+                            self._save()
+                        except Exception:
+                            self._events[index] = event
+                            raise
                         return updated
                     return event
             raise KeyError(f"Unknown alert event: {event_id}")
+
+    def acknowledge_all(self, when: datetime | None = None) -> int:
+        """Acknowledge all pending events in one durable write; return count."""
+        with self._lock:
+            previous_events = self._events
+            pending = [event for event in previous_events if event.acknowledged_at is None]
+            if not pending:
+                return 0
+            acknowledged_at = _iso(when or _utc_now())
+            pending_ids = {event.id for event in pending}
+            self._events = [
+                AlertEvent(**{**asdict(event), "acknowledged_at": acknowledged_at})
+                if event.id in pending_ids else event
+                for event in previous_events
+            ]
+            try:
+                self._save()
+            except Exception:
+                self._events = previous_events
+                raise
+            return len(pending)
 
     def _load(self) -> None:
         if not self.path.exists():
             return
         try:
+            if self.path.stat().st_size > _MAX_STORE_BYTES:
+                raise ValueError("Saved alert data exceeds the 2 MB safety limit")
             payload = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict) or payload.get("version") != 1:
+            if not isinstance(payload, dict):
+                self.load_error = "Saved alert data must contain a JSON object."
                 return
-            self._rules = {item["id"]: AlertRule(**item) for item in payload.get("rules", [])}
-            self._events = [AlertEvent(**item) for item in payload.get("events", [])]
-            self._active = {str(item) for item in payload.get("active", [])}
-        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
-            # A malformed preferences file should not prevent the application starting.
+            if payload.get("version") != 1:
+                self.load_error = f"Unsupported saved alert data version: {payload.get('version')!r}."
+                return
+            if set(payload) != {"version", "rules", "events", "active"}:
+                raise ValueError("Saved alert data has missing or unsupported top-level fields")
+            raw_rules = payload.get("rules", [])
+            raw_events = payload.get("events", [])
+            raw_active = payload.get("active", [])
+            if (not isinstance(raw_rules, list) or len(raw_rules) > _MAX_RULES
+                    or not isinstance(raw_events, list) or len(raw_events) > _MAX_EVENTS
+                    or not isinstance(raw_active, list) or len(raw_active) > _MAX_RULES * 100):
+                raise ValueError("Saved alert data has invalid or oversized collections")
+            rules = [_load_rule(item) for item in raw_rules]
+            events = [_load_event(item) for item in raw_events]
+            if len({rule.id for rule in rules}) != len(rules):
+                raise ValueError("Saved alert data contains duplicate rule IDs")
+            if len({event.id for event in events}) != len(events):
+                raise ValueError("Saved alert data contains duplicate event IDs")
+            if not all(isinstance(item, str) and len(item) <= 160 for item in raw_active):
+                raise ValueError("Saved alert data contains invalid active-rule keys")
+            self._rules = {item.id: item for item in rules}
+            self._events = events
+            self._active = set(raw_active)
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+            # Keep the app usable, but do not later save an empty replacement
+            # over the unreadable file and destroy the user's alert history.
             self._rules, self._events, self._active = {}, [], set()
+            self.load_error = f"{type(exc).__name__}: {exc}"
 
     def _save(self) -> None:
+        if self.load_error:
+            raise OSError(
+                "Saved alert data could not be loaded; the original file is preserved. "
+                "Back it up and repair it before changing alert rules or history."
+            )
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "version": 1,
@@ -265,7 +430,45 @@ class AlertStore:
                 os.fsync(stream.fileno())
             os.chmod(temp_path, 0o600)
             os.replace(temp_path, self.path)
-            os.chmod(self.path, 0o600)
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
+
+
+def _load_rule(item: object) -> AlertRule:
+    if not isinstance(item, dict):
+        raise ValueError("Saved alert rule must be an object")
+    allowed = {"name", "symbol", "price_op", "price", "score_op", "score", "action", "enabled", "id", "created_at"}
+    if set(item) != allowed:
+        raise ValueError("Saved alert rule has missing or unsupported fields")
+    for key in ("name", "id", "created_at"):
+        if not isinstance(item[key], str) or not item[key].strip() or len(item[key]) > 160:
+            raise ValueError(f"Saved alert rule has an invalid {key}")
+    for key in ("symbol", "action"):
+        if item[key] is not None and (not isinstance(item[key], str) or len(item[key]) > 64):
+            raise ValueError(f"Saved alert rule has an invalid {key}")
+    if not isinstance(item["enabled"], bool):
+        raise ValueError("Saved alert rule has an invalid enabled state")
+    for key in ("price", "score"):
+        value = item[key]
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise ValueError(f"Saved alert rule has an invalid {key}")
+    return AlertRule(**item)
+
+
+def _load_event(item: object) -> AlertEvent:
+    if not isinstance(item, dict):
+        raise ValueError("Saved alert event must be an object")
+    required = {"id", "rule_id", "rule_name", "symbol", "triggered_at", "price", "score", "action", "acknowledged_at"}
+    if set(item) != required:
+        raise ValueError("Saved alert event has missing or unsupported fields")
+    for key in ("id", "rule_id", "rule_name", "symbol", "triggered_at", "action"):
+        if not isinstance(item[key], str) or not item[key].strip() or len(item[key]) > 160:
+            raise ValueError(f"Saved alert event has an invalid {key}")
+    if item["acknowledged_at"] is not None and not isinstance(item["acknowledged_at"], str):
+        raise ValueError("Saved alert event has an invalid acknowledgement timestamp")
+    if isinstance(item["price"], bool) or not isinstance(item["price"], (int, float)) or not math.isfinite(item["price"]):
+        raise ValueError("Saved alert event has an invalid price")
+    if isinstance(item["score"], bool) or not isinstance(item["score"], int) or not 0 <= item["score"] <= 100:
+        raise ValueError("Saved alert event has an invalid score")
+    return AlertEvent(**item)

@@ -18,22 +18,20 @@ Operational workflows for validation, live brokerage, actual trade placement, fr
 docs/WORKFLOWS.md
 ```
 
-## 0.1.4 Release Notes
+## 0.1.6 Release Notes
 
-This source checkout targets Timmy 0.1.4. The release adds the GUI facelift and
-guided market overview, clearer workflow navigation and responsive scrolling,
-serialized GUI and automation actions, safer handling for unresolved live-order
-responses and invalid exposure limits, and lower-memory market-data processing
-for larger universes. These notes describe the source changes; confirm that
-0.1.4 is available on the [Download page](https://timmy-tradesonauto.web.app/download.html)
-or in GitHub Releases before installing a published build.
+This source checkout targets Timmy 0.1.6. It includes a reorganized financial
+workspace, saved views and scanner filters, local alerts and watchlist groups,
+clearer market-data and trade-readiness explanations, stronger recovery paths,
+and bounded market-data processing. This source release also improves operator
+health, settings, and order-journal workflows.
 
 For the Debian install, verify the downloaded package with the accompanying
 `SHA256SUMS.txt`, then install it:
 
 ```bash
 sha256sum -c SHA256SUMS.txt
-sudo apt install ./timmy-trader_0.1.4_amd64.deb
+sudo apt install ./timmy-trader_0.1.6_amd64.deb
 ```
 
 The native updater expects the GitHub release archive
@@ -191,7 +189,7 @@ scripts/package_deb.sh
 Install it locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.4_amd64.deb
+sudo apt install ./dist/timmy-trader_0.1.6_amd64.deb
 ```
 
 After install, launch **Timmy** from the system menu or run:
@@ -218,7 +216,7 @@ The installed app stores runtime config in:
 ~/.config/timmy-trader
 ```
 
-Timmy keeps one active native app instance per runtime home. A new launch claims a lock and exits with a message if another instance already holds it; it does not terminate that process.
+Timmy permits one active native app instance per Linux user, even when launches use different `TIMMY_HOME` runtime directories. It holds an OS file lock at `${XDG_CONFIG_HOME:-~/.config}/timmy-trader/timmy-instance.lock` for the process lifetime. A second launch exits with a message; it does not terminate the active process. The lock file can remain after exit, but the OS lock is released automatically.
 
 On first installed launch, Timmy seeds `~/.config/timmy-trader/.env` from the packaged safe template only. It does not copy source-checkout secrets or Webull token files into the installed runtime.
 
@@ -251,7 +249,7 @@ Dynamic watchlist rotation:
 ```text
 ENABLE_WATCHLIST_ROTATION=1
 WATCHLIST_UNIVERSE=all-us
-WATCHLIST_UNIVERSE_BATCH_SIZE=250
+WATCHLIST_UNIVERSE_BATCH_SIZE=100
 WATCHLIST_UNIVERSE_REFRESH_HOURS=24
 WATCHLIST_ROTATION_CANDIDATES=SPY,QQQ,IWM,DIA,AAPL,MSFT,NVDA,AMD,TSLA,META,GOOGL,AMZN,AVGO,NFLX,COST,JPM,XOM,UNH,LLY,ORCL,CRM,ADBE,INTC,MU,SMH,XLK,XLF,XLE,VTI
 ACTIVE_WATCHLIST_PATH=active-watchlist.txt
@@ -269,7 +267,7 @@ MIN_WATCHLIST_SCOUT_SCORE=42
 QUIET_WATCHLIST_SCOUT_SCORE=30
 ```
 
-When enabled with a live market-data provider, Timmy fetches the current custom active list plus the candidate pool, scores every loaded symbol, keeps names showing movement, removes quiet low-ranked names, and writes the rotated active list to `ACTIVE_WATCHLIST_PATH`. Timmy then writes market data for that active custom list, and that is the list the strategy can trade from. `watchlist.txt` remains the seed list. Set `WATCHLIST_UNIVERSE=all-us` to refresh the current U.S. listed-symbol universe from Nasdaq Trader and scan it in rotating batches. The active list stays capped by `MAX_WATCHLIST_SYMBOLS`, while `WATCHLIST_UNIVERSE_BATCH_SIZE` controls how many new market symbols are inspected per refresh cycle. Any symbol that may become tradable must also be permitted by `WEBULL_SYMBOL_WHITELIST`; leaving that whitelist blank allows the rotated universe to create order plans when all other risk gates pass.
+When `ENABLE_WATCHLIST_ROTATION=1`, Timmy can fetch the custom active list and candidate pool, score loaded symbols, and write a rotated active list to `ACTIVE_WATCHLIST_PATH`. This changes the strategy's active custom list; it is separate from the all-US movement scan. With the built-in `WATCHLIST_UNIVERSE=all-us`, Timmy scans a rotating batch when cached candles are stale even while automatic watchlist rotation is off. `WATCHLIST_UNIVERSE_BATCH_SIZE` controls requested symbols per scan cycle (default 100); successful coverage can be slower or incomplete because of provider limits, failed requests, and unsupported symbols. The movement scan is discovery context and does not itself make every listed symbol tradable. Any symbol that may become tradable must also be permitted by `WEBULL_SYMBOL_WHITELIST` and pass the other risk gates.
 
 Timmy also ships a source-controlled snapshot at `trend_trader/resources/us-listed-symbols.csv`. That file currently contains 11,466 U.S. listed symbols: 5,910 stocks/non-ETFs and 5,556 ETFs/ETPs. Timmy uses it as a warm-start fallback when `WATCHLIST_UNIVERSE=all-us` and the mutable runtime cache `timmy-watchlist-universe.txt` has not been created yet. The live Nasdaq Trader refresh remains the preferred source when reachable.
 
@@ -465,7 +463,9 @@ REQUIRE_MARKET_HOURS=1
 AUTO_START_PAPER_ON_MARKET_OPEN=1
 AUTO_START_LIVE_ON_MARKET_OPEN=0
 MARKET_OPEN_POLL_SECONDS=30
-MARKET_DATA_PROVIDER=csv
+MARKET_DATA_PROVIDER=yahoo
+WATCHLIST_UNIVERSE=all-us
+WATCHLIST_UNIVERSE_BATCH_SIZE=100
 MARKET_DATA_MAX_AGE_MINUTES=15
 WATCHLIST_PATH=watchlist.txt
 WATCHLIST_TEMPLATE=equity

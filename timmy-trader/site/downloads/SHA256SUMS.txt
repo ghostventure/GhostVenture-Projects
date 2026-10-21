@@ -1,1 +1,1 @@
-83d2604c5371e991d4ba398d9baf3dcec8fed1d44b3959388d88e84ed87d95f5  timmy-trader_0.1.5_amd64.deb
+7655ab08bbc6a13b3d2d055bf7fb403337a64e3a41dbf694c86aeabc73a9b09f  timmy-trader_0.1.6_amd64.deb

@@ -86,8 +86,8 @@ class WebullOpenApiBroker:
         )
         return snapshot
 
-    def new_order_payload(self, order: OrderPlan) -> dict:
-        client_order_id = f"timmy-{order.symbol.lower()}-{uuid4().hex[:8]}"
+    def new_order_payload(self, order: OrderPlan, client_order_id: str | None = None) -> dict:
+        client_order_id = client_order_id or f"timmy-{order.symbol.lower()}-{uuid4().hex[:8]}"
         payload = {
             "client_order_id": client_order_id[:32],
             "combo_type": "NORMAL",
@@ -110,10 +110,10 @@ class WebullOpenApiBroker:
             payload.update(order.extra_payload)
         return payload
 
-    def preview_order_payload(self, order: OrderPlan) -> dict:
+    def preview_order_payload(self, order: OrderPlan, client_order_id: str | None = None) -> dict:
         return {
             "account_id": self.config.webull_account_id,
-            "new_orders": [self.new_order_payload(order)],
+            "new_orders": [self.new_order_payload(order, client_order_id=client_order_id)],
         }
 
     def preview_order(self, order: OrderPlan) -> dict:
@@ -131,11 +131,11 @@ class WebullOpenApiBroker:
             "order_plan": asdict(order),
         }
 
-    def submit_order(self, order: OrderPlan) -> dict:
+    def submit_order(self, order: OrderPlan, client_order_id: str | None = None) -> dict:
         enforce_live_guards(self.config)
         self._ensure_connected()
 
-        payload = self.preview_order_payload(order)
+        payload = self.preview_order_payload(order, client_order_id=client_order_id)
         if self.config.webull_require_preview:
             return {
                 "status": "preview-required",
