@@ -1,10 +1,10 @@
 # OverHead
 
-Current packaged release: **0.3.15** for standard desktop and **0.3.10** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
+Current packaged release: **0.3.24** for OverHead Desktop, Cylinder Server, and Cylinder Client. For the verified identity and entitlement architecture and current Firebase deployment status, see [`docs/shared-identity-and-entitlements.md`](docs/shared-identity-and-entitlements.md), [`docs/authentication-workflow.md`](docs/authentication-workflow.md), and [`docs/production-readiness.md`](docs/production-readiness.md).
 
 For the current website/Desktop account process, email verification gate, password recovery, and operator acceptance checklist, see `docs/authentication-workflow.md`.
 
-For the Desktop per-user seat schedule, $499/month cap, Cylinder recommendation, first-month offer, and shared seat billing behavior, see [`docs/desktop-seat-billing.md`](docs/desktop-seat-billing.md). Its deployment status must be confirmed in the release handoff before treating billing as live.
+For the proposed Desktop per-user seat schedule, $499/month cap, Cylinder recommendation, and first-month offer, see [`docs/desktop-seat-billing.md`](docs/desktop-seat-billing.md). The paid checkout and seat-billing service is not deployed; the current production boundary is recorded in the shared identity and entitlement audit.
 
 For the owner-only VS Code / Code - OSS hot-fix handoff, see `docs/developer-editor-workflow.md`.
 
@@ -23,8 +23,11 @@ The current Windows build includes a local desktop sign-in/onboarding surface, l
 
 ## Current releases
 
-- **OverHead Desktop 0.3.18:** standard Windows desktop release with customer/staff access lanes, role controls, local workflow schedules, project status approvals, customer merge safeguards, saved-session controls, and Firebase-hosted downloads/updates.
-- **OverHead Cylinder 0.3.10:** separate deployment for Windows Server and Windows IoT only. It uses its own application identity, local data directory, updater channel, and Cylinder tier. It will exit on standard Windows editions. Each server workspace gets one 30-day, no-card evaluation; continued paid use requires a separate commercial activation rather than the standard desktop checkout.
+- **OverHead Desktop 0.3.24:** individual-user Windows edition with the current shared workspace UX, local operations, and Firebase-backed identity and entitlement reads.
+- **Cylinder Server 0.3.24:** department-managed host for supported Windows Server and Windows IoT editions, with centralized employee Ranks, departments, device controls, and a separate update channel.
+- **Cylinder Client 0.3.24:** managed Windows 10/11 workstation and remote-desktop endpoint for an enrolled Cylinder workspace.
+
+All three packages share the `overhead-office` Firebase Authentication identity and top-level workspace profile. Cylinder's Ranks and device authorization use separate Cylinder membership records; they do not replace Desktop roles or plan licenses. Each Cylinder Server workspace has one 30-day no-card evaluation. See `docs/cylinder-deployment.md` for host and Client requirements.
 
 See `docs/cylinder-deployment.md` for server/IoT deployment, updates, and compatibility details.
 
@@ -34,7 +37,7 @@ Expense entry, approval, and monthly budget guidance is in [`docs/expense-ledger
 
 ## Shared browser and desktop access
 
-The signed-in website and OverHead Desktop use the same Firebase account, workspace role, subscription entitlement, and member license. The website account page reflects the shared plan and, for administrators, provides the same Stripe billing service used by the EXE. Stripe secrets remain in Firebase Secret Manager and are never included in the Windows package or website files.
+The signed-in website and Windows packages use the same Firebase account and workspace profile. The website reads the workspace plan and member licenses directly from Firestore; Desktop refreshes those same records after sign-in and every five minutes while signed in. The deployed no-card Gold trial service can update the shared entitlement and licenses. Paid checkout, seat charges, and paid plan changes are not live: the `billingApi` function is absent from production. The website billing view is read-only. See `docs/shared-identity-and-entitlements.md` for the verified paths and deployment gate. Stripe secrets must remain in Firebase Secret Manager and must never be included in a Windows package or website bundle.
 
 New and invited users must verify their email before protected workspace data opens. The website can persist a session only when the user opts in on a private device; the Desktop checks the same Firebase verification state before starting its local operating session.
 

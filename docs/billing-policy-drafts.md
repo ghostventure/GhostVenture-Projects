@@ -2,6 +2,8 @@
 
 Status: product-policy drafts for legal review before live launch. They are not jurisdiction-specific legal advice.
 
+**Production alignment note (2026-10-22):** the live Desktop trial is one no-card 90-day Gold trial per workspace, implemented through `trialApi`. The 30-day trial language below is an unapproved policy draft and is not current production behavior. Paid checkout and seat pricing are not active because `billingApi` is not deployed. Do not use this draft as a statement of current availability.
+
 ## OverHead Team Identity and Authorization
 
 An internal OverHead Team account must use an authorized `@overheadteam.com` or `@overheadteam.biz` email address. An authorized supervisor, manager, or administrator must approve and issue the employee license before access is active; the authorization record retains the approving account and issue time. This internal-team policy does not apply to a customer business's own workspace staff, who may use that business's approved company email domain.

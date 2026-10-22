@@ -27,7 +27,7 @@ Both scripts build the shared renderer before packaging. The Server installer is
 
 `npm run build` verifies the shared renderer build only. A completed installer build verifies packaging, not installation or operation on real Server/IoT hardware, Windows workstations, VPNs, or remote PowerShell. `npm run release:verify` checks the published release feeds and artifact hashes after deployment; it does not prove those device/runtime behaviors. Do not describe a local package as published or installed without checking those steps separately.
 
-## 0.3.24 local package record
+## 0.3.24 package and service status
 
 The 0.3.24 Desktop UX and shared backend updates are included in both locally built Cylinder packages through the shared renderer and Electron backend. The shared work includes lazy-loaded workspaces, keyboard navigation and command search, the work planner and record history, bulk status updates, and batched persistence writes. Cylinder Server additionally retains its department Rank and device-policy integration; Cylinder Client remains an endpoint build and does not gain management authority from the shared UI.
 
@@ -38,7 +38,7 @@ The build outputs currently present in the workspace are:
 | Cylinder Server | `release/OverHead-Cylinder-Setup-0.3.24-win-x64.exe` | `21e07655ff31b98ca14fdd35002ed7cbcc3496261cb68203a55692557204f46c` |
 | Cylinder Client | `release/cylinder-client/OverHead-Cylinder-Client-Setup-0.3.24-win-x64.exe` | `f45b0ae8d96257a1d4f5d990ff806cd9e2db357e427468aa3bd20328f50fb584` |
 
-Both local installers report Authenticode status `NotSigned`. Their SHA-256 values are recorded in `release/CYLINDER-SHA256SUMS.txt` and `release/cylinder-client/CYLINDER-CLIENT-SHA256SUMS.txt`, respectively. These are local packaging outputs, not production-signed distribution packages. Installation, real-device behavior, and publication to GitHub or Firebase must be verified separately before describing this version as installed or available to users. The renderer build and static checks passed for this work; no test suite or installation verification is claimed here.
+The release packages are published through the project release channels; signature status is independent of availability and should be checked on the actual downloaded artifact. Current Firebase identity/profile is shared with Desktop and website. Cylinder Rank membership and device policies are separate records. Paid seat billing and Stripe changes remain unavailable because production `billingApi` is absent. See `shared-identity-and-entitlements.md` for the verified service inventory.
 
 ## Cylinder tier
 
@@ -73,7 +73,7 @@ Cylinder Server and Client never use the regular desktop update feed. Their chan
 
 Cylinder includes a separate Firebase-backed Rank control plane for department membership, employee invitations, device enrollment/approval/blocking, and minimum-version/offline policies. See [Cylinder ranks and centralized management](ranks-and-cylinder-management.md) for authority, rollout, and recovery details. Its four Ranks do not change the standard Desktop app's per-user roles or local data. These controls enforce OverHead Cylinder access; they do not configure native Windows GPO, Active Directory, Entra, or other software.
 
-The Cylinder function is deployed as its own Firebase codebase (`firebase.cylinder.json`), independently from billing secrets; Firestore rules are deployed to `overhead-office`. The backend is live, but employees cannot use it from the currently published 0.3.4 installer. The updated signed Cylinder installer must be built and published before the complete feature reaches users. Workspace data and customer files remain local; the central service manages identity and access policy, not shared record synchronization.
+The Cylinder function is deployed as its own Firebase codebase (`firebase.cylinder.json`), independently from billing secrets; Firestore rules are deployed to `overhead-office`. The backend and 0.3.24 Cylinder packages are published. Employees can use the versioned Cylinder management features; verify installed client version and connectivity for each deployment. Workspace data and customer files remain local; the central service manages identity and access policy, not shared record synchronization.
 
 ## September 2026 maintenance
 

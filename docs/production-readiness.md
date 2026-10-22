@@ -1,6 +1,14 @@
 # Production readiness
 
-For the current deployed release, shared-licensing model, and Firebase handoff status, start with `docs/current-handoff-2026-08-21.md`.
+For the current release and verified Firebase status, see `docs/shared-identity-and-entitlements.md`.
+
+## Current production status ? 2026-10-22
+
+Desktop, Cylinder Server, and Cylinder Client are at 0.3.24. They share Firebase Authentication identity and profile records; the website reads shared workspace entitlements and member licenses. Cylinder adds separate department membership, Rank, and device policy records.
+
+The live Functions are `cylinderApi`, `expireTrials`, and `trialApi`; `billingApi` is absent. The no-card 90-day Gold trial and entitlement/license reconciliation are live. Paid checkout, paid plan changes, per-seat charges, and Stripe webhook updates are not live. The website billing view is read-only. Shared plan display does not mean paid billing is active.
+
+The dated snapshots below are historical and superseded by this status.
 
 ## Stripe test-to-live gate
 
@@ -8,7 +16,7 @@ For the current deployed release, shared-licensing model, and Firebase handoff s
 
 Before live payments, deploy the Firebase Functions in Stripe test mode and verify each outcome with Stripe test data:
 
-1. Start the one-time 30-day Gold trial: confirm no customer, payment, or charge is created.
+1. Start the one-time 90-day Gold trial: confirm no customer, payment, or charge is created.
 2. Confirm the Gold entitlement and licenses are active, then confirm a second trial is refused.
 3. Complete one embedded paid checkout and verify the signed webhook activates the correct tier.
 4. Double-click checkout and open a second app window: verify only one session can proceed.
@@ -31,15 +39,15 @@ npm run dist:win
 Get-AuthenticodeSignature .\release\OverHead-Setup-<version>-win-x64.exe
 ```
 
-The final verification must report `Valid` and identify the organization certificate. Do not publish a release that reports `NotSigned`.
+The final verification must report `Valid` and identify the organization certificate. Signing is recommended. An unsigned package may be published when explicitly authorized by the release owner; record its hash and accurately label its signature status.
 
 ### Live feed audit Ã¢â‚¬â€ 2026-10-21
 
-The public desktop feed advertises 0.3.18 and the Cylinder feed advertises 0.3.4. Both hosted installers were downloaded and matched their respective `latest.yml` byte lengths and SHA-512 values, but Windows reported `NotSigned` for both. The deployed feeds therefore do not meet the release-signing requirement above. Configure the organization certificate before publishing another installer or update manifest. The current local desktop and Cylinder installations are 0.3.2; they were left unchanged during this review.
+The public desktop feed advertises 0.3.18 and the Cylinder feed advertises 0.3.4. Both hosted installers were downloaded and matched their respective `latest.yml` byte lengths and SHA-512 values, but Windows reported `NotSigned` for both. This historical observation is superseded by the current package status above. Record signature state for each release. The current local desktop and Cylinder installations are 0.3.2; they were left unchanged during this review.
 
 ## Update publishing
 
-Use the central release workflow in `docs/windows-release-signing.md` to publish desktop and Cylinder installers from one verified Firebase Hosting release. Confirm each public `latest.yml` version matches its installer and that a prior packaged build detects and downloads its update. Never point an app at a feed containing unsigned artifacts.
+Use the central release workflow in `docs/windows-release-signing.md` to publish desktop and Cylinder installers from one verified Firebase Hosting release. Confirm each public `latest.yml` version matches its installer and that a prior packaged build detects and downloads its update. Record the signature state of every published artifact and verify that the feed matches its installer.
 
 OverHead Cylinder uses a separate Windows Server/Windows IoT-only channel: publish its installer, blockmap, and matching `latest.yml` to `https://overhead-office.web.app/updates/cylinder`. Do not mix Cylinder and desktop artifacts; their app IDs, local data roots, and compatibility gates are intentionally separate.
 

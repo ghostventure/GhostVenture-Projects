@@ -1,6 +1,6 @@
 # Authentication workflow
 
-This is the current sign-up, sign-in, and recovery flow for `overhead-office`. It applies to the website and the OverHead Desktop app.
+This is the current sign-up, sign-in, and recovery flow for Firebase project `overhead-office`. It applies to the website, OverHead Desktop, Cylinder Server, and Cylinder Client. The shared identity and entitlement records are documented in [Shared identity and plan entitlements](shared-identity-and-entitlements.md).
 
 ## What users do
 
@@ -25,15 +25,17 @@ An invalid or expired invite does not leave a usable Firebase account behind.
 ### Sign in and recover access
 
 - Website users can choose **Keep me signed in on this private device**. Clear it on a shared device to end the browser session when the browser closes.
-- The website and Desktop use the same email and password. Desktop checks Firebase's current email-verification state before opening a session.
+- The website, Desktop, Cylinder Server, and Cylinder Client authenticate against the same Firebase Authentication project and use the same Firebase UID/profile. Desktop checks Firebase's current email-verification state before opening a session. Cylinder also requires active Cylinder membership and an authorized device.
 - **Forgot your password?** sends a Firebase password-reset link. The acknowledgement is intentionally generic so the page does not reveal whether an email address is registered.
 - If the verification link is delayed, use **Send a new link**. Check spam/junk and use the newest message.
 
 ## Access boundary
 
-Firebase Authentication is the identity source. Firestore holds the workspace profile and role. Unverified users may only complete the minimum profile/invitation setup needed to verify their email; protected workspace data and actions require an authenticated, verified email address.
+Firebase Authentication is the identity source. Firestore holds `profiles/{uid}` and the workspace role. The website and Desktop read the shared workspace entitlement from `workspaces/{workspaceId}/billing/current` and per-member access from `workspaces/{workspaceId}/licenses/{uid}`. Website billing and license views update through Firestore listeners; Desktop refreshes at sign-in and every five minutes during a signed-in staff session. Local Desktop profile and license data are caches, not the authoritative shared account database.
 
-The website and standard Desktop continue to use their existing `Administrator`, `Manager`, and `Staff` shared roles, with Desktop mapping the shared role to its local operating role after verified sign-in. Cylinder stores its four Ranks and department scope separately under the workspace and checks them through the trusted `cylinderApi`; Rank changes do not change Desktop roles. See [Cylinder ranks and centralized management](ranks-and-cylinder-management.md).
+The website and standard Desktop use the shared `Administrator`, `Manager`, and `Staff` roles, with Desktop mapping the shared role to its local operating role after verified sign-in. Cylinder stores its four Ranks and department scope separately under the same workspace and checks them through `cylinderApi`; Rank changes do not change Desktop roles or paid-plan licenses. See [Cylinder ranks and centralized management](ranks-and-cylinder-management.md).
+
+Production currently has the authenticated no-card `trialApi` and the Cylinder `cylinderApi`, but not `billingApi`. Therefore shared identity and entitlement reads work, and the Gold trial can update shared records, but paid checkout, paid plan changes, and billed-seat writes are not active. Do not interpret Desktop UI or source code for paid billing as proof that a payment was accepted.
 
 ## Operator checklist
 
@@ -51,7 +53,8 @@ Before treating authentication as ready after a configuration or release change:
    npm run build
 
    cd ..
-   npx firebase-tools deploy --config firebase.overhead.json --only hosting,firestore:rules --project overhead-office
+   npx firebase-tools deploy --config firebase.overhead.json --only firestore:rules --project overhead-office
+   npm run release:deploy
    Invoke-WebRequest https://overhead-office.web.app/sign-in/ -UseBasicParsing
    ```
 
@@ -59,4 +62,6 @@ Do not put Firebase passwords, reset links, verification links, or user tokens i
 
 ## Current verification record
 
-On 2026-08-23, the website build, Electron syntax/build checks, Firestore rule compilation, Hosting deployment, and the live `/sign-in/` route all succeeded. The Email/Password provider returned Firebase's normal invalid-credentials response to a non-account probe, which confirms that the provider was enabled at that time. A full mailbox click-through remains a manual acceptance test because it requires a real disposable inbox.
+On 2026-10-22, the installed Desktop and staged Desktop/Server/Client packages were inspected and matched the `overhead-office` Firebase project. The deployed function inventory contained `trialApi`, `expireTrials`, and `cylinderApi`, but not `billingApi`. Unauthenticated endpoint checks confirmed that the deployed trial and Cylinder services require authentication and that the paid billing endpoint returns 404. This verifies configuration and service presence, not an individual user's private plan data or an authenticated account session.
+
+On 2026-08-23, the website build, Electron syntax/build checks, Firestore rule compilation, Hosting deployment, and the live `/sign-in/` route succeeded. A full mailbox click-through remains a manual acceptance test because it requires a real disposable inbox.

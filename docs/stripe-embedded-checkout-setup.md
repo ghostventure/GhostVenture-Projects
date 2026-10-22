@@ -1,6 +1,8 @@
 # Stripe embedded checkout setup
 
-The Stripe billing server lives in `functions/`. It is deliberately separate from the Electron app and hosted browser workspace: Stripe secret keys and webhook secrets must never be packaged into OverHead or included in the website bundle.
+**Deployment status (2026-10-22): this is a future deployment guide, not a live feature description.** Firebase project `overhead-office` has no deployed `billingApi`; paid checkout, plan changes, seat billing, and Stripe webhook processing are unavailable. The live no-card 90-day Gold trial is provided separately by `trialApi`. Do not advertise or operate the workflow below until the function is deployed and its end-to-end checks pass. See `shared-identity-and-entitlements.md`.
+
+The planned Stripe billing server belongs in `functions/`, separate from the Electron app and hosted browser workspace. Stripe secret keys and webhook secrets must never be packaged into OverHead or included in the website bundle.
 
 ## Where to install it
 
@@ -47,8 +49,8 @@ The billing function refuses to create a second checkout when the workspace alre
 
 ## Billing workflow
 
-1. An administrator can choose a tier from OverHead Desktop or from the signed-in website account page. Both use the same Firebase Authentication identity and `billingApi` endpoint.
-2. A new workspace can instead select **Start Free 30-Day Gold Trial**. It requires no card, creates a one-time Gold-equivalent entitlement, and records an exact 30-day end time.
+1. In the future paid flow, an administrator will be able to choose a tier from OverHead Desktop or the signed-in website account page using the same Firebase Authentication identity and `billingApi` endpoint.
+2. The live separate trial flow is one no-card 90-day Gold trial per workspace, handled by `trialApi`; it does not depend on Stripe checkout.
 3. OverHead checks the central billing entitlement.
 4. If the same tier is already active, OverHead confirms that no new charge was created.
 5. If another checkout is already pending, OverHead blocks the second attempt.
@@ -70,7 +72,7 @@ The subscription source of truth is shared by the EXE and website:
 - Member license: `workspaces/{workspaceId}/licenses/{userUid}`.
 - Protected service: `https://us-central1-overhead-office.cloudfunctions.net/billingApi`.
 
-The website `/account/` page reads the entitlement and license in real time. Administrators can start the one-time trial, choose a plan, open the Stripe billing portal, and request cancellation; managers and staff can view their reflected access but cannot change billing. The EXE receives the same entitlement during its next shared sign-in or entitlement refresh.
+The website `/account/` page reads the entitlement and license in real time. It is currently read-only: paid plan selection, Stripe portal, and cancellation actions are not live. Trial activation is provided by `trialApi`. The EXE reads the same entitlement during shared sign-in or refresh.
 
 `billingApi` accepts browser calls only from `https://overhead-office.web.app` and `https://overhead-office.firebaseapp.com`. Do not broaden this allow-list without a reviewed production domain and a corresponding Functions deployment.
 
