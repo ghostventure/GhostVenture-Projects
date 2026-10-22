@@ -14,14 +14,14 @@ Only distribute the installer when the signature status is `Valid` and the signe
 
 ## Central release workflow
 
-The central workspace keeps desktop and Cylinder packages together while preserving separate versions, app IDs, user data, and update channels.
+The central workspace keeps Desktop, Cylinder Server, and Cylinder Client packages together while preserving separate app IDs, user data, and update channels. All three package versions come from `package.json`.
 
 1. Set `CSC_LINK`, `CSC_KEY_PASSWORD`, and `OVERHEAD_EXPECTED_SIGNER` using the approved organization certificate. Keep certificate files and passwords outside the repository.
-2. Review the shared version. Desktop and Cylinder both take their version from `package.json`.
+2. Review the shared version in `package.json`.
 3. Run `npm run release:plan` to review the versions and output paths.
-4. Run `npm run release:prepare`. The signed installers, updater manifests, blockmaps, ZIPs, checksums, and release manifest go under `release/current/desktop` and `release/current/cylinder`.
-5. Review both installers and the generated `release/current/release-manifest.json`.
-6. Run `npm run release:deploy` to verify both signatures and publish both update feeds and current downloads in one Firebase Hosting release. Firebase Tools is found automatically when installed locally or in npm's cache; use `OVERHEAD_FIREBASE_TOOLS` to pin another installation.
+4. Run `npm run release:prepare`. The signed installers, updater manifests, blockmaps, ZIPs, checksums, and release manifest go under `release/current/desktop`, `release/current/cylinder-client`, and `release/current/cylinder`.
+5. Review all three installers and the generated `release/current/release-manifest.json`.
+6. Run `npm run release:deploy` to verify all three signatures and publish their update feeds and current downloads in one Firebase Hosting release. Firebase Tools is found automatically when installed locally or in npm's cache; use `OVERHEAD_FIREBASE_TOOLS` to pin another installation.
 7. Run `npm run release:verify` to compare the public updater feeds and downloaded installer hashes with the prepared release.
 
 The release script preserves previous versioned ZIP URLs by redirecting them to the newest package for the same product. It does not deploy the full site or change user data. The currently installed local OverHead application is not upgraded by packaging or publishing; installation is a separate operational step.

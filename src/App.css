@@ -917,6 +917,12 @@ select:focus {
   font-weight: 800;
 }
 
+.command-search-readout input { flex: 1 1 260px; min-width: 180px; min-height: 34px; border: 0; outline: 0; color: var(--heading); background: transparent; font: inherit; }
+.command-list { max-height: min(58vh, 560px); overflow-y: auto; padding-right: 2px; }
+.command-list button.command-active { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent); background: color-mix(in srgb, var(--accent) 10%, white); }
+.command-keyboard-hint { margin: 0; color: var(--muted); font-size: 12px; }
+.command-keyboard-hint kbd { margin: 0 3px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); font: 11px ui-monospace, monospace; }
+
 .command-list {
   display: grid;
   gap: 8px;
@@ -1084,6 +1090,12 @@ select:focus {
   display: grid;
   gap: 12px;
 }
+
+.overview-layout.dashboard-compact { gap: 7px; }
+.dashboard-compact .dashboard-grid { gap: 8px; }
+.dashboard-compact .panel,
+.dashboard-compact .metric,
+.dashboard-compact .hero-panel { padding: 12px; }
 
 .dashboard-customize-bar {
   display: flex;
@@ -2086,4 +2098,54 @@ html[data-reduced-motion='true'] *::after {
   }
 }
 
+/* Workspace navigation and open-tab controls for the expanded OverHead workbench. */
+.sidebar-toggle { width: 28px; height: 28px; display: grid; place-items: center; margin: 0 0 10px auto; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; background: rgba(255,255,255,.07); color: #fff; font-size: 21px; line-height: 1; cursor: pointer; }
+.desktop-body.is-sidebar-collapsed { grid-template-columns: 68px minmax(0,1fr); }
+.sidebar.sidebar-collapsed { gap: 10px; padding: 12px 8px; }
+.sidebar-collapsed .brand { display: grid; justify-items: center; padding: 0 0 10px; }
+.sidebar-collapsed .brand .sidebar-toggle { margin: 0 0 8px; }
+.sidebar-collapsed .brand > div:not(.brand-mark),
+.sidebar-collapsed .nav-item span,
+.sidebar-collapsed .nav-item em,
+.sidebar-collapsed .nav-group-heading,
+.sidebar-collapsed .nav-group > strong,
+.sidebar-collapsed .sidebar-account > div:not(.avatar),
+.sidebar-collapsed .sidebar-status > div,
+.sidebar-collapsed .nav-customizer,
+.sidebar-collapsed .nav-list > .ghost-button { display: none; }
+.sidebar-collapsed .nav-list { gap: 5px; }
+.sidebar-collapsed .nav-item { min-height: 42px; grid-template-columns: 1fr; justify-items: center; padding: 8px 4px; }
+.sidebar-collapsed .sidebar-account,
+.sidebar-collapsed .sidebar-status { grid-template-columns: 1fr; justify-items: center; padding: 8px 4px; }
+.workspace-tabs { position: sticky; top: 76px; z-index: 3; display: flex; gap: 5px; overflow-x: auto; padding: 7px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.workspace-tab { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface, var(--panel)); }
+.workspace-tab.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, var(--panel)); }
+.workspace-tab button { min-height: 30px; padding: 4px 9px; border: 0; background: transparent; color: var(--text); cursor: pointer; }
+.workspace-tab button:last-child { padding-inline: 7px; color: var(--muted); font-size: 18px; }
+.record-history { display: grid; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.record-history article { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.record-freshness { color: var(--muted); }
+
 .nav-group{display:grid;gap:5px}.nav-group-heading{border:0;background:transparent;color:var(--muted);text-align:left;font-weight:700;padding:8px 10px;cursor:pointer}.nav-customizer{padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}.nav-customizer>div{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:6px;margin-top:8px}.nav-customizer label{font-size:11px}.nav-customizer input:not([type=checkbox]){width:62px;max-width:100%;margin-left:4px}.nav-customizer input[type=checkbox]{width:auto}
+
+.workspace-loading { min-height: 110px; display: grid; place-items: center; margin: 12px 20px; padding: 20px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); background: var(--panel); }
+.work-planner { display: grid; gap: 14px; }
+.work-planner-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.work-planner-grid > .panel { min-width: 0; }
+.planner-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+.planner-row > strong { color: var(--heading); overflow-wrap: anywhere; }
+.planner-row > span,.planner-row > small { color: var(--muted); font-size: .83rem; }
+.planner-row > small { grid-column: 1 / -1; }
+.capacity-row { display: grid; gap: 7px; padding: 11px 0; border-top: 1px solid var(--line); }
+.capacity-row > div:first-child { display: flex; justify-content: space-between; gap: 10px; }
+.capacity-row > div:first-child span,.capacity-row > small { color: var(--muted); font-size: .83rem; }
+.capacity-track { height: 8px; overflow: hidden; border-radius: 99px; background: var(--paper-2); }
+.capacity-track i { display: block; height: 100%; min-width: 4px; border-radius: inherit; }
+.timer-readout { margin: 14px 0 6px; color: var(--heading); font: 700 2rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.work-planner-grid label { display: grid; gap: 5px; margin: 10px 0; color: var(--muted); font-size: .86rem; }
+.work-planner-grid input,.work-planner-grid select,.work-planner-grid textarea { width: 100%; min-width: 0; }
+.planner-footnote { color: var(--muted); font-size: .82rem; }
+.sidebar-collapsed .nav-item[title] { position: relative; }
+.workspace-tab:focus-within,.nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 860px) { .work-planner-grid { grid-template-columns: 1fr; } .workspace-tabs { top: 0; padding-inline: 10px; } .desktop-body.is-sidebar-collapsed { grid-template-columns: 52px minmax(0,1fr); } .sidebar.sidebar-collapsed { padding-inline: 5px; } }
+@media (max-width: 540px) { .planner-row { grid-template-columns: 1fr; } .planner-row > small { grid-column: auto; } .capacity-row > div:first-child { flex-direction: column; gap: 2px; } .workspace-tab button { padding-inline: 7px; font-size: .82rem; } }

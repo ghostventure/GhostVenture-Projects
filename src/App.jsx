@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RecentRecords } from './features/FeatureWave101Helpers'
 import {
   BadgeCheck,
   BarChart3,
@@ -35,25 +36,34 @@ import { workflowBoilerplates } from './boilerplates'
 import { customerDatabaseSchema } from './customerDatabase'
 import { complianceBadges, helpArticles, legalDocuments, marketableFeatures, planTiers, supportChannels } from './productBlueprint'
 import { themes } from './themes'
-import GrowthWorkspace from './features/GrowthWorkspace'
-import SalesWorkspace from './features/SalesWorkspace'
-import CustomerManagementWorkspace from './features/CustomerManagementWorkspace'
-import CustomerFinanceWorkspace from './features/CustomerFinanceWorkspace'
-import PeopleOperationsWorkspace from './features/PeopleOperationsWorkspace'
-import SchedulingWorkspace from './features/SchedulingWorkspace'
-import DocumentControlWorkspace from './features/DocumentControlWorkspace'
-import CollaborationWorkspace from './features/CollaborationWorkspace'
-import ControlCenter from './features/ControlCenter'
-import { IntegrationStudio } from './IntegrationStudio'
-import { AutomationStudio } from './AutomationStudio.jsx'
-import { ReportStudio } from './ReportStudio.jsx'
-import { AccountGovernancePanel, FeatureWavePreferences, FieldAssistSection, SupportOperationsPanel } from './featureWave301400.jsx'
+const GrowthWorkspace = lazy(() => import('./features/GrowthWorkspace'))
+const SalesWorkspace = lazy(() => import('./features/SalesWorkspace'))
+const CustomerManagementWorkspace = lazy(() => import('./features/CustomerManagementWorkspace'))
+const CustomerFinanceWorkspace = lazy(() => import('./features/CustomerFinanceWorkspace'))
+const PeopleOperationsWorkspace = lazy(() => import('./features/PeopleOperationsWorkspace'))
+const SchedulingWorkspace = lazy(() => import('./features/SchedulingWorkspace'))
+const DocumentControlWorkspace = lazy(() => import('./features/DocumentControlWorkspace'))
+const CollaborationWorkspace = lazy(() => import('./features/CollaborationWorkspace'))
+const ControlCenter = lazy(() => import('./features/ControlCenter'))
+const IntegrationStudio = lazy(() => import('./IntegrationStudio').then((module) => ({ default: module.IntegrationStudio })))
+const AutomationStudio = lazy(() => import('./AutomationStudio.jsx').then((module) => ({ default: module.AutomationStudio })))
+const ReportStudio = lazy(() => import('./ReportStudio.jsx').then((module) => ({ default: module.ReportStudio })))
+const AccountGovernancePanel = lazy(() => import('./featureWave301400.jsx').then((module) => ({ default: module.AccountGovernancePanel })))
+const FeatureWavePreferences = lazy(() => import('./featureWave301400.jsx').then((module) => ({ default: module.FeatureWavePreferences })))
+const FieldAssistSection = lazy(() => import('./featureWave301400.jsx').then((module) => ({ default: module.FieldAssistSection })))
+const SupportOperationsPanel = lazy(() => import('./featureWave301400.jsx').then((module) => ({ default: module.SupportOperationsPanel })))
+import { readFormTemplates } from './features/uxPreferencesStorage.js'
+const WorkloadAgendaPanel = lazy(() => import('./features/UXBatchC.jsx').then((module) => ({ default: module.WorkloadAgendaPanel })))
+const UXPreferencesPanel = lazy(() => import('./features/UXBatchC.jsx').then((module) => ({ default: module.UXPreferencesPanel })))
+const UserExperienceSuite = lazy(() => import('./features/UserExperienceSuite.jsx'))
+const WorkPlanner = lazy(() => import('./features/WorkPlanner.jsx'))
 import './App.css'
 
 const navSections = [
   { id: 'overview', label: 'Team Dashboard', detail: 'Priorities, ownership, readiness', icon: Gauge },
   { id: 'reports', label: 'Reports', detail: 'Activity, revenue, and work summaries', icon: BarChart3 },
   { id: 'growth', label: 'Growth & Work', detail: 'Dashboards, tasks, projects, sales', icon: BriefcaseBusiness },
+  { id: 'work-planner', label: 'Work Planner', detail: 'Capacity, timers, and handoffs', icon: CalendarDays },
   { id: 'sales-growth', label: 'Sales Studio', detail: 'Forecasts, qualification, and deal workflow', icon: BarChart3 },
   { id: 'customer-management', label: 'Customer Management', detail: 'Segments, care, consent, and ownership', icon: Users },
   { id: 'field-assist', label: 'Field & Assist', detail: 'Offline capture and reviewed local help', icon: Sparkles },
@@ -163,7 +173,8 @@ function userFacingError(error, fallback) {
 }
 
 const cylinderMode = window.overheadDesktop?.deploymentMode === 'cylinder'
-const applicationName = cylinderMode ? 'OverHead Cylinder' : 'OverHead Desktop'
+const cylinderClientMode = cylinderMode && window.overheadDesktop?.deploymentVariant === 'client'
+const applicationName = cylinderClientMode ? 'OverHead Cylinder Client' : cylinderMode ? 'OverHead Cylinder' : 'OverHead Desktop'
 
 function App() {
   const [activeSection, setActiveSection] = useState('overview')
@@ -188,6 +199,9 @@ function App() {
   const [shortcutKeys, setShortcutKeys] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.navShortcuts.v1') || '{}') } catch { return {} } })
   const [collapsedNavGroups, setCollapsedNavGroups] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.navCollapsed.v1') || '{}') } catch { return {} } })
   const [navCustomizeOpen, setNavCustomizeOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('overhead.sidebar.collapsed.v1') === 'true')
+  const [workspaceTabs, setWorkspaceTabs] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.workspaceTabs.v1') || '["overview"]') } catch { return ['overview'] } })
+  const [recentWorkspaces, setRecentWorkspaces] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.recentWorkspaces.v1') || '[]') } catch { return [] } })
 
   const selectedModule = useMemo(
     () => modules.find((module) => module.id === activeModule) ?? modules[0],
@@ -199,11 +213,18 @@ function App() {
   )
   const secureView = session.signedIn && !privacyMode
   const teamSections = visibleSectionsForRole(session.role)
+  function closeWorkspaceTab(sectionId) {
+    const next = workspaceTabs.filter((id) => id !== sectionId)
+    if (!next.length) next.push('overview')
+    setWorkspaceTabs(next)
+    window.localStorage.setItem('overhead.workspaceTabs.v1', JSON.stringify(next))
+    if (activeSection === sectionId) setActiveSection(next[next.length - 1])
+  }
   const navGroups = useMemo(() => {
     const visibleSections = visibleSectionsForRole(session.role)
     const groups = { Workspace: [], Operations: [], Administration: [] }
     const administration = ['accounts', 'licenses', 'plans', 'payments', 'security', 'admin-security', 'settings', 'support']
-    const operations = ['scheduling', 'documents', 'collaboration', 'finance', 'people', 'rule-center', 'integrations', 'automations', 'evidence', 'imports', 'work', 'customers', 'square', 'tools']
+    const operations = ['work-planner', 'scheduling', 'documents', 'collaboration', 'finance', 'people', 'rule-center', 'integrations', 'automations', 'evidence', 'imports', 'work', 'customers', 'square', 'tools']
     navSections.filter((section) => visibleSections.includes(section.id)).forEach((section) => groups[administration.includes(section.id) ? 'Administration' : operations.includes(section.id) ? 'Operations' : 'Workspace'].push(section))
     return Object.entries(groups).filter(([, items]) => items.length)
   }, [session.role])
@@ -211,8 +232,24 @@ function App() {
   useEffect(() => { window.localStorage.setItem('overhead.favoritePages.v1', JSON.stringify(favoritePages)) }, [favoritePages])
   useEffect(() => { window.localStorage.setItem('overhead.navShortcuts.v1', JSON.stringify(shortcutKeys)) }, [shortcutKeys])
   useEffect(() => { window.localStorage.setItem('overhead.navCollapsed.v1', JSON.stringify(collapsedNavGroups)) }, [collapsedNavGroups])
+  useEffect(() => { window.localStorage.setItem('overhead.sidebar.collapsed.v1', String(sidebarCollapsed)) }, [sidebarCollapsed])
+  useEffect(() => { if (session.signedIn) setWorkspaceTabs((current) => { const next = [...new Set([...current.filter((id) => teamSections.includes(id)), activeSection])].slice(-8); window.localStorage.setItem('overhead.workspaceTabs.v1', JSON.stringify(next)); return next }) }, [activeSection, session.signedIn])
+  useEffect(() => { if (session.signedIn && activeSection !== 'settings') window.localStorage.setItem('overhead.lastSection.v1', activeSection) }, [session.signedIn, activeSection])
+  useEffect(() => {
+    setRecentWorkspaces((current) => {
+      const next = [activeSection, ...current.filter((id) => id !== activeSection)].slice(0, 5)
+      window.localStorage.setItem('overhead.recentWorkspaces.v1', JSON.stringify(next))
+      return next
+    })
+  }, [activeSection])
   useEffect(() => {
     const onKeyDown = (event) => {
+      if (!session.signedIn) return
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setCommandOpen(true)
+        return
+      }
       if (!(event.altKey && event.shiftKey) || event.ctrlKey || event.metaKey) return
       const key = event.key.toLowerCase()
       const visibleSections = visibleSectionsForRole(session.role)
@@ -222,11 +259,18 @@ function App() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [session.role, shortcutKeys])
+  useEffect(() => {
+    const onRecentRecordNavigate = (event) => {
+      const target = String(event.detail || '')
+      if (teamSections.includes(target)) setActiveSection(target)
+    }
+    window.addEventListener('overhead:navigate', onRecentRecordNavigate)
+    return () => window.removeEventListener('overhead:navigate', onRecentRecordNavigate)
+  }, [teamSections])
   const quickCommands = [
-    { id: 'today', label: 'Open Current Work', area: 'Navigation', detail: 'Jump to the dashboard queue.', action: () => setActiveSection('overview') },
-    { id: 'customers', label: 'Open Customer Records', area: 'Navigation', detail: 'Review profiles and workflow rules.', action: () => setActiveSection('customers') },
-    { id: 'plans', label: 'Open Billing And Plans', area: 'Navigation', detail: 'Manage Silver, Gold, Black, billing, and Stripe.', action: () => setActiveSection('plans') },
-    { id: 'security', label: 'Open Security Center', area: 'Navigation', detail: 'Recovery, privacy requests, risk, and compliance.', action: () => setActiveSection('security') },
+    { id: 'quick-create', label: 'Quick Create', area: 'Action', detail: 'Open the create panel for customers, tasks, appointments, and more.', action: () => window.dispatchEvent(new CustomEvent('overhead:open-ux-panel', { detail: 'create' })) },
+    { id: 'global-search', label: 'Search All Records', area: 'Action', detail: 'Search customer, task, finance, and support records.', action: () => window.dispatchEvent(new CustomEvent('overhead:open-ux-panel', { detail: 'search' })) },
+    { id: 'action-inbox', label: 'Open Action Inbox', area: 'Action', detail: 'Review tasks, support requests, and queued work.', action: () => window.dispatchEvent(new CustomEvent('overhead:open-ux-panel', { detail: 'inbox' })) },
     { id: 'pdf', label: 'Create Fillable PDF', area: 'Tool', detail: 'Generate a customer intake packet.', action: async () => {
       if (!window.overheadBackend?.createFillablePdf) return
       const result = await window.overheadBackend.createFillablePdf({ customerId: backendState.customers?.[0]?.id || '', packetType: 'customer-intake' })
@@ -417,7 +461,10 @@ function App() {
       setSession(next)
       setDraftSession(next)
       setPrivacyMode(false)
-      setActiveSection('overview')
+      const startup = window.localStorage.getItem('overhead.startupSection.v1') || 'overview'
+      const allowed = visibleSectionsForRole(next.role)
+      const remembered = window.localStorage.getItem('overhead.lastSection.v1')
+      setActiveSection(startup === 'last' && allowed.includes(remembered) ? remembered : allowed.includes(startup) ? startup : 'overview')
       window.localStorage.setItem('overhead.profile.v1', JSON.stringify({
         ownerName: next.ownerName,
         businessName: next.businessName,
@@ -513,9 +560,10 @@ function App() {
         </div>
       </header>
 
-      <div className="desktop-body">
-        <aside className="sidebar" aria-label="Primary">
+      <div className={`desktop-body${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
+        <aside className={`sidebar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`} aria-label="Primary">
           <div className="brand">
+            <button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'} title={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? '›' : '‹'}</button>
             <div className="brand-mark" aria-hidden="true">OH</div>
             <div>
               <strong>OverHead</strong>
@@ -525,6 +573,7 @@ function App() {
 
           <nav className="nav-list">
             <button className="ghost-button" type="button" onClick={() => setNavCustomizeOpen((open) => !open)} aria-expanded={navCustomizeOpen}>{navCustomizeOpen ? 'Close navigation editor' : 'Customize navigation'}</button>
+            {recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).length > 0 && <div className="nav-group"><strong>Recent workspaces</strong>{recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; return <button className="nav-item" type="button" key={`recent-${id}`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{navLabels[id] || section.label}</strong><small>Recently opened</small></span></button> })}</div>}
             {favoritePages.filter((id) => teamSections.includes(id)).length > 0 && <div className="nav-group"><strong>Favorites</strong>{favoritePages.filter((id) => teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; return <button className={section.id === activeSection ? 'nav-item active' : 'nav-item'} type="button" key={`favorite-${id}`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{navLabels[id] || section.label}</strong><small>Favorite page</small></span></button> })}</div>}
             {navCustomizeOpen && <details className="nav-customizer" open><summary>Labels, favorites and shortcuts</summary>{navSections.filter((section) => teamSections.includes(section.id)).map((section) => <div key={`pref-${section.id}`}><label>{section.label}<input aria-label={`Custom label for ${section.label}`} maxLength={28} value={navLabels[section.id] || ''} placeholder={section.label} onChange={(event) => setNavLabels((current) => ({ ...current, [section.id]: event.target.value }))}/></label><label><input type="checkbox" checked={favoritePages.includes(section.id)} onChange={(event) => setFavoritePages((current) => event.target.checked ? [...new Set([...current, section.id])] : current.filter((id) => id !== section.id))}/>Favorite</label><label>Alt+Shift+<input aria-label={`Shortcut key for ${section.label}`} maxLength={1} value={shortcutKeys[section.id] || ''} onChange={(event) => setShortcutKeys((current) => { const key = event.target.value.slice(-1); const next = Object.fromEntries(Object.entries(current).filter(([id, assigned]) => id === section.id || !key || String(assigned).toLowerCase() !== key.toLowerCase())); return { ...next, [section.id]: key } })}/></label></div>)}</details>}
             {navGroups.map(([group, groupSections]) => <div className="nav-group" key={group}><button className="nav-group-heading" type="button" aria-expanded={!collapsedNavGroups[group]} onClick={() => setCollapsedNavGroups((current) => ({ ...current, [group]: !current[group] }))}>{group}</button>{!collapsedNavGroups[group] && groupSections.map((section) => {
@@ -535,6 +584,7 @@ function App() {
                   className={section.id === activeSection ? 'nav-item active' : 'nav-item'}
                   type="button"
                   key={section.id}
+                  title={`${navLabels[section.id] || section.label} · ${section.detail}`}
                   onClick={() => setActiveSection(section.id)}
                 >
                   <Icon size={18} />
@@ -589,7 +639,32 @@ function App() {
             </div>
           </header>
 
-          <section className="workspace-content">
+          <nav className="workspace-tabs" aria-label="Open workspaces" role="tablist" onKeyDown={(event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+            const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]')]
+            const current = tabs.indexOf(event.target.closest('[role="tab"]'))
+            if (current < 0 || !tabs.length) return
+            event.preventDefault()
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : event.key === 'ArrowRight' ? (current + 1) % tabs.length : (current - 1 + tabs.length) % tabs.length
+            tabs[next].focus()
+            setActiveSection(tabs[next].dataset.section)
+          }}>
+            {workspaceTabs.filter((id) => teamSections.includes(id)).map((id) => {
+              const section = navSections.find((item) => item.id === id)
+              if (!section) return null
+              return <div className={id === activeSection ? 'workspace-tab active' : 'workspace-tab'} key={id} role="presentation"><button id={`workspace-tab-${id}`} type="button" role="tab" aria-controls="active-workspace-panel" data-section={id} tabIndex={id === activeSection ? 0 : -1} aria-selected={id === activeSection} onClick={() => setActiveSection(id)}>{navLabels[id] || section.label}</button>{id !== 'overview' && <button type="button" aria-label={`Close ${section.label} tab`} title="Close tab" onClick={() => closeWorkspaceTab(id)}>×</button>}</div>
+            })}
+          </nav>
+
+          <Suspense fallback={<div className="workspace-loading" role="status">Loading workspace tools…</div>}><UserExperienceSuite
+            backendState={backendState}
+            activeSection={activeSection}
+            onNavigate={setActiveSection}
+            operationNotice={operationNotice}
+            setOperationNotice={setOperationNotice}
+          /></Suspense>
+
+          <Suspense fallback={<div className="workspace-loading" role="status">Loading workspace…</div>}><section className="workspace-content" id="active-workspace-panel" role="tabpanel" tabIndex={0} aria-labelledby={`workspace-tab-${activeSection}`}>
             {activeSection === 'overview' && (
               <OverviewSection
                 session={session}
@@ -602,6 +677,7 @@ function App() {
             )}
             {activeSection === 'reports' && <><ReportsSection backendState={backendState} /><ReportStudio backendState={backendState} sessionRole={session.role} sessionEmail={session.email} setOperationNotice={setOperationNotice} /></>}
             {activeSection === 'growth' && <GrowthWorkspace session={session} />}
+            {activeSection === 'work-planner' && <WorkPlanner backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'sales-growth' && <SalesWorkspace backendState={backendState} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
             {activeSection === 'customer-management' && <CustomerManagementWorkspace backendState={backendState} secureView={secureView} refreshBackend={refreshBackend} sessionRole={session.role} />}
             {activeSection === 'field-assist' && <FieldAssistSection backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
@@ -689,6 +765,7 @@ function App() {
                 backendState={backendState}
                 activePlan={activePlan}
                 setActivePlan={setActivePlan}
+                allowedSections={teamSections}
                 draftSession={draftSession}
                 refreshBackend={refreshBackend}
                 setOperationNotice={setOperationNotice}
@@ -734,13 +811,15 @@ function App() {
                 setActivePlan={setActivePlan}
               />
             )}
-          </section>
+          </section></Suspense>
         </main>
       </div>
       {commandOpen && (
         <CommandCenter
           commands={quickCommands}
+          sections={navSections.filter((section) => teamSections.includes(section.id))}
           onRun={runCommand}
+          onNavigate={setActiveSection}
           onClose={() => setCommandOpen(false)}
           backendState={backendState}
         />
@@ -758,7 +837,36 @@ function App() {
   )
 }
 
-function CommandCenter({ commands, onRun, onClose, backendState }) {
+function CommandCenter({ commands, sections, onRun, onNavigate, onClose, backendState }) {
+  const [query, setQuery] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
+  const searchRef = useRef(null)
+  const entries = [
+    ...sections.map((section) => ({ id: `workspace:${section.id}`, label: `Open ${section.label}`, area: 'Workspace', detail: section.detail, navigate: section.id })),
+    ...commands.map((command) => ({ ...command, id: `command:${command.id}` })),
+  ].filter((item) => `${item.label} ${item.area} ${item.detail}`.toLowerCase().includes(query.trim().toLowerCase()))
+
+  useEffect(() => { searchRef.current?.focus() }, [])
+  useEffect(() => { setActiveIndex((index) => Math.min(index, Math.max(0, entries.length - 1))) }, [query, entries.length])
+
+  function runEntry(entry) {
+    if (entry.navigate) { onNavigate(entry.navigate); onClose(); return }
+    onRun(entry)
+  }
+
+  function handleSearchKeyDown(event) {
+    if (!entries.length) return
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const direction = event.key === 'ArrowDown' ? 1 : -1
+      setActiveIndex((index) => (index + direction + entries.length) % entries.length)
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault(); setActiveIndex(event.key === 'Home' ? 0 : entries.length - 1)
+    } else if (event.key === 'Enter') {
+      event.preventDefault(); runEntry(entries[activeIndex])
+    }
+  }
+
   return (
     <div className="command-overlay" role="presentation" onMouseDown={onClose}>
       <section className="command-center" role="dialog" aria-label="OverHead command center" onMouseDown={(event) => event.stopPropagation()}>
@@ -771,19 +879,22 @@ function CommandCenter({ commands, onRun, onClose, backendState }) {
         </div>
         <div className="command-search-readout">
           <Search size={17} />
+          <input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0) }} onKeyDown={handleSearchKeyDown} aria-label="Search commands and workspaces" placeholder="Search workspaces and actions" />
           <span>{backendState.health?.customerCount ?? 0} customers</span>
           <span>{backendState.health?.queuedJobCount ?? 0} queued jobs</span>
           <span>{backendState.health?.openFraudSignalCount ?? 0} risk signals</span>
         </div>
         <div className="command-list">
-          {commands.map((command) => (
-            <button type="button" key={command.id} onClick={() => onRun(command)}>
+          {entries.map((command, index) => (
+            <button type="button" key={command.id} className={index === activeIndex ? 'command-active' : ''} onMouseEnter={() => setActiveIndex(index)} onClick={() => runEntry(command)}>
               <span>{command.area}</span>
               <strong>{command.label}</strong>
               <small>{command.detail}</small>
             </button>
           ))}
+          {!entries.length && <p className="queue-empty">No matching workspace or action. Try a shorter search.</p>}
         </div>
+        <p className="command-keyboard-hint"><kbd>↑</kbd> <kbd>↓</kbd> Move <kbd>Enter</kbd> Open <kbd>Esc</kbd> Close</p>
       </section>
     </div>
   )
@@ -938,7 +1049,7 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
           <div className="brand-mark" aria-hidden="true">OH</div>
           <div>
             <strong>{applicationName}</strong>
-            <span>{cylinderMode ? 'Windows Server and Windows IoT workspace' : 'Installed Windows application'}</span>
+            <span>{cylinderMode ? cylinderClientMode ? 'Managed Windows 10 and Windows 11 workstation' : 'Windows Server and Windows IoT workspace' : 'Installed Windows application'}</span>
           </div>
         </div>
         <h1>Open the work. Keep it moving.</h1>
@@ -1114,11 +1225,17 @@ function readDashboardWidgetPreferences() {
 function ReportsSection({ backendState }) {
   const [recordType, setRecordType] = useState('invoices')
   const [period, setPeriod] = useState('30')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [previewOpen, setPreviewOpen] = useState(false)
   const records = backendState[recordType] || []
-  const cutoff = period === 'all' ? 0 : Date.now() - Number(period) * 86400000
+  const cutoff = period === 'all' || period === 'custom' ? 0 : Date.now() - Number(period) * 86400000
   const rows = records.filter((record) => {
     const date = Date.parse(record.created_at || record.updated_at || record.scheduled_for || record.due_at || '')
-    return !cutoff || (Number.isFinite(date) && date >= cutoff)
+    if (!Number.isFinite(date)) return period === 'all' && !fromDate && !toDate
+    const start = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : period === 'custom' ? 0 : cutoff
+    const end = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Infinity
+    return date >= start && date <= end
   })
   const total = rows.reduce((sum, record) => sum + (Number(record.amount) || 0), 0)
   const statuses = rows.reduce((counts, record) => {
@@ -1146,8 +1263,9 @@ function ReportsSection({ backendState }) {
         <p>Review a local summary of operational records, then export the filtered rows as a spreadsheet-ready CSV.</p>
         <div className="report-controls">
           <label>Record type<select value={recordType} onChange={(event) => setRecordType(event.target.value)}><option value="invoices">Invoices</option><option value="quotes">Quotes</option><option value="appointments">Appointments</option><option value="tasks">Tasks</option></select></label>
-          <label>Date range<select value={period} onChange={(event) => setPeriod(event.target.value)}><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All available records</option></select></label>
-          <button className="primary-action" type="button" onClick={downloadCsv} disabled={!rows.length}>Export CSV</button>
+          <label>Date range<select value={period} onChange={(event) => setPeriod(event.target.value)}><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last year</option><option value="custom">Custom dates</option><option value="all">All available records</option></select></label>
+          {period === 'custom' && <><label>From<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label><label>Through<input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></label></>}
+          <button className="primary-action" type="button" onClick={() => setPreviewOpen((open) => !open)} disabled={!rows.length}>{previewOpen ? 'Close export preview' : 'Preview export'}</button>
         </div>
         <div className="dashboard-grid report-metrics">
           <StatusCard icon={FileText} title="Matching records" value={String(rows.length)} note={`From ${records.length} available ${recordType}.`} />
@@ -1155,6 +1273,7 @@ function ReportsSection({ backendState }) {
           <StatusCard icon={CheckCircle2} title="Statuses" value={String(Object.keys(statuses).length)} note="Distinct statuses in this report." />
         </div>
         {rows.length ? <div className="report-status-list">{Object.entries(statuses).map(([status, count]) => <span key={status}><strong>{status}</strong>{count}</span>)}</div> : <p className="queue-empty">No {recordType} match this date range.</p>}
+        {previewOpen && rows.length > 0 && <div className="backend-health" role="region" aria-label="CSV export preview"><strong>CSV preview · {rows.length} rows · 5 columns</strong><span>Record ID · Title · Status · Date · Amount</span>{rows.slice(0, 5).map((record) => <small key={record.id}>{record.id} · {record.title || record.label || 'Untitled'} · {record.status || 'Unspecified'} · {record.created_at || record.updated_at || record.scheduled_for || record.due_at || '—'} · {record.amount ?? ''}</small>)}{rows.length > 5 && <small>Showing the first 5 rows. The export includes all {rows.length} matching records.</small>}<button className="primary-action" type="button" onClick={downloadCsv}>Download CSV</button></div>}
         <p className="form-hint">This report reads the current OverHead workspace. CSV files are saved to your device when exported.</p>
       </div>
     </section>
@@ -1170,10 +1289,13 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
   const [queueError, setQueueError] = useState('')
   const [visibleWidgets, setVisibleWidgets] = useState(readDashboardWidgetPreferences)
   const [customizeOpen, setCustomizeOpen] = useState(false)
+  const [dashboardDensity, setDashboardDensity] = useState(() => window.localStorage.getItem('overhead.dashboard.density.v1') || 'comfortable')
+  const [dashboardPresets, setDashboardPresets] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.dashboard.presets.v1') || '[]') } catch { return [] } })
   const widgetSet = useMemo(() => new Set(visibleWidgets), [visibleWidgets])
   useEffect(() => {
     window.localStorage.setItem('overhead.dashboard.widgets.v1', JSON.stringify(visibleWidgets))
   }, [visibleWidgets])
+  useEffect(() => { window.localStorage.setItem('overhead.dashboard.density.v1', dashboardDensity) }, [dashboardDensity])
   function toggleWidget(id) {
     setVisibleWidgets((current) => {
       if (current.includes(id)) {
@@ -1186,6 +1308,14 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
   function resetDashboard() {
     setVisibleWidgets(dashboardWidgets.map(([id]) => id))
   }
+  function saveDashboardPreset() {
+    const name = window.prompt('Name this dashboard preset')?.trim()
+    if (!name) return
+    const next = [...dashboardPresets.filter((preset) => preset.name !== name), { name, widgets: visibleWidgets, density: dashboardDensity }].slice(-10)
+    setDashboardPresets(next)
+    window.localStorage.setItem('overhead.dashboard.presets.v1', JSON.stringify(next))
+  }
+  function applyDashboardPreset(preset) { setVisibleWidgets(preset.widgets); setDashboardDensity(preset.density || 'comfortable') }
   const taskCounts = useMemo(() => queue.reduce((counts, task) => {
     const status = task.status || 'Open'
     counts[status] = (counts[status] || 0) + 1
@@ -1220,13 +1350,18 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
   }
 
   return (
-    <section className="overview-layout">
+    <section className={`overview-layout dashboard-${dashboardDensity}`}>
+      <WorkloadAgendaPanel backendState={backendState} />
       <div className="dashboard-customize-bar">
         <p>Choose the panels that appear on your dashboard.</p>
         <button className="ghost-button" type="button" aria-expanded={customizeOpen} onClick={() => setCustomizeOpen((open) => !open)}>{customizeOpen ? 'Done customizing' : 'Customize dashboard'}</button>
       </div>
+      <RecentRecords />
       {customizeOpen && <fieldset className="dashboard-widget-picker">
         <legend>Dashboard panels</legend>
+        <div className="button-row"><label>Layout density<select value={dashboardDensity} onChange={(event) => setDashboardDensity(event.target.value)}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><button className="ghost-button" type="button" onClick={saveDashboardPreset}>Save current preset</button></div>
+        {dashboardPresets.length > 0 && <label>Apply saved preset<select value="" onChange={(event) => { const preset = dashboardPresets.find((item) => item.name === event.target.value); if (preset) applyDashboardPreset(preset) }}><option value="">Choose a preset</option>{dashboardPresets.map((preset) => <option key={preset.name}>{preset.name}</option>)}</select></label>}
+        <div className="button-row"><button className="ghost-button" type="button" onClick={() => applyDashboardPreset({ widgets: ['status', 'queue', 'live-operations', 'records'], density: 'comfortable' })}>Operations preset</button><button className="ghost-button" type="button" onClick={() => applyDashboardPreset({ widgets: ['status', 'profile', 'queue', 'compliance'], density: 'comfortable' })}>Owner preset</button><button className="ghost-button" type="button" onClick={() => applyDashboardPreset({ widgets: ['status', 'queue'], density: 'compact' })}>Compact preset</button></div>
         {dashboardWidgets.map(([id, label]) => <label key={id}>
           <input type="checkbox" checked={widgetSet.has(id)} onChange={() => toggleWidget(id)} />
           <span>{label}</span>
@@ -1318,6 +1453,15 @@ function LiveOperations({ backendState, refreshBackend, setOperationNotice }) {
   const [kind, setKind] = useState('appointment')
   const [draft, setDraft] = useState({ title: '', amount: '', scheduledFor: '', dueDate: '', notes: '', customerId: '' })
   const [error, setError] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState('')
+  const templates = readFormTemplates().filter((item) => item.kind === kind)
+  function applyTemplate(templateId) {
+    const template = templates.find((item) => item.id === templateId)
+    if (!template) return
+    setDraft((current) => ({ ...current, ...template.defaults }))
+    setSelectedTemplate(template.id)
+    setOperationNotice(`Applied ${template.name}.`)
+  }
   const lists = { appointment: backendState.appointments || [], quote: backendState.quotes || [], invoice: backendState.invoices || [] }
   async function create() {
     try {
@@ -1327,7 +1471,7 @@ function LiveOperations({ backendState, refreshBackend, setOperationNotice }) {
       setDraft({ title: '', amount: '', scheduledFor: '', dueDate: '', notes: '', customerId: '' }); setError(''); setOperationNotice(`${kind[0].toUpperCase()}${kind.slice(1)} created.`); await refreshBackend()
     } catch (reason) { setError(userFacingError(reason, `The ${kind} could not be created.`)) }
   }
-  return <section className="panel action-panel"><div className="section-head"><div><p className="eyebrow">Live operations</p><h2>Create office work</h2></div><span className="record-count">{lists[kind].length} saved</span></div><div className="queue-filters">{['appointment', 'quote', 'invoice'].map((item) => <button className={kind === item ? 'active' : ''} type="button" key={item} onClick={() => setKind(item)}>{item}</button>)}</div><div className="profile-form compact-form"><FormField label="Title" value={draft.title} onChange={(value) => setDraft((current) => ({ ...current, title: value }))} placeholder={kind === 'appointment' ? 'Service appointment' : kind === 'quote' ? 'Service quote' : 'Customer invoice'} /><label>Customer<select value={draft.customerId} onChange={(event) => setDraft((current) => ({ ...current, customerId: event.target.value }))}><option value="">No customer assigned</option>{(backendState.customers || []).map((customer) => <option key={customer.id} value={customer.id}>{customer.business_name || customer.owner_name || customer.email}</option>)}</select></label>{kind === 'appointment' ? <label>Scheduled for<input type="datetime-local" value={draft.scheduledFor} onChange={(event) => setDraft((current) => ({ ...current, scheduledFor: event.target.value }))} /></label> : <><FormField label="Amount" value={draft.amount} onChange={(value) => setDraft((current) => ({ ...current, amount: value }))} placeholder="0.00" />{kind === 'invoice' && <label>Due date<input type="date" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} /></label>}</>}<FormField label="Notes" value={draft.notes} onChange={(value) => setDraft((current) => ({ ...current, notes: value }))} placeholder="Optional internal note" /><button className="primary-action" type="button" onClick={create}>Create {kind}</button>{error && <p className="form-error">{error}</p>}</div><div className="task-list">{lists[kind].slice(0, 4).map((item) => <div className="task-row" key={item.id}><strong>{item.title}</strong><span>{item.status}</span><span>{item.scheduled_for || item.due_date || `$${Number(item.amount || 0).toFixed(2)}`}</span></div>)}{!lists[kind].length && <p className="queue-empty">No {kind}s have been created yet.</p>}</div></section>
+  return <section className="panel action-panel"><div className="section-head"><div><p className="eyebrow">Live operations</p><h2>Create office work</h2></div><span className="record-count">{lists[kind].length} saved</span></div><div className="queue-filters">{['appointment', 'quote', 'invoice'].map((item) => <button className={kind === item ? 'active' : ''} type="button" key={item} onClick={() => { setKind(item); setSelectedTemplate('') }}>{item}</button>)}</div><div className="profile-form compact-form">{templates.length > 0 && <label>Apply saved template<select value={selectedTemplate} onChange={(event) => applyTemplate(event.target.value)}><option value="">Choose a template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>}<FormField label="Title" value={draft.title} onChange={(value) => setDraft((current) => ({ ...current, title: value }))} placeholder={kind === 'appointment' ? 'Service appointment' : kind === 'quote' ? 'Service quote' : 'Customer invoice'} /><label>Customer<select value={draft.customerId} onChange={(event) => setDraft((current) => ({ ...current, customerId: event.target.value }))}><option value="">No customer assigned</option>{(backendState.customers || []).map((customer) => <option key={customer.id} value={customer.id}>{customer.business_name || customer.owner_name || customer.email}</option>)}</select></label>{kind === 'appointment' ? <label>Scheduled for<input type="datetime-local" value={draft.scheduledFor} onChange={(event) => setDraft((current) => ({ ...current, scheduledFor: event.target.value }))} /></label> : <><FormField label="Amount" value={draft.amount} onChange={(value) => setDraft((current) => ({ ...current, amount: value }))} placeholder="0.00" />{kind === 'invoice' && <label>Due date<input type="date" value={draft.dueDate} onChange={(event) => setDraft((current) => ({ ...current, dueDate: event.target.value }))} /></label>}</>}<FormField label="Notes" value={draft.notes} onChange={(value) => setDraft((current) => ({ ...current, notes: value }))} placeholder="Optional internal note" /><button className="primary-action" type="button" onClick={create}>Create {kind}</button>{error && <p className="form-error">{error}</p>}</div><div className="task-list">{lists[kind].slice(0, 4).map((item) => <div className="task-row" key={item.id}><strong>{item.title}</strong><span>{item.status}</span><span>{item.scheduled_for || item.due_date || `$${Number(item.amount || 0).toFixed(2)}`}</span></div>)}{!lists[kind].length && <p className="queue-empty">No {kind}s have been created yet.</p>}</div></section>
 }
 
 function OperationalRecords({ backendState, refreshBackend, setOperationNotice }) {
@@ -1419,6 +1563,7 @@ function sectionTitle(section) {
     overview: 'OverHead Console',
     reports: 'Workspace Reports',
     growth: 'Growth & Work Suite',
+    'work-planner': 'Work Planner',
     'sales-growth': 'Sales Studio',
     'customer-management': 'Customer Management',
     'field-assist': 'Field & Assist',
@@ -1453,7 +1598,7 @@ function displayRole(role) {
 }
 
 function allowedSectionsForRole(role) {
-  const member = ['overview', 'field-assist', 'scheduling', 'collaboration', 'search', 'work', 'customers', 'support', 'tools', 'security']
+  const member = ['overview', 'field-assist', 'work-planner', 'scheduling', 'collaboration', 'search', 'work', 'customers', 'support', 'tools', 'security']
   if (role === 'Owner') return navSections.map((section) => section.id)
   if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'sales-growth', 'customer-management', 'documents', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
   return member
@@ -2492,9 +2637,11 @@ function CylinderPlanPanel({ backendState }) {
   const subscription = entitlement?.subscription
   const trialEnd = subscription?.trial_ends_at
   return <section className="panel page-panel" aria-label="Cylinder deployment">
-    <p className="eyebrow">OverHead Cylinder</p>
-    <h2>Your server workspace</h2>
-    <p>Cylinder runs on Windows Server or Windows IoT. Records, documents, and backups stay on this host unless you explicitly export or synchronize supported records.</p>
+    <p className="eyebrow">{applicationName}</p>
+    <h2>{cylinderClientMode ? 'Your managed workstation' : 'Your server workspace'}</h2>
+    <p>{cylinderClientMode
+      ? 'Cylinder Client runs on a managed Windows 10 or Windows 11 workstation and checks this device against your central workspace policy. Local records, documents, and backups are stored on this workstation.'
+      : 'Cylinder runs on Windows Server or Windows IoT. Records, documents, and backups stay on this host unless you explicitly export or synchronize supported records.'}</p>
     {entitlement && <div className="billing-protection-note" role="status">
       <strong>{subscription?.payment_status === 'trial' ? 'Evaluation active' : entitlement.activeTier === 'cylinder' ? 'Cylinder access active' : 'Cylinder access needs activation'}</strong>
       <span>{trialEnd ? `Evaluation ends ${new Date(trialEnd).toLocaleDateString()}. No automatic charge or renewal.` : `Current access: ${entitlement.activePlan?.name || 'Silver'}.`}</span>
@@ -2870,6 +3017,7 @@ function ImportsSection({ backendState, refreshBackend, setOperationNotice }) {
   const [preview, setPreview] = useState(null)
   const [companyId, setCompanyId] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
+  const [lastImport, setLastImport] = useState(() => { try { return JSON.parse(window.localStorage.getItem('overhead.lastMicrosoftImport.v1') || 'null') } catch { return null } })
   const connections = backendState.microsoftConnections || []
 
   useEffect(() => {
@@ -2915,12 +3063,24 @@ function ImportsSection({ backendState, refreshBackend, setOperationNotice }) {
     try {
       const result = await window.overheadBackend.importMicrosoftPreview({ previewId: preview.previewId, selectedIds })
       setOperationNotice(`Imported ${result.imported} customer record${result.imported === 1 ? '' : 's'}; skipped ${result.skipped} duplicate or plan-limit record${result.skipped === 1 ? '' : 's'}.`)
+      if (result.importBatchId && result.imported) { const batch = { id: result.importBatchId, imported: result.imported, importedAt: new Date().toISOString() }; setLastImport(batch); window.localStorage.setItem('overhead.lastMicrosoftImport.v1', JSON.stringify(batch)) }
       setPreview(null)
       setSelectedIds([])
       await refreshBackend()
     } catch (error) {
       setOperationNotice(userFacingError(error, 'Could not import the selected Microsoft records.'))
     }
+  }
+
+  async function undoLastImport() {
+    if (!lastImport || !window.overheadBackend?.undoMicrosoftImport) return
+    if (!window.confirm(`Undo this Microsoft import and remove up to ${lastImport.imported} unchanged records?`)) return
+    try {
+      const result = await window.overheadBackend.undoMicrosoftImport({ importBatchId: lastImport.id })
+      setLastImport(null); window.localStorage.removeItem('overhead.lastMicrosoftImport.v1')
+      setOperationNotice(`Import undone. Removed ${result.removed} unchanged record${result.removed === 1 ? '' : 's'}.`)
+      await refreshBackend()
+    } catch (error) { setOperationNotice(userFacingError(error, 'Could not undo this import.')) }
   }
 
   function toggleRecord(id) {
@@ -2937,6 +3097,7 @@ function ImportsSection({ backendState, refreshBackend, setOperationNotice }) {
         <CloudDownload size={20} />
       </div>
       <div className="tool-grid">
+        {lastImport && <div className="backend-health"><strong>Recent import · {lastImport.imported} records</strong><span>{new Date(lastImport.importedAt).toLocaleString()}</span><button className="ghost-button" type="button" onClick={undoLastImport}>Undo import</button><small>Undo removes the batch only if its records remain unchanged and have no linked work. If they have been edited or used, no records are removed.</small></div>}
         <div className="backend-health">
           <strong>1. Connect Microsoft safely</strong>
           <span>OverHead sends you to Microsoftâ€™s sign-in page. It never collects, stores, or displays your Microsoft password. The encrypted local connection is read-only until you choose records to import.</span>
@@ -3264,7 +3425,7 @@ function SecuritySection({ backendState, session, refreshBackend, setOperationNo
   )
 }
 
-function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session, draftSession, updateDraft, signIn, backendState, refreshBackend, operationNotice, setOperationNotice }) {
+function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session, draftSession, updateDraft, signIn, backendState, refreshBackend, operationNotice, setOperationNotice, allowedSections = [] }) {
   const [reduceMotion, setReduceMotion] = useState(() => {
     const saved = window.localStorage.getItem('overhead.reduceMotion.v1')
     return saved === null ? Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) : saved === 'true'
@@ -3442,6 +3603,7 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
           </label>
         </div>
         <FeatureWavePreferences session={session} backendState={backendState} operationNotice={operationNotice} setOperationNotice={setOperationNotice} />
+        <UXPreferencesPanel allowedSections={allowedSections} setOperationNotice={setOperationNotice} />
         <div className="profile-form">
           <div className="backend-health">
             <strong>Local workspace health</strong>

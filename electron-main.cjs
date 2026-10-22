@@ -277,7 +277,7 @@ function createWindow() {
       sandbox: true,
       webSecurity: true,
       preload: path.join(__dirname, 'electron-preload.cjs'),
-      additionalArguments: [`--overhead-deployment=${DEPLOYMENT_MODE}`],
+      additionalArguments: [`--overhead-deployment=${DEPLOYMENT_MODE}`, `--overhead-variant=${DEPLOYMENT_VARIANT}`],
     },
   })
 
@@ -704,6 +704,7 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('tasks:update-status', trustedHandler((_event, payload) => backend.updateTaskStatus(payload)))
     ipcMain.handle('features:list', trustedHandler((_event, collection) => backend.listFeatureRecords(collection)))
     ipcMain.handle('features:upsert', trustedHandler((_event, payload) => backend.upsertFeatureRecord(payload)))
+    ipcMain.handle('features:bulk-status', trustedHandler((_event, payload) => backend.updateFeatureRecordStatuses(payload)))
     ipcMain.handle('features:delete', trustedHandler((_event, payload) => backend.deleteFeatureRecord(payload)))
     ipcMain.handle('jobs:queue', trustedHandler((_event, payload) => backend.queueWorkflowJob(payload)))
     ipcMain.handle('jobs:process-due', trustedHandler(() => backend.processDueJobs()))
@@ -745,6 +746,7 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('microsoft:list-connections', trustedHandler(() => backend.listMicrosoftConnections()))
     ipcMain.handle('microsoft:preview-import', trustedHandler((_event, payload) => backend.previewMicrosoftImport(payload)))
     ipcMain.handle('microsoft:import-preview', trustedHandler((_event, payload) => backend.importMicrosoftPreview(payload)))
+    ipcMain.handle('microsoft:undo-import', trustedHandler((_event, payload) => backend.undoMicrosoftImport(payload)))
     ipcMain.handle('playbooks:apply', trustedHandler((_event, payload) => backend.applyCustomerPlaybook(payload)))
     ipcMain.handle('guided-launch:build', trustedHandler(() => backend.buildGuidedLaunchPlan()))
     ipcMain.handle('legal:acknowledge', trustedHandler((_event, payload) => backend.acknowledgeLegal(payload)))

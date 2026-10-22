@@ -105,6 +105,11 @@ const featureRecordSchema = z.object({
   collection: featureCollectionSchema,
   record: z.record(z.string(), z.unknown()).refine((record) => Object.keys(record).length <= 100, 'A feature record can contain up to 100 fields.'),
 })
+const featureBulkStatusSchema = z.object({
+  collection: featureCollectionSchema,
+  recordIds: z.array(z.string().trim().min(1).max(160)).min(1).max(100),
+  status: z.string().trim().min(1).max(60),
+}).refine(({ recordIds }) => new Set(recordIds).size === recordIds.length, 'Selected record IDs must be unique.')
 const featureDeleteSchema = z.object({ collection: featureCollectionSchema, recordId: z.string().trim().min(1).max(160) })
 const configurableIdPrefixes = new Set(['cust', 'task', 'quote', 'invoice', 'expense', 'appointment', 'document'])
 const securityNoticeEvents = new Set(['fraud.signal', 'access.denied', 'integrity.attention', 'auth.failed', 'user.suspended', 'data.exported', 'restore.completed', 'session.revoked', 'project.status_request.created', 'project.status_request.decided'])
@@ -391,6 +396,8 @@ let schedulerStarted = false
 let secureStore = null
 let activeSession = null
 let cylinderHeartbeatTimer = null
+let persistenceBatchDepth = 0
+let persistencePending = false
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA2bxXMdNsXVgPaYv3jbWJXGlosVYtBd8U',
@@ -994,9 +1001,30 @@ function upgradeState(snapshot = {}) {
 }
 
 function persist() {
+  if (persistenceBatchDepth > 0) {
+    persistencePending = true
+    return
+  }
+  persistNow()
+}
+
+function withPersistenceBatch(operation) {
+  persistenceBatchDepth += 1
+  try {
+    return operation()
+  } finally {
+    persistenceBatchDepth -= 1
+    if (persistenceBatchDepth === 0 && persistencePending) {
+      persistencePending = false
+      persistNow()
+    }
+  }
+}
+
+function persistNow() {
   state.updatedAt = now()
   const tmpPath = `${dbPath}.tmp`
-  fs.writeFileSync(tmpPath, encryptStore(JSON.stringify(state, null, 2)), { encoding: 'utf8', flush: true })
+  fs.writeFileSync(tmpPath, encryptStore(JSON.stringify(state)), { encoding: 'utf8', flush: true })
   if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, `${dbPath}.bak`)
   fs.renameSync(tmpPath, dbPath)
   if (fs.existsSync(legacyDbPath)) fs.renameSync(legacyDbPath, `${legacyDbPath}.migrated-${Date.now()}`)
@@ -1678,10 +1706,11 @@ function listFeatureRecords(collection) {
   const parsedCollection = featureCollectionSchema.parse(collection)
   requireRole(featureCollectionRoles[parsedCollection], `${parsedCollection} feature data access`)
   const records = Array.isArray(state.featureRecords[parsedCollection]) ? state.featureRecords[parsedCollection] : []
-  return JSON.parse(JSON.stringify(records))
+  return structuredClone(records)
 }
 
 function upsertFeatureRecord(payload = {}) {
+  return withPersistenceBatch(() => {
   const input = featureRecordSchema.parse(payload)
   const { collection } = input
   requireRole(featureCollectionRoles[collection], `${collection} feature data update`)
@@ -1748,10 +1777,52 @@ function upsertFeatureRecord(payload = {}) {
   persist()
   if (projectStatusAction) recordAudit(`project.status_request.${projectStatusAction}`, `Project status request ${projectStatusAction}`, { projectId: record.projectId, requestedStatus: record.requestedStatus, requestId: record.id }, activeSession.email)
   recordAudit(`feature.${collection}.saved`, `${collection} feature record saved`, { recordId: id }, activeSession.email)
-  return JSON.parse(JSON.stringify(record))
+  return structuredClone(record)
+  })
+}
+
+function updateFeatureRecordStatuses(payload = {}) {
+  const input = featureBulkStatusSchema.parse(payload)
+  requireSession('feature record bulk status update')
+  const { collection } = input
+  requireRole(featureCollectionRoles[collection], `${collection} feature data update`)
+  const rows = Array.isArray(state.featureRecords[collection]) ? state.featureRecords[collection] : []
+  const recordsById = new Map(rows.map((record) => [record?.id, record]))
+  const matches = input.recordIds.map((recordId) => {
+    const record = recordsById.get(recordId)
+    if (!record) throw new Error('One or more selected records no longer exist. Refresh the list and review your changes.')
+    return record
+  })
+  if (collection === 'projects' && matches.some((record) => record.kind === 'project_status_request')) {
+    throw new Error('Project status requests must be approved or rejected from their review screen.')
+  }
+
+  const changed = []
+  const timestamp = now()
+  for (const record of matches) {
+    if (record.status === input.status) continue
+    record.revisionHistory = [...(Array.isArray(record.revisionHistory) ? record.revisionHistory : []), {
+      at: timestamp,
+      by: activeSession.email || 'Workspace user',
+      changes: [{ field: 'status', before: record.status ?? '', after: input.status }],
+    }].slice(-20)
+    record.status = input.status
+    record.updated_at = timestamp
+    changed.push(record)
+  }
+  if (!changed.length) return { collection, updatedCount: 0, records: [] }
+  return withPersistenceBatch(() => {
+    recordAudit(`feature.${collection}.bulk_status_updated`, `${collection} records updated in bulk`, {
+      recordIds: changed.map((record) => record.id),
+      status: input.status,
+      updatedCount: changed.length,
+    }, activeSession.email)
+    return { collection, updatedCount: changed.length, records: structuredClone(changed) }
+  })
 }
 
 function deleteFeatureRecord(payload = {}) {
+  return withPersistenceBatch(() => {
   const input = featureDeleteSchema.parse(payload)
   requireRole(featureCollectionRoles[input.collection], `${input.collection} feature data deletion`)
   const rows = Array.isArray(state.featureRecords[input.collection]) ? state.featureRecords[input.collection] : []
@@ -1766,6 +1837,7 @@ function deleteFeatureRecord(payload = {}) {
   persist()
   recordAudit(`feature.${input.collection}.deleted`, `${input.collection} feature record deleted`, { recordId: input.recordId }, activeSession.email)
   return { deleted: true }
+  })
 }
 
 function requireSession(action = 'workspace access') {
@@ -2574,6 +2646,8 @@ function importMicrosoftPreview(payload) {
   let imported = 0
   let skipped = 0
   const createdAt = now()
+  const importBatchId = createId('ms_import')
+  const importedIds = []
   for (const record of selected) {
     const duplicate = state.customers.some((customer) => customer.external_source?.provider === preview.provider && customer.external_source?.connection_id === preview.connection_id && customer.external_source?.id === record.id)
       || Boolean(record.email) && state.customers.some((customer) => customer.email.toLowerCase() === record.email.toLowerCase())
@@ -2587,16 +2661,36 @@ function importMicrosoftPreview(payload) {
       service_area: record.serviceArea || 'Imported from Microsoft',
       preferred_contact: 'Email',
       status: 'Imported - review before outreach',
-      external_source: { provider: preview.provider, connection_id: preview.connection_id, id: record.id, imported_at: createdAt },
+      external_source: { provider: preview.provider, connection_id: preview.connection_id, id: record.id, imported_at: createdAt, import_batch_id: importBatchId },
       created_at: createdAt,
       updated_at: createdAt,
     })
+    importedIds.push(state.customers.at(-1).id)
     imported += 1
   }
   microsoftImportPreviews.delete(input.previewId)
   persist()
-  recordAudit('microsoft.customers_imported', 'Microsoft customer records imported', { provider: preview.provider, imported, skipped })
-  return { imported, skipped, customers: listCustomers() }
+  recordAudit('microsoft.customers_imported', 'Microsoft customer records imported', { provider: preview.provider, imported, skipped, importBatchId })
+  return { imported, skipped, importBatchId, importedIds, customers: listCustomers() }
+}
+
+function undoMicrosoftImport(payload = {}) {
+  requireRole(['Owner'], 'Microsoft import undo')
+  requireFeature('customers')
+  const importBatchId = String(payload.importBatchId || '').trim()
+  if (!/^ms_import_[a-zA-Z0-9_-]{8,}$/.test(importBatchId)) throw new Error('Choose a valid Microsoft import batch to undo.')
+  const batch = state.customers.filter((customer) => customer.external_source?.import_batch_id === importBatchId)
+  if (!batch.length) throw new Error('No records from that import batch remain in this workspace.')
+  const linkedCollections = ['appointments', 'quotes', 'invoices', 'tasks', 'expenses']
+  const batchIds = new Set(batch.map((customer) => customer.id))
+  const changedOrLinked = batch.filter((customer) => customer.updated_at !== customer.created_at
+    || linkedCollections.some((key) => (state[key] || []).some((row) => row.customer_id === customer.id || row.customerId === customer.id))
+    || state.workflowPreferences.some((row) => row.customer_id === customer.id))
+  if (changedOrLinked.length) throw new Error(`${changedOrLinked.length} imported record(s) have changed or linked work. Review those records manually; no records were removed.`)
+  state.customers = state.customers.filter((customer) => !batchIds.has(customer.id))
+  persist()
+  recordAudit('microsoft.customers_import_undone', 'Microsoft customer import batch was undone', { importBatchId, removed: batch.length })
+  return { removed: batch.length, customers: listCustomers() }
 }
 
 function listCustomers() {
@@ -4049,6 +4143,7 @@ module.exports = {
   connectMicrosoft,
   previewMicrosoftImport,
   importMicrosoftPreview,
+  undoMicrosoftImport,
   applyCustomerPlaybook,
   buildGuidedLaunchPlan,
   createDataExport,
@@ -4107,6 +4202,7 @@ module.exports = {
   listTasks,
   listFeatureRecords,
   upsertFeatureRecord,
+  updateFeatureRecordStatuses,
   deleteFeatureRecord,
   listUserProfiles,
   listWorkflowJobs,

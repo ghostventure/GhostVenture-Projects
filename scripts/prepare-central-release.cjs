@@ -56,6 +56,10 @@ function run(command, args) {
   if (result.status !== 0) throw new Error(`${command} failed with exit code ${result.status}`)
 }
 
+function allowUnsignedRelease() {
+  return process.env.OVERHEAD_ALLOW_UNSIGNED_RELEASE === 'true'
+}
+
 function parseVersion(value, label) {
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value || '')) {
     throw new Error(`Set ${label} to a valid product version (for example 0.3.19).`)
@@ -98,8 +102,12 @@ function main() {
     console.log(JSON.stringify({ releaseRoot, targets }, null, 2))
     return
   }
-  if (!process.env.OVERHEAD_EXPECTED_SIGNER) throw new Error('Set OVERHEAD_EXPECTED_SIGNER to the approved signing certificate subject before preparing a release.')
-  if (!process.env.CSC_LINK && !process.env.WIN_CSC_LINK) throw new Error('Set CSC_LINK (or WIN_CSC_LINK) to the approved Windows signing certificate before preparing a release.')
+  if (!allowUnsignedRelease()) {
+    if (!process.env.OVERHEAD_EXPECTED_SIGNER) throw new Error('Set OVERHEAD_EXPECTED_SIGNER to the approved signing certificate subject before preparing a release.')
+    if (!process.env.CSC_LINK && !process.env.WIN_CSC_LINK) throw new Error('Set CSC_LINK (or WIN_CSC_LINK) to the approved Windows signing certificate before preparing a release.')
+  } else {
+    console.warn('OVERHEAD_ALLOW_UNSIGNED_RELEASE=true: preparing explicitly authorized unsigned installers.')
+  }
 
   fs.mkdirSync(releaseRoot, { recursive: true })
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'])
@@ -113,7 +121,7 @@ function main() {
     }
     const output = path.join(releaseRoot, target.name)
     fs.mkdirSync(output, { recursive: true })
-    run(process.execPath, [builder, '--win', 'nsis', '--x64', `--config.directories.output=${output}`, `--config.extraMetadata.version=${target.version}`, ...target.args])
+    run(process.execPath, [builder, '--win', 'nsis', '--x64', ...(allowUnsignedRelease() ? ['--config.forceCodeSigning=false', '--config.win.signAndEditExecutable=false'] : []), `--config.directories.output=${output}`, `--config.extraMetadata.version=${target.version}`, ...target.args])
 
     const unpacked = path.join(output, 'win-unpacked')
     const executable = path.join(unpacked, target.executable)
@@ -124,13 +132,19 @@ function main() {
     archive.writeZip(path.join(output, target.zip))
 
     const installerPath = path.join(output, target.installer)
-    const signature = spawnSync('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-      path.join(__dirname, 'assert-windows-installer-signature.ps1'),
-      '-InstallerPath', installerPath, '-ExpectedSigner', process.env.OVERHEAD_EXPECTED_SIGNER,
-    ], { encoding: 'utf8', windowsHide: true })
-    if (signature.error || signature.status !== 0) throw new Error((signature.stderr || signature.stdout || signature.error?.message || `${target.name} signature check failed`).trim())
-    console.log(signature.stdout.trim())
+    if (allowUnsignedRelease()) {
+      const signature = spawnSync('powershell.exe', ['-NoProfile', '-Command', `Get-AuthenticodeSignature -LiteralPath '${installerPath.replaceAll("'", "''")}' | Select-Object -ExpandProperty Status`], { encoding: 'utf8', windowsHide: true })
+      if (signature.error || signature.status !== 0 || signature.stdout.trim() !== 'NotSigned') throw new Error(`${target.name} was expected to be unsigned, got: ${(signature.stdout || signature.stderr || signature.error?.message || 'signature check failed').trim()}`)
+      console.log(`${target.name}: verified explicitly unsigned installer.`)
+    } else {
+      const signature = spawnSync('powershell.exe', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        path.join(__dirname, 'assert-windows-installer-signature.ps1'),
+        '-InstallerPath', installerPath, '-ExpectedSigner', process.env.OVERHEAD_EXPECTED_SIGNER,
+      ], { encoding: 'utf8', windowsHide: true })
+      if (signature.error || signature.status !== 0) throw new Error((signature.stderr || signature.stdout || signature.error?.message || `${target.name} signature check failed`).trim())
+      console.log(signature.stdout.trim())
+    }
 
     writeUpdaterFeed(target, output)
 

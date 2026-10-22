@@ -50,6 +50,14 @@ const centralManifest = centralMode ? JSON.parse(fs.readFileSync(path.join(relea
 const api = new Client({ urlPrefix: 'https://firebasehosting.googleapis.com', apiVersion: 'v1beta1', auth: true })
 async function liveRelease() { return (await api.get(`/sites/${site}/releases`, {queryParams:{pageSize:1}})).body.releases[0] }
 function assertSignedInstaller(installerPath) {
+  if (process.env.OVERHEAD_ALLOW_UNSIGNED_RELEASE === 'true') {
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', `Get-AuthenticodeSignature -LiteralPath '${installerPath.replaceAll("'", "''")}' | Select-Object -ExpandProperty Status`], { encoding: 'utf8', windowsHide: true })
+    if (result.error || result.status !== 0 || result.stdout.trim() !== 'NotSigned') {
+      throw new Error((result.stderr || result.stdout || result.error?.message || 'Expected an explicitly unsigned release artifact.').trim())
+    }
+    console.log(`Verified explicitly unsigned installer: ${path.basename(installerPath)}`)
+    return
+  }
   const expectedSigner = process.env.OVERHEAD_EXPECTED_SIGNER
   if (!expectedSigner) throw new Error('Set OVERHEAD_EXPECTED_SIGNER to the exact subject of the approved organization certificate.')
   const result = spawnSync('powershell.exe', [
@@ -156,9 +164,30 @@ async function main() {
     [`/downloads/OverHead-Desktop-${version}-win-x64.zip`, `OverHead-Desktop-${version}-win-x64.zip`],
     ['/downloads/SHA256SUMS.txt', 'SHA256SUMS.txt'],
   ]
+  if (centralMode) {
+    const extraFilesPath = path.join(release, 'hosting-extra-files.json')
+    if (fs.existsSync(extraFilesPath)) {
+      const extraFiles = JSON.parse(fs.readFileSync(extraFilesPath, 'utf8'))
+      if (!Array.isArray(extraFiles)) throw new Error('hosting-extra-files.json must contain an array of {url, source} entries.')
+      const extraRoutes = new Set()
+      for (const entry of extraFiles) {
+        if (!entry || typeof entry.url !== 'string' || !entry.url.startsWith('/') || entry.url.includes('..') || typeof entry.source !== 'string') {
+          throw new Error('Invalid Hosting extra-file entry; expected an absolute route and repository-relative source path.')
+        }
+        if (extraRoutes.has(entry.url) || artifacts.some(([url]) => url === entry.url)) throw new Error(`Duplicate Hosting release route: ${entry.url}`)
+        extraRoutes.add(entry.url)
+        const sourcePath = path.resolve(root, entry.source)
+        if (!sourcePath.startsWith(`${root}${path.sep}`) || !fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
+          throw new Error(`Hosting extra-file source is missing or outside the repository: ${entry.source}`)
+        }
+        artifacts.push([entry.url, sourcePath])
+      }
+    }
+  }
   const contents = new Map()
   for (const [url, filename] of artifacts) {
-    const compressed = zlib.gzipSync(fs.readFileSync(path.join(release, filename)), {level:9})
+    const sourcePath = path.isAbsolute(filename) ? filename : path.join(release, filename)
+    const compressed = zlib.gzipSync(fs.readFileSync(sourcePath), {level:9})
     const hash = crypto.createHash('sha256').update(compressed).digest('hex')
     files[url] = hash
     contents.set(hash, compressed)

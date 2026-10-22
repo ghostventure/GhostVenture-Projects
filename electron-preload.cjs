@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('overheadDesktop', {
   deploymentMode: process.argv.includes('--overhead-deployment=cylinder') ? 'cylinder' : 'desktop',
+  deploymentVariant: process.argv.includes('--overhead-variant=client') ? 'client' : 'server',
   onSecurityLock: (callback) => {
     const listener = () => callback()
     ipcRenderer.on('security-lock', listener)
@@ -39,6 +40,7 @@ contextBridge.exposeInMainWorld('overheadBackend', {
   updateTaskStatus: (payload) => ipcRenderer.invoke('tasks:update-status', payload),
   listFeatureRecords: (collection) => ipcRenderer.invoke('features:list', collection),
   upsertFeatureRecord: (payload) => ipcRenderer.invoke('features:upsert', payload),
+  updateFeatureRecordStatuses: (payload) => ipcRenderer.invoke('features:bulk-status', payload),
   deleteFeatureRecord: (payload) => ipcRenderer.invoke('features:delete', payload),
   queueWorkflowJob: (payload) => ipcRenderer.invoke('jobs:queue', payload),
   processDueJobs: () => ipcRenderer.invoke('jobs:process-due'),
@@ -66,6 +68,7 @@ contextBridge.exposeInMainWorld('overheadBackend', {
   listMicrosoftConnections: () => ipcRenderer.invoke('microsoft:list-connections'),
   previewMicrosoftImport: (payload) => ipcRenderer.invoke('microsoft:preview-import', payload),
   importMicrosoftPreview: (payload) => ipcRenderer.invoke('microsoft:import-preview', payload),
+  undoMicrosoftImport: (payload) => ipcRenderer.invoke('microsoft:undo-import', payload),
   applyCustomerPlaybook: (payload) => ipcRenderer.invoke('playbooks:apply', payload),
   buildGuidedLaunchPlan: () => ipcRenderer.invoke('guided-launch:build'),
   acknowledgeLegal: (payload) => ipcRenderer.invoke('legal:acknowledge', payload),
