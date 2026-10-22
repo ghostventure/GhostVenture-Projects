@@ -6,6 +6,9 @@ const { getAuth } = require('firebase-admin/auth')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const Stripe = require('stripe')
 const crypto = require('crypto')
+const {
+  PLAN_CENTS, CYLINDER_MONTHLY_CAP_CENTS, seatPriceCents,
+} = require('./seat-pricing.cjs')
 
 initializeApp()
 
@@ -31,11 +34,279 @@ async function ownerProfile(uid) {
   if (!profile || profile.status !== 'Active' || profile.role !== 'Administrator' || typeof profile.workspace_id !== 'string' || !profile.workspace_id || profile.workspace_id.includes('/')) throw new Error('Only a workspace administrator can manage billing.')
   return profile
 }
+const normalizedEmail = (value) => String(value || '').trim().toLowerCase()
+const seatKey = (email) => crypto.createHash('sha256').update(normalizedEmail(email)).digest('hex')
+const tierBaseCents = (tier) => PLAN_CENTS[String(tier || '').toLowerCase()] || PLAN_CENTS.silver
+
+async function seatProduct(stripe, workspaceId, billingRef, billingData = {}) {
+  if (billingData.seat_product_id) return billingData.seat_product_id
+  const product = await stripe.products.create({
+    name: `OverHead Desktop additional seats (${workspaceId.slice(0, 8)})`,
+    metadata: { overhead_kind: 'desktop_seat_overage', workspace_id: workspaceId },
+  }, { idempotencyKey: `overhead-seat-product-${workspaceId}` })
+  await billingRef.set({ seat_product_id: product.id, updated_at: FieldValue.serverTimestamp() }, { merge: true })
+  return product.id
+}
+
+async function setStripeSeatOverage(stripe, billingRef, billingData, overageCents, operationId) {
+  const subscriptionId = billingData.stripe_subscription_id
+  if (!subscriptionId || !['active', 'trialing'].includes(billingData.status)) return null
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const existing = (subscription.items?.data || []).find(item => item.metadata?.overhead_kind === 'desktop_seat_overage')
+  if (overageCents <= 0) {
+    if (existing) await stripe.subscriptionItems.del(existing.id, { proration_behavior: 'none' }, { idempotencyKey: `overhead-seat-delete-${operationId}` })
+    return null
+  }
+  if (existing && Number(existing.price?.unit_amount || 0) === Math.min(overageCents, CYLINDER_MONTHLY_CAP_CENTS)) return existing
+  const product = await seatProduct(stripe, billingData.workspace_id, billingRef, billingData)
+  const price = await stripe.prices.create({
+    product, currency: 'usd', unit_amount: Math.min(overageCents, CYLINDER_MONTHLY_CAP_CENTS),
+    recurring: { interval: 'month' }, metadata: { overhead_kind: 'desktop_seat_overage', workspace_id: billingData.workspace_id },
+  }, { idempotencyKey: `overhead-seat-price-${operationId}` })
+  const params = {
+    price: price.id, quantity: 1, proration_behavior: 'none',
+    metadata: { overhead_kind: 'desktop_seat_overage', workspace_id: billingData.workspace_id },
+  }
+  if (existing) return stripe.subscriptionItems.update(existing.id, params, { idempotencyKey: `overhead-seat-item-${operationId}` })
+  return stripe.subscriptionItems.create({ subscription: subscriptionId, ...params }, { idempotencyKey: `overhead-seat-item-${operationId}` })
+}
+
+async function createWorkspaceInvite(db, stripe, workspaceId, ownerUid, businessName, body) {
+  const email = normalizedEmail(body.email)
+  const name = String(body.name || '').trim().slice(0, 80) || email
+  const role = String(body.role || 'Staff')
+  const localOnly = body.localOnly === true
+  const requestId = String(body.requestId || '')
+  if (!/^\S+@\S+\.\S+$/.test(email) || !['Manager', 'Staff'].includes(role)) throw new Error('Enter a valid email and choose Manager or Staff.')
+  if (!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new Error('Refresh and try the invitation again.')
+
+  const billingRef = db.doc(`workspaces/${workspaceId}/billing/current`)
+  await ensureSeatSummary(workspaceId, db, billingRef)
+  const inviteRef = db.doc(`workspaces/${workspaceId}/invites/${email}`)
+  const seatRef = db.doc(`workspaces/${workspaceId}/desktop_seats/${seatKey(email)}`)
+  const operationRef = db.doc(`workspaces/${workspaceId}/seat_operations/${requestId}`)
+  const profileQuery = db.collection('profiles').where('workspace_id', '==', workspaceId).where('email', '==', email)
+  const reservation = await db.runTransaction(async tx => {
+    const [billingSnap, inviteSnap, profileSnaps, localSeatSnap, operationSnap] = await Promise.all([
+      tx.get(billingRef), tx.get(inviteRef), tx.get(profileQuery), tx.get(seatRef), tx.get(operationRef),
+    ])
+    const billing = billingSnap.data() || {}
+    if (operationSnap.exists && operationSnap.data().status === 'complete') return { complete: true, seatCount: billing.seat_count || 0, overageCents: billing.seat_overage_cents || 0 }
+    if (!localOnly && inviteSnap.exists) return { exists: true, seatCount: billing.seat_count || 0, overageCents: billing.seat_overage_cents || 0 }
+    if (profileSnaps.size) throw new Error('That email already belongs to a workspace profile.')
+      if (billing.checkout_pending) throw new Error('Plan checkout is processing. Retry the invitation after billing finishes.')
+      if (billing.seat_update_pending_id && billing.seat_update_pending_id !== requestId) throw new Error('Another seat update is processing. Retry in a few seconds.')
+    let seatCount = Number(billing.seat_count || 0), overageCents = Number(billing.seat_overage_cents || 0)
+    const existingLocalSeat = localSeatSnap.exists && ['active', 'pending verification', 'invited'].includes(String(localSeatSnap.data().status || '').toLowerCase())
+    const isNewSeat = !existingLocalSeat
+    const tier = String(billing.tier || 'silver').toLowerCase()
+    const base = tierBaseCents(tier)
+    const seatChargeCents = isNewSeat
+      ? Math.min(seatPriceCents(tier, seatCount + 1), Math.max(0, CYLINDER_MONTHLY_CAP_CENTS - base - overageCents))
+      : Number(localSeatSnap.data().seat_charge_cents || 0)
+    const seatNumber = isNewSeat ? seatCount + 1 : Number(localSeatSnap.data().seat_number || seatCount)
+    if (operationSnap.exists && operationSnap.data().status === 'pending') {
+      return { requestId, email, name, role, tier, seatCount: operationSnap.data().seat_count, overageCents: operationSnap.data().overage_cents, seatChargeCents: operationSnap.data().seat_charge_cents, seatNumber: operationSnap.data().seat_number, isNewSeat: operationSnap.data().is_new_seat }
+    }
+    if (billing.checkout_pending) throw new Error('Plan checkout is processing. Retry the invitation after billing finishes.')
+    if (billing.seat_update_pending_id && billing.seat_update_pending_id !== requestId) throw new Error('Another seat update is processing. Retry in a few seconds.')
+    const nextSeatCount = seatCount + (isNewSeat ? 1 : 0)
+    const nextOverageCents = overageCents + (isNewSeat ? seatChargeCents : 0)
+    tx.set(billingRef, { seat_update_pending_id: requestId, updated_at: FieldValue.serverTimestamp() }, { merge: true })
+    tx.set(operationRef, {
+      request_id: requestId, email, owner_uid: ownerUid, tier, is_new_seat: isNewSeat,
+      seat_count: nextSeatCount, overage_cents: nextOverageCents, seat_number: seatNumber,
+      seat_charge_cents: seatChargeCents, status: 'pending', created_at: FieldValue.serverTimestamp(),
+    }, { merge: true })
+    return { requestId, email, name, role, tier, seatCount: nextSeatCount, overageCents: nextOverageCents, seatChargeCents, seatNumber, isNewSeat }
+  })
+  if (reservation.complete || reservation.exists) return { invited: false, complete: reservation.complete === true, localSeatReserved: localOnly && reservation.complete === true, alreadyInvited: reservation.exists, seatCount: reservation.seatCount, monthlyTotalCents: tierBaseCents((await billingRef.get()).data()?.tier) + reservation.overageCents }
+
+  const billing = (await billingRef.get()).data() || {}
+  try {
+    await setStripeSeatOverage(stripe, billingRef, { ...billing, workspace_id: workspaceId }, reservation.overageCents, requestId)
+    const createdAt = new Date()
+    const expiresAt = new Date(createdAt.getTime() + 14 * 24 * 60 * 60 * 1000)
+    await db.runTransaction(async tx => {
+      const [latestBilling, operation] = await Promise.all([tx.get(billingRef), tx.get(operationRef)])
+      if (!operation.exists || operation.data().status !== 'pending' || latestBilling.data()?.seat_update_pending_id !== requestId) throw new Error('This seat reservation changed. Refresh and try again.')
+      if (localOnly) {
+        tx.set(seatRef, { email, name, status: 'Pending verification', seat_charge_cents: reservation.seatChargeCents, seat_number: reservation.seatNumber, created_by: ownerUid, created_at: createdAt, updated_at: createdAt }, { merge: true })
+      } else {
+        const write = { email, name, business_name: businessName || 'OverHead workspace', role, created_by: ownerUid, created_at: createdAt, expires_at: expiresAt, seat_charge_cents: reservation.seatChargeCents, seat_number: reservation.seatNumber, seat_reserved: true }
+        tx.set(inviteRef, write)
+        if (reservation.isNewSeat) tx.set(seatRef, { email, name, status: 'Invited', seat_charge_cents: reservation.seatChargeCents, seat_number: reservation.seatNumber, invite_email: email, created_at: createdAt, updated_at: createdAt }, { merge: true })
+      }
+      tx.set(billingRef, { seat_update_pending_id: FieldValue.delete(), seat_count: reservation.seatCount, seat_overage_cents: reservation.overageCents, seat_summary_initialized: true, updated_at: FieldValue.serverTimestamp() }, { merge: true })
+      tx.set(operationRef, { status: 'complete', completed_at: FieldValue.serverTimestamp() }, { merge: true })
+    })
+  } catch (error) {
+    // Keep the reservation lock on ambiguous Stripe/network failures. Retrying
+    // the same request id reuses Stripe's idempotency key and completes the invite.
+    if (error.type && ['StripeInvalidRequestError', 'StripeAuthenticationError', 'StripePermissionError'].includes(error.type)) {
+      await db.runTransaction(async tx => {
+        const current = (await tx.get(billingRef)).data() || {}
+        if (current.seat_update_pending_id === requestId) tx.set(billingRef, { seat_update_pending_id: FieldValue.delete() }, { merge: true })
+        tx.set(operationRef, { status: 'failed', failure: error.message, updated_at: FieldValue.serverTimestamp() }, { merge: true })
+      })
+    }
+    throw error
+  }
+  return { invited: !localOnly, localSeatReserved: localOnly, seatCount: reservation.seatCount, seatChargeCents: reservation.seatChargeCents, monthlyTotalCents: tierBaseCents(reservation.tier) + reservation.overageCents, cylinderRecommended: tierBaseCents(reservation.tier) + reservation.overageCents >= CYLINDER_MONTHLY_CAP_CENTS }
+}
+
+async function updateLocalSeat(db, stripe, workspaceId, body) {
+  const email = normalizedEmail(body.email)
+  const status = String(body.status || '').toLowerCase()
+  const requestId = String(body.requestId || '')
+  const targetUid = String(body.uid || '')
+  if (!/^\S+@\S+\.\S+$/.test(email) || !['active', 'suspended', 'released'].includes(status)) throw new Error('Choose a valid local user and seat status.')
+  if (!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new Error('Refresh and try the seat update again.')
+  if (targetUid && (!/^[A-Za-z0-9:_-]{1,128}$/.test(targetUid) || status === 'released')) throw new Error('The shared account seat update is invalid.')
+  const sharedRole = String(body.role || '')
+  if (targetUid && sharedRole && !['Administrator', 'Manager', 'Staff'].includes(sharedRole)) throw new Error('Choose a valid shared workspace role.')
+  const billingRef = db.doc(`workspaces/${workspaceId}/billing/current`)
+  const seatRef = db.doc(`workspaces/${workspaceId}/desktop_seats/${seatKey(email)}`)
+  const targetProfileRef = targetUid ? db.doc(`profiles/${targetUid}`) : null
+  await ensureSeatSummary(workspaceId, db, billingRef)
+  const lock = await db.runTransaction(async tx => {
+    const [billingSnap, seatSnap, targetProfileSnap] = await Promise.all([
+      tx.get(billingRef), tx.get(seatRef), ...(targetProfileRef ? [tx.get(targetProfileRef)] : []),
+    ])
+    const billing = billingSnap.data() || {}
+    const sharedProfile = targetProfileRef ? targetProfileSnap.data() : null
+    if (targetProfileRef && (!sharedProfile || sharedProfile.workspace_id !== workspaceId || normalizedEmail(sharedProfile.email) !== email || sharedProfile.role === 'Customer')) throw new Error('That shared user is not an employee in this workspace.')
+    if (!seatSnap.exists && !targetProfileRef) return { found: false }
+    if (billing.checkout_pending) throw new Error('Plan checkout is processing. Retry the seat update after billing finishes.')
+    if (billing.seat_update_pending_id && billing.seat_update_pending_id !== requestId) throw new Error('Another seat update is processing. Retry in a few seconds.')
+    tx.set(billingRef, { seat_update_pending_id: requestId, updated_at: FieldValue.serverTimestamp() }, { merge: true })
+    return { found: true, billing, seat: seatSnap.data(), sharedProfile }
+  })
+  if (!lock.found) return { updated: false, seatFound: false }
+
+  try {
+    const [profiles, invites, localSeats] = await Promise.all([
+      db.collection('profiles').where('workspace_id', '==', workspaceId).get(),
+      db.collection('workspaces').doc(workspaceId).collection('invites').get(),
+      db.collection('workspaces').doc(workspaceId).collection('desktop_seats').get(),
+    ])
+    const people = new Map()
+    profiles.forEach(snap => {
+      const person = snap.data(), key = normalizedEmail(person.email)
+      const isTarget = targetUid && snap.id === targetUid
+      const nextStatus = isTarget ? status : person.status
+      if (key && nextStatus === 'active' || key && nextStatus === 'Active') {
+        if (person.role !== 'Customer' && person.cylinder_managed !== true) people.set(key, { email: key, uid: snap.id, created: person.created_at?.toDate?.()?.getTime?.() || Date.parse(person.created_at || '') || 0, profile: snap.ref, charge: 0, number: 0 })
+      }
+    })
+    invites.forEach(snap => {
+      const invite = snap.data(), key = normalizedEmail(invite.email)
+      const expires = invite.expires_at?.toDate?.()?.getTime?.() || Date.parse(invite.expires_at || '') || Infinity
+      if (key && expires > Date.now() && !people.has(key)) people.set(key, { email: key, created: invite.created_at?.toDate?.()?.getTime?.() || Date.parse(invite.created_at || '') || 0, invite: snap.ref, charge: 0, number: 0 })
+    })
+    localSeats.forEach(snap => {
+      const seat = snap.data(), key = normalizedEmail(seat.email)
+      if (!key) return
+      const nextStatus = key === email ? status : String(seat.status || '').toLowerCase()
+      if (!['active', 'pending verification', 'invited'].includes(nextStatus)) { if (key === email) people.delete(key); return }
+      const existing = people.get(key)
+      if (existing) existing.localSeat = snap.ref
+      else people.set(key, { email: key, created: seat.created_at?.toDate?.()?.getTime?.() || Date.parse(seat.created_at || '') || 0, localSeat: snap.ref, charge: 0, number: 0 })
+    })
+    if (status === 'released') people.delete(email)
+
+    const billing = (await billingRef.get()).data() || lock.billing || {}
+    const tier = String(billing.tier || 'silver').toLowerCase()
+    const ordered = [...people.values()].sort((a, b) => a.created - b.created || a.email.localeCompare(b.email))
+    let overageCents = 0
+    ordered.forEach((person, index) => {
+      person.number = index + 1
+      const wanted = index === 0 ? 0 : seatPriceCents(tier, index + 1)
+      person.charge = Math.min(wanted, Math.max(0, CYLINDER_MONTHLY_CAP_CENTS - tierBaseCents(tier) - overageCents))
+      overageCents += person.charge
+    })
+    await setStripeSeatOverage(stripe, billingRef, { ...billing, workspace_id: workspaceId }, overageCents, requestId)
+    await db.runTransaction(async tx => {
+      const latest = (await tx.get(billingRef)).data() || {}
+      if (latest.seat_update_pending_id !== requestId) throw new Error('This seat update changed. Refresh and try again.')
+      for (const person of ordered) {
+        const fields = { seat_number: person.number, seat_charge_cents: person.charge, updated_at: FieldValue.serverTimestamp() }
+        if (person.profile) tx.set(person.profile, person.uid === targetUid
+          ? { ...fields, status: status === 'active' ? 'Active' : 'Suspended', ...(sharedRole ? { role: sharedRole } : {}), ...(body.ownerName ? { owner_name: String(body.ownerName).slice(0, 80) } : {}), ...(body.businessName ? { business_name: String(body.businessName).slice(0, 120) } : {}) }
+          : fields, { merge: true })
+        if (person.invite) tx.set(person.invite, fields, { merge: true })
+        if (person.localSeat) tx.set(person.localSeat, person.email === email
+          ? { ...fields, status: status === 'active' ? 'Active' : status === 'released' ? 'Released' : 'Suspended' }
+          : fields, { merge: true })
+      }
+      if (targetProfileRef && !ordered.some(person => person.uid === targetUid)) tx.set(targetProfileRef, { status: 'Suspended', seat_number: 0, seat_charge_cents: 0, ...(sharedRole ? { role: sharedRole } : {}), ...(body.ownerName ? { owner_name: String(body.ownerName).slice(0, 80) } : {}), ...(body.businessName ? { business_name: String(body.businessName).slice(0, 120) } : {}), updated_at: FieldValue.serverTimestamp() }, { merge: true })
+      if (!ordered.some(person => person.email === email)) tx.set(seatRef, { status: status === 'released' ? 'Released' : 'Suspended', seat_charge_cents: 0, updated_at: FieldValue.serverTimestamp() }, { merge: true })
+      tx.set(billingRef, { seat_count: ordered.length, seat_overage_cents: overageCents, seat_summary_initialized: true, seat_update_pending_id: FieldValue.delete(), updated_at: FieldValue.serverTimestamp() }, { merge: true })
+    })
+    return { updated: true, seatFound: true, status, seatCount: ordered.length, monthlyTotalCents: tierBaseCents(tier) + overageCents, cylinderRecommended: tierBaseCents(tier) + overageCents >= CYLINDER_MONTHLY_CAP_CENTS }
+  } catch (error) {
+    // Keep the lock if Stripe may have accepted the idempotent update; retrying
+    // with the same request id safely completes the local ledger update.
+    if (error.type && ['StripeInvalidRequestError', 'StripeAuthenticationError', 'StripePermissionError'].includes(error.type)) {
+      await db.runTransaction(async tx => {
+        const current = (await tx.get(billingRef)).data() || {}
+        if (current.seat_update_pending_id === requestId) tx.set(billingRef, { seat_update_pending_id: FieldValue.delete() }, { merge: true })
+      })
+    }
+    throw error
+  }
+}
+
+async function initialSeatSummary(workspaceId, db) {
+  const [profiles, invites, desktopSeats] = await Promise.all([
+    db.collection('profiles').where('workspace_id', '==', workspaceId).get(),
+    db.collection('workspaces').doc(workspaceId).collection('invites').get(),
+    db.collection('workspaces').doc(workspaceId).collection('desktop_seats').get(),
+  ])
+  const seats = new Map()
+  profiles.forEach(snap => {
+    const person = snap.data(), email = normalizedEmail(person.email)
+    if (email && person.status === 'Active' && person.role !== 'Customer' && person.cylinder_managed !== true) seats.set(email, Number(person.seat_charge_cents) || 0)
+  })
+  invites.forEach(snap => {
+    const data = snap.data(), email = normalizedEmail(data.email)
+    const expires = data.expires_at?.toDate?.()?.getTime?.() || Date.parse(data.expires_at || '') || Infinity
+    if (email && expires > Date.now()) seats.set(email, Math.max(seats.get(email) || 0, Number(data.seat_charge_cents) || 0))
+  })
+  desktopSeats.forEach(snap => {
+    const data = snap.data(), email = normalizedEmail(data.email)
+    if (email && ['active', 'pending verification', 'invited'].includes(String(data.status || '').toLowerCase())) seats.set(email, Math.max(seats.get(email) || 0, Number(data.seat_charge_cents) || 0))
+  })
+  return { user_count: seats.size, initialized: true }
+}
+
+async function ensureSeatSummary(workspaceId, db, billingRef) {
+  const current = (await billingRef.get()).data() || {}
+  if (current.seat_summary_initialized) return current
+  const summary = await initialSeatSummary(workspaceId, db)
+  await db.runTransaction(async tx => {
+    const latest = (await tx.get(billingRef)).data() || {}
+    if (latest.seat_summary_initialized) return
+    const tier = String(latest.tier || 'silver').toLowerCase()
+    let overageCents = 0
+    for (let seat = 2; seat <= summary.user_count; seat += 1) {
+      overageCents += Math.min(seatPriceCents(tier, seat), Math.max(0, CYLINDER_MONTHLY_CAP_CENTS - tierBaseCents(tier) - overageCents))
+    }
+    tx.set(billingRef, { seat_summary_initialized: true, seat_count: summary.user_count, seat_overage_cents: overageCents, updated_at: FieldValue.serverTimestamp() }, { merge: true })
+  })
+  return (await billingRef.get()).data() || current
+}
 function tierFromEvent(event) {
   return String(event.data.object.metadata?.tier || event.data.object.subscription_details?.metadata?.tier || event.data.object.parent?.subscription_details?.metadata?.tier || '').toLowerCase()
 }
 function workspaceFromEvent(event) {
   return String(event.data.object.metadata?.workspaceId || event.data.object.subscription_details?.metadata?.workspaceId || event.data.object.parent?.subscription_details?.metadata?.workspaceId || '')
+}
+function subscriptionMetadataFromEvent(event) {
+  const object = event.data.object
+  return [object.metadata, object.subscription_details?.metadata, object.parent?.subscription_details?.metadata]
+    .find(metadata => metadata?.seatCount !== undefined || metadata?.seatOverageCents !== undefined)
+    || object.metadata || object.subscription_details?.metadata || object.parent?.subscription_details?.metadata || {}
 }
 function subscriptionPeriod(subscription) {
   const item = subscription.items?.data?.[0] || {}
@@ -119,12 +390,16 @@ async function applyStripeEvent(event) {
   const workspaceId = workspaceFromEvent(event), tier = tierFromEvent(event)
   if (!workspaceId || workspaceId.includes('/') || !['silver', 'gold', 'black'].includes(tier)) return
   const object = event.data.object
+  const subscriptionMetadata = subscriptionMetadataFromEvent(event)
+  const eventSeatCount = Number(subscriptionMetadata.seatCount)
+  const eventSeatOverageCents = Number(subscriptionMetadata.seatOverageCents)
   const subscriptionId = String(object.subscription?.id || object.subscription || object.parent?.subscription_details?.subscription || (event.type.startsWith('customer.subscription.') ? object.id : '') || '')
   if (!subscriptionId.startsWith('sub_')) return
   // A subscription update is not proof of payment: retain Stripe's actual status.
   const status = event.type === 'customer.subscription.deleted' ? 'canceled'
     : event.type === 'customer.subscription.updated' ? String(object.status || 'incomplete')
     : event.type === 'invoice.payment_failed' ? 'past_due'
+    : event.type === 'checkout.session.completed' && object.payment_status === 'no_payment_required' ? 'trialing'
     : event.type === 'invoice.paid' || ['paid', 'no_payment_required'].includes(object.payment_status) ? 'active' : 'pending'
   const licenseStatus = status === 'active' ? 'Active' : status === 'trialing' ? 'Trial' : status === 'past_due' ? 'Past due' : 'Suspended'
   const db = getFirestore()
@@ -148,9 +423,14 @@ async function applyStripeEvent(event) {
       stripe_customer_id: String(object.customer?.id || object.customer || current.stripe_customer_id || ''),
       stripe_subscription_id: subscriptionId,
       last_event: event.type,
-      checkout_pending: false,
-      pending_tier: FieldValue.delete(),
-      pending_checkout_started_at: FieldValue.delete(),
+      first_paid_month_free_used: event.type === 'checkout.session.completed' && current.pending_first_month_free === true
+        ? true : current.first_paid_month_free_used === true,
+      ...(event.type === 'checkout.session.completed' && Number.isInteger(eventSeatCount) && eventSeatCount >= 1 && Number.isFinite(eventSeatOverageCents) && eventSeatOverageCents >= 0
+        ? { seat_count: eventSeatCount, seat_overage_cents: eventSeatOverageCents, seat_summary_initialized: true }
+        : {}),
+      ...(event.type === 'checkout.session.completed' || event.type.startsWith('invoice.') || event.type === 'customer.subscription.deleted'
+        ? { checkout_pending: false, pending_first_month_free: FieldValue.delete(), pending_tier: FieldValue.delete(), pending_checkout_started_at: FieldValue.delete() }
+        : {}),
       updated_at: FieldValue.serverTimestamp(),
     }, { merge: true })
     people.forEach(person => {
@@ -235,34 +515,58 @@ async function handleBillingRequest(req, res) {
       return json(res, 200, { trialStarted: true, tier: 'gold', status: 'trialing', trialEndsAt: endsAt.toISOString(), message: 'Your free 90-day Gold trial is active. No card was charged.' })
     }
     const stripe = new Stripe(stripeSecretKey.value())
+    if (body.action === 'create_invite' || body.action === 'reserve_local_seat') {
+      const result = await createWorkspaceInvite(db, stripe, profile.workspace_id, user.uid, profile.business_name, { ...body, localOnly: body.action === 'reserve_local_seat' })
+      return json(res, 200, result)
+    }
+    if (body.action === 'update_local_seat') {
+      return json(res, 200, await updateLocalSeat(db, stripe, profile.workspace_id, body))
+    }
     if (body.action === 'checkout') {
       const tier = String(body.tier || '').toLowerCase()
       if (!prices[tier]) return json(res, 400, { error: 'Choose Silver, Gold, or Black.' })
       if (body.acceptBillingPolicy !== true) return json(res, 400, { error: 'Acknowledge the Subscription Billing & Authorization Policy before checkout.' })
       const attempt = crypto.randomUUID()
+      const seatSummary = await ensureSeatSummary(profile.workspace_id, db, billing)
+      // Reprice the existing seat count against the selected tier. Stored seat
+      // charges may have been created under an older tier's price schedule.
+      let scheduledSeatOverageCents = 0
+      for (let seat = 2; seat <= Math.max(1, Number(seatSummary.seat_count || 1)); seat += 1) {
+        scheduledSeatOverageCents += seatPriceCents(tier, seat)
+      }
+      const seatOverageCents = Math.max(0, Math.min(CYLINDER_MONTHLY_CAP_CENTS - tierBaseCents(tier), scheduledSeatOverageCents))
       const current = await db.runTransaction(async tx => {
         const stored = (await tx.get(billing)).data() || {}
         if (stored.status === 'active' && stored.tier === tier) return stored
+        if (stored.status === 'trialing' && stored.billing_provider === 'overhead_free_trial') throw new Error('Finish the active 90-day Gold trial before starting paid billing. The free first month does not stack with that trial.')
         if (stored.cancellation_pending || (stored.stripe_subscription_id && stored.status !== 'canceled')) throw new Error('Manage the existing subscription in the billing portal before starting another plan.')
+        if (stored.seat_update_pending_id) throw new Error('A user seat is being added. Wait for that update before starting checkout.')
         const pendingAt = stored.pending_checkout_started_at?.toDate?.()
         if (stored.checkout_pending && (!pendingAt || Date.now() - pendingAt.getTime() < 31 * 60 * 1000)) throw new Error('A checkout is already open. Finish it or wait for it to expire.')
-        tx.set(billing, { checkout_pending: true, pending_attempt: attempt, pending_tier: tier, pending_checkout_started_at: FieldValue.serverTimestamp(), updated_at: FieldValue.serverTimestamp() }, { merge: true })
+        tx.set(billing, { checkout_pending: true, pending_attempt: attempt, pending_tier: tier, pending_first_month_free: stored.trial_used !== true && stored.first_paid_month_free_used !== true, pending_checkout_started_at: FieldValue.serverTimestamp(), updated_at: FieldValue.serverTimestamp() }, { merge: true })
         return stored
       })
       if (current.status === 'active' && current.tier === tier) return json(res, 200, { alreadySubscribed: true, entitlement: current, message: 'This plan is already active. No additional charge was created.' })
       let session
-      try { session = await stripe.checkout.sessions.create({
-        mode: 'subscription', ui_mode: 'embedded', line_items: [{ price: prices[tier].value(), quantity: 1 }],
+      try {
+        const lines = [{ price: prices[tier].value(), quantity: 1 }]
+        if (seatOverageCents > 0) {
+          const product = await seatProduct(stripe, profile.workspace_id, billing, { ...current, workspace_id: profile.workspace_id })
+          const seatPrice = await stripe.prices.create({ product, currency: 'usd', unit_amount: seatOverageCents, recurring: { interval: 'month' }, metadata: { overhead_kind: 'desktop_seat_overage', workspace_id: profile.workspace_id } }, { idempotencyKey: `overhead-seat-checkout-price-${profile.workspace_id}-${tier}-${seatSummary.seat_count}-${seatOverageCents}` })
+          lines.push({ price: seatPrice.id, quantity: 1 })
+        }
+        session = await stripe.checkout.sessions.create({
+        mode: 'subscription', ui_mode: 'embedded', line_items: lines,
         expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
         customer: current.stripe_customer_id || undefined, customer_email: current.stripe_customer_id ? undefined : user.email,
         client_reference_id: profile.workspace_id,
-        metadata: { workspaceId: profile.workspace_id, ownerUid: user.uid, tier },
-        subscription_data: { metadata: { workspaceId: profile.workspace_id, ownerUid: user.uid, tier } },
+        metadata: { workspaceId: profile.workspace_id, ownerUid: user.uid, tier, seatCount: String(seatSummary.seat_count || 1), seatOverageCents: String(seatOverageCents) },
+        subscription_data: { ...(current.trial_used !== true && current.first_paid_month_free_used !== true ? { trial_period_days: 30 } : {}), metadata: { workspaceId: profile.workspace_id, ownerUid: user.uid, tier, seatCount: String(seatSummary.seat_count || 1), seatOverageCents: String(seatOverageCents) } },
         return_url: `${billingReturnUrl.value()}?session_id={CHECKOUT_SESSION_ID}`,
-      }, { idempotencyKey: `overhead-checkout-${profile.workspace_id}-${attempt}` })
+        }, { idempotencyKey: `overhead-checkout-${profile.workspace_id}-${attempt}` })
       } catch (error) {
         // Leave ambiguous network failures locked until expiry: a session may exist.
-        if (error.type === 'StripeInvalidRequestError' || error.type === 'StripeAuthenticationError') await db.runTransaction(async tx => {
+        if (error.type && ['StripeInvalidRequestError', 'StripeAuthenticationError', 'StripePermissionError'].includes(error.type)) await db.runTransaction(async tx => {
           const stored = (await tx.get(billing)).data() || {}
           if (stored.pending_attempt === attempt) tx.set(billing, { checkout_pending: false, pending_attempt: FieldValue.delete() }, { merge: true })
         })

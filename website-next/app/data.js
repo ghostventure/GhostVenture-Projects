@@ -26,21 +26,21 @@ export const plans = [
     price: '$59/mo',
     label: 'Basic',
     text: 'For the solo owner ready to replace loose notes with a reliable daily command view.',
-    features: ['1 owner profile', '250 customer records', 'Task queue', 'Basic backup tools', 'Support bundle export'],
+    features: ['1 included user seat', '250 customer records', 'Task queue', 'Basic backup tools', 'Support bundle export'],
   },
   {
     name: 'Gold',
     price: '$129/mo',
     label: 'Advanced',
     text: 'For busy teams that want faster follow-through, clearer roles, and fewer dropped handoffs.',
-    features: ['3 staff profiles', '1,500 customer records', 'Workflow automation', 'Legal center', 'Priority support'],
+    features: ['1 included user seat', '1,500 customer records', 'Workflow automation', 'Legal center', 'Priority support'],
   },
   {
     name: 'Black',
     price: '$299/mo',
     label: 'Premium',
     text: 'For high-trust offices that need stronger control, deeper records, and premium onboarding.',
-    features: ['10 staff profiles', '10,000 customer records', 'Encrypted local store', 'Audit ledger', 'Concierge setup'],
+    features: ['1 included user seat', '10,000 customer records', 'Encrypted local store', 'Audit ledger', 'Concierge setup'],
   },
 ]
 
@@ -51,6 +51,58 @@ export const cylinderDeployment = {
   annualPrice: '$4,990/year',
   text: 'A separate in-house deployment for organizations running a supported Windows Server or Windows IoT host. It includes one 30-day, no-card evaluation per server workspace and is not the standard Windows desktop application.',
   features: ['Up to 50 users', 'Up to 100,000 customer records', 'Separate local data root and update channel', 'Server deployment controls'],
+}
+
+export const seatPricing = {
+  minimumSeatCents: 1499,
+  cylinderMonthlyCents: 49900,
+  cylinderAnnualCents: 499000,
+  firstMonthFree: true,
+}
+
+export function desktopSeatPricing(plan, users, cylinderInterval = 'monthly') {
+  const userCount = Math.max(1, Number(users) || 1)
+  const baseCents = ({ Silver: 5900, Gold: 12900, Black: 29900 })[plan] || 5900
+  let priorSeatCents = baseCents
+  let uncappedCents = baseCents
+  let secondSeatCents = 0
+  let thirdSeatCents = 0
+  for (let seat = 2; seat <= userCount; seat += 1) {
+    const seatCents = Math.max(seatPricing.minimumSeatCents, Math.floor(priorSeatCents / 200) * 100)
+    if (seat === 2) secondSeatCents = seatCents
+    if (seat === 3) thirdSeatCents = seatCents
+    uncappedCents += seatCents
+    priorSeatCents = seatCents
+  }
+  if (userCount < 2) secondSeatCents = Math.max(seatPricing.minimumSeatCents, Math.floor(baseCents / 200) * 100)
+  if (userCount < 3) thirdSeatCents = Math.max(seatPricing.minimumSeatCents, Math.floor(secondSeatCents / 200) * 100)
+  const nextSeatCents = Math.max(seatPricing.minimumSeatCents, Math.floor(priorSeatCents / 200) * 100)
+  const capCents = cylinderInterval === 'annual'
+    ? Math.round(seatPricing.cylinderAnnualCents / 12)
+    : seatPricing.cylinderMonthlyCents
+  return {
+    baseCents,
+    secondSeatCents,
+    thirdSeatCents,
+    nextSeatCents,
+    uncappedCents,
+    monthlyCents: Math.min(uncappedCents, capCents),
+    cylinderRecommended: uncappedCents > capCents,
+  }
+}
+
+export function cylinderCrossoverUsers(plan, cylinderInterval = 'monthly') {
+  const capCents = cylinderInterval === 'annual'
+    ? Math.round(seatPricing.cylinderAnnualCents / 12)
+    : seatPricing.cylinderMonthlyCents
+  let totalCents = ({ Silver: 5900, Gold: 12900, Black: 29900 })[plan] || 5900
+  let priorSeatCents = totalCents
+  for (let seat = 2; seat <= 1000; seat += 1) {
+    priorSeatCents = Math.max(seatPricing.minimumSeatCents, Math.floor(priorSeatCents / 200) * 100)
+    totalCents += priorSeatCents
+    if (totalCents > capCents) return seat
+  }
+  return 1000
 }
 
 export const capabilityGroups = [

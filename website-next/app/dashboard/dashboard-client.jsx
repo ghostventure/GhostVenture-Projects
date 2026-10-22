@@ -16,12 +16,11 @@ import {
   onSnapshot,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
 import { firebaseAuth, firebaseDb } from "../firebase-client";
-import { downloadHref } from "../data";
+import { cylinderCrossoverUsers, desktopSeatPricing, downloadHref } from "../data";
 
 const ALLOWED_INVITE_ROLES = ["Manager", "Staff"];
 const ALLOWED_MEMBER_ROLES = ["Administrator", "Manager", "Staff"];
@@ -47,6 +46,13 @@ export default function DashboardClient() {
   const [approvals, setApprovals] = useState([]);
   const [members, setMembers] = useState([]);
   const [licenses, setLicenses] = useState([]);
+  const [billedSeatCount, setBilledSeatCount] = useState(0);
+  const activeSeatCount = Math.max(1, billedSeatCount, members.filter((member) => member.status === "Active").length);
+  const activeTier = String(licenses.find((license) => license.user_uid === profile?.uid)?.tier || licenses[0]?.tier || "silver");
+  const activePlan = activeTier.charAt(0).toUpperCase() + activeTier.slice(1);
+  const monthlySeatQuote = desktopSeatPricing(activePlan, activeSeatCount);
+  const annualCylinderQuote = desktopSeatPricing(activePlan, activeSeatCount, "annual");
+  const cylinderRecommended = monthlySeatQuote.cylinderRecommended || annualCylinderQuote.cylinderRecommended;
 
   // Draft states
   const [draft, setDraft] = useState("");
@@ -60,6 +66,8 @@ export default function DashboardClient() {
     details: "",
   });
   const [invite, setInvite] = useState({ email: "", name: "", role: "Staff" });
+  const inviteRequestRef = useRef(null);
+  const memberSeatRequestRef = useRef(new Map());
 
   // UX & Background Ops states
   const [taskFilter, setTaskFilter] = useState("all"); // 'all' | 'active' | 'done'
@@ -208,6 +216,15 @@ export default function DashboardClient() {
     );
     return unsub;
   }, [profile?.workspace_id, profile?.role]);
+
+  useEffect(() => {
+    if (!profile?.workspace_id) return undefined;
+    return onSnapshot(
+      doc(firebaseDb, "workspaces", profile.workspace_id, "billing", "current"),
+      (snapshot) => setBilledSeatCount(Number(snapshot.data()?.seat_count) || 0),
+      (error) => showNotice(displayError(error), "error"),
+    );
+  }, [profile?.workspace_id]);
 
   useEffect(() => {
     if (!profile?.workspace_id || profile.role !== "Administrator") return undefined;
@@ -426,26 +443,19 @@ export default function DashboardClient() {
 
     try {
       setBusyAction("createInvite");
-      await setDoc(
-        doc(
-          firebaseDb,
-          "workspaces",
-          profile.workspace_id,
-          "invites",
-          cleanEmail,
-        ),
-        {
-          email: cleanEmail,
-          name: cleanName || cleanEmail,
-          business_name: profile.business_name,
-          role: invite.role,
-          created_by: firebaseAuth.currentUser.uid,
-          created_at: serverTimestamp(),
-        },
-      );
+      const requestId = inviteRequestRef.current || (inviteRequestRef.current = crypto.randomUUID());
+      const idToken = await firebaseAuth.currentUser.getIdToken();
+      const response = await fetch("https://us-central1-overhead-office.cloudfunctions.net/billingApi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action: "create_invite", requestId, email: cleanEmail, name: cleanName || cleanEmail, role: invite.role }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "The invite and seat billing could not be updated.");
+      inviteRequestRef.current = null;
       setInvite({ email: "", name: "", role: "Staff" });
       showNotice(
-        `Invite created! Share workspace ID (${profile.workspace_id}) with ${cleanEmail}.`,
+        `${result.alreadyInvited ? "That invite is already active." : "Invite created."} Share workspace ID (${profile.workspace_id}) with ${cleanEmail}. The seat will be included on the next subscription invoice.`,
         "success",
       );
     } catch (error) {
@@ -469,10 +479,24 @@ export default function DashboardClient() {
 
     try {
       setBusyAction(actionKey);
-      await updateDoc(doc(firebaseDb, "profiles", member.id), {
-        [key]: value,
-        updated_at: serverTimestamp(),
-      });
+      if (key === "status") {
+        const requestId = memberSeatRequestRef.current.get(member.id) || crypto.randomUUID();
+        memberSeatRequestRef.current.set(member.id, requestId);
+        const idToken = await firebaseAuth.currentUser.getIdToken();
+        const response = await fetch("https://us-central1-overhead-office.cloudfunctions.net/billingApi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ action: "update_local_seat", requestId, uid: member.id, email: member.email, status: value.toLowerCase() }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "The member status and seat billing could not be updated.");
+        memberSeatRequestRef.current.delete(member.id);
+      } else {
+        await updateDoc(doc(firebaseDb, "profiles", member.id), {
+          [key]: value,
+          updated_at: serverTimestamp(),
+        });
+      }
       showNotice(`${member.owner_name || member.email} updated.`, "success");
     } catch (error) {
       showNotice(displayError(error), "error");
@@ -997,7 +1021,7 @@ export default function DashboardClient() {
                 <span>Administrator controls</span>
                 <h2>Invite and manage your team</h2>
               </div>
-              <strong>{members.length} members</strong>
+              <strong>{activeSeatCount} billable seats</strong>
             </div>
             <div className="invite-form">
               <label>
@@ -1006,12 +1030,13 @@ export default function DashboardClient() {
                   value={invite.name}
                   maxLength={80}
                   disabled={busyAction === "createInvite"}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    inviteRequestRef.current = null;
                     setInvite((current) => ({
                       ...current,
                       name: event.target.value,
                     }))
-                  }
+                  }}
                   placeholder="Team member name"
                 />
               </label>
@@ -1022,12 +1047,13 @@ export default function DashboardClient() {
                   value={invite.email}
                   maxLength={100}
                   disabled={busyAction === "createInvite"}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    inviteRequestRef.current = null;
                     setInvite((current) => ({
                       ...current,
                       email: event.target.value,
                     }))
-                  }
+                  }}
                   placeholder="person@business.com"
                 />
               </label>
@@ -1036,12 +1062,13 @@ export default function DashboardClient() {
                 <select
                   value={invite.role}
                   disabled={busyAction === "createInvite"}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    inviteRequestRef.current = null;
                     setInvite((current) => ({
                       ...current,
                       role: event.target.value,
                     }))
-                  }
+                  }}
                 >
                   {ALLOWED_INVITE_ROLES.map((role) => (
                     <option key={role}>{role}</option>
@@ -1060,6 +1087,14 @@ export default function DashboardClient() {
             <p className="admin-hint">
               Invitees create their own password at the shared sign-in page.
               Give them the workspace ID (<strong>{profile.workspace_id}</strong>) shown in the confirmation.
+            </p>
+            <p className="admin-hint">
+              Seat pricing guide: every Desktop plan includes 1 user. Each added seat is half the previous seat price, rounded down to a whole dollar, with a $14.99/month minimum; the next {activePlan} seat would be ${ (monthlySeatQuote.nextSeatCents / 100).toFixed(2) }. Total Desktop charges are capped at $499/month. The first paid month is free at checkout and does not stack with the existing 90-day Gold trial. Seat charges are included in checkout and adjusted on the next subscription invoice. Cylinder includes up to 50 users at its separate server price.
+            </p>
+            <p className="admin-hint" role="status">
+              {cylinderRecommended
+                ? `Cylinder may cost less for ${activeSeatCount} active ${activePlan} users. Current uncapped Desktop estimate: $${(monthlySeatQuote.uncappedCents / 100).toFixed(2)}/month, capped at $499/month. Compare Cylinder's $499/month or $4,990/year plan. Cylinder requires a supported Windows Server or Windows IoT host.`
+                : `${activeSeatCount} active ${activePlan} users. Compare Cylinder at ${cylinderCrossoverUsers(activePlan, "annual")} users on its annual price or ${cylinderCrossoverUsers(activePlan)} users month to month, based on the selected Desktop price and half-price additional seats.`}
             </p>
             <div className="member-list">
               {members.map((member) => (

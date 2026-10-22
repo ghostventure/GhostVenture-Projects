@@ -879,6 +879,7 @@ function defaultState() {
       lastSuccessfulSignIn: '',
     },
     approvalRequests: [],
+    pendingSeatRequests: {},
     recordIdCounters: {},
     savedFormMemory: {
       profile: {},
@@ -1109,6 +1110,7 @@ function seed() {
   if (!Array.isArray(state.emailVerifications)) state.emailVerifications = []
   state.rememberedSignIn = { ...defaultState().rememberedSignIn, ...(state.rememberedSignIn || {}) }
   if (!Array.isArray(state.approvalRequests)) state.approvalRequests = []
+  state.pendingSeatRequests = state.pendingSeatRequests && typeof state.pendingSeatRequests === 'object' && !Array.isArray(state.pendingSeatRequests) ? state.pendingSeatRequests : {}
   state.recordIdCounters = state.recordIdCounters && typeof state.recordIdCounters === 'object' && !Array.isArray(state.recordIdCounters) ? state.recordIdCounters : {}
   state.savedFormMemory = { ...defaultState().savedFormMemory, ...(state.savedFormMemory || {}) }
   if (!Array.isArray(state.subscriptions)) state.subscriptions = []
@@ -1266,7 +1268,7 @@ function registerProfile(payload) {
   }
 }
 
-function createStaffAccount(payload = {}) {
+async function createStaffAccount(payload = {}) {
   if (isCylinderDeployment()) throw new Error('Cylinder employee accounts must be created in Cylinder Management so membership, Rank, and audit records stay central.')
   requireRole(['Owner'], 'staff account creation')
   requireFeature('roles')
@@ -1274,6 +1276,24 @@ function createStaffAccount(payload = {}) {
   const email = input.email.toLowerCase()
   if (state.userProfiles.find((item) => item.email.toLowerCase() === email)) {
     throw new Error('That username is already registered on this computer.')
+  }
+  const previousSavedProfile = state.savedFormMemory.profile
+  // Local desktop accounts remain usable offline. When this owner is signed in
+  // through the shared workspace, reserve the seat centrally before creating
+  // the local account so devices cannot silently exceed the plan.
+  let reservedSharedSeat = false
+  if (!activeSession?.firebaseIdToken || !activeSession?.firebaseUid) {
+    throw new Error('Connect to the internet and sign in with your shared OverHead account before adding a billable staff seat. Existing desktop accounts remain available offline.')
+  }
+  state.pendingSeatRequests ||= {}
+  const seatRequestId = state.pendingSeatRequests[email] || (state.pendingSeatRequests[email] = crypto.randomUUID())
+  persist()
+  if (activeSession?.firebaseIdToken && activeSession?.firebaseUid) {
+    const sharedRole = input.role === 'Front Desk' ? 'Manager' : 'Staff'
+    const reservation = await billingApiRequest('reserve_local_seat', {
+      email, name: input.ownerName, role: sharedRole, requestId: seatRequestId,
+    })
+    reservedSharedSeat = reservation.localSeatReserved === true || reservation.complete === true
   }
   const createdAt = now()
   const user = {
@@ -1290,22 +1310,38 @@ function createStaffAccount(payload = {}) {
     recovery_phrase_hash: '',
     recovery_hint: 'Not set',
     terms_accepted_at: '',
+    shared_seat_reserved: reservedSharedSeat,
     last_sign_in: '',
     created_at: createdAt,
     updated_at: createdAt,
   }
-  state.userProfiles.push(user)
-  state.savedFormMemory.profile = {
-    ownerName: user.owner_name,
-    businessName: user.business_name,
-    email: user.email,
-    role: user.role,
+  try {
+    state.userProfiles.push(user)
+    state.savedFormMemory.profile = {
+      ownerName: user.owner_name,
+      businessName: user.business_name,
+      email: user.email,
+      role: user.role,
+    }
+    ensureUserLicense(user)
+    persist()
+    delete state.pendingSeatRequests[email]
+    const delivery = sendVerificationEmail(user, 'staff-invite')
+    recordAudit('staff.invited', 'Staff account created pending email verification', { email, role: input.role, sharedSeatReserved: reservedSharedSeat }, activeSession.email)
+    return { users: listUserProfiles(), delivery, sharedSeatReserved: reservedSharedSeat }
+  } catch (error) {
+    state.userProfiles = state.userProfiles.filter((item) => item.id !== user.id)
+    state.savedFormMemory.profile = previousSavedProfile
+    persist()
+    try {
+      if (reservedSharedSeat && activeSession?.firebaseIdToken) await billingApiRequest('update_local_seat', { email, status: 'released', requestId: crypto.randomUUID() })
+    } catch { /* Keep the original local creation error; the server reservation remains auditable. */ }
+    if (reservedSharedSeat) {
+      delete state.pendingSeatRequests[email]
+      persist()
+    }
+    throw error
   }
-  ensureUserLicense(user)
-  persist()
-  const delivery = sendVerificationEmail(user, 'staff-invite')
-  recordAudit('staff.invited', 'Staff account created pending email verification', { email, role: input.role }, activeSession.email)
-  return { users: listUserProfiles(), delivery }
 }
 
 function sendVerificationEmail(user, purpose) {
@@ -2295,6 +2331,9 @@ async function updateUserProfile(payload) {
   const input = userProfileUpdateSchema.parse(payload || {})
   const user = state.userProfiles.find((item) => item.email === input.email)
   if (!user) throw new Error('User profile not found.')
+  if (input.status !== user.status && (user.shared_seat_reserved || user.firebase_uid) && (!activeSession?.firebaseIdToken || !activeSession?.firebaseUid)) {
+    throw new Error('Connect and sign in with your shared OverHead account before changing this billed seat.')
+  }
   const activeUser = state.userProfiles.find((item) => item.email === activeSession.email)
   if (user.email === activeSession.email && input.status !== 'Active') throw new Error('You cannot suspend the account currently managing OverHead.')
   if (user.email === activeSession.email && input.role !== 'Owner') throw new Error('You cannot remove your own owner access while signed in.')
@@ -2304,7 +2343,20 @@ async function updateUserProfile(payload) {
   }
   const sharedRole = input.role === 'Owner' ? 'Administrator' : input.role === 'Front Desk' ? 'Manager' : 'Staff'
   let sharedSync = 'Local only'
-  if (user.firebase_uid && activeSession.firebaseIdToken) {
+  // Shared Firebase identities are updated in place by the trusted endpoint;
+  // that recalculates their existing seat and never creates a duplicate one.
+  // Legacy local-only staff rows use the separate local-seat ledger.
+  let sharedSeatUpdated = false
+  if (input.status !== user.status && activeSession?.firebaseIdToken && activeSession?.firebaseUid) {
+    const result = await billingApiRequest('update_local_seat', {
+      email: user.email,
+      status: input.status === 'Active' ? 'active' : 'suspended',
+      ...(user.firebase_uid ? { uid: user.firebase_uid, role: sharedRole, ownerName: input.ownerName || user.owner_name, businessName: input.businessName || user.business_name } : {}),
+      requestId: crypto.randomUUID(),
+    })
+    sharedSeatUpdated = Boolean(user.firebase_uid && result.updated)
+  }
+  if (user.firebase_uid && activeSession.firebaseIdToken && !sharedSeatUpdated) {
     await updateFirestoreDocument(`profiles/${user.firebase_uid}`, {
       owner_name: input.ownerName || user.owner_name,
       business_name: input.businessName || user.business_name,
@@ -2785,7 +2837,46 @@ async function performCustomerSync() {
   return state.customerSync
 }
 
+async function reserveLegacyDesktopSeats() {
+  if (isCylinderDeployment() || activeSession?.role !== 'Owner' || !activeSession?.firebaseIdToken || !activeSession?.firebaseUid) return { migrated: 0, pending: [] }
+  state.pendingSeatRequests ||= {}
+  const candidates = state.userProfiles.filter((user) =>
+    user.role !== 'Owner'
+    && !user.firebase_uid
+    && user.shared_seat_reserved !== true
+    && ['active', 'pending verification'].includes(String(user.status || '').toLowerCase())
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(user.email || '')))
+  let migrated = 0
+  const pending = []
+  for (const user of candidates) {
+    const email = user.email.trim().toLowerCase()
+    const requestId = state.pendingSeatRequests[email] || (state.pendingSeatRequests[email] = crypto.randomUUID())
+    persist()
+    try {
+      const result = await billingApiRequest('reserve_local_seat', {
+        email,
+        name: user.owner_name || email,
+        role: user.role === 'Front Desk' ? 'Manager' : 'Staff',
+        requestId,
+      })
+      if (result.localSeatReserved === true || result.complete === true) {
+        user.shared_seat_reserved = true
+        delete state.pendingSeatRequests[email]
+        migrated += 1
+        persist()
+      } else {
+        pending.push({ email, reason: 'The central seat reservation did not complete.' })
+      }
+    } catch (error) {
+      pending.push({ email, reason: error.message || 'The central seat reservation could not be completed.' })
+    }
+  }
+  return { migrated, pending }
+}
+
 async function synchronizeCustomersAfterSignIn(session) {
+  const seatMigration = await reserveLegacyDesktopSeats().catch((error) => ({ migrated: 0, pending: [{ reason: error.message || 'Existing staff seats could not be synchronized.' }] }))
+  session = { ...session, seatMigration }
   if (activeSession.role !== 'Customer' && !isCylinderDeployment()) await syncStripeBilling().catch(() => {})
   if (activeSession.role === 'Customer' || !state.appToggles.autoSyncCustomers) return { ...session, customerSync: state.customerSync }
   try {

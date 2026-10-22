@@ -196,8 +196,9 @@ export const planTiers = [
     level: 'Basic',
     audience: 'Solo owner or lean front desk',
     price: '$59/mo',
+    additionalSeatPrice: '$29, then $14.99 minimum/mo',
     summary: 'Basic office control priced for one small shop that needs order without adding five subscriptions.',
-    features: ['1 owner profile', '250 customer records', 'Task queue', 'Basic backups', 'Support bundle'],
+    features: ['1 included user seat', '250 customer records', 'Task queue', 'Basic backups', 'Support bundle'],
   },
   {
     id: 'gold',
@@ -205,8 +206,9 @@ export const planTiers = [
     level: 'Advanced',
     audience: 'Busy local service office',
     price: '$129/mo',
+    additionalSeatPrice: '$64, $32, $16, then $14.99 minimum/mo',
     summary: 'Advanced workflow support for offices that would otherwise stack scheduling, CRM, and helpdesk tools.',
-    features: ['3 staff profiles', '1,500 customer records', 'Workflow automation', 'Legal center', 'Priority support'],
+    features: ['1 included user seat', '1,500 customer records', 'Workflow automation', 'Legal center', 'Priority support'],
   },
   {
     id: 'black',
@@ -214,8 +216,9 @@ export const planTiers = [
     level: 'Premium',
     audience: 'High-touch business with sensitive records',
     price: '$299/mo',
+    additionalSeatPrice: '$149, $74, $37, $18, then $14.99 minimum/mo',
     summary: 'Premium protection and recovery for sensitive records, higher-volume offices, and white-glove setup.',
-    features: ['10 staff profiles', '10,000 customer records', 'Encrypted local store', 'Audit ledger', 'Concierge setup'],
+    features: ['1 included user seat', '10,000 customer records', 'Encrypted local store', 'Audit ledger', 'Concierge setup'],
   },
 ]
 

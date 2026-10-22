@@ -7,6 +7,7 @@ import {
   checksumHref,
   cylinderDeployment,
   cylinderPageHref,
+  cylinderCrossoverUsers,
   downloadHref,
   plans,
 } from "./data";
@@ -336,6 +337,14 @@ export default function HomePage() {
               </article>
             ))}
           </div>
+          <article className="plan-card seat-pricing-note">
+            <span>Growing team pricing</span>
+            <h3>One seat per person</h3>
+            <p>Every Desktop plan includes one user. Each added seat is half the previous seat's monthly price, rounded down to a whole dollar, with a $14.99 minimum. Silver is $59 for the first user, $29 for the second, then $14.99 per user. Total Desktop charges are capped at Cylinder's $499 monthly price.</p>
+            <p>Gold and Black use the same step-down rule from their plan price. Monthly Cylinder crossover: {plans.map((plan) => `${plan.name} at ${cylinderCrossoverUsers(plan.name)} users`).join(' · ')}. With Cylinder's annual rate: {plans.map((plan) => `${plan.name} at ${cylinderCrossoverUsers(plan.name, 'annual')} users`).join(' · ')}. Cylinder includes up to 50 users on a supported Windows Server or Windows IoT host.</p>
+            <p>The first paid month is free at checkout; it does not stack with the existing 90-day Gold trial. Seat charges follow this schedule and stop at the $499 monthly Desktop cap. Cylinder is recommended when the uncapped Desktop total exceeds that price.</p>
+            <Link className="text-link" href={cylinderPageHref}>Compare Cylinder</Link>
+          </article>
           <article className="cylinder-plan-card">
             <div>
               <span>{cylinderDeployment.label}</span>

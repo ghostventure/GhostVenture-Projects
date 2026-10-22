@@ -426,6 +426,13 @@ function App() {
         acceptedTerms: next.acceptedTerms,
       }))
       await refreshBackend({ signedIn: true })
+      if (authenticated.seatMigration?.migrated > 0) {
+        setOperationNotice(`${authenticated.seatMigration.migrated} existing staff seat${authenticated.seatMigration.migrated === 1 ? ' was' : 's were'} added to centralized billing.`)
+      }
+      if (authenticated.seatMigration?.pending?.length > 0) {
+        const unresolved = authenticated.seatMigration.pending.map((item) => item.email).filter(Boolean)
+        setBackendError(`Central seat sync needs attention for ${unresolved.join(', ') || `${authenticated.seatMigration.pending.length} existing account(s)`}. ${authenticated.seatMigration.pending[0].reason}`)
+      }
   }
 
   async function powerCycle() {
@@ -2290,7 +2297,7 @@ function AccountsSection({ backendState, session, refreshBackend, setOperationNo
                 <option>Support</option>
               </select>
             </label>
-            <small>Use a temporary password only for first access. The invitee should replace it immediately and should never share it.</small>
+            <small>Every Desktop plan includes one user. Additional seat price halves from the previous seat, rounded down to a whole dollar, with a $14.99 minimum: Silver $29 then $14.99; Gold $64, $32, $16 then $14.99; Black $149, $74, $37, $18 then $14.99. The monthly cap is $499. The first paid month is free at checkout and does not stack with the 90-day Gold trial. When signed in with a shared OverHead account, local staff seats are reserved centrally; offline-created local accounts are not centrally billed until connected.</small>
             <button className="ghost-button" type="button" onClick={createStaffAccount}>Create Staff Account</button>
           </div>
         </div>
@@ -2640,6 +2647,7 @@ function DesktopPlansSection({ backendState, activePlan, setActivePlan, draftSes
             <span>{plan.price}</span>
             <p>{plan.summary}</p>
             <small>{plan.audience}</small>
+            <small>Additional user: {plan.additionalSeatPrice}; first paid month free at checkout; total capped at $499/month.</small>
             <ul>
               {plan.features.map((feature) => {
                 const unlocked = isPlanUnlocked(plan.id, backendState.entitlements?.activeTier)

@@ -126,7 +126,7 @@ export default function SignInClient() {
       if (!invite.exists()) throw new Error('auth/invalid-invitation')
       const inviteData = invite.data(); const createdAt = serverTimestamp()
       const batch = writeBatch(firebaseDb)
-      batch.set(doc(firebaseDb, 'profiles', credential.user.uid), { uid: credential.user.uid, owner_name: inviteData.name || credential.user.email, business_name: inviteData.business_name || 'OverHead workspace', email: credential.user.email, workspace_id: join.workspaceId.trim(), role: inviteData.role, status: 'Active', email_verified: false, terms_accepted_at: createdAt, last_sign_in: createdAt, created_at: createdAt, updated_at: createdAt })
+      batch.set(doc(firebaseDb, 'profiles', credential.user.uid), { uid: credential.user.uid, owner_name: inviteData.name || credential.user.email, business_name: inviteData.business_name || 'OverHead workspace', email: credential.user.email, workspace_id: join.workspaceId.trim(), role: inviteData.role, status: 'Active', email_verified: false, seat_charge_cents: Number(inviteData.seat_charge_cents) || 0, seat_number: Number(inviteData.seat_number) || 0, terms_accepted_at: createdAt, last_sign_in: createdAt, created_at: createdAt, updated_at: createdAt })
       batch.delete(inviteRef)
       await batch.commit()
       const verificationSent = await sendEmailVerification(credential.user).then(() => true).catch(() => false)
