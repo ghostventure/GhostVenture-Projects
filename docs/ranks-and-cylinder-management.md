@@ -1,6 +1,6 @@
 # Cylinder ranks and centralized management
 
-**Status: Source, Firebase function, and Firestore rules are deployed; the updated signed Cylinder installer is not published yet.** This four Rank hierarchy belongs to OverHead Cylinder, which is intended to manage a department's employees and installations. It does not change regular OverHead Desktop, which retains its per-user account and role behavior and has no GPO controls.
+**Status: Source, Firebase function, and Firestore rules are deployed; the updated signed Cylinder installer is not published yet.** Desktop is OverHead's individual-user capacity, with the standard business feature set and no Cylinder GPO controls. Cylinder is the multi-user, department-managed capacity. It retains the same core customer, task, workflow, document, integration, and reporting features, then adds employee invitations and removal, four Ranks, department-scoped device authorization, minimum-version and offline policies, a workspace pause, and central audit. Server controls are additive to the shared OverHead feature set.
 
 ## Tenant and department scope
 

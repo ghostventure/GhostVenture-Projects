@@ -2,7 +2,7 @@
 
 ## Purpose
 
-OverHead Cylinder is the server deployment for an organization running an in-house Windows Server or Windows IoT host. It includes centralized employee Ranks, department scope, device policy, and an optional workstation-client distribution package. The server host and workstation client are separate signed applications.
+OverHead Desktop is the individual-user capacity and retains the full standard business feature set without Cylinder GPO controls. OverHead Cylinder is the multi-user, department-managed capacity for an organization running an in-house Windows Server or Windows IoT host. It has the same core OverHead business workflows and adds centralized employee Ranks, department scope, device policy, and an optional workstation-client distribution package. The server host and workstation client are separate applications.
 
 ## Compatibility gate
 
@@ -10,7 +10,7 @@ The Cylinder Server launcher reads the Windows `ProductName` registry value befo
 
 ## Cylinder tier
 
-Cylinder Server uses its own application ID, local data root (`%APPDATA%\\OverHead Cylinder`), and updater feed. Cylinder Client has a separate application ID, data root (`%APPDATA%\\OverHead Cylinder Client`), and update channel. Both use the same Firebase-backed Cylinder Rank and device policy. Its current entitlement definition supports up to 50 users and 100,000 customer records. Cylinder is not selectable in the standard desktop application.
+Cylinder Server uses its own application ID, local data root (`%APPDATA%\\OverHead Cylinder`), and updater feed. Cylinder Client has a separate application ID, data root (`%APPDATA%\\OverHead Cylinder Client`), and update channel. Both use the same Firebase-backed Cylinder Rank and device policy. Its current entitlement definition supports up to 50 users and 100,000 customer records. Cylinder is a separate deployment capacity; it is not an option that turns GPO controls on in the individual-user Desktop app.
 
 ## Evaluation and commercial activation
 

@@ -317,7 +317,7 @@ const planDefinitions = {
     level: 'Windows Server',
     maxUsers: 50,
     maxCustomers: 100000,
-    features: ['customers', 'tasks', 'backups', 'support_bundle', 'workflow_jobs', 'legal_acknowledgements', 'roles', 'data_export', 'restore_validation', 'fraud_detection', 'server_deployment'],
+    features: ['customers', 'tasks', 'backups', 'support_bundle', 'workflow_jobs', 'legal_acknowledgements', 'roles', 'data_export', 'restore_validation', 'fraud_detection', 'stripe', 'server_deployment'],
   },
 }
 
@@ -661,9 +661,7 @@ function syncCylinderAccessToLocalProfile(uid, access) {
   if (!isCylinderDeployment() || !uid || !access?.allowed) return false
   const user = state.userProfiles.find((item) => item.firebase_uid === uid)
   if (!user) return false
-  const nextRole = access.rank < 4
-    ? ({ Support: 'Support', 'Front Desk': 'Front Desk', Bookkeeper: 'Bookkeeper' })[access.jobFunction] || 'Support'
-    : user.role
+  const nextRole = cylinderWorkRole(access)
   const nextDepartments = Array.isArray(access.departmentIds) ? [...access.departmentIds] : []
   const changed = user.cylinder_rank !== access.rank || user.cylinder_rank_name !== access.rankName ||
     user.cylinder_job_function !== access.jobFunction || user.role !== nextRole ||
@@ -679,6 +677,11 @@ function syncCylinderAccessToLocalProfile(uid, access) {
   })
   persist()
   return true
+}
+
+function cylinderWorkRole(access) {
+  if (Number(access?.rank) === 4) return 'Owner'
+  return ({ Support: 'Support', 'Front Desk': 'Front Desk', Bookkeeper: 'Bookkeeper' })[access?.jobFunction] || 'Support'
 }
 
 function getRememberedSignIn() {
@@ -1422,7 +1425,7 @@ function startSession(user, sharedIdentity = {}) {
         if (!access.allowed) activeSession.cylinderAccess = { ...activeSession.cylinderAccess, allowed: false, reason: access.reason, expiresAt: Date.now() }
         else {
           activeSession.cylinderAccess = access
-          if (access.rank < 4) activeSession.role = ({ Support: 'Support', 'Front Desk': 'Front Desk', Bookkeeper: 'Bookkeeper' })[access.jobFunction] || 'Support'
+          activeSession.role = cylinderWorkRole(access)
           syncCylinderAccessToLocalProfile(activeSession.firebaseUid, access)
         }
       } catch (error) {
