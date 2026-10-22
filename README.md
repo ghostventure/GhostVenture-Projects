@@ -4,6 +4,8 @@ Current packaged release: **0.3.15** for standard desktop and **0.3.10** for the
 
 For the current website/Desktop account process, email verification gate, password recovery, and operator acceptance checklist, see `docs/authentication-workflow.md`.
 
+For the Desktop per-user seat schedule, $499/month cap, Cylinder recommendation, first-month offer, and shared seat billing behavior, see [`docs/desktop-seat-billing.md`](docs/desktop-seat-billing.md). Its deployment status must be confirmed in the release handoff before treating billing as live.
+
 For the owner-only VS Code / Code - OSS hot-fix handoff, see `docs/developer-editor-workflow.md`.
 
 For the verified customer feedback channel and review location, see `docs/feedback-workflow.md`.
