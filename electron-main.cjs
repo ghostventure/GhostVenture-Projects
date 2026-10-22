@@ -7,6 +7,7 @@ const path = require('node:path')
 const { spawn, spawnSync } = require('node:child_process')
 const backend = require('./electron-backend.cjs')
 const { nextUpdateCheck } = require('./update-schedule.cjs')
+const { GITHUB_RELEASES_API_URL, latestCompatibleRelease, releaseFeedUrl, releaseVersion, classifyReleaseUpdate, releaseInstaller } = require('./github-release.cjs')
 
 let mainWindow = null
 let lockTimer = null
@@ -18,10 +19,15 @@ const INACTIVITY_LOCK_MS = 30 * 60 * 1000
 const MAX_RECOVERY_RETRIES = 3
 const DEVELOPER_EMAIL = 'solidartentertainment@gmail.com'
 const DEPLOYMENT_MODE = process.env.OVERHEAD_DEPLOYMENT_MODE === 'cylinder' ? 'cylinder' : 'desktop'
-const UPDATE_FEED_URL = process.env.OVERHEAD_UPDATE_URL || `https://overhead-office.web.app/updates${DEPLOYMENT_MODE === 'cylinder' ? '/cylinder' : ''}`
+const DEPLOYMENT_VARIANT = DEPLOYMENT_MODE === 'cylinder' && process.env.OVERHEAD_CYLINDER_VARIANT === 'client' ? 'client' : 'server'
+const RELEASE_TARGET = DEPLOYMENT_MODE === 'cylinder' && DEPLOYMENT_VARIANT === 'client' ? 'cylinder-client' : DEPLOYMENT_MODE
+const UPDATE_FEED_PATH = RELEASE_TARGET === 'cylinder-client' ? '/updates/cylinder-client' : DEPLOYMENT_MODE === 'cylinder' ? '/updates/cylinder' : '/updates'
+const UPDATE_FEED_URL = process.env.OVERHEAD_UPDATE_URL || `https://overhead-office.web.app${UPDATE_FEED_PATH}`
 const STARTUP_UPDATE_TIMEOUT_MS = 2500
+const GITHUB_UPDATE_TIMEOUT_MS = 10000
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 60 * 1000
 let updateCheckInFlight = false
+let pendingUpdateAssessment = null
 const STARTUP_RECOVERY_HTML = 'data:text/html;charset=utf-8,' + encodeURIComponent([
   '<!doctype html><html><head><meta charset="utf-8"><title>OverHead Recovery</title>',
   '<style>body{font:16px system-ui,-apple-system,"Segoe UI",sans-serif;background:#edf1f4;color:#18212b;margin:0;display:grid;min-height:100vh;place-items:center}.card{max-width:520px;padding:32px;background:white;border-radius:18px;box-shadow:0 18px 50px #1a27301c}h1{margin-top:0}p{line-height:1.55}button{background:#152b3d;color:#fff;border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer}</style></head>',
@@ -33,7 +39,7 @@ const STARTUP_RECOVERY_HTML = 'data:text/html;charset=utf-8,' + encodeURICompone
 // CPU avoids a common launch failure on machines with older or unstable drivers.
 app.disableHardwareAcceleration()
 if (process.env.OVERHEAD_SMOKE_DATA) app.setPath('appData', path.resolve(process.env.OVERHEAD_SMOKE_DATA))
-app.setPath('userData', path.join(app.getPath('appData'), DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead'))
+app.setPath('userData', path.join(app.getPath('appData'), RELEASE_TARGET === 'cylinder-client' ? 'OverHead Cylinder Client' : DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead'))
 const recoveryStatePath = path.join(app.getPath('userData'), 'runtime-recovery.json')
 const updatePreferencesPath = path.join(app.getPath('userData'), 'update-preferences.json')
 log.initialize()
@@ -261,7 +267,7 @@ function createWindow() {
     height: 860,
     minWidth: 1040,
     minHeight: 700,
-    title: DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead',
+      title: RELEASE_TARGET === 'cylinder-client' ? 'OverHead Cylinder Client' : DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead',
     icon: iconPath,
     backgroundColor: '#edf1f4',
     autoHideMenuBar: true,
@@ -360,7 +366,7 @@ function powerCycle() {
 function createTray() {
   if (tray) return
   tray = new Tray(iconPath)
-  tray.setToolTip(DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead Desktop')
+  tray.setToolTip(RELEASE_TARGET === 'cylinder-client' ? 'OverHead Cylinder Client' : DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead Desktop')
   tray.setContextMenu(Menu.buildFromTemplate([
     {
       label: 'Open OverHead',
@@ -447,6 +453,24 @@ async function verifyUpdateFeed() {
   }
 }
 
+async function verifyGitHubRelease() {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), GITHUB_UPDATE_TIMEOUT_MS)
+  try {
+    const response = await fetch(GITHUB_RELEASES_API_URL, {
+      headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+      signal: controller.signal,
+    })
+    if (!response.ok) return null
+    const releases = await response.json()
+    return latestCompatibleRelease(releases, RELEASE_TARGET)
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 async function checkForUpdatesBeforeLaunch() {
   if (!app.isPackaged) {
     setUpdateState('source-mode', { message: 'Live update checks are skipped while running from source.' })
@@ -464,10 +488,47 @@ async function checkForUpdatesBeforeLaunch() {
   try {
     updatePreferences.lastAttemptAt = new Date().toISOString()
     saveUpdatePreferences()
-    const availableVersion = await verifyUpdateFeed()
-    autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_FEED_URL })
-    setUpdateState('checking', { version: availableVersion, message: `Checking installed version ${app.getVersion()} against available version ${availableVersion}.` })
-    const check = autoUpdater.checkForUpdates().catch((error) => {
+    let githubRelease = null
+    let availableVersion
+    let activeFeed = 'firebase'
+    try {
+      availableVersion = await verifyUpdateFeed()
+      pendingUpdateAssessment = {
+        ...classifyReleaseUpdate(app.getVersion(), { tag_name: availableVersion }),
+        source: 'firebase', installerUrl: '', releaseUrl: '',
+      }
+      autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_FEED_URL })
+      setUpdateState('checking', { ...pendingUpdateAssessment, version: availableVersion, message: `Checking the OverHead Firebase update feed at version ${availableVersion}.` })
+    } catch (firebaseError) {
+      githubRelease = await verifyGitHubRelease()
+      if (!githubRelease) throw firebaseError
+      activeFeed = 'github'
+      availableVersion = releaseVersion(githubRelease)
+      pendingUpdateAssessment = {
+        ...classifyReleaseUpdate(app.getVersion(), githubRelease),
+        source: 'github', installerUrl: releaseInstaller(githubRelease, RELEASE_TARGET), releaseUrl: githubRelease.html_url || '',
+      }
+      autoUpdater.setFeedURL({ provider: 'generic', url: releaseFeedUrl(githubRelease) })
+      setUpdateState('checking', { ...pendingUpdateAssessment, version: availableVersion, message: `Firebase is unavailable; checking GitHub release ${githubRelease.tag_name} against installed version ${app.getVersion()}.` })
+    }
+    const check = autoUpdater.checkForUpdates().catch(async (error) => {
+      if (activeFeed === 'firebase') {
+        try {
+          githubRelease = await verifyGitHubRelease()
+          if (!githubRelease) throw new Error('No compatible GitHub release is published.')
+          const fallbackVersion = releaseVersion(githubRelease)
+          pendingUpdateAssessment = {
+            ...classifyReleaseUpdate(app.getVersion(), githubRelease),
+            source: 'github', installerUrl: releaseInstaller(githubRelease, RELEASE_TARGET), releaseUrl: githubRelease.html_url || '',
+          }
+          autoUpdater.setFeedURL({ provider: 'generic', url: releaseFeedUrl(githubRelease) })
+          setUpdateState('checking', { ...pendingUpdateAssessment, version: fallbackVersion, message: `Firebase update check failed; trying GitHub release ${githubRelease.tag_name}.` })
+          return await autoUpdater.checkForUpdates()
+        } catch (fallbackError) {
+          setUpdateState('unavailable', { message: `Firebase update check failed (${error?.message || 'unavailable'}); GitHub fallback failed (${fallbackError?.message || 'unavailable'}).` })
+          return null
+        }
+      }
       setUpdateState('unavailable', { message: error?.message || 'Update service could not be reached.' })
       return null
     }).finally(() => { updateCheckInFlight = false })
@@ -482,8 +543,70 @@ async function checkForUpdatesBeforeLaunch() {
   return updaterStatus()
 }
 
+async function checkForUpdatesFromGitHub() {
+  if (!app.isPackaged) {
+    setUpdateState('source-mode', { source: 'github', message: 'GitHub update checks require a packaged OverHead installation.' })
+    return updaterStatus()
+  }
+  if (updateCheckInFlight) return updaterStatus()
+  updateCheckInFlight = true
+  updatePreferences.lastAttemptAt = new Date().toISOString()
+  saveUpdatePreferences()
+  try {
+    const release = await verifyGitHubRelease()
+    if (!release) {
+      pendingUpdateAssessment = null
+      setUpdateState('unavailable', { source: 'github', updateKind: '', installerUrl: '', message: 'GitHub has no compatible stable OverHead release for this installation.' })
+      return updaterStatus()
+    }
+    const assessment = {
+      ...classifyReleaseUpdate(app.getVersion(), release),
+      source: 'github', installerUrl: releaseInstaller(release, RELEASE_TARGET), releaseUrl: release.html_url || '',
+      releaseTag: release.tag_name || '',
+    }
+    pendingUpdateAssessment = assessment
+    if (!assessment.newer) {
+      setUpdateState('current', {
+        ...assessment, version: assessment.availableVersion,
+        message: `GitHub release ${release.tag_name} is not newer than installed version ${app.getVersion()}.`,
+      })
+      return updaterStatus()
+    }
+    autoUpdater.setFeedURL({ provider: 'generic', url: releaseFeedUrl(release) })
+    setUpdateState('checking', {
+      ...assessment, version: assessment.availableVersion,
+      message: assessment.kind === 'major'
+        ? `Major GitHub update ${assessment.availableVersion} found. The full installer is available; OverHead will also download it in the background for in-app installation.`
+        : `Incremental GitHub update ${assessment.availableVersion} found. It will download in the background and install when OverHead closes.`,
+    })
+    await autoUpdater.checkForUpdates()
+  } catch (error) {
+    setUpdateState('unavailable', { source: 'github', message: error?.message || 'GitHub update check failed.' })
+  } finally {
+    updateCheckInFlight = false
+  }
+  return updaterStatus()
+}
+
+async function openGitHubInstaller() {
+  const installerUrl = updateState.source === 'github' ? updateState.installerUrl : ''
+  if (!installerUrl) return { opened: false, message: 'No verified GitHub installer is available for this update.' }
+  const installerPrefix = RELEASE_TARGET === 'cylinder-client' ? 'OverHead-Cylinder-Client-Setup-' : DEPLOYMENT_MODE === 'cylinder' ? 'OverHead-Cylinder-Setup-' : 'OverHead-Setup-'
+  const allowed = releaseInstaller({ assets: [{ name: `${installerPrefix}0.0.0-win-x64.exe`, browser_download_url: installerUrl }] }, RELEASE_TARGET)
+  if (!allowed) return { opened: false, message: 'The GitHub installer URL could not be verified.' }
+  await shell.openExternal(allowed)
+  return { opened: true, message: 'Opened the full signed installer download. Run it normally for the installer wizard, or use the in-app downloaded update when it is ready.' }
+}
+
 autoUpdater.on('update-available', (info) => {
-  setUpdateState('downloading', { version: info.version || '', message: 'A newer OverHead update is downloading.' })
+  const assessment = pendingUpdateAssessment || {}
+  const version = info.version || assessment.availableVersion || ''
+  setUpdateState('downloading', {
+    ...assessment, version,
+    message: assessment.kind === 'major'
+      ? `Major update ${version} is downloading in the background. The full installer can also be downloaded separately.`
+      : 'A newer OverHead update is downloading in the background.',
+  })
 })
 
 autoUpdater.on('update-not-available', () => setUpdateState('current', { message: 'This is the latest OverHead version.' }))
@@ -660,6 +783,7 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('users:list', trustedHandler(() => backend.listUserProfiles()))
     ipcMain.handle('users:create-staff', trustedHandler((_event, payload) => backend.createStaffAccount(payload)))
     ipcMain.handle('users:update', trustedHandler((_event, payload) => backend.updateUserProfile(payload)))
+    ipcMain.handle('cylinder:management', trustedHandler((_event, payload) => backend.cylinderManagement(payload)))
     ipcMain.handle('licenses:list', trustedHandler(() => backend.listLicenses()))
     ipcMain.handle('licenses:refresh-user', trustedHandler((_event, payload) => backend.refreshUserLicense(payload)))
     ipcMain.handle('employee-licenses:list', trustedHandler(() => backend.listEmployeeLicenses()))
@@ -689,6 +813,8 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('support:create-bundle', trustedHandler(() => backend.createSupportBundle(integrityReport())))
     ipcMain.handle('updater:status', trustedHandler(() => updaterStatus()))
     ipcMain.handle('updater:check', trustedHandler(() => checkForUpdatesBeforeLaunch()))
+    ipcMain.handle('updater:check-github', trustedHandler(() => checkForUpdatesFromGitHub()))
+    ipcMain.handle('updater:open-github-installer', trustedHandler(() => openGitHubInstaller()))
     ipcMain.handle('updater:set-auto-check', trustedHandler((_event, payload) => setAutoCheck(payload)))
     ipcMain.handle('updater:install', trustedHandler(() => installDownloadedUpdate()))
     ipcMain.handle('app:power-cycle', trustedHandler(() => powerCycle()))

@@ -390,11 +390,13 @@ let state = null
 let schedulerStarted = false
 let secureStore = null
 let activeSession = null
+let cylinderHeartbeatTimer = null
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA2bxXMdNsXVgPaYv3jbWJXGlosVYtBd8U',
   projectId: 'overhead-office',
   billingApiUrl: 'https://us-central1-overhead-office.cloudfunctions.net/billingApi',
+  cylinderApiUrl: 'https://us-central1-overhead-office.cloudfunctions.net/cylinderApi',
 }
 
 function firebaseError(body, fallback) {
@@ -423,6 +425,33 @@ async function billingApiRequest(action, payload = {}) {
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error([401, 403, 404].includes(response.status) ? billingErrorMessage(response.status) : body.error || billingErrorMessage(response.status))
+  return body
+}
+
+async function cylinderApiRequest(action, payload = {}, idToken = activeSession?.firebaseIdToken, refreshToken = activeSession?.firebaseRefreshToken) {
+  if (!isCylinderDeployment()) throw new Error('Central Cylinder management is available only in Cylinder.')
+  if (!idToken) throw new Error('Sign out and sign back in with your shared verified account.')
+  const request = (token) => fetch(firebaseConfig.cylinderApiUrl, {
+    signal: AbortSignal.timeout(20000), method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action, ...payload }),
+  })
+  let response = await request(idToken)
+  if (response.status === 401 && refreshToken) {
+    const refreshed = await firebaseRequest(`https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }).toString(),
+    })
+    idToken = refreshed.id_token
+    refreshToken = refreshed.refresh_token || refreshToken
+    if (activeSession && activeSession.firebaseRefreshToken) {
+      activeSession.firebaseIdToken = idToken
+      activeSession.firebaseRefreshToken = refreshToken
+    }
+    response = await request(idToken)
+  }
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error || `Cylinder control request failed (${response.status}).`)
   return body
 }
 
@@ -587,7 +616,11 @@ function normalizeDesktopRole(role) {
 
 function syncSharedProfile(profile, uid, emailVerified = false) {
   const email = String(profile.email || '').toLowerCase()
-  let user = state.userProfiles.find((item) => item.firebase_uid === uid || item.email === email)
+  let user = state.userProfiles.find((item) => item.firebase_uid === uid)
+  // A legacy local-only row may be adopted on its first Firebase sign-in. A
+  // row already bound to another UID is a different identity, even if email
+  // addresses were later reused; never silently merge those histories.
+  if (!user) user = state.userProfiles.find((item) => item.email === email && !item.firebase_uid)
   if (!user) {
     user = { id: createId('user'), created_at: now(), recovery_phrase_hash: '', recovery_hint: 'Managed by Firebase', password_hash: '' }
     state.userProfiles.push(user)
@@ -624,6 +657,30 @@ function syncSharedProfile(profile, uid, emailVerified = false) {
   return user
 }
 
+function syncCylinderAccessToLocalProfile(uid, access) {
+  if (!isCylinderDeployment() || !uid || !access?.allowed) return false
+  const user = state.userProfiles.find((item) => item.firebase_uid === uid)
+  if (!user) return false
+  const nextRole = access.rank < 4
+    ? ({ Support: 'Support', 'Front Desk': 'Front Desk', Bookkeeper: 'Bookkeeper' })[access.jobFunction] || 'Support'
+    : user.role
+  const nextDepartments = Array.isArray(access.departmentIds) ? [...access.departmentIds] : []
+  const changed = user.cylinder_rank !== access.rank || user.cylinder_rank_name !== access.rankName ||
+    user.cylinder_job_function !== access.jobFunction || user.role !== nextRole ||
+    JSON.stringify(user.cylinder_department_ids || []) !== JSON.stringify(nextDepartments)
+  if (!changed) return false
+  Object.assign(user, {
+    cylinder_rank: access.rank,
+    cylinder_rank_name: access.rankName,
+    cylinder_department_ids: nextDepartments,
+    cylinder_job_function: access.jobFunction,
+    role: nextRole,
+    updated_at: now(),
+  })
+  persist()
+  return true
+}
+
 function getRememberedSignIn() {
   const remembered = state?.rememberedSignIn || {}
   return {
@@ -649,10 +706,28 @@ async function signInSharedProfile(payload) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: session.idToken }),
   })
   const emailVerified = Boolean(account.users?.[0]?.emailVerified)
+  let sharedProfile = null
+  if (isCylinderDeployment()) {
+    sharedProfile = await readFirestoreDocument(`profiles/${session.localId}`, session.idToken)
+    if (sharedProfile.role === 'Customer') throw new Error('Cylinder is for department employees. Use the OverHead desktop app for Customer Access.')
+  }
   if (!emailVerified) {
+    if (isCylinderDeployment()) {
+      if (!sharedProfile.uid || !['Active', 'Pending'].includes(sharedProfile.status)) throw new Error('This account is not provisioned for Cylinder.')
+      await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseConfig.apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestType: 'VERIFY_EMAIL', idToken: session.idToken }),
+      })
+    }
     return { verificationRequired: true, email, delivery: { channel: 'firebase-link' } }
   }
-  const sharedProfile = await readFirestoreDocument(`profiles/${session.localId}`, session.idToken)
+  if (!sharedProfile) sharedProfile = await readFirestoreDocument(`profiles/${session.localId}`, session.idToken)
+  if (isCylinderDeployment() && sharedProfile.role !== 'Customer') {
+    const invitation = await cylinderApiRequest('activateInvitation', {}, session.idToken)
+    if (invitation.activated) {
+    sharedProfile = await readFirestoreDocument(`profiles/${session.localId}`, session.idToken)
+    }
+  }
   if (!sharedProfile.uid || sharedProfile.status !== 'Active') throw new Error('This shared account is not active for an OverHead workspace.')
   const accessLane = String(payload?.accessLane || '')
   const sharedRole = String(sharedProfile.role || '')
@@ -664,9 +739,21 @@ async function signInSharedProfile(payload) {
     recordAudit('auth.access_lane_denied', 'Team account attempted customer access', { email, sharedRole, accessLane }, email)
     throw new Error('This is a staff or manager account. Use Team Access to sign in.')
   }
+  let cylinderAccess = null
+  if (isCylinderDeployment() && sharedRole !== 'Customer') {
+    if (!state.cylinderDeviceId) state.cylinderDeviceId = crypto.randomUUID()
+    if (!state.cylinderDeviceSecret) state.cylinderDeviceSecret = crypto.randomBytes(48).toString('base64url')
+    persist()
+    cylinderAccess = await cylinderApiRequest('heartbeat', {
+      deviceId: state.cylinderDeviceId, deviceSecret: state.cylinderDeviceSecret, deviceName: os.hostname(), hostname: os.hostname(),
+      platform: `${os.platform()} ${os.release()}`, appVersion: require('./package.json').version,
+    }, session.idToken, session.refreshToken)
+    if (!cylinderAccess.allowed) throw new Error(cylinderAccess.reason || 'This Cylinder account or device is not allowed by current workspace policy.')
+  }
   const user = syncSharedProfile(sharedProfile, session.localId, emailVerified)
+  if (cylinderAccess) syncCylinderAccessToLocalProfile(session.localId, cylinderAccess)
   recordAudit('auth.shared_sign_in', 'Shared Firebase desktop sign-in completed', { email, workspaceId: user.workspace_id, accessLane: accessLane || 'standard' }, email)
-  return synchronizeCustomersAfterSignIn(startSession(user, { firebaseIdToken: session.idToken, firebaseUid: session.localId }))
+  return synchronizeCustomersAfterSignIn(startSession(user, { firebaseIdToken: session.idToken, firebaseRefreshToken: session.refreshToken, firebaseUid: session.localId, cylinderAccess }))
 }
 
 async function registerSharedProfile(payload) {
@@ -861,6 +948,10 @@ function initBackend(app, options = {}) {
   secureStore = options.secureStore || null
   fs.mkdirSync(dataRoot, { recursive: true })
   state = readState()
+  if (isCylinderDeployment()) {
+    if (!state.cylinderDeviceId) state.cylinderDeviceId = crypto.randomUUID()
+    if (!state.cylinderDeviceSecret) state.cylinderDeviceSecret = crypto.randomBytes(48).toString('base64url')
+  }
   seed()
   persist()
   startScheduler()
@@ -1090,6 +1181,7 @@ function recordFraudSignal(type, severity, details, actor = activeSession?.email
 }
 
 function signIn(payload) {
+  if (isCylinderDeployment()) throw new Error('Cylinder requires a verified shared workspace account. Use Team Access to sign in.')
   const profile = profileSchema.parse(payload || {})
   const email = (profile.email || 'owner@overhead.local').toLowerCase()
   const user = state.userProfiles.find((item) => item.email === email)
@@ -1172,6 +1264,7 @@ function registerProfile(payload) {
 }
 
 function createStaffAccount(payload = {}) {
+  if (isCylinderDeployment()) throw new Error('Cylinder employee accounts must be created in Cylinder Management so membership, Rank, and audit records stay central.')
   requireRole(['Owner'], 'staff account creation')
   requireFeature('roles')
   const input = staffInviteSchema.parse(payload)
@@ -1311,7 +1404,36 @@ function startSession(user, sharedIdentity = {}) {
     ended_at: '',
   }
   state.sessions.unshift(session)
-  activeSession = { id: session.id, email: user.email, role: user.role, firebaseIdToken: sharedIdentity.firebaseIdToken || '', firebaseUid: sharedIdentity.firebaseUid || user.firebase_uid || '' }
+  activeSession = {
+    id: session.id, email: user.email, role: user.role,
+    firebaseIdToken: sharedIdentity.firebaseIdToken || '', firebaseRefreshToken: sharedIdentity.firebaseRefreshToken || '', firebaseUid: sharedIdentity.firebaseUid || user.firebase_uid || '',
+    cylinderAccess: sharedIdentity.cylinderAccess || null,
+  }
+  if (cylinderHeartbeatTimer) clearInterval(cylinderHeartbeatTimer)
+  if (isCylinderDeployment() && activeSession.firebaseIdToken && activeSession.cylinderAccess) {
+    const sessionId = activeSession.id
+    cylinderHeartbeatTimer = setInterval(async () => {
+      if (activeSession?.id !== sessionId || !state.cylinderDeviceId) return
+      try {
+        const access = await cylinderApiRequest('heartbeat', {
+          deviceId: state.cylinderDeviceId, deviceSecret: state.cylinderDeviceSecret, deviceName: os.hostname(), hostname: os.hostname(),
+          platform: `${os.platform()} ${os.release()}`, appVersion: require('./package.json').version,
+        })
+        if (!access.allowed) activeSession.cylinderAccess = { ...activeSession.cylinderAccess, allowed: false, reason: access.reason, expiresAt: Date.now() }
+        else {
+          activeSession.cylinderAccess = access
+          if (access.rank < 4) activeSession.role = ({ Support: 'Support', 'Front Desk': 'Front Desk', Bookkeeper: 'Bookkeeper' })[access.jobFunction] || 'Support'
+          syncCylinderAccessToLocalProfile(activeSession.firebaseUid, access)
+        }
+      } catch (error) {
+        if (Date.now() > Number(activeSession.cylinderAccess?.expiresAt || 0)) {
+          activeSession.cylinderAccess = { ...activeSession.cylinderAccess, allowed: false, reason: 'Cylinder policy could not be refreshed before the offline access window expired.' }
+        }
+        recordAudit('cylinder.policy_refresh_failed', 'Cylinder central policy refresh failed', { message: error.message || String(error) }, activeSession.email)
+      }
+    }, 2 * 60 * 1000)
+    cylinderHeartbeatTimer.unref?.()
+  }
   persist()
 
   return {
@@ -1326,6 +1448,7 @@ function startSession(user, sharedIdentity = {}) {
 }
 
 function resumeRememberedSession() {
+  if (isCylinderDeployment()) return null
   const openSession = state.sessions.find((item) => item.lock_state === 'unlocked' && !item.ended_at)
   if (!openSession) return null
   const user = state.userProfiles.find((item) => item.id === openSession.user_profile_id && item.status === 'Active')
@@ -1466,6 +1589,7 @@ function lockSession(sessionId) {
     persist()
   }
   activeSession = null
+  if (cylinderHeartbeatTimer) { clearInterval(cylinderHeartbeatTimer); cylinderHeartbeatTimer = null }
   recordAudit('session.locked', 'Desktop session locked', { sessionId })
   return { locked: true }
 }
@@ -1502,6 +1626,7 @@ function revokeDeviceSession(payload = {}) {
 }
 
 function requireRole(allowedRoles, action) {
+  requireSession(action)
   if (!activeSession) throw new Error('Sign in is required.')
   if (!allowedRoles.includes(activeSession.role)) {
     recordAudit('access.denied', 'Role action denied', { role: activeSession.role, action }, activeSession.email)
@@ -1606,6 +1731,21 @@ function deleteFeatureRecord(payload = {}) {
 
 function requireSession(action = 'workspace access') {
   if (!activeSession) throw new Error(`Sign in is required for ${action}.`)
+  if (isCylinderDeployment() && activeSession.firebaseUid) {
+    const access = activeSession.cylinderAccess
+    if (!access?.allowed || Date.now() > Number(access.expiresAt || 0)) {
+      throw new Error(access?.reason || `Cylinder central access must be refreshed before ${action}.`)
+    }
+  }
+}
+
+async function cylinderManagement(payload = {}) {
+  requireSession('Cylinder management')
+  if (!isCylinderDeployment() || !activeSession?.firebaseIdToken) throw new Error('Sign in to Cylinder with a shared Firebase account to manage your workspace.')
+  const action = String(payload.action || 'bootstrap')
+  const result = await cylinderApiRequest(action, { ...payload, action, currentDeviceId: state.cylinderDeviceId })
+  if (action === 'bootstrap') return result
+  return { ...result, management: await cylinderApiRequest('bootstrap', {}) }
 }
 
 function requireDeveloperHotfixCredentials(action) {
@@ -2146,6 +2286,7 @@ function managerForActiveSession() {
 }
 
 async function updateUserProfile(payload) {
+  if (isCylinderDeployment()) throw new Error('Cylinder employee access must be changed in Cylinder Management.')
   requireRole(['Owner'], 'user profile management')
   requireFeature('roles')
   const input = userProfileUpdateSchema.parse(payload || {})
@@ -3833,6 +3974,7 @@ module.exports = {
   startFreeGoldTrial,
   cancelSubscriptionWithUnusedTimeRefund,
   createStaffAccount,
+  cylinderManagement,
   createEmployeeLicense,
   decideApprovalRequest,
   getBootstrap,

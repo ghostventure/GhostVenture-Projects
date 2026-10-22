@@ -1,0 +1,10 @@
+{
+  "firestore": {
+    "indexes": "firestore.cylinder.indexes.json"
+  },
+  "functions": {
+    "source": "cylinder-functions",
+    "codebase": "cylinder",
+    "runtime": "nodejs22"
+  }
+}

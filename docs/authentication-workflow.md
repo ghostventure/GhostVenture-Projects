@@ -33,7 +33,7 @@ An invalid or expired invite does not leave a usable Firebase account behind.
 
 Firebase Authentication is the identity source. Firestore holds the workspace profile and role. Unverified users may only complete the minimum profile/invitation setup needed to verify their email; protected workspace data and actions require an authenticated, verified email address.
 
-Roles remain `Administrator`, `Manager`, and `Staff`. The desktop maps the shared role to its local operating role only after successful verified sign-in.
+The website and standard Desktop continue to use their existing `Administrator`, `Manager`, and `Staff` shared roles, with Desktop mapping the shared role to its local operating role after verified sign-in. Cylinder stores its four Ranks and department scope separately under the workspace and checks them through the trusted `cylinderApi`; Rank changes do not change Desktop roles. See [Cylinder ranks and centralized management](ranks-and-cylinder-management.md).
 
 ## Operator checklist
 

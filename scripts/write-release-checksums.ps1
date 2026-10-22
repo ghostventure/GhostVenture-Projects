@@ -11,6 +11,12 @@ if (-not (Test-Path $release)) {
 
 $installer = Get-ChildItem -Path $release -File -Filter 'OverHead-Setup-*-win-x64.exe' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($installer) {
+  $expectedSigner = $env:OVERHEAD_EXPECTED_SIGNER
+  if ([string]::IsNullOrWhiteSpace($expectedSigner)) {
+    throw 'Set OVERHEAD_EXPECTED_SIGNER to the exact subject of the approved organization certificate.'
+  }
+  & (Join-Path $PSScriptRoot 'assert-windows-installer-signature.ps1') -InstallerPath $installer.FullName -ExpectedSigner $expectedSigner
+
   $sha512Hasher = [Security.Cryptography.SHA512]::Create()
   try {
     $sha512 = [Convert]::ToBase64String($sha512Hasher.ComputeHash([IO.File]::ReadAllBytes($installer.FullName)))

@@ -19,6 +19,8 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
         && selfProfile().data.workspace_id == workspaceId
         && selfProfile().data.status == 'Active'
+        && selfProfile().data.cylinder_managed != true
+        && !exists(/databases/$(database)/documents/workspaces/$(workspaceId)/cylinder_members/$(request.auth.uid))
         && selfProfile().data.role in roles;
     }
 
@@ -180,6 +182,28 @@ service cloud.firestore {
           && request.resource.data.created_by == resource.data.created_by;
         allow delete: if false;
       }
+
+      // Cylinder membership, devices, departments and policy are written only
+      // by the trusted cylinderApi Cloud Function using the Admin SDK.
+      match /cylinder_members/{memberId} {
+        allow read, write: if false;
+      }
+      match /cylinder_departments/{departmentId} {
+        allow read, write: if false;
+      }
+      match /cylinder_devices/{deviceId} {
+        allow read, write: if false;
+      }
+      match /cylinder_policies/{policyId} {
+        allow read, write: if false;
+      }
+      match /cylinder_audit/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /cylinder_revocations/{userId} {
+      allow read, write: if false;
     }
   }
 }

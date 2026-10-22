@@ -25,6 +25,7 @@ Use an organization-owned Windows code-signing certificate. Keep the certificate
 ```powershell
 $env:CSC_LINK = 'C:\secure\black-lion-code-signing.pfx'
 $env:CSC_KEY_PASSWORD = 'replace-with-certificate-password'
+$env:OVERHEAD_EXPECTED_SIGNER = '<exact subject of the approved certificate>'
 cd C:\Users\solid\Documents\Codex\OverHead
 npm run dist:win
 Get-AuthenticodeSignature .\release\OverHead-Setup-<version>-win-x64.exe
@@ -32,9 +33,13 @@ Get-AuthenticodeSignature .\release\OverHead-Setup-<version>-win-x64.exe
 
 The final verification must report `Valid` and identify the organization certificate. Do not publish a release that reports `NotSigned`.
 
+### Live feed audit Ã¢â‚¬â€ 2026-10-21
+
+The public desktop feed advertises 0.3.18 and the Cylinder feed advertises 0.3.4. Both hosted installers were downloaded and matched their respective `latest.yml` byte lengths and SHA-512 values, but Windows reported `NotSigned` for both. The deployed feeds therefore do not meet the release-signing requirement above. Configure the organization certificate before publishing another installer or update manifest. The current local desktop and Cylinder installations are 0.3.2; they were left unchanged during this review.
+
 ## Update publishing
 
-Publish the standard desktop installer, blockmap, and matching `latest.yml` together to `https://overhead-office.web.app/updates`. Confirm the public `latest.yml` version matches the installer version and that a prior packaged build detects and downloads the update. Never point the app at a feed containing unsigned artifacts.
+Use the central release workflow in `docs/windows-release-signing.md` to publish desktop and Cylinder installers from one verified Firebase Hosting release. Confirm each public `latest.yml` version matches its installer and that a prior packaged build detects and downloads its update. Never point an app at a feed containing unsigned artifacts.
 
 OverHead Cylinder uses a separate Windows Server/Windows IoT-only channel: publish its installer, blockmap, and matching `latest.yml` to `https://overhead-office.web.app/updates/cylinder`. Do not mix Cylinder and desktop artifacts; their app IDs, local data roots, and compatibility gates are intentionally separate.
 
@@ -49,3 +54,7 @@ Cylinder has a separate one-time, 30-day, no-card evaluation per server workspac
 5. Qualified counsel has reviewed the final commercial terms for the applicable jurisdiction.
 
 Do not represent Cylinder checkout or recurring billing as live until that separate activation path is implemented, tested, and approved.
+
+### Central release preparation — 2026-10-22
+
+The central release workspace and two-target Firebase publisher are implemented. The current target plan is desktop and Cylinder 0.3.19, staged under `release/current/{desktop,cylinder}`. Both products share the version from `package.json`; the live feeds still advertise desktop 0.3.18 and Cylinder 0.3.4. No private-key code-signing certificates are installed in the CurrentUser or LocalMachine certificate stores, and `CSC_LINK`, `WIN_CSC_LINK`, and `OVERHEAD_EXPECTED_SIGNER` are not configured. Therefore the signed packages cannot be built and the Firebase release has not been published. The existing local 0.3.2 installations and live Firebase files remain unchanged.

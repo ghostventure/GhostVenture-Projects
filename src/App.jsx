@@ -21,6 +21,7 @@ import {
   MessageSquareText,
   PanelTopOpen,
   ReceiptText,
+  Server,
   Search,
   Settings2,
   ShieldAlert,
@@ -73,6 +74,7 @@ const navSections = [
   { id: 'support', label: 'Support', detail: 'Legal, tickets, help paths', icon: LifeBuoy },
   { id: 'tools', label: 'Tools', detail: 'PDFs, exports, utilities', icon: BriefcaseBusiness },
   { id: 'accounts', label: 'Accounts', detail: 'Users, roles, manager profiles', icon: UserRoundCog },
+  { id: 'cylinder-admin', label: 'Cylinder Management', detail: 'Ranks, departments, devices and policies', icon: Server },
   { id: 'licenses', label: 'Licenses', detail: 'User subscriptions and OverHead team access', icon: BadgeCheck },
   { id: 'plans', label: 'Plans', detail: 'Price, billing, access', icon: BadgeCheck },
   { id: 'payments', label: 'Payments', detail: 'Stripe verify, import data', icon: ReceiptText },
@@ -92,6 +94,7 @@ const sectionFeatures = {
   support: ['Support tickets', 'Legal acknowledgements', 'Support bundle', 'Contact channels'],
   tools: ['Fillable PDFs', 'Support bundles', 'Data exports', 'Restore validation'],
   accounts: ['Role manager', 'Suspension status', 'Recovery hints', 'Manager profiles'],
+  'cylinder-admin': ['Ranked employees', 'Departments', 'Enrolled devices', 'Central OverHead policy'],
   licenses: ['Profile license numbers', 'Subscription numbers', 'OverHead employee register', 'Access status'],
   plans: ['Silver/Gold/Black', 'Billing profile', 'Locked features', 'Access rules'],
   payments: ['Open Stripe verify', 'Save connection', 'Import billing', 'Import payments'],
@@ -195,9 +198,9 @@ function App() {
     [activeLegal],
   )
   const secureView = session.signedIn && !privacyMode
-  const teamSections = allowedSectionsForRole(session.role)
+  const teamSections = visibleSectionsForRole(session.role)
   const navGroups = useMemo(() => {
-    const visibleSections = allowedSectionsForRole(session.role)
+    const visibleSections = visibleSectionsForRole(session.role)
     const groups = { Workspace: [], Operations: [], Administration: [] }
     const administration = ['accounts', 'licenses', 'plans', 'payments', 'security', 'admin-security', 'settings', 'support']
     const operations = ['scheduling', 'documents', 'collaboration', 'finance', 'people', 'rule-center', 'integrations', 'automations', 'evidence', 'imports', 'work', 'customers', 'square', 'tools']
@@ -212,7 +215,7 @@ function App() {
     const onKeyDown = (event) => {
       if (!(event.altKey && event.shiftKey) || event.ctrlKey || event.metaKey) return
       const key = event.key.toLowerCase()
-      const visibleSections = allowedSectionsForRole(session.role)
+      const visibleSections = visibleSectionsForRole(session.role)
       const section = navSections.find((item) => visibleSections.includes(item.id) && String(shortcutKeys[item.id] || '').toLowerCase() === key)
       if (section) { event.preventDefault(); setActiveSection(section.id) }
     }
@@ -663,6 +666,9 @@ function App() {
                 refreshBackend={refreshBackend}
                 setOperationNotice={setOperationNotice}
               />
+            )}
+            {activeSection === 'cylinder-admin' && cylinderMode && (
+              <CylinderManagementSection session={session} setOperationNotice={setOperationNotice} />
             )}
             {activeSection === 'licenses' && (
               <LicensesSection
@@ -1446,6 +1452,13 @@ function allowedSectionsForRole(role) {
   return member
 }
 
+function visibleSectionsForRole(role) {
+  const sections = allowedSectionsForRole(role)
+  return cylinderMode && role !== 'Customer'
+    ? [...new Set([...sections.filter((id) => id !== 'accounts'), 'cylinder-admin'])]
+    : sections
+}
+
 function WorkflowsSection({ activeModule, selectedModule, setActiveModule, refreshBackend, setOperationNotice }) {
   const SelectedIcon = selectedModule.icon
   const [error, setError] = useState('')
@@ -2010,6 +2023,101 @@ function ToolsSection({ backendState, refreshBackend, setOperationNotice, operat
 }
 
 const configurableIdEntities = [['cust', 'Customers'], ['task', 'Tasks'], ['quote', 'Quotes'], ['invoice', 'Invoices'], ['expense', 'Expenses'], ['appointment', 'Appointments'], ['document', 'Documents']]
+
+const cylinderRanks = [{ value: 1, label: 'Rank 1 · Regular User' }, { value: 2, label: 'Rank 2 · Management' }, { value: 3, label: 'Rank 3 · Administrator' }]
+
+function CylinderManagementSection({ session, setOperationNotice }) {
+  const [management, setManagement] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [invite, setInvite] = useState({ name: '', email: '', rank: '1', jobFunction: 'Support', departmentIds: [] })
+  const [inviteLink, setInviteLink] = useState('')
+  const [departmentName, setDepartmentName] = useState('')
+  const [policyDraft, setPolicyDraft] = useState({ minimumAppVersion: '0.3.19', offlineGraceHours: '4', disabled: false })
+  const [memberDrafts, setMemberDrafts] = useState({})
+  const [deviceDrafts, setDeviceDrafts] = useState({})
+
+  async function loadManagement() {
+    setBusy(true)
+    try {
+      const result = await window.overheadBackend.cylinderManagement({ action: 'bootstrap' })
+      setManagement(result)
+      setPolicyDraft({ minimumAppVersion: result.policy?.minimum_app_version || '0.3.19', offlineGraceHours: String(result.policy?.offline_grace_hours ?? 4), disabled: result.policy?.disabled === true })
+      setError('')
+    } catch (reason) { setError(userFacingError(reason, 'Cylinder management could not load.')) }
+    finally { setBusy(false) }
+  }
+
+  useEffect(() => { loadManagement() }, [])
+
+  async function runAction(action, payload = {}) {
+    setBusy(true)
+    try {
+      const result = await window.overheadBackend.cylinderManagement({ action, ...payload })
+      if (result.passwordSetupLink) setInviteLink(result.passwordSetupLink)
+      if (result.management) setManagement(result.management)
+      else if (action !== 'bootstrap') await loadManagement()
+      setError('')
+      if (action !== 'bootstrap') setOperationNotice(action === 'inviteMember'
+        ? (result.existingWorkspaceAccount ? `Cylinder invitation created for ${payload.email}. They can accept by signing in to Cylinder.` : `Invitation created for ${payload.email}. Share the one-time setup link privately.`)
+        : action === 'removeMember' ? 'Employee removed from Cylinder. Their separate desktop account was not changed.' : 'Cylinder management change saved and audited.')
+      return result
+    } catch (reason) {
+      setError(userFacingError(reason, 'Cylinder management change failed.'))
+      return null
+    } finally { setBusy(false) }
+  }
+
+  function departmentOptions(ids) { return (management?.departments || []).filter((department) => ids.includes(department.id)) }
+
+  return (
+    <section className="panel page-panel">
+      <div className="section-head">
+        <div><p className="eyebrow">Cylinder · centralized workspace</p><h2>Department people, devices, and access policy</h2><span>Signed in as {management?.actor?.rankName || 'Loading rank'} · {session.email}</span></div>
+        <button className="ghost-button" type="button" disabled={busy} onClick={loadManagement}><Server size={16} />Refresh control plane</button>
+      </div>
+      {error && <div className="backend-health"><strong>Management request</strong><span>{error}</span></div>}
+      {!management && <div className="backend-health"><strong>{busy ? 'Connecting to Firebase' : 'Cylinder management is unavailable'}</strong><span>Access is checked by the trusted Cylinder service. Sign in with an active workspace account.</span></div>}
+      {management && <>
+        <div className="settings-layout">
+          <div className="feature-list">
+            <div className="backend-health"><strong>Workspace</strong><span>{management.workspaceId}</span><small>Rank controls Cylinder administration. Job function controls the employee’s OverHead work role.</small></div>
+            <div className="support-item support-form">
+              <strong>Invite employee</strong>
+              <FormField label="Name" value={invite.name} onChange={(value) => setInvite((current) => ({ ...current, name: value }))} placeholder="Employee name" />
+              <FormField label="Email" value={invite.email} onChange={(value) => setInvite((current) => ({ ...current, email: value }))} placeholder="employee@example.com" />
+              <label>Starting Rank<select value={invite.rank} onChange={(event) => setInvite((current) => ({ ...current, rank: event.target.value }))}>{cylinderRanks.filter((rank) => rank.value < (management.actor.rank || 0)).map((rank) => <option value={rank.value} key={rank.value}>{rank.label}</option>)}</select></label>
+              <label>Job function<select value={invite.jobFunction} onChange={(event) => setInvite((current) => ({ ...current, jobFunction: event.target.value }))}><option>Support</option><option>Front Desk</option><option>Bookkeeper</option></select></label>
+              <label>Department<select multiple size="3" value={invite.departmentIds} onChange={(event) => setInvite((current) => ({ ...current, departmentIds: [...event.target.selectedOptions].map((option) => option.value) }))}>{(management.departments || []).map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
+              <small>The employee receives a pending account. After password setup and email verification, Cylinder activates the membership. New employee devices need approval.</small>
+              <button className="ghost-button" type="button" disabled={busy || !invite.name || !invite.email || !invite.departmentIds.length || management.actor.rank < 2} onClick={async () => { setInviteLink(''); const result = await runAction('inviteMember', { ...invite, rank: Number(invite.rank) }); if (result) setInvite((current) => ({ ...current, name: '', email: '' })) }}>Create employee invitation</button>
+              {inviteLink && <div className="backend-health"><strong>One-time password setup link</strong><input readOnly value={inviteLink} aria-label="One-time password setup link" /><button className="ghost-button" type="button" onClick={() => navigator.clipboard?.writeText(inviteLink).then(() => setOperationNotice('Invitation setup link copied.'))}>Copy link</button><small>Send this privately to the invited employee. Anyone holding it can set that account’s password.</small></div>}
+            </div>
+            {management.actor.rank === 4 && <div className="support-item support-form"><strong>Create department</strong><FormField label="Department name" value={departmentName} onChange={setDepartmentName} placeholder="Department" /><button className="ghost-button" type="button" disabled={busy || departmentName.trim().length < 2} onClick={async () => { const result = await runAction('createDepartment', { name: departmentName }); if (result) setDepartmentName('') }}>Add department</button></div>}
+          </div>
+          <div className="feature-list">
+            <div className="support-item"><strong>Employees · {management.members.length}</strong>
+              {management.members.map((member) => {
+                const draft = memberDrafts[member.uid] || { rank: String(member.rank), status: member.status, jobFunction: member.job_function || 'Support', departmentIds: member.department_ids || [] }
+                return <div className="backend-health" key={member.uid}><strong>{member.name || member.email} · {member.rank_name}</strong><span>{member.email} · {member.status} · {departmentOptions(member.department_ids || []).map((department) => department.name).join(', ')}</span>
+                  {management.actor.rank > member.rank && member.uid !== management.actor.uid && <><label>Rank<select value={draft.rank} onChange={(event) => setMemberDrafts((current) => ({ ...current, [member.uid]: { ...draft, rank: event.target.value } }))}>{cylinderRanks.filter((rank) => rank.value < management.actor.rank).map((rank) => <option value={rank.value} key={rank.value}>{rank.label}</option>)}</select></label><label>Job function<select value={draft.jobFunction} onChange={(event) => setMemberDrafts((current) => ({ ...current, [member.uid]: { ...draft, jobFunction: event.target.value } }))}><option>Support</option><option>Front Desk</option><option>Bookkeeper</option></select></label><label>Departments<select multiple size="3" value={draft.departmentIds} onChange={(event) => setMemberDrafts((current) => ({ ...current, [member.uid]: { ...draft, departmentIds: [...event.target.selectedOptions].map((option) => option.value) } }))}>{management.departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label>Status<select value={draft.status} onChange={(event) => setMemberDrafts((current) => ({ ...current, [member.uid]: { ...draft, status: event.target.value } }))}><option>Active</option><option>Suspended</option></select></label><button className="ghost-button" type="button" disabled={busy || !draft.departmentIds.length} onClick={() => runAction('updateMember', { uid: member.uid, ...draft, rank: Number(draft.rank) })}>Save employee access</button><button className="ghost-button" type="button" disabled={busy} onClick={() => window.confirm(`Remove ${member.name || member.email} from Cylinder? This does not remove their separate desktop profile.`) && runAction('removeMember', { uid: member.uid })}>Remove from Cylinder</button></>}
+                </div>
+              })}
+            </div>
+            {management.actor.rank >= 3 && <div className="support-item"><strong>Enrolled devices · {management.devices.length}</strong><small>New devices remain pending until an Administrator or Owner allows them. Device identity is the app’s revocable installation ID.</small>
+              {management.devices.map((device) => {
+                const draft = deviceDrafts[device.id] || { status: device.status, departmentIds: device.department_ids || [], allowedUids: device.allowed_uids || [] }
+                return <div className="backend-health" key={device.id}><strong>{device.name} · {device.status}</strong><span>{device.hostname || 'Hostname unavailable'} · {device.platform || 'Platform unavailable'} · {device.app_version || 'Version unknown'}</span><label>Device status<select value={draft.status} onChange={(event) => setDeviceDrafts((current) => ({ ...current, [device.id]: { ...draft, status: event.target.value } }))}><option>Allowed</option><option>Blocked</option><option>Retired</option></select></label><label>Departments<select multiple size="3" value={draft.departmentIds} onChange={(event) => setDeviceDrafts((current) => ({ ...current, [device.id]: { ...draft, departmentIds: [...event.target.selectedOptions].map((option) => option.value) } }))}>{management.departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label>Assigned users (leave empty for all members in these departments)<select multiple size="4" value={draft.allowedUids} onChange={(event) => setDeviceDrafts((current) => ({ ...current, [device.id]: { ...draft, allowedUids: [...event.target.selectedOptions].map((option) => option.value) } }))}>{management.members.filter((member) => member.status === 'Active').map((member) => <option key={member.uid} value={member.uid}>{member.name || member.email} · Rank {member.rank}</option>)}</select></label><button className="ghost-button" type="button" disabled={busy || !draft.departmentIds.length} onClick={() => runAction('setDevice', { id: device.id, ...draft })}>Save device control</button></div>
+              })}
+            </div>}
+          </div>
+        </div>
+        {management.actor.rank === 4 && <div className="support-item support-form"><strong>Workspace Cylinder policy</strong><FormField label="Minimum app version (Owner recovery is exempt)" value={policyDraft.minimumAppVersion} onChange={(value) => setPolicyDraft((current) => ({ ...current, minimumAppVersion: value }))} placeholder="0.3.19" /><label>Offline grace hours<input type="number" min="0" max="24" value={policyDraft.offlineGraceHours} onChange={(event) => setPolicyDraft((current) => ({ ...current, offlineGraceHours: event.target.value }))} /></label><label><input type="checkbox" checked={policyDraft.disabled} onChange={(event) => setPolicyDraft((current) => ({ ...current, disabled: event.target.checked }))} /> Pause employee access (Owner recovery remains available)</label><button className="ghost-button" type="button" disabled={busy} onClick={() => runAction('savePolicy', { ...policyDraft, offlineGraceHours: Number(policyDraft.offlineGraceHours) })}>Publish workspace policy</button><small>Online policy checks run at sign-in and every two minutes. A disconnected device can retain access for up to the selected offline grace after a central change. Protected employee actions stop when that window expires. These controls manage OverHead Cylinder access and version requirements, not native Windows GPO.</small></div>}
+        {management.audit?.length > 0 && <div className="support-item"><strong>Recent central audit events</strong>{management.audit.slice(0, 20).map((event) => <div className="backend-health" key={event.id}><span>{event.action} · {event.actor_email || event.actor_uid} · {event.target_uid || 'workspace'}</span><small>{event.created_at?.toDate?.()?.toLocaleString?.() || 'Recorded in Firebase'}</small></div>)}</div>}
+      </>}
+    </section>
+  )
+}
 
 function AccountsSection({ backendState, session, refreshBackend, setOperationNotice }) {
   const firstUser = backendState.userProfiles?.[0]
@@ -3167,7 +3275,10 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
         if (active) setUpdater({ status: 'unavailable', autoCheck: true, message: userFacingError(error, 'Update status is unavailable.') })
       })
     }
-    return () => { active = false }
+    const poll = window.setInterval(() => {
+      window.overheadBackend?.updaterStatus?.().then((status) => { if (active) setUpdater(status) }).catch(() => {})
+    }, 1500)
+    return () => { active = false; window.clearInterval(poll) }
   }, [])
 
   useEffect(() => {
@@ -3231,6 +3342,19 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
     const status = await window.overheadBackend.checkForUpdates()
     setUpdater(status)
     setOperationNotice(status.message || 'Update check started.')
+  }
+
+  async function checkForGitHubUpdates() {
+    if (!window.overheadBackend?.checkForUpdatesFromGitHub) return
+    const status = await window.overheadBackend.checkForUpdatesFromGitHub()
+    setUpdater(status)
+    setOperationNotice(status.message || 'GitHub update check started.')
+  }
+
+  async function downloadGitHubInstaller() {
+    if (!window.overheadBackend?.openGitHubInstaller) return
+    const result = await window.overheadBackend.openGitHubInstaller()
+    setOperationNotice(result.message || 'GitHub installer opened.')
   }
 
   async function setAutoCheck(enabled) {
@@ -3338,9 +3462,11 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
           <div className="backend-health update-check-panel">
             <strong>Updates</strong>
             <span>{updater.message || 'Choose Check to look for an update.'}</span>
-            <small>{updater.configured ? `Installed: ${updater.currentVersion || 'unknown'} - Available: ${updater.version || 'not checked'} - Channel: ${updater.channel || 'latest'}${updater.checkedAt ? ` - last checked ${new Date(updater.checkedAt).toLocaleString()}` : ''}` : 'Install a packaged release to use the live update service.'}</small>
+            <small>{updater.configured ? `Installed: ${updater.currentVersion || 'unknown'} - Available: ${updater.version || 'not checked'}${updater.updateKind ? ` - ${updater.updateKind} update` : ''}${updater.source ? ` - Source: ${updater.source === 'github' ? 'GitHub' : 'Firebase'}` : ''} - Channel: ${updater.channel || 'latest'}${updater.checkedAt ? ` - last checked ${new Date(updater.checkedAt).toLocaleString()}` : ''}` : 'Install a packaged release to use the live update service.'}</small>
             <div className="button-row">
               <button className="primary-action" type="button" onClick={checkForUpdates}>Check</button>
+              <button className="ghost-button" type="button" onClick={checkForGitHubUpdates}>Check GitHub</button>
+              {updater.source === 'github' && updater.updateKind === 'major' && updater.installerUrl && <button className="ghost-button" type="button" onClick={downloadGitHubInstaller}>Download full installer</button>}
               <label className="checkbox-line update-auto-check">
                 <input type="checkbox" checked={updater.autoCheck !== false} onChange={(event) => setAutoCheck(event.target.checked)} />
                 Auto-Check

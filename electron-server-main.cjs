@@ -2,6 +2,7 @@ const { app, dialog } = require('electron')
 const { execFileSync } = require('node:child_process')
 
 process.env.OVERHEAD_DEPLOYMENT_MODE = 'cylinder'
+process.env.OVERHEAD_CYLINDER_VARIANT = 'server'
 
 function isSupportedServerPlatform() {
   if (process.platform !== 'win32') return false
@@ -15,7 +16,7 @@ function isSupportedServerPlatform() {
 
 if (!isSupportedServerPlatform()) {
   app.whenReady().then(() => {
-    dialog.showErrorBox('OverHead Cylinder requires Windows Server or Windows IoT', 'This deployment is licensed and built for Windows Server or a Windows IoT edition. Install the standard OverHead desktop app on Windows 10 or Windows 11.')
+    dialog.showErrorBox('OverHead Cylinder Server requires Windows Server or Windows IoT', 'This deployment is for a Windows Server or Windows IoT host. For Windows 10 or Windows 11 endpoints managed by Cylinder, install the optional Cylinder Workstation Client package.')
     app.quit()
   })
 } else {

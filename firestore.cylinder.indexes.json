@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "cylinder_members",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department_ids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cylinder_audit",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "details.department_ids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

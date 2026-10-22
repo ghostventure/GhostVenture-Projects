@@ -96,6 +96,7 @@ contextBridge.exposeInMainWorld('overheadBackend', {
   listUsers: () => ipcRenderer.invoke('users:list'),
   createStaffAccount: (payload) => ipcRenderer.invoke('users:create-staff', payload),
   updateUser: (payload) => ipcRenderer.invoke('users:update', payload),
+  cylinderManagement: (payload) => ipcRenderer.invoke('cylinder:management', payload),
   listLicenses: () => ipcRenderer.invoke('licenses:list'),
   refreshUserLicense: (payload) => ipcRenderer.invoke('licenses:refresh-user', payload),
   listEmployeeLicenses: () => ipcRenderer.invoke('employee-licenses:list'),
@@ -125,6 +126,8 @@ contextBridge.exposeInMainWorld('overheadBackend', {
   createSupportBundle: () => ipcRenderer.invoke('support:create-bundle'),
   updaterStatus: () => ipcRenderer.invoke('updater:status'),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  checkForUpdatesFromGitHub: () => ipcRenderer.invoke('updater:check-github'),
+  openGitHubInstaller: () => ipcRenderer.invoke('updater:open-github-installer'),
   setAutoCheck: (payload) => ipcRenderer.invoke('updater:set-auto-check', payload),
   installDownloadedUpdate: () => ipcRenderer.invoke('updater:install'),
 })
