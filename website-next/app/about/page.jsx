@@ -26,7 +26,7 @@ export default function AboutPage() {
             <p className="section-copy">{businessFoundation.scope}</p>
           </div>
           <div className="metrics">
-            <article className="metric"><span>Current release</span><strong>0.3.18</strong><p>Windows desktop app with local workflow and account controls.</p></article>
+            <article className="metric"><span>Current release</span><strong>0.3.24</strong><p>Windows Desktop, Cylinder Server, and Cylinder Client share the latest workflow UX.</p></article>
             <article className="metric"><span>Audience</span><strong>SMB</strong><p>Local service offices and owner-run teams.</p></article>
             <article className="metric"><span>Workflow model</span><strong>Local first</strong><p>Scheduled reports, exports, and access reviews run locally while the app is open.</p></article>
             <article className="metric"><span>Focus</span><strong>Daily control</strong><p>Practical visibility for owners and managers.</p></article>
@@ -34,10 +34,10 @@ export default function AboutPage() {
         </section>
 
         <section className="section">
-          <p className="eyebrow">Current desktop release · 0.3.18</p>
-          <h2>Practical controls for daily office work.</h2>
-          <p className="section-copy">Owners can merge duplicate local customer records with a protected pre-merge backup, schedule report CSVs and full data exports, create recurring access-review tasks, and review sessions saved by the current installation. Staff can request project status changes for Owner approval.</p>
-          <p className="section-copy">These workflows run locally while OverHead is open. They do not send email or push notifications, suspend Firebase-linked accounts, merge shared Firestore customer records, or revoke sessions on other devices. MFA, SSO, IP allowlists, and multi-workspace membership controls are not available in this release.</p>
+          <p className="eyebrow">Current release · 0.3.24</p>
+          <h2>A faster shared workspace, with Cylinder's department controls.</h2>
+          <p className="section-copy">All three Windows packages include keyboard navigation, Ctrl+K command search, Work Planner, recent-record history, bulk status previews, lazy-loaded workspaces, and batched local saves. Desktop remains the individual-user edition. Cylinder Server adds central employee Ranks, departments, device authorization, minimum-version/offline policies, access pause, and audit; Cylinder Client brings the shared work tools to enrolled Windows 10/11 workstations.</p>
+          <p className="section-copy">Cylinder's controls govern OverHead membership and device access, not native Windows Group Policy, Active Directory, or Entra. Operational records and customer documents stay on the configured devices and are not centrally synchronized by these controls.</p>
         </section>
 
         <section className="section mission-statement">
@@ -72,7 +72,7 @@ export default function AboutPage() {
         <ProductProof
           eyebrow="Installed product"
           title="See the office at a glance."
-          body="OverHead Desktop 0.3.18 puts customer records, current work, office checks, and local workflow controls in one Windows view."
+          body="OverHead Desktop 0.3.24 puts customer records, current work, office checks, keyboard tools, and local workflow controls in one Windows view."
           image="/assets/overhead-console-proof.png"
           alt="OverHead Desktop command console showing workspace status, customer database, action queue, and office readiness"
           caption="Actual OverHead Desktop smoke-test capture"

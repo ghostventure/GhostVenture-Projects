@@ -7,7 +7,6 @@ import {
   checksumHref,
   cylinderDeployment,
   cylinderPageHref,
-  cylinderCrossoverUsers,
   downloadHref,
   plans,
 } from "./data";
@@ -135,36 +134,38 @@ export default function HomePage() {
 
         <ExecutiveSummaryFeature />
         <section className="section home-release" aria-labelledby="release-title">
-          <p className="eyebrow">Current desktop release · 0.3.18</p>
-          <h2 id="release-title">More control over local office workflows.</h2>
+          <p className="eyebrow">Current release · 0.3.24</p>
+          <h2 id="release-title">Move through office work with less friction.</h2>
           <p className="section-copy">
-            The latest Windows release adds Owner tools for merging duplicate
-            local customer records with an encrypted pre-merge backup, scheduling
-            local CSV reports and full data exports, and reviewing or ending
-            sessions saved on this installation.
+            Desktop, Cylinder Server, and Cylinder Client share the latest
+            workspace improvements: a searchable command palette, keyboard
+            navigation, a Work Planner, recent-record history, bulk status
+            previews, lazy-loaded workspaces, and batched local saves.
           </p>
           <div className="card-grid three">
             <article>
-              <span>Customer records</span>
-              <strong>Resolve local duplicates safely.</strong>
-              <p>Review the merge and backup before local records are combined.</p>
+              <span>Find work</span>
+              <strong>Jump to an action with Ctrl+K.</strong>
+              <p>Search workspaces and common actions from the keyboard.</p>
             </article>
             <article>
-              <span>Scheduled work</span>
-              <strong>Keep routine reviews on the calendar.</strong>
-              <p>Queue local reports, exports, and recurring access-review tasks.</p>
+              <span>Plan the day</span>
+              <strong>Keep the next handoff visible.</strong>
+              <p>Use the Work Planner and recent history to pick up active work.</p>
             </article>
             <article>
-              <span>Session controls</span>
-              <strong>Review sessions from this installation.</strong>
-              <p>Owners can inspect and end sessions saved by this local copy.</p>
+              <span>Update work in batches</span>
+              <strong>Preview changes before applying them.</strong>
+              <p>Review bulk status updates before saving the selected records.</p>
             </article>
           </div>
           <p className="office-fit-note">
-            Scheduled desktop jobs run while OverHead is open and the required
-            Owner or Bookkeeper is signed in. Reports and notices stay local or
-            in-app; these controls do not manage Firebase account suspension,
-            merge shared cloud customer records, or end sessions on other devices.
+            Desktop is the individual-user edition. Cylinder is the
+            multi-user department edition: its Server host manages employee
+            Ranks and device access, while its separate Client runs on Windows
+            10/11 workstations and remote-desktop endpoints. Cylinder&apos;s
+            controls govern OverHead access; they do not configure native
+            Windows Group Policy.
           </p>
           <Link className="text-link" href={businessGuideHref}>Read the current user guide</Link>
         </section>
@@ -214,7 +215,7 @@ export default function HomePage() {
               separate tools.
             </h2>
             <p className="section-copy">
-              OverHead gives the owner and team one practical desktop workspace
+            OverHead gives an individual user one practical desktop workspace
               for the customer record, active work, follow-up, approvals,
               payment context, and support history.
             </p>
@@ -312,10 +313,9 @@ export default function HomePage() {
           <p className="eyebrow">Plans and deployments</p>
           <h2>Choose the setup that fits the office and its host.</h2>
           <p className="section-copy">
-            Start with a 90-day free Gold trial for the standard desktop
-            application. No card is required for the trial; commercial
-            activation is available when secure production billing and account
-            services are enabled.
+            Start with a 90-day, no-card Gold trial for the standard Desktop
+            application. Public paid checkout is not currently enabled, so
+            contact OverHead for current commercial activation terms.
           </p>
           <div className="plan-grid">
             {plans.map((plan) => (
@@ -338,11 +338,10 @@ export default function HomePage() {
             ))}
           </div>
           <article className="plan-card seat-pricing-note">
-            <span>Growing team pricing</span>
-            <h3>One seat per person</h3>
-            <p>Every Desktop plan includes one user. Each added seat is half the previous seat's monthly price, rounded down to a whole dollar, with a $14.99 minimum. Silver is $59 for the first user, $29 for the second, then $14.99 per user. Total Desktop charges are capped at Cylinder's $499 monthly price.</p>
-            <p>Gold and Black use the same step-down rule from their plan price. Monthly Cylinder crossover: {plans.map((plan) => `${plan.name} at ${cylinderCrossoverUsers(plan.name)} users`).join(' · ')}. With Cylinder's annual rate: {plans.map((plan) => `${plan.name} at ${cylinderCrossoverUsers(plan.name, 'annual')} users`).join(' · ')}. Cylinder includes up to 50 users on a supported Windows Server or Windows IoT host.</p>
-            <p>The first paid month is free at checkout; it does not stack with the existing 90-day Gold trial. Seat charges follow this schedule and stop at the $499 monthly Desktop cap. Cylinder is recommended when the uncapped Desktop total exceeds that price.</p>
+            <span>Choose a capacity</span>
+            <h3>Desktop for one user. Cylinder for a managed department.</h3>
+            <p>Each Desktop plan includes one user. Additional-seat pricing logic exists in the application source, but paid seat checkout is not enabled in the public production service, so additional-user rates and first-month promotions are not offered here.</p>
+            <p>When a department needs centrally managed employees, Ranks, and device access, compare the separate Cylinder Server deployment and its Windows workstation Client. Cylinder is not activated by adding Desktop seats.</p>
             <Link className="text-link" href={cylinderPageHref}>Compare Cylinder</Link>
           </article>
           <article className="cylinder-plan-card">

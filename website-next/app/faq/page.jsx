@@ -13,15 +13,19 @@ const faqs = [
   ],
   [
     "What is OverHead Cylinder?",
-    "Cylinder is the separate OverHead deployment tier for a supported Windows Server or Windows IoT host. It has its own application identity, local data directory, installer, and update channel.",
+    "Cylinder is the multi-user, department-managed OverHead deployment. Cylinder Server runs on supported Windows Server or Windows IoT editions and manages employee membership, four Ranks, departments, enrolled devices, minimum-version/offline policies, access pause, and audit. Its separate Client runs on enrolled Windows 10/11 workstations and remote-desktop endpoints. These are OverHead access controls, not native Windows Group Policy.",
+  ],
+  [
+    "How is Cylinder different from Desktop?",
+    "Desktop is OverHead's individual-user edition and includes the shared customer, task, workflow, document, integration, and reporting tools. Cylinder is built for a department: the Server adds central employee and device controls, and the Client carries the shared workspace to managed Windows endpoints. The Server and Client share the latest 0.3.24 keyboard, command-search, Work Planner, history, and bulk-update UX.",
   ],
   [
     "Can I install Cylinder on Windows 10 or Windows 11?",
-    "No. Cylinder is not compatible with standard Windows 10 or Windows 11 editions. Its launcher checks the Windows host edition and exits on an unsupported desktop edition. Use the standard OverHead desktop application instead.",
+    "Cylinder Server is not compatible with standard Windows 10/11; it requires a supported Windows Server or Windows IoT host. The separate Cylinder Client is designed for enrolled Windows 10/11 workstations and remote-desktop endpoints. A single-user setup should use OverHead Desktop.",
   ],
   [
     "What does the Cylinder tier support?",
-    "The current Cylinder entitlement profile supports up to 50 users and 100,000 customer records. It includes the server deployment controls alongside the core customer, task, backup, workflow, approval, export, restore-validation, and support capabilities.",
+    "The current Cylinder entitlement profile supports up to 50 users and 100,000 customer records. Server management includes employee invites and removal, four Ranks, department scope, device approval and blocking, minimum-version/offline policies, employee access pause, and audit alongside the shared OverHead workflows. These controls govern OverHead access; they are not native Windows Group Policy and do not synchronize local customer records or files.",
   ],
   [
     "How much is Cylinder?",
@@ -29,7 +33,7 @@ const faqs = [
   ],
   [
     "Does Cylinder have a trial?",
-    "Yes. Each server workspace receives one 90-day, no-card Cylinder evaluation. It does not create a payment or automatically renew. After the evaluation ends, continued Cylinder access requires a completed commercial activation and issued entitlement.",
+    "Yes. Each server workspace receives one 30-day, no-card Cylinder evaluation. It does not create a payment or automatically renew. After the evaluation ends, continued Cylinder access requires a completed commercial activation and issued entitlement.",
   ],
   [
     "Does Cylinder automatically copy server data to the cloud?",
@@ -48,8 +52,8 @@ const faqs = [
     `${businessFoundation.mission} In practice, that means ${businessPrinciples[0].title.toLowerCase()}, ${businessPrinciples[1].title.toLowerCase()}, and ${businessPrinciples[5].title.toLowerCase()}.`,
   ],
   [
-    "What is included in OverHead 0.3.18?",
-    "Version 0.3.18 adds local report and security workflow controls, including scheduled CSV exports, access-review tasks, inactivity policies, role-routed in-app notices, saved-session management, and Owner-reviewed local customer merges. The exact actions available depend on your role.",
+    "What is included in OverHead 0.3.24?",
+    "Desktop, Cylinder Server, and Cylinder Client share keyboard navigation, a Ctrl+K command palette, the Work Planner, recent-record history, bulk status previews, lazy-loaded workspaces, and batched local saves. Cylinder Server also includes its department Rank and device-management controls. Available actions depend on the package and the signed-in user's role or Rank.",
   ],
   [
     "Do scheduled exports and security jobs run when OverHead is closed?",
@@ -101,7 +105,7 @@ const faqs = [
   ],
   [
     "Is there a free trial?",
-    "Yes—OverHead is designed to offer one no-card, 90-day Gold-equivalent trial per workspace. Trial activation becomes publicly available when the secure production billing and account service are enabled; no payment is created for the trial.",
+    "Yes. One no-card, 90-day Gold trial is available per Desktop workspace through the account service. Starting it does not create a payment or automatically renew.",
   ],
   [
     "What happens if I cancel?",
@@ -141,7 +145,7 @@ const faqs = [
   ],
   [
     "Where are downloads?",
-    "The standard Windows ZIP and checksum are available from the Download buttons. Cylinder has its own Server/IoT download and separate checksum on the Cylinder page.",
+    "The current 0.3.24 Desktop ZIP and checksum are available from the Download buttons. Cylinder Server has a separate Server/IoT ZIP; Cylinder Client has a separate Windows 10/11 ZIP. Both Cylinder packages and checksums are linked from the Cylinder page.",
   ],
 ];
 

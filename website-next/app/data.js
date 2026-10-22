@@ -11,14 +11,16 @@ export const navItems = [
   { href: '/contact/', label: 'Contact' },
 ]
 
-export const downloadHref = '/downloads/OverHead-Desktop-0.3.18-win-x64.zip'
-export const cylinderDownloadHref = '/downloads/OverHead-Cylinder-0.3.10-win-x64.zip'
+export const downloadHref = '/downloads/OverHead-Desktop-0.3.24-win-x64.zip'
+export const cylinderDownloadHref = '/downloads/OverHead-Cylinder-0.3.24-win-x64.zip'
+export const cylinderClientDownloadHref = '/downloads/OverHead-Cylinder-Client-0.3.24-win-x64.zip'
 export const iosSourceHref = '/downloads/OverHead-iOS-SwiftUI-source.zip'
 export const checksumHref = '/downloads/SHA256SUMS.txt'
 export const cylinderChecksumHref = '/downloads/CYLINDER-SHA256SUMS.txt'
+export const cylinderClientChecksumHref = '/downloads/CYLINDER-CLIENT-SHA256SUMS.txt'
 export const cylinderPageHref = '/cylinder/'
 export const investorBrochureHref = '/downloads/OverHead-Investor-Brochure.pdf'
-export const businessGuideHref = '/downloads/OverHead-Business-Office-Guide.pdf'
+export const businessGuideHref = '/user-guide/'
 
 export const plans = [
   {
@@ -49,8 +51,8 @@ export const cylinderDeployment = {
   label: 'Windows Server / Windows IoT',
   price: '$499/mo',
   annualPrice: '$4,990/year',
-  text: 'A separate in-house deployment for organizations running a supported Windows Server or Windows IoT host. It includes one 30-day, no-card evaluation per server workspace and is not the standard Windows desktop application.',
-  features: ['Up to 50 users', 'Up to 100,000 customer records', 'Separate local data root and update channel', 'Server deployment controls'],
+  text: 'A department-managed deployment for organizations running a supported Windows Server or Windows IoT host. It includes one 30-day, no-card evaluation per server workspace and is separate from the standard Windows desktop application.',
+  features: ['Up to 50 users', 'Up to 100,000 customer records', 'Four employee Ranks and department membership', 'Device approval and workspace access policies', 'Separate Server and Windows workstation Client packages'],
 }
 
 export const seatPricing = {
