@@ -39,7 +39,7 @@ async function verifyInstaller(target, feedPath) {
     hash.update(chunk)
   }
   const digest = hash.digest('base64')
-  const advertisedSize = Number(publicFeed.match(/^size:\s*(\d+)\s*$/m)?.[1])
+  const advertisedSize = Number(publicFeed.match(/^[ \t]*size:\s*(\d+)\s*$/m)?.[1])
   const advertisedHash = publicFeed.match(/^sha512:\s*(\S+)\s*$/m)?.[1]
   if (size !== advertisedSize || digest !== advertisedHash) throw new Error(`${target.directory} hosted installer does not match its published size and SHA-512.`)
   console.log(`Verified ${target.directory} ${target.version} installer (${size} bytes, SHA-512 matched).`)

@@ -219,7 +219,7 @@ async function main() {
     if (!contents.has(hash)) throw new Error('Hosting requested an unchanged live file; stopping before release.')
     console.log(`Uploading ${contents.get(hash).length} bytes`)
     const content = contents.get(hash)
-    const response = await upload.request({method:'POST', path:`/${hash}`, body:content, headers:{'content-length':String(content.length)}, responseType:'stream', resolveOnHTTPError:true, signal:AbortSignal.timeout(1200000), retries:3, retryMinTimeout:2500, retryMaxTimeout:10000})
+    const response = await upload.request({method:'POST', path:`/${hash}`, body:content, headers:{'content-length':String(content.length)}, responseType:'stream', resolveOnHTTPError:true, signal:AbortSignal.timeout(1200000), retries:3, retryMinTimeout:2500, retryMaxTimeout:10000, skipLog:{body:true}})
     if (response.status >= 400) throw new Error(`Artifact upload failed: HTTP ${response.status}`)
     response.body.resume()
   }
@@ -230,4 +230,4 @@ async function main() {
   fs.writeFileSync(path.join(release, 'hosting-release.json'), JSON.stringify(result, null, 2))
   console.log(`Released ${result.name}`)
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1 })
+main().catch(error => { console.error(error.stack || error.message); process.exitCode = 1 })
