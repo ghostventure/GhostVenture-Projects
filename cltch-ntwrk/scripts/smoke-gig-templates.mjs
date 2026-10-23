@@ -29,6 +29,6 @@ assert.deepEqual(readGigTemplates('host-A', storage), []);
 const hostPage = await readFile(new URL('../host.html', import.meta.url), 'utf8');
 assert.match(hostPage, /Your saved templates/);
 assert.match(hostPage, /saved only in this browser/);
-assert.match(hostPage, /refreshGigTemplateOptions\(\);\s*applyRebookDraftIfPresent\(\)/);
+assert.match(hostPage, /refreshGigTemplateOptions\(\);\s*refreshVenuePreferenceOptions\(\);\s*applyRebookDraftIfPresent\(\)/);
 
 console.log('Gig template smoke passed: host scoping, storage bounds, malformed data recovery, and UI wiring.');

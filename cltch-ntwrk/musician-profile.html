@@ -443,12 +443,15 @@
     .cal-nav:focus-visible { outline: 3px solid #ffd16a; outline-offset: 2px; }
     .cal-cell:hover          { border-color: #f5a623; color: #f5a623; }
     .cal-cell.today          { border-color: #3a3a3a; color: #fff; font-weight: 700; }
+    .cal-cell.regular        { outline: 1px dotted #4f7994; outline-offset: -3px; }
+    .cal-cell.outside-regular { color: #68717a; }
     .cal-cell.blocked        { background: #2e0d0d; border-color: #5c1a1a !important; color: #cf6679; }
     .cal-cell.blocked:hover  { background: #3e1212; }
     .cal-cell.past           { color: #2e2e2e; cursor: default; pointer-events: none; }
     .cal-cell.other-month    { color: #1e1e1e; cursor: default; pointer-events: none; }
     .cal-legend {
       display: flex;
+      flex-wrap: wrap;
       gap: 20px;
       margin-top: 14px;
       font-size: 12px;
@@ -457,8 +460,12 @@
     .cal-legend .leg { display: flex; align-items: center; gap: 6px; }
     .cal-legend .dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
     .dot-open    { background: #141414; border: 1px solid #2a2a2a; }
+    .dot-regular { background: #141414; border: 1px dotted #4f7994; }
+    .dot-outside { background: #141414; border: 1px solid #68717a; }
     .dot-blocked { background: #2e0d0d; border: 1px solid #5c1a1a; }
     .dot-booked  { background: #2a1a00; border: 1px solid #f5a623; }
+    #availabilityWeekdays label { display:inline-flex; align-items:center; gap:6px; margin:0; padding:7px 9px; border:1px solid #2a3a49; border-radius:8px; color:#d0dce7; font-size:12px; text-transform:none; letter-spacing:0; }
+    #availabilityWeekdays input { width:16px; height:16px; margin:0; accent-color:#f5a623; }
     .cal-cell.booked        { background: #2a1a00; border-color: #f5a623 !important; color: #f5a623; cursor: default; }
     .cal-cell.booked:hover  { background: #3a2400; }
     /* Tooltip popup for booked date info */
@@ -742,7 +749,15 @@
         <button type="button" id="clearLocalDraft" class="cta">Clear local draft</button>
         <span id="accountCopyStatus" role="status" aria-live="polite"></span>
       </div>
-      <p class="form-hint">The file contains your account and profile records, including payout contact details. It is saved to this device.</p>
+      <p class="form-hint">The file includes account and profile records, linked gigs, accepted-booking messages, reviews, and saved portfolio links. It can contain payout details. Uploaded media files and records your account cannot access are not included; the JSON is saved to this device.</p>
+      <div class="form-group" style="margin-top:20px;">
+        <h3>Request account deletion</h3>
+        <p class="form-hint">This saves a request in your account after an identity recheck. It does not delete your account or notify support; contact privacy support to ensure the request reaches staff.</p>
+        <label for="deletionReason">Optional note for support</label>
+        <textarea id="deletionReason" maxlength="500" rows="3"></textarea>
+        <button type="button" id="requestAccountDeletion" class="cta">Request account deletion</button>
+        <span id="deletionRequestStatus" role="status" aria-live="polite">Checking request status…</span>
+      </div>
     </section>
 
     <form id="profileForm" class="form-shell">
@@ -876,6 +891,28 @@
           <button type="button" class="avail-btn" id="availNo" onclick="setAvail(false)">Not Available</button>
         </div>
       </div>
+      <div class="form-group" id="availabilityResumeGroup" hidden>
+        <label for="availabilityResumeDate">Resume availability on (optional)</label>
+        <input type="date" id="availabilityResumeDate">
+        <p class="section-copy">Your profile will return to matching on this local calendar date. Leave blank to stay paused until you change availability.</p>
+      </div>
+
+      <fieldset style="margin:18px 0;padding:14px;border:1px solid #2a2a2a;border-radius:10px;">
+        <legend style="padding:0 6px;color:#ddd;font-weight:700;">Weekly recurring availability</legend>
+        <p class="section-copy">These are all-day weekly availability days in your timezone. Exact date blocks and accepted bookings take priority. If you uncheck every day, recurring rules exclude all timezone-qualified gigs.</p>
+        <div id="availabilityWeekdays" style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;">
+          <label><input type="checkbox" data-availability-day="0" checked> Sunday</label>
+          <label><input type="checkbox" data-availability-day="1" checked> Monday</label>
+          <label><input type="checkbox" data-availability-day="2" checked> Tuesday</label>
+          <label><input type="checkbox" data-availability-day="3" checked> Wednesday</label>
+          <label><input type="checkbox" data-availability-day="4" checked> Thursday</label>
+          <label><input type="checkbox" data-availability-day="5" checked> Friday</label>
+          <label><input type="checkbox" data-availability-day="6" checked> Saturday</label>
+        </div>
+        <label for="availabilityTimeZone">Your IANA timezone</label>
+        <input type="text" id="availabilityTimeZone" maxlength="64" autocomplete="off" placeholder="America/New_York" aria-describedby="availabilityTimeZoneHelp">
+        <p class="section-copy" id="availabilityTimeZoneHelp">Example: America/New_York. Recurring days are evaluated in this timezone. New gig posts include the host’s event timezone; older gigs or daylight-saving transition times use the exact-date fallback.</p>
+      </fieldset>
 
       <!-- ── Availability Calendar ────────────────────────── -->
       <div style="border-top:1px solid #1e1e1e; margin:28px 0 24px;"></div>
@@ -893,6 +930,8 @@
       <div class="cal-grid" id="calGrid" role="group" aria-label="Availability dates. Use arrow keys to move by day and Space or Enter to block or unblock an available date."></div>
       <div class="cal-legend">
         <div class="leg"><div class="dot dot-open"></div> Available</div>
+        <div class="leg"><div class="dot dot-regular"></div> Regular weekday</div>
+        <div class="leg"><div class="dot dot-outside"></div> Outside schedule</div>
         <div class="leg"><div class="dot dot-blocked"></div> Blocked</div>
         <div class="leg"><div class="dot dot-booked"></div> Booked</div>
       </div>
@@ -901,11 +940,13 @@
 
     <section class="form-section">
       <div class="section-kicker">Availability Sync</div>
-      <div class="section-title">Keep Your Calendar Aligned</div>
-      <div class="section-copy">Connect an external calendar so blocked dates and accepted gigs stay synchronized across Gig Radar and your booking queue.</div>
+      <div class="section-title">Calendar Subscription</div>
+      <div class="section-copy">A private feed contains only your confirmed upcoming gigs. Treat its URL like a password. Revoking it stops future refreshes, though a calendar app may retain cached events.</div>
       <div style="margin-top:12px;">
-        <button id="availability-sync-btn" class="cta" type="button">Connect Calendar</button>
-        <div id="availability-sync-status" style="margin-top:8px; font-size:13px; color:#8ea4bf;">Status: awaiting connection</div>
+        <button id="calendar-subscription-create" class="cta" type="button" hidden>Create private calendar link</button>
+        <div id="calendar-subscription-status" role="status" aria-live="polite" style="margin-top:8px; font-size:13px; color:#8ea4bf;">Checking calendar service…</div>
+        <div id="calendar-subscription-link" hidden style="margin-top:8px;"></div>
+        <button id="calendar-subscription-revoke" class="cta" type="button" hidden style="margin-top:8px;">Revoke calendar link</button>
       </div>
     </section>
 
@@ -980,13 +1021,14 @@
 
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script type="module">
-    import { doc, setDoc, getDoc, updateDoc, serverTimestamp, collection, getDocs, query, orderBy, limit, documentId, startAfter, where }
+    import { doc, setDoc, getDoc, updateDoc, deleteField, serverTimestamp, collection, collectionGroup, getDocs, query, orderBy, limit, where }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
-    import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { onAuthStateChanged, signOut, reload, EmailAuthProvider, GoogleAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { initProfileDrafts } from "./app/profile-drafts.js";
+    import { localAvailabilityDate } from "./app/availability-pause.js";
     import { createAccountExport, downloadAccountExport } from "./app/account-export.js";
     import { derivePerformerTier, isBusinessClassEligible } from "./app/performer-tier.js";
     import { getStripeConfig, startStripeOnboarding } from "./app/stripe-connect.js";
@@ -994,26 +1036,9 @@
     import { activatePlugzMembershipForCurrentCltchUser, finishPendingPlugzProfileActivation } from "./app/plugz-bridge.js";
     import { buildOneId, readUserSummary, recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { renderProfileRecommendations } from "./app/profile-recommendations.js";
-
-    async function readAllPages(ref, filters = []) {
-      const rows = [];
-      let cursor = null;
-      while (true) {
-        const constraints = [...filters, orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(100)];
-        const page = await getDocs(query(ref, ...constraints));
-        rows.push(...page.docs.map((item) => ({ id: item.id, data: item.data() })));
-        if (page.size < 100) return rows;
-        cursor = page.docs[page.docs.length - 1];
-      }
-    }
-
-    async function readExportMessages(uid, gigId, gig) {
-      const current = await getDoc(doc(db, 'gigs', gigId));
-      if (!current.exists()) throw new Error('Booking is no longer available');
-      const latest = current.data();
-      if (latest.status !== 'accepted' || (latest.hostId !== uid && latest.acceptedBy !== uid)) throw new Error('Booking participant access is no longer available');
-      return readAllPages(collection(db, 'gigs', gigId, 'messages'));
-    }
+    import { reauthenticateSensitiveUser } from "./app/reauthenticate-sensitive.js";
+    import { isValidTimeZone, weekdayInTimeZone } from "./app/recurring-availability.js";
+    import { bindCalendarSubscription } from "./app/calendar-subscription.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1033,6 +1058,8 @@
     }
 
     let MUSICIAN_ID = null;
+    let originalPayout = { method: '', handle: '' };
+    let originalIdentity = { firstName: '', lastName: '', zip: '' };
     const MUSICIAN_PROFILE_DRAFT_KEY = 'cltch_musician_profile_draft_v1';
     let profileDraftApi = null;
     const profileForm = document.getElementById('profileForm');
@@ -1049,10 +1076,12 @@
       if (requiresVerifiedEmail(freshUser)) { await redirectUnverifiedUser(); return; }
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
       MUSICIAN_ID = freshUser.uid;
+      refreshDeletionRequest(freshUser);
       initModeSwitch('musician', MUSICIAN_ID);
       document.getElementById('payoutMethod').value = 'applepay';
       window.updatePayoutHandle();
       await loadProfile();
+      bindCalendarSubscription({ auth });
       initUserScopedProfileDraft();
       await finishPendingProfilePlugzActivation();
       window.CLTCHLoading?.done();
@@ -1070,31 +1099,85 @@
       const button = document.getElementById('downloadAccountCopy');
       const status = document.getElementById('accountCopyStatus');
       if (!MUSICIAN_ID || !auth.currentUser) return;
-      if (!window.confirm('Download an account copy to this device? It includes your account/profile records (including payout contact details), your host and assigned-performer booking history, messages for accepted bookings you participate in, and reviews on your performer profile or authored for your hosted bookings with an assigned performer. Manager-only data, unscoped portfolio highlights, and media files are excluded; this build has no owner-scoped media metadata.')) return;
+      if (!window.confirm('Download your account records, linked gigs, booking messages, reviews, and portfolio metadata to this device? The file may contain payout contact details.')) return;
       button.disabled = true;
       status.textContent = 'Preparing your account copy…';
       try {
         const snapshot = await createAccountExport({
           user: auth.currentUser,
+          readCollection: async (name, uid) => {
+            const [hostSnap, performerSnap] = await Promise.all([
+              getDocs(query(collection(db, name), where("hostId", "==", uid))),
+              getDocs(query(collection(db, name), where("acceptedBy", "==", uid)))
+            ]);
+            const byId = new Map();
+            [hostSnap, performerSnap].forEach((snap) => snap.forEach((item) => byId.set(item.id, { id: item.id, ...item.data() })));
+            return [...byId.values()];
+          },
+          readSubcollection: async (name, parentId, child) => {
+            const snap = await getDocs(query(collection(db, name, parentId, child), orderBy("createdAt", "asc")));
+            return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+          },
+          readCollectionGroup: async (name, field, value) => {
+            const snap = await getDocs(query(collectionGroup(db, name), where(field, "==", value)));
+            return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+          },
           readDocument: async (collection, uid) => {
             const result = await getDoc(doc(db, collection, uid));
             return result.exists() ? result.data() : null;
-          },
-          readGigsByHost: (uid) => readAllPages(collection(db, 'gigs'), [where('hostId', '==', uid)]),
-          readGigsByPerformer: (uid) => readAllPages(collection(db, 'gigs'), [where('acceptedBy', '==', uid)]),
-          readBookingMessages: readExportMessages,
-          readPerformerReviews: (uid) => readAllPages(collection(db, 'musicians', uid, 'reviews')),
-          readReviewsForBooking: (uid, gigId, performerId) => readAllPages(collection(db, 'musicians', performerId, 'reviews'), [where('gigId', '==', gigId)])
+          }
         });
+        try {
+          snapshot.data.localPortfolioMetadata = JSON.parse(localStorage.getItem("cltch_platform_component:portfolio_manager") || "[]");
+        } catch { snapshot.data.localPortfolioMetadata = []; }
         downloadAccountExport(snapshot);
-        status.textContent = snapshot.completeness.status === 'incomplete'
-          ? 'Account copy downloaded, but one or more permitted record groups could not be read. See the completeness section in the file. Media metadata is unavailable and media files are not included. Store the file privately.'
-          : 'Available account records downloaded. This build has no owner-scoped media metadata; media files are not included. Store the file privately.';
+        status.textContent = 'Account copy downloaded. It includes records available to this account; uploaded media contents are not included. Store the file somewhere private.';
       } catch (error) {
         console.error('Account export failed:', error);
         status.textContent = 'Could not prepare the account copy. Try again when your connection is available.';
       } finally {
         button.disabled = false;
+      }
+    });
+
+    const deletionButton = document.getElementById('requestAccountDeletion');
+    const deletionStatus = document.getElementById('deletionRequestStatus');
+    async function refreshDeletionRequest(user) {
+      try {
+        const snap = await getDoc(doc(db, 'accountDeletionRequests', user.uid));
+        if (snap.exists()) {
+          deletionStatus.textContent = `Request saved: ${snap.data().status}. Support is not notified by this form; contact privacy support to have it processed. Saved ${formatTs(snap.data().createdAt)}.`;
+          deletionButton.disabled = true;
+        } else deletionStatus.textContent = 'No deletion request is on file.';
+      } catch { deletionStatus.textContent = 'Could not load deletion request status.'; }
+    }
+    deletionButton.addEventListener('click', async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      if (!window.confirm('Submit a request for support to review account deletion? This does not delete your account immediately.')) return;
+      deletionButton.disabled = true;
+      deletionStatus.textContent = 'Rechecking your identity…';
+      try {
+        const providers = new Set((user.providerData || []).map((item) => item.providerId));
+        if (providers.has('password')) {
+          const password = window.prompt('Enter your account password to confirm this request.');
+          if (password == null || !password) throw new Error('Identity check cancelled.');
+        await reauthenticateForSensitiveChange(user, 'account deletion request');
+        } else if (providers.has('google.com')) {
+          await reauthenticateWithPopup(user, new GoogleAuthProvider());
+        } else throw new Error('This sign-in provider cannot be rechecked here. Contact support to request deletion.');
+        const requestRef = doc(db, 'accountDeletionRequests', user.uid);
+        const existing = await getDoc(requestRef);
+        if (!existing.exists()) await setDoc(requestRef, {
+          uid: user.uid, email: user.email || '', status: 'submitted',
+          reason: document.getElementById('deletionReason').value.trim(),
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+        await refreshDeletionRequest(user);
+      } catch (error) {
+        console.error('Deletion request failed:', error);
+        deletionStatus.textContent = error.message || 'Request could not be recorded. Contact support if this continues.';
+        deletionButton.disabled = false;
       }
     });
 
@@ -1326,7 +1409,8 @@
 
       const availabilityEl = document.getElementById('dashAvailability');
       if (availabilityEl) {
-        availabilityEl.textContent = available ? 'Available' : 'Paused';
+        const resumeDate = document.getElementById('availabilityResumeDate')?.value || '';
+        availabilityEl.textContent = available ? 'Available' : (resumeDate ? `Paused until ${resumeDate}` : 'Paused');
         availabilityEl.className = 'dash-value ' + (available ? 'ok' : 'warn');
       }
 
@@ -1450,7 +1534,32 @@
     // ── Availability calendar ──────────────────────────────────────────
     let blackoutDates  = new Set();  // 'YYYY-MM-DD' — manually blocked
     let bookedDatesMap = new Map();  // 'YYYY-MM-DD' → booking object (auto from accepted gigs)
-    const _today = new Date(); _today.setHours(0,0,0,0);
+    let availabilityDays = [0, 1, 2, 3, 4, 5, 6];
+    let availabilityTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    document.getElementById('availabilityTimeZone').value = availabilityTimeZone;
+    function applyAvailabilityDays(value) {
+      availabilityDays = Array.isArray(value) ? value.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [];
+      document.querySelectorAll('[data-availability-day]').forEach((input) => { input.checked = availabilityDays.includes(Number(input.dataset.availabilityDay)); });
+      renderCalendar();
+    }
+    document.querySelectorAll('[data-availability-day]').forEach((input) => input.addEventListener('change', () => {
+      applyAvailabilityDays([...document.querySelectorAll('[data-availability-day]:checked')].map((item) => Number(item.dataset.availabilityDay)));
+    }));
+    document.getElementById('availabilityTimeZone').addEventListener('change', (event) => {
+      availabilityTimeZone = event.target.value.trim();
+      const viewingCurrentMonth = calYear === _today.getFullYear() && calMonth === _today.getMonth();
+      if (isValidTimeZone(availabilityTimeZone)) {
+        _today = dateInZone(availabilityTimeZone); _today.setHours(0, 0, 0, 0);
+        if (viewingCurrentMonth) { calYear = _today.getFullYear(); calMonth = _today.getMonth(); calFocusDate = new Date(_today); }
+      }
+      renderCalendar();
+    });
+    function dateInZone(timeZone, instant = new Date()) {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(instant);
+      const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+      return new Date(values.year, values.month - 1, values.day);
+    }
+    let _today = dateInZone(availabilityTimeZone); _today.setHours(0,0,0,0);
     let calYear = _today.getFullYear();
     let calMonth = _today.getMonth();
     let calFocusDate = new Date(_today);
@@ -1461,7 +1570,7 @@
       const grid  = document.getElementById('calGrid');
       const title = document.getElementById('calTitle');
       const prevBtn = document.getElementById('calPrevBtn');
-      title.textContent = `${MONTH_NAMES[calMonth]} ${calYear}`;
+      title.textContent = `${MONTH_NAMES[calMonth]} ${calYear} · ${availabilityTimeZone}`;
 
       // Disable prev button if already on current month
       const isCurrentMonth = calYear === _today.getFullYear() && calMonth === _today.getMonth();
@@ -1493,6 +1602,8 @@
 
         const isBooked  = bookedDatesMap.has(dateStr);
         const isBlocked = blackoutDates.has(dateStr);
+        const zonedWeekday = weekdayInTimeZone(dateStr, availabilityTimeZone);
+        const isRegularDay = availabilityDays.includes(zonedWeekday);
         const cell = document.createElement('button');
         cell.type = 'button';
         let cls = 'cal-cell';
@@ -1500,12 +1611,13 @@
         if (isToday)   cls += ' today';
         if (isBooked)  cls += ' booked';
         else if (isBlocked) cls += ' blocked';
+        else if (availabilityDays.length) cls += isRegularDay ? ' regular' : ' outside-regular';
         cell.className = cls;
         cell.textContent = d;
         cell.dataset.date = dateStr;
         cell.tabIndex = date.getFullYear() === calFocusDate.getFullYear() && date.getMonth() === calFocusDate.getMonth() && date.getDate() === calFocusDate.getDate() ? 0 : -1;
         const spokenDate = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
-        const state = isBooked ? `Booked${bookedDatesMap.get(dateStr)?.venue ? ` at ${bookedDatesMap.get(dateStr).venue}` : ''}` : isPast ? 'Past date' : isBlocked ? 'Unavailable, blocked' : 'Available';
+        const state = isBooked ? `Booked${bookedDatesMap.get(dateStr)?.venue ? ` at ${bookedDatesMap.get(dateStr).venue}` : ''}` : isPast ? 'Past date' : isBlocked ? 'Unavailable, blocked exception' : availabilityDays.length ? (isRegularDay ? 'Regularly available' : 'Outside regular availability') : 'No recurring weekdays selected';
         cell.setAttribute('aria-label', `${spokenDate}, ${state}`);
         if (!isPast && !isBooked) cell.setAttribute('aria-pressed', String(isBlocked));
         if (isToday) cell.setAttribute('aria-current', 'date');
@@ -1682,6 +1794,7 @@
       connectStripeBtn.addEventListener('click', async () => {
         setStripeButtonState('Opening Stripe...', true);
         try {
+          await reauthenticateForSensitiveChange(auth.currentUser, 'Stripe payout onboarding');
           await startStripeOnboarding({ auth, role: 'musician' });
         } catch (error) {
           setStripeStatus(error.message || 'Could not open Stripe onboarding right now.', true);
@@ -1731,10 +1844,15 @@
     // Availability toggle
     window.setAvail = (val) => {
       available = val;
+      const resumeInput = document.getElementById('availabilityResumeDate');
+      const resumeGroup = document.getElementById('availabilityResumeGroup');
+      if (val && resumeInput) resumeInput.value = '';
+      if (resumeGroup) resumeGroup.hidden = val;
       document.getElementById('availYes').classList.toggle('active', val);
       document.getElementById('availNo').classList.toggle('active', !val);
       renderProfileDashboard();
     };
+    document.getElementById('availabilityResumeDate')?.addEventListener('input', renderProfileDashboard);
 
     // Load existing profile
     async function loadProfile() {
@@ -1742,6 +1860,8 @@
     const snap = await getDoc(profileRef);
       if (snap.exists()) {
         const d = snap.data();
+        originalPayout = { method: d.payoutMethod || '', handle: d.payoutHandle || '' };
+        originalIdentity = { firstName: d.firstName || '', lastName: d.lastName || '', zip: d.zip || '' };
         document.getElementById('firstName').value = d.firstName || '';
         document.getElementById('lastName').value = d.lastName || '';
         document.getElementById('stageName').value = d.stageName || '';
@@ -1764,6 +1884,19 @@
         verifiedPerformerRequestedAt = d.verifiedPerformerRequestedAt || null;
         available = d.available !== false;
         window.setAvail(available);
+        const savedResumeDate = typeof d.availabilityResumeDate === 'string' ? d.availabilityResumeDate : '';
+        if (!available && savedResumeDate && savedResumeDate <= localAvailabilityDate()) {
+          available = true;
+          window.setAvail(true);
+          updateDoc(profileRef, {
+            available: true,
+            availabilityResumeDate: deleteField(),
+            updatedAt: serverTimestamp()
+          }).catch((error) => console.warn('Could not persist scheduled availability resume.', error));
+        } else if (!available) {
+          document.getElementById('availabilityResumeDate').value = savedResumeDate;
+          document.getElementById('availabilityResumeGroup').hidden = false;
+        }
         window.setType(d.performerType || 'musician');
         selectedGenres = d.genres || [];
         document.querySelectorAll('.genre-chip').forEach(chip => {
@@ -1777,10 +1910,16 @@
         if (d.blackoutDates) {
           blackoutDates = new Set(d.blackoutDates);
         }
+        availabilityDays = Array.isArray(d.availabilityDays) ? d.availabilityDays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [0, 1, 2, 3, 4, 5, 6];
+        availabilityTimeZone = isValidTimeZone(d.availabilityTimeZone) ? d.availabilityTimeZone : (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+        document.getElementById('availabilityTimeZone').value = availabilityTimeZone;
+        document.querySelectorAll('[data-availability-day]').forEach((input) => { input.checked = availabilityDays.includes(Number(input.dataset.availabilityDay)); });
+        _today = dateInZone(availabilityTimeZone); _today.setHours(0,0,0,0);
+        calYear = _today.getFullYear(); calMonth = _today.getMonth(); calFocusDate = new Date(_today);
         if (d.bookedDates && Array.isArray(d.bookedDates)) {
           bookedDatesMap = new Map(d.bookedDates.map(b => [b.date, b]));
         }
-        if (d.blackoutDates || d.bookedDates) renderCalendar();
+        renderCalendar();
       }
       await loadReviewMetrics();
       updateProfileCompletion();
@@ -1881,6 +2020,25 @@
       }
 
       const profileRef = doc(db, 'musicians', MUSICIAN_ID);
+      const resumeDate = document.getElementById('availabilityResumeDate').value;
+      availabilityTimeZone = document.getElementById('availabilityTimeZone').value.trim();
+      availabilityDays = [...document.querySelectorAll('[data-availability-day]:checked')].map((item) => Number(item.dataset.availabilityDay));
+      if (!isValidTimeZone(availabilityTimeZone)) {
+        statusMsg.className = 'status error';
+        statusMsg.textContent = 'Enter a valid IANA timezone, such as America/New_York.';
+        document.getElementById('availabilityTimeZone').focus();
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Profile';
+        return;
+      }
+      if (resumeDate && (!/^\d{4}-\d{2}-\d{2}$/.test(resumeDate) || resumeDate < localAvailabilityDate())) {
+        statusMsg.className = 'status error';
+        statusMsg.textContent = 'Choose today or a future date to resume availability.';
+        document.getElementById('availabilityResumeDate').focus();
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Profile';
+        return;
+      }
       const profile = {
         firstName: document.getElementById('firstName').value.trim(),
         lastName: document.getElementById('lastName').value.trim(),
@@ -1897,6 +2055,9 @@
         experience: document.getElementById('experience').value,
         bio: document.getElementById('bio').value.trim(),
         available,
+        availabilityResumeDate: !available && resumeDate ? resumeDate : deleteField(),
+        availabilityDays,
+        availabilityTimeZone,
         performerType,
         payoutMethod,
         payoutHandle: payoutHandle,
@@ -1908,7 +2069,16 @@
       };
 
       try {
+        const identityChanged = profile.firstName !== originalIdentity.firstName
+          || profile.lastName !== originalIdentity.lastName || profile.zip !== originalIdentity.zip;
+        if (identityChanged || payoutMethod !== originalPayout.method || payoutHandle !== originalPayout.handle) {
+          statusMsg.className = 'status';
+          statusMsg.textContent = 'Rechecking your identity before saving account or payout changes…';
+          await reauthenticateForSensitiveChange(auth.currentUser, 'account or payout changes');
+        }
         await setDoc(profileRef, profile, { merge: true });
+        originalPayout = { method: payoutMethod, handle: payoutHandle };
+        originalIdentity = { firstName: profile.firstName, lastName: profile.lastName, zip: profile.zip };
         await writeUserSummary(db, MUSICIAN_ID, {
           role: 'musician',
           displayName: profile.stageName || `${profile.firstName} ${profile.lastName}`.trim(),
@@ -1925,7 +2095,7 @@
         setTimeout(() => window.location.href = 'musician-matched-gigs.html', 1000);
       } catch (err) {
         statusMsg.className = 'status error';
-        statusMsg.textContent = 'Error saving profile.';
+        statusMsg.textContent = err?.message || 'Error saving profile.';
         console.error(err);
       }
 
@@ -1948,6 +2118,7 @@
         businessClassRequestBtn.disabled = true;
         const statusMsg = document.getElementById('statusMsg');
         try {
+          await reauthenticateForSensitiveChange(auth.currentUser, 'Business Class account changes');
           await updateDoc(doc(db, 'musicians', MUSICIAN_ID), {
             businessClassRequestedAt: serverTimestamp(),
             updatedAt: serverTimestamp()
@@ -1960,7 +2131,7 @@
           console.error(err);
           businessClassRequestBtn.disabled = false;
           statusMsg.className = 'status error';
-          statusMsg.textContent = 'Could not request Business Class right now.';
+          statusMsg.textContent = err?.message || 'Could not request Business Class right now.';
         }
       });
     }
@@ -1972,6 +2143,7 @@
         verifiedPerformerBtn.disabled = true;
         const statusMsg = document.getElementById('statusMsg');
         try {
+          await reauthenticateForSensitiveChange(auth.currentUser, 'Verified Performer account and plan changes');
           await updateDoc(doc(db, 'musicians', MUSICIAN_ID), {
             verifiedPerformerActive: true,
             verifiedPerformerRequestedAt: serverTimestamp(),
@@ -1987,7 +2159,7 @@
           console.error(err);
           verifiedPerformerBtn.disabled = false;
           statusMsg.className = 'status error';
-          statusMsg.textContent = 'Could not enable Verified Performer right now.';
+          statusMsg.textContent = err?.message || 'Could not enable Verified Performer right now.';
         }
       });
     }
@@ -2005,6 +2177,7 @@
         plugzMembershipBtn.disabled = true;
         plugzMembershipBtn.textContent = 'Checking Plugz...';
         try {
+        await reauthenticateForSensitiveChange(auth.currentUser, 'Plugz account and membership changes');
           const bridge = await activatePlugzMembershipForCurrentCltchUser(auth, 'musician', { acceptedTerms: true });
           if (!bridge) return;
           statusMsg.className = 'status success';
@@ -2070,7 +2243,17 @@
           { id: 'zipCode' }, { id: 'instruments' }, { id: 'rate' }, { id: 'experience' },
           { id: 'bio' }, { id: 'payoutMethod' }, { id: 'payoutHandle' },
           { id: 'genreGrid', read: () => selectedGenres, write: (_, value) => { selectedGenres = Array.isArray(value) ? value : []; } },
-          { id: 'availYes', read: () => available, write: (_, value) => { setAvail(!!value); } }
+          { id: 'availYes', read: () => available, write: (_, value) => { setAvail(!!value); } },
+          { id: 'availabilityResumeDate' },
+          { id: 'availabilityTimeZone', write: (el, value) => {
+            if (!isValidTimeZone(value)) return;
+            availabilityTimeZone = value;
+            el.value = value;
+            _today = dateInZone(availabilityTimeZone); _today.setHours(0, 0, 0, 0);
+            calYear = _today.getFullYear(); calMonth = _today.getMonth(); calFocusDate = new Date(_today);
+            renderCalendar();
+          } },
+          { id: 'availabilityWeekdays', read: () => availabilityDays, write: (_, value) => applyAvailabilityDays(value) }
         ],
         onStatus(message) {
           document.getElementById('draftRestoreText').textContent = message;
@@ -2113,11 +2296,21 @@
         status.textContent = error instanceof Error ? error.message : 'Enter valid route miles and a fee rate.';
       }
     });
+
+    function reauthenticateForSensitiveChange(user, action = 'this account change') {
+      return reauthenticateSensitiveUser(user, {
+        action,
+        promptPassword: (message) => window.prompt(message),
+        makePasswordCredential: (email, password) => EmailAuthProvider.credential(email, password),
+        reauthenticateWithCredential,
+        makeGoogleProvider: () => new GoogleAuthProvider(),
+        reauthenticateWithPopup
+      });
+    }
   </script>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       if (window.Enhancements) {
-        window.Enhancements.initAvailabilitySync('availability-sync-btn', 'availability-sync-status');
         window.Enhancements.initDocumentVault('document-vault');
       }
       if (window.PlatformComponents) {

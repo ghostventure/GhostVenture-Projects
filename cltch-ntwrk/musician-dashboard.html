@@ -186,6 +186,7 @@
     }
     .stat-val { font-size: 24px; font-weight: 800; line-height: 1; margin-bottom: 5px; }
     .stat-lbl { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+    .stat-note { display:block; margin-top:6px; color:#777; font-size:10px; line-height:1.35; }
     .analytics-panel {
       margin-bottom: 36px;
       background: #101010;
@@ -685,6 +686,13 @@
       </div>
       <div id="dashAvailPill"></div>
     </div>
+    <section class="dash-section" style="padding:12px 16px;margin:0 0 18px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+      <div id="unreadMessageSummary" role="status" aria-live="polite">Checking unread messages with the server…</div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <a href="#upcomingSection">View bookings</a>
+        <button type="button" id="refreshUnreadMessageCount" class="btn">Refresh count</button>
+      </div>
+    </section>
 
     <!-- Quick Stats -->
     <div class="stats-strip" id="statsStrip"></div>
@@ -767,7 +775,7 @@
           <a class="command-link" href="support.html">Need help?</a>
         </div>
       </div>
-      <div id="musicianBookingGuide" role="region" aria-label="First booking tutorial" aria-live="polite" aria-atomic="true" style="font-size:13px;line-height:1.65;color:#cfd7e2;">Loading your booking flow…</div>
+      <div id="musicianBookingGuide" style="font-size:13px;line-height:1.65;color:#cfd7e2;">Loading your booking flow…</div>
     </section>
 
     <section class="review-spotlight workspace-scope" id="reviewSpotlight">
@@ -860,10 +868,12 @@
 
   <script type="module">
     import { getFirestore, collection, query, where, orderBy, limit, onSnapshot,
-             doc, updateDoc, getDoc, getDocs, arrayUnion, deleteField, runTransaction, serverTimestamp }
+             doc, updateDoc, getDoc, getDocs, arrayUnion }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
+    import { performBookingAction } from "./app/booking-action.js";
+    import { refreshUnreadMessageCount } from "./app/unread-message-count.js";
     import { buildAcceptedGigQuery, buildOpenGigFeedQuery, isoToday } from "./app/gig-queries.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
@@ -871,8 +881,9 @@
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { bookingsToCalendar, filterUpcomingBookings, formatAgendaText } from "./app/performer-agenda.js";
+    import { availabilityPauseActive } from "./app/availability-pause.js";
+    import { recurringAvailabilityForGig } from "./app/recurring-availability.js";
     import { renderStaleBookingRecovery } from "./app/stale-booking-recovery.js";
-    import { createBookingWalkthrough, renderBookingWalkthrough } from "./app/booking-walkthrough.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -899,11 +910,16 @@
     let agendaDays = 30;
     let activeGigFilter = localStorage.getItem('cltch_gig_filter_v1') || 'all';
 
+    document.getElementById('refreshUnreadMessageCount').addEventListener('click', () => {
+      refreshUnreadMessageCount(auth.currentUser, document.getElementById('unreadMessageSummary'), document.getElementById('refreshUnreadMessageCount'));
+    });
+
     // Gate: must be signed in with a profile
     onAuthStateChanged(auth, async (user) => {
       if (!user) { window.location.href = 'auth.html'; return; }
       if (requiresVerifiedEmail(user)) { await redirectUnverifiedUser(); return; }
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
+      refreshUnreadMessageCount(user, document.getElementById('unreadMessageSummary'), document.getElementById('refreshUnreadMessageCount'));
       const profileSnap = await getDoc(doc(db, 'musicians', user.uid));
       if (!profileSnap.exists()) { window.location.href = 'musician-profile.html'; return; }
       MUSICIAN_ID     = user.uid;
@@ -967,7 +983,10 @@
       acceptedCount: 0,
       passedCount: 0,
       acceptanceRate: 0,
-      upcomingEarnings: 0
+      upcomingEarnings: 0,
+      acceptanceResponseMedianMinutes: null,
+      acceptanceResponseSampleCount: 0,
+      acceptanceResponseUnavailable: false
     };
     const BOOKING_CACHE_LIMIT = 120;
     const BOOKING_CACHE_PAST_DAYS = 30;
@@ -1158,31 +1177,33 @@
       const el = document.getElementById('musicianBookingGuide');
       if (!el) return;
       const acceptedCount = Number(analyticsState.acceptedCount || 0);
-      const profileReady = !!(musicianProfile && Array.isArray(musicianProfile.genres) && musicianProfile.genres.length && musicianProfile.bio);
       const steps = [
-        { title: 'Make your profile bookable', detail: profileReady ? 'Your bio and styles are ready for hosts to review.' : 'Add a bio, styles, and payout preference so hosts can understand your fit.', href: 'musician-profile.html', linkLabel: 'Review your profile', done: profileReady },
-        { title: 'Review live matches', detail: analyticsState.activeMatches > 0 ? `${analyticsState.activeMatches} current match${analyticsState.activeMatches === 1 ? '' : 'es'} are available to review.` : 'Compare match reasons and booking details before deciding.', href: '#matchedQueueList', linkLabel: 'Go to match results', done: acceptedCount > 0 },
-        { title: 'Choose a gig that works for you', detail: acceptedCount > 0 ? 'You have an accepted gig in progress. Check its details and preparation steps.' : 'Accept only when the date, location, pay, and requirements work for you.', href: '#matchedQueueList', linkLabel: acceptedCount > 0 ? 'Review your booking' : 'Review available gigs', done: acceptedCount > 0 },
-        { title: 'Finish the booking and build trust', detail: reviewCache.length > 0 ? 'Your review history is visible to hosts.' : 'After the event, check in with your host and leave an honest review when prompted.', href: '#upcomingSection', linkLabel: 'Go to upcoming bookings', done: reviewCache.length > 0 }
+        renderChecklistStep(!!(musicianProfile && Array.isArray(musicianProfile.genres) && musicianProfile.genres.length), '1. Keep your profile bookable', !!(musicianProfile && Array.isArray(musicianProfile.genres) && musicianProfile.genres.length) ? 'Your style setup is ready for host matching.' : 'Add genres, bio, and payout details so hosts can trust the fit.'),
+        renderChecklistStep(acceptedCount > 0, '2. Accept the right gig', acceptedCount > 0 ? 'You already have an accepted booking in motion.' : 'Use the match reasons on each card to decide fast without guessing.'),
+        renderChecklistStep(reviewCache.length > 0, '3. Complete the gig and earn a review', reviewCache.length > 0 ? 'Your trust history is now visible to hosts.' : 'The first completed booking starts your public reputation.')
       ];
-      let storage = null;
-      try { storage = window.localStorage; } catch {}
-      const workflow = createBookingWalkthrough(steps, {
-        storage,
-        storageKey: `cltch.booking-walkthrough.v1.${MUSICIAN_ID}`,
-        suggestedIndex: profileReady ? (acceptedCount > 0 ? 3 : 1) : 0
-      });
-      renderBookingWalkthrough(el, workflow);
+      el.innerHTML = steps.join('');
     }
 
     async function refreshPerformanceAnalytics() {
       try {
         const acceptedQ = buildAcceptedGigQuery(db, MUSICIAN_ID, { today: isoToday() });
+        const responseSpeedQ = query(
+          collection(db, 'gigs'),
+          where('acceptedBy', '==', MUSICIAN_ID),
+          where('status', '==', 'accepted'),
+          orderBy('acceptedAt', 'desc'),
+          limit(50)
+        );
         const passedQ = query(
           collection(db, 'gigs'),
           where('passedBy', 'array-contains', MUSICIAN_ID)
         );
-        const [acceptedSnap, passedSnap] = await Promise.all([getDocs(acceptedQ), getDocs(passedQ)]);
+        const [acceptedSnap, passedSnap, responseSpeedResult] = await Promise.all([
+          getDocs(acceptedQ),
+          getDocs(passedQ),
+          getDocs(responseSpeedQ).then((snapshot) => ({ snapshot })).catch((error) => ({ error }))
+        ]);
 
         const acceptedCount = acceptedSnap.size;
         const passedCount = passedSnap.size;
@@ -1197,11 +1218,36 @@
           if (amount != null) upcomingTotal += amount;
         });
 
+        if (responseSpeedResult.snapshot) {
+          const responseMinutes = [];
+          responseSpeedResult.snapshot.forEach((docSnap) => {
+            const gig = docSnap.data();
+            const postedAt = gig.createdAt?.toMillis?.();
+            const acceptedAt = gig.acceptedAt?.toMillis?.();
+            if (!Number.isFinite(postedAt) || !Number.isFinite(acceptedAt) || acceptedAt < postedAt) return;
+            responseMinutes.push((acceptedAt - postedAt) / 60000);
+          });
+          responseMinutes.sort((a, b) => a - b);
+          analyticsState.acceptanceResponseSampleCount = responseMinutes.length;
+          analyticsState.acceptanceResponseMedianMinutes = responseMinutes.length
+            ? (responseMinutes.length % 2
+              ? responseMinutes[Math.floor(responseMinutes.length / 2)]
+              : (responseMinutes[responseMinutes.length / 2 - 1] + responseMinutes[responseMinutes.length / 2]) / 2)
+            : null;
+          analyticsState.acceptanceResponseUnavailable = false;
+        } else {
+          console.error('Acceptance response-speed lookup failed:', responseSpeedResult.error);
+          analyticsState.acceptanceResponseUnavailable = true;
+          analyticsState.acceptanceResponseSampleCount = 0;
+          analyticsState.acceptanceResponseMedianMinutes = null;
+        }
+
         analyticsState.acceptedCount = acceptedCount;
         analyticsState.passedCount = passedCount;
         analyticsState.acceptanceRate = decisions > 0 ? Math.round((acceptedCount / decisions) * 100) : 0;
         analyticsState.upcomingEarnings = Math.round(upcomingTotal);
         updateAnalyticsPanel();
+        updateAcceptanceResponseMetric();
         renderMusicianChecklist();
         renderMusicianBookingGuide();
       } catch (err) {
@@ -1291,7 +1337,7 @@
       document.getElementById('dashStage').textContent    = p.stageName || meta.label;
       document.getElementById('dashLocation').textContent = p.location  || '';
       const pill = document.getElementById('dashAvailPill');
-      const open = p.available !== false;
+      const open = !availabilityPauseActive(p);
       pill.innerHTML = `
         <div class="avail-pill ${open ? 'open' : 'closed'}">
           <div class="avail-dot ${open ? 'open' : 'closed'}"></div>
@@ -1322,7 +1368,41 @@
         <div class="stat-box">
           <div class="stat-val" style="font-size:18px;">${summary.tier}</div>
           <div class="stat-lbl">Tier</div>
+        </div>
+        <div class="stat-box" aria-describedby="statAcceptanceResponseNote">
+          <div class="stat-val" id="statAcceptanceResponse">—</div>
+          <div class="stat-lbl">Median post-to-accept time</div>
+          <span class="stat-note" id="statAcceptanceResponseNote" role="status" aria-live="polite">Loading accepted booking history…</span>
         </div>`;
+      updateAcceptanceResponseMetric();
+    }
+
+    function updateAcceptanceResponseMetric() {
+      const value = document.getElementById('statAcceptanceResponse');
+      const note = document.getElementById('statAcceptanceResponseNote');
+      if (!value || !note) return;
+      const count = analyticsState.acceptanceResponseSampleCount;
+      if (analyticsState.acceptanceResponseUnavailable) {
+        value.textContent = '—';
+        note.textContent = 'Accepted booking history is unavailable right now.';
+        return;
+      }
+      if (count < 5 || !Number.isFinite(analyticsState.acceptanceResponseMedianMinutes)) {
+        value.textContent = '—';
+        note.textContent = `Available after 5 timestamped acceptances; ${count} of 5 recorded. This covers accepted gigs only; passes and declines are not timed.`;
+        return;
+      }
+      const rawMinutes = analyticsState.acceptanceResponseMedianMinutes;
+      const minutes = Math.round(rawMinutes);
+      const duration = rawMinutes < 1
+        ? '<1 min'
+        : minutes < 60
+        ? `${minutes} min`
+        : minutes < 1440
+          ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+          : `${Math.floor(minutes / 1440)}d ${Math.floor((minutes % 1440) / 60)}h`;
+      value.textContent = duration;
+      note.textContent = `Median from gig post to acceptance across ${count} of up to 50 latest accepted gigs. Passes and declines are not timed.`;
     }
 
     // ── Upcoming Booked Gigs ───────────────────────────────────────────
@@ -1693,9 +1773,13 @@
         // Hard filters: already-passed, already-accepted (same gig), or manually blocked date
         const eligible = docs.filter(d => {
           const g = d.data();
+          const recurring = recurringAvailabilityForGig(musicianProfile, g);
+          const performerLocalDate = recurring.localDate || g.date;
           if ((g.passedBy || []).includes(MUSICIAN_ID)) return false;
           if (bookedGigIds.has(d.id))                   return false;
-          if (g.date && blackouts.has(g.date))           return false;
+          if (!recurring.eligible)                       return false;
+          if (performerLocalDate && blackouts.has(performerLocalDate)) return false;
+          if (performerLocalDate && bookedDatesSet.has(performerLocalDate)) return false;
           if (g.hostId === MUSICIAN_ID)                  return false; // Never allow self-booking
           return true;
         });
@@ -1726,13 +1810,15 @@
         matchedGigFeed = matched.map(({ docSnap, match }) => {
           const g = docSnap.data();
           const gigId = docSnap.id;
-          const hasConflict = bookedDatesSet.has(g.date);
+          const recurringAvailability = recurringAvailabilityForGig(musicianProfile, g);
+          const hasConflict = bookedDatesSet.has(recurringAvailability.localDate || g.date);
           const daysAway = daysUntil(g.date);
           gigDataCache[gigId] = g;
           return {
             gigId,
             g,
             match,
+            recurringAvailability,
             hasConflict,
             daysAway,
             searchText: normalizeText([g.venue, g.location, g.genre, g.pay, g.notes].join(' '))
@@ -1754,7 +1840,7 @@
       }
       countEl.textContent = String(visibleMatches.length);
       countEl.style.display = 'inline-block';
-      listEl.innerHTML = visibleMatches.map(({ gigId, g, match, hasConflict, daysAway }) => {
+      listEl.innerHTML = visibleMatches.map(({ gigId, g, match, hasConflict, daysAway, recurringAvailability }) => {
         const days = daysAway;
         const dateLabel = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : (days > 1 ? `In ${days} days` : (g.date || 'Date pending'));
         return `
@@ -1763,6 +1849,7 @@
               <div style="min-width:0;flex:1;">
                 <div style="font-size:15px;font-weight:700;color:#f4f7fb;">${g.venue || 'Opportunity'}</div>
                 <div style="font-size:12px;color:#8ea0b5;margin-top:4px;">${dateLabel} • ${g.location || 'Location pending'} • ${g.pay || 'Pay pending'}</div>
+                ${recurringAvailability?.fallback ? `<div style="font-size:12px;color:#ffd26d;margin-top:5px;">${Array.isArray(musicianProfile.availabilityDays) ? 'Recurring availability was not applied for this event. Exact-date blocks still apply.' : 'No recurring schedule is saved; this gig uses exact-date availability blocks only.'}</div>` : ''}
                 <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
                   <span style="padding:5px 9px;border-radius:999px;background:#111923;border:1px solid #25384a;color:#cfe0f1;font-size:11px;">${match.percent}% match</span>
                   ${(match.reasons || []).slice(0, 3).map((reason) => `<span style="padding:5px 9px;border-radius:999px;background:#111923;border:1px solid #25384a;color:#cfe0f1;font-size:11px;">${reason}</span>`).join('')}
@@ -1807,7 +1894,7 @@
       gigList.appendChild(tip);
 
       visibleMatches.forEach((item, index) => {
-        const { gigId, g, match, hasConflict, daysAway } = item;
+        const { gigId, g, match, hasConflict, daysAway, recurringAvailability } = item;
         const card = document.createElement('div');
         card.className = `gig-card`;
         card.id        = `gig-${gigId}`;
@@ -1845,6 +1932,7 @@
             <span>💵 ${g.pay}</span>
             ${g.performerType && g.performerType !== 'any' ? `<span>🎭 ${(PERFORMER_META[g.performerType] || PERFORMER_META.musician).label}</span>` : ''}
           </div>
+          ${recurringAvailability?.fallback ? `<div class="gig-notes">${Array.isArray(musicianProfile.availabilityDays) ? 'Recurring availability was not applied for this event because its timezone or local event time could not be confirmed. Exact-date blocks still apply.' : 'No recurring schedule is saved; this gig uses exact-date availability blocks only.'}</div>` : ''}
           ${g.skillNeed ? `<div class="gig-notes"><strong>Skill focus:</strong> ${g.skillNeed}</div>` : ''}
           ${g.notes ? `<div class="gig-notes">${g.notes}</div>` : ''}
           <div class="actions">
@@ -1924,66 +2012,11 @@
           }
 
           exitCard(card, 'right');
-          let acceptedGig = null;
-          const musicianRef = doc(db, 'musicians', MUSICIAN_ID);
-
-          await runTransaction(db, async (tx) => {
-            const gigSnap = await tx.get(gigRef);
-            const musicianSnap = await tx.get(musicianRef);
-            if (!gigSnap.exists()) throw new Error('Gig is no longer available.');
-
-            const liveGig = gigSnap.data();
-            if (liveGig.hostId === MUSICIAN_ID) {
-              throw new Error('You cannot accept your own gig as a performer.');
-            }
-            if (liveGig.status !== 'open') {
-              throw new Error('This gig has already been taken.');
-            }
-
-            tx.update(gigRef, {
-              status:'accepted',
-              acceptedBy: MUSICIAN_ID,
-              acceptedAt: serverTimestamp(),
-              lockedPay: liveGig.pay || '',
-              lockedDate: liveGig.date || '',
-              lockedTime: liveGig.time || '',
-              lockedLocation: liveGig.location || '',
-              ...(Number.isFinite(Number(liveGig.processingFeeAmount)) ? { lockedProcessingFeeAmount: Number(liveGig.processingFeeAmount) } : {}),
-              ...(Number.isFinite(Number(liveGig.hostTotalCharge)) ? { lockedHostTotalCharge: Number(liveGig.hostTotalCharge) } : {})
-            });
-            acceptedGig = liveGig;
-
-            if (liveGig.date) {
-              const booking = {
-                gigId,
-                id: gigId,
-                date:     liveGig.date,
-                venue:    liveGig.venue    || '',
-                time:     liveGig.time     || '',
-                pay:      liveGig.pay      || '',
-                location: liveGig.location || '',
-                genre:    liveGig.genre    || ''
-              };
-              const bookedDates = Array.isArray(musicianSnap.data()?.bookedDates) ? musicianSnap.data().bookedDates : [];
-              tx.update(musicianRef, {
-                bookedDates: pruneBookedDatesCache(bookedDates, booking)
-              });
-            }
-          });
-
-          if (acceptedGig && acceptedGig.date) {
-            const booking = {
-              gigId,
-              id: gigId,
-              date:     acceptedGig.date,
-              venue:    acceptedGig.venue    || '',
-              time:     acceptedGig.time     || '',
-              pay:      acceptedGig.pay      || '',
-              location: acceptedGig.location || '',
-              genre:    acceptedGig.genre    || ''
-            };
-            const existingBookings = musicianProfile.bookedDates || [];
-            musicianProfile.bookedDates = pruneBookedDatesCache(existingBookings, booking);
+          const actionResult = await performBookingAction(auth, gigId, 'accept');
+          const acceptedGig = actionResult.booking || gigDataCache[gigId];
+          if (acceptedGig?.date) {
+            const booking = { gigId, id: gigId, date: recurringAvailabilityForGig(musicianProfile, acceptedGig).localDate || acceptedGig.date, venue: acceptedGig.venue || '', time: acceptedGig.time || '', pay: acceptedGig.pay || '', location: acceptedGig.location || '', genre: acceptedGig.genre || '' };
+            musicianProfile.bookedDates = pruneBookedDatesCache(musicianProfile.bookedDates || [], booking);
           }
 
           loadUpcomingGigs();
@@ -2006,6 +2039,7 @@
         }
       } catch (err) {
         console.error(err);
+        if (action === 'accept') alert(err.message || 'Unable to accept this booking right now.');
         responding.delete(gigId);
         card.style.transform=''; card.style.opacity='';
         card.querySelectorAll('.btn').forEach(b => b.disabled=false);
@@ -2014,8 +2048,6 @@
 
     window.cancelBooking = async (gigId) => {
       if (!gigId) return;
-      const gigRef = doc(db, 'gigs', gigId);
-      const musicianRef = doc(db, 'musicians', MUSICIAN_ID);
       const currentGig = gigDataCache[gigId];
       if (currentGig?.date && currentGig.date < new Date().toISOString().slice(0, 10)) {
         alert('Past gigs cannot be canceled from this list.');
@@ -2023,29 +2055,7 @@
       }
       if (!window.confirm('Cancel this booking and reopen it for other performers?')) return;
       try {
-        await runTransaction(db, async (tx) => {
-          const gigSnap = await tx.get(gigRef);
-          const musicianSnap = await tx.get(musicianRef);
-          if (!gigSnap.exists()) throw new Error('This booking no longer exists.');
-          const gig = gigSnap.data();
-          if (gig.acceptedBy !== MUSICIAN_ID) throw new Error('This booking is no longer assigned to you.');
-          const bookedDates = Array.isArray(musicianSnap.data()?.bookedDates) ? musicianSnap.data().bookedDates : [];
-          tx.update(gigRef, {
-            status: 'open',
-            acceptedBy: deleteField(),
-            acceptedAt: deleteField(),
-            lockedPay: deleteField(),
-            lockedDate: deleteField(),
-            lockedTime: deleteField(),
-            lockedLocation: deleteField(),
-            lockedProcessingFeeAmount: deleteField(),
-            lockedHostTotalCharge: deleteField(),
-            checkedInAt: deleteField()
-          });
-          tx.update(musicianRef, {
-            bookedDates: pruneBookedDatesCache(bookedDates.filter((booking) => booking && booking.gigId !== gigId))
-          });
-        });
+        await performBookingAction(auth, gigId, 'cancel');
         if (Array.isArray(musicianProfile.bookedDates)) {
           musicianProfile.bookedDates = pruneBookedDatesCache(musicianProfile.bookedDates.filter((booking) => booking && booking.gigId !== gigId));
         }
@@ -2077,8 +2087,9 @@
         alert(state.reason || 'This booking cannot be checked in right now.');
         return;
       }
+      if (!window.confirm('Share your arrival check-in with the host?')) return;
       try {
-        await updateDoc(doc(db, 'gigs', gigId), { checkedInAt: serverTimestamp() });
+        await performBookingAction(auth, gigId, 'checkin');
         if (gigDataCache[gigId]) gigDataCache[gigId].checkedInAt = new Date().toISOString();
         await loadUpcomingGigs();
       } catch (err) {

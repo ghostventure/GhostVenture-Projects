@@ -71,10 +71,6 @@
   </header>
 
   <main class="page-shell container">
-    <aside id="connectionStatus" class="card" role="status" aria-live="polite" hidden data-connection="offline" style="margin-bottom:16px;border-color:#7f5a28;background:#2b2112;color:#ffe1a6;">
-      <span data-connection-copy></span>
-      <button id="dismissConnectionStatus" type="button" class="btn" hidden aria-label="Dismiss connection status">Dismiss</button>
-    </aside>
     <section class="hero">
       <div class="eyebrow">Booking Details</div>
       <div class="title" id="bookingTitle">Loading booking…</div>
@@ -82,20 +78,8 @@
       <div class="meta" id="bookingMeta"></div>
       <div class="timeline" id="bookingTimeline"></div>
       <div class="actions" id="bookingActions"></div>
-      <section id="checkInConsentPanel" class="card stack" hidden aria-labelledby="checkInConsentTitle" style="margin-top:16px;">
-        <h2 id="checkInConsentTitle">Confirm your arrival</h2>
-        <p class="small">Check in only after you arrive. This records an arrival timestamp that the host can see.</p>
-        <label style="display:flex;gap:10px;align-items:flex-start;line-height:1.5;">
-          <input id="checkInConsent" type="checkbox" style="margin-top:4px;">
-          <span>I confirm I have arrived and want to share this check-in with the host.</span>
-        </label>
-        <div class="actions" style="margin-top:0;">
-          <button class="btn primary" id="confirmCheckInBtn" type="button" disabled>Confirm Arrival</button>
-          <button class="btn" id="cancelCheckInBtn" type="button">Cancel</button>
-        </div>
-        <p id="checkInConsentStatus" class="small" role="status" aria-live="polite"></p>
-      </section>
       <div class="status" id="bookingStatus"></div>
+      <section aria-label="Booking change history" id="bookingAuditTrail" hidden></section>
     </section>
 
     <section class="grid">
@@ -155,9 +139,28 @@
       <div class="label">Booking Messages</div>
       <div class="small" id="messageSubtitle">Messages stay tied to this booking and are only for the host and assigned performer.</div>
       <div class="message-note" style="margin-top:6px;">For faster loading, this thread shows up to the latest 100 messages in chronological order.</div>
-      <div class="message-note" id="messageSyncStatus" role="status" aria-live="polite">Thread sync status appears for booking participants. It does not indicate whether a recipient read a message.</div>
-      <div class="message-note">Same-message retries reuse an ID only while this page stays open. If delivery is uncertain, check the thread before refreshing; this is not durable idempotency.</div>
       <div class="message-note" style="margin:10px 0 14px;">Trust note: only use the names, booking details, and payout method shown inside CLTCH.NTWRK. Do not trust off-platform payment demands, login requests, or last-minute identity changes made outside the booking thread.</div>
+      <div class="message-note" style="margin:10px 0 14px;">
+        <button type="button" class="btn" id="supportEscalationToggle">Contact support about this booking</button>
+        <div id="supportEscalationPanel" hidden style="margin-top:10px;">
+          <p>This saves a private request under your account. It does not notify staff; support inbox access is not connected. After saving, copy the details and email them to support.</p>
+          <label for="supportIssueDetails">What do you need help with?</label>
+          <textarea id="supportIssueDetails" maxlength="1500" rows="4" style="width:100%;"></textarea>
+          <label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;">
+            <input type="checkbox" id="includeSupportConversation">
+            <span>Include booking details and up to the latest 20 conversation messages. These can contain personal information.</span>
+          </label>
+          <button type="button" class="btn primary" id="saveSupportTicket">Save support request</button>
+          <span id="supportTicketStatus" role="status" aria-live="polite"></span>
+          <div id="supportTicketActions" hidden>
+            <label for="supportTicketCopy">Saved request details (copy and paste into your support email)</label>
+            <textarea id="supportTicketCopy" rows="8" readonly style="width:100%;"></textarea>
+            <button type="button" class="btn" id="copySupportTicket">Copy details</button>
+            <a id="emailSupportTicket" href="mailto:support@cltch.ntwrk?subject=CLTCH%20booking%20support" style="margin-left:8px;">Open support email</a>
+          </div>
+          <div id="supportTicketHistory" aria-live="polite"></div>
+        </div>
+      </div>
       <div class="message-list" id="messageList">
         <div class="empty">Loading booking messages…</div>
       </div>
@@ -239,7 +242,7 @@
   <footer style="padding:24px 18px 40px;text-align:center;color:#556272;font-size:12px;">&copy; 2026 CLTCH.NTWRK</footer>
 
   <script type="module">
-    import { doc, getDoc, getDocFromServer, updateDoc, serverTimestamp, collection, setDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, onSnapshot, getDocs, query, orderBy, limit, where, documentId } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, reload, signOut } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
@@ -247,9 +250,9 @@
     import { readUserSummary, recordAuthEvent } from "./app/user-db.js";
     import { deleteQuickReply, readQuickReplies, saveQuickReply } from "./app/quick-replies.js";
     import { downloadBookingReceipt } from "./app/booking-receipt.js";
-    import { installBookingOfflineStatus, isBrowserOffline } from "./app/booking-offline.js";
-    import { confirmArrivalWithConsent } from "./app/checkin-consent.js";
-    import { createMessageRetryGuard } from "./app/message-retry-guard.js";
+    import { ensureMessageStored } from "./app/message-delivery.js";
+    import { performBookingAction } from "./app/booking-action.js";
+    import { buildSupportConversationContext, buildSupportTicketCopy } from "./app/support-ticket-context.js";
 
     const bookingId = new URL(window.location.href).searchParams.get("id") || "";
     const titleEl = document.getElementById("bookingTitle");
@@ -262,39 +265,16 @@
     const messageFormEl = document.getElementById("messageForm");
     const messageInputEl = document.getElementById("messageInput");
     const messageStatusEl = document.getElementById("messageStatus");
-    const messageSyncStatusEl = document.getElementById("messageSyncStatus");
     const messageSendBtn = document.getElementById("messageSendBtn");
     const quickReplySelect = document.getElementById("quickReplySelect");
     const quickReplyStatus = document.getElementById("quickReplyStatus");
-    const connectionStatusEl = document.getElementById("connectionStatus");
-    const dismissConnectionStatusBtn = document.getElementById("dismissConnectionStatus");
+    let pendingMessage = null;
+    let stopMessageState = null;
+    let currentSupportMessages = [];
     let stopMessages = null;
     let activeBooking = null;
     let activeSummary = null;
     let activeUser = null;
-    let checkInAllowed = false;
-    const messageRetryGuard = createMessageRetryGuard();
-
-    function applyConnectionState(isOffline) {
-      if (activeBooking && activeUser) renderMessageState(activeBooking, activeUser);
-      const checkInBtn = document.getElementById('checkInBtn');
-      if (checkInBtn) checkInBtn.disabled = !checkInAllowed || isOffline;
-      const consent = document.getElementById('checkInConsent');
-      const confirm = document.getElementById('confirmCheckInBtn');
-      if (confirm) confirm.disabled = !checkInAllowed || isOffline || !consent?.checked;
-      const consentStatus = document.getElementById('checkInConsentStatus');
-      if (isOffline && consentStatus && !document.getElementById('checkInConsentPanel')?.hidden) {
-        consentStatus.textContent = 'Browser reports no connection. Your consent is kept, but no check-in will be sent until you reconnect and choose Confirm Arrival.';
-      }
-    }
-
-    const removeOfflineStatus = installBookingOfflineStatus({
-      navigatorRef: navigator,
-      windowRef: window,
-      banner: connectionStatusEl,
-      dismissButton: dismissConnectionStatusBtn,
-      onChange: applyConnectionState
-    });
 
     function refreshQuickReplies() {
       const replies = activeUser ? readQuickReplies(activeUser.uid) : [];
@@ -374,6 +354,13 @@
       return new Date(y, m - 1, d, hh, mm, 0, 0);
     }
 
+    function isEventDay(gig) {
+      const date = gig?.lockedDate || gig?.date;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return false;
+      const now = new Date();
+      return date === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
     function checkInState(gig) {
       const start = gigDateTime(gig);
       if (!start || gig?.status !== "accepted") return { allowed: false, label: "Check-in unavailable", reason: "" };
@@ -406,17 +393,14 @@
       const participant = canUseMessages(gig, user);
       const open = isMessagingOpen(gig);
       const enabled = participant && open;
-      const offline = isBrowserOffline(navigator);
       messageInputEl.disabled = !enabled;
-      messageSendBtn.disabled = !enabled || offline;
+      messageSendBtn.disabled = !enabled;
       if (!participant) {
         messageStatusEl.textContent = gig.status === "accepted"
           ? "Only the host and assigned performer can use this thread."
           : "Messages open once a performer has accepted this booking.";
       } else if (!open) {
         messageStatusEl.textContent = "Messaging is locked because the event day has passed.";
-      } else if (offline) {
-        messageStatusEl.textContent = "Your browser reports no network. You can keep editing this draft; sending is paused until you reconnect and press Send Message.";
       } else {
         messageStatusEl.textContent = "Messages stay open through the event day and lock the following day.";
       }
@@ -429,24 +413,41 @@
       }
       renderMessageState(gig, user);
       if (!canUseMessages(gig, user)) {
-        messageSyncStatusEl.textContent = "Thread sync status is available only to the host and assigned performer. It does not indicate whether a recipient read a message.";
         messageListEl.innerHTML = `<div class="empty">${gig.status === "accepted" ? "This thread is private to the host and assigned performer." : "A private booking thread appears after a performer accepts the gig."}</div>`;
+        document.getElementById("supportEscalationToggle").hidden = true;
         return;
       }
+      document.getElementById("supportEscalationToggle").hidden = false;
 
-      const q = query(collection(db, "gigs", gig.id, "messages"), orderBy("createdAt", "desc"), limit(100));
+      const q = query(collection(db, "gigs", gig.id, "messages"), orderBy("createdAt", "desc"), orderBy(documentId(), "desc"), limit(100));
+      const ownStateRef = doc(db, "gigs", gig.id, "messageStates", user.uid);
+      const peerId = gig.hostId === user.uid ? gig.acceptedBy : gig.hostId;
+      const peerStateRef = doc(db, "gigs", gig.id, "messageStates", peerId);
+      let peerReadAt = 0;
+      if (stopMessageState) stopMessageState();
+      stopMessageState = onSnapshot(peerStateRef, (state) => {
+        const data = state.exists() ? state.data() : {};
+        peerReadAt = data.lastReadAt?.toMillis?.() || 0;
+        document.querySelectorAll(".message-item.self .message-meta").forEach((meta) => {
+          const time = Number(meta.dataset.sentAt || 0);
+          if (time) meta.textContent = `${meta.dataset.label} • ${meta.dataset.pending === "true" ? "Sending…" : peerReadAt >= time ? "Read" : "Delivered"}`;
+        });
+      });
       stopMessages = subscribeWhenVisible(() => onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
         const items = [];
-        snapshot.forEach((docSnap) => items.push({ id: docSnap.id, ...docSnap.data() }));
-        if (snapshot.metadata.fromCache) {
-          messageSyncStatusEl.textContent = "Showing a cache-only thread snapshot; it may be out of date. This does not confirm whether the recipient read a message.";
-        } else if (snapshot.metadata.hasPendingWrites) {
-          messageSyncStatusEl.textContent = "The server is reachable, but a local message write is still pending sync. This does not confirm whether the recipient read a message.";
-        } else if (items[0]?.senderId === user.uid) {
-          messageSyncStatusEl.textContent = "Thread snapshot synced with the server and includes your latest message. This confirms thread sync only; it does not mean the recipient read it.";
-        } else {
-          messageSyncStatusEl.textContent = "Thread snapshot synced with the server. This confirms thread sync only; it does not mean the recipient read any message.";
+        snapshot.forEach((docSnap) => items.push({ id: docSnap.id, ...docSnap.data(), pendingWrite: docSnap.metadata.hasPendingWrites }));
+        currentSupportMessages = items.slice().reverse();
+        const confirmedMessages = items.filter((item) => !item.pendingWrite && item.createdAt?.toDate);
+        const latestConfirmed = confirmedMessages[0];
+        const readState = {
+          readModelVersion: 2,
+          lastReadAt: serverTimestamp()
+        };
+        if (latestConfirmed) {
+          readState.lastReadMessageId = latestConfirmed.id;
+          readState.lastReadMessageCreatedAt = latestConfirmed.createdAt;
         }
+        setDoc(ownStateRef, readState).catch(() => {});
         if (!items.length) {
           messageListEl.innerHTML = `<div class="empty">No messages yet. Use this thread for event details, arrival updates, or quick coordination.</div>`;
           return;
@@ -458,16 +459,17 @@
           card.className = `message-item ${self ? 'self' : ''}`;
           const meta = document.createElement('div');
           meta.className = 'message-meta';
-          meta.textContent = `${item.senderRole === 'host' ? 'Host' : 'Performer'}${self ? ' • You' : ''} • ${formatStamp(item.createdAt)}`;
+          const time = item.createdAt?.toMillis?.() || 0;
+          meta.dataset.sentAt = String(time);
+          meta.dataset.label = `${item.senderRole === 'host' ? 'Host' : 'Performer'}${self ? ' • You' : ''} • ${formatStamp(item.createdAt)}`;
+          meta.dataset.pending = String(Boolean(item.pendingWrite));
+          meta.textContent = self ? `${meta.dataset.label} • ${item.pendingWrite ? "Sending…" : peerReadAt >= time ? "Read" : "Delivered"}` : meta.dataset.label;
           const body = document.createElement('div');
           body.className = 'message-text';
           body.textContent = String(item.text || '');
           card.append(meta, body);
           messageListEl.append(card);
         });
-      }, (error) => {
-        console.error(error);
-        messageSyncStatusEl.textContent = "Unable to confirm whether the thread is synced. This does not confirm whether the recipient read a message.";
       }));
     }
 
@@ -521,7 +523,8 @@
       refreshQuickReplies();
       const isHostOwner = gig.hostId === user.uid;
       const isAcceptedPerformer = gig.acceptedBy === user.uid;
-      const canView = isHostOwner || isAcceptedPerformer || gig.status === "open";
+      const isReplacementCandidate = gig.replacementOffer?.status === 'pending' && gig.replacementOffer.performerId === user.uid;
+      const canView = isHostOwner || isAcceptedPerformer || isReplacementCandidate || gig.status === "open";
 
       if (!canView) {
         titleEl.textContent = "Booking unavailable";
@@ -558,30 +561,117 @@
 
       const [hostText, performerText] = await Promise.all([
         readProfileSummary("hosts", gig.hostId, "Host profile not found."),
-        gig.acceptedBy ? readProfileSummary("musicians", gig.acceptedBy, "Performer profile not found.") : Promise.resolve("No performer has accepted this booking yet.")
+        gig.acceptedBy && !isReplacementCandidate ? readProfileSummary("musicians", gig.acceptedBy, "Performer profile not found.") : Promise.resolve(isReplacementCandidate ? "A replacement offer is awaiting your response." : "No performer has accepted this booking yet.")
       ]);
       document.getElementById("hostValue").textContent = hostText;
       document.getElementById("performerValue").textContent = performerText;
 
       const backHref = routeForRole(summary?.role);
       const checkIn = checkInState(gig);
-      checkInAllowed = checkIn.allowed && isAcceptedPerformer;
       actionsEl.innerHTML = [
         `<a class="btn" href="${backHref}">Back to Workspace</a>`,
         isHostOwner && gig.acceptedBy ? `<a class="btn" href="performer-view.html?id=${encodeURIComponent(gig.acceptedBy)}">View Performer</a>` : "",
         gig.status === "accepted" && (isHostOwner || isAcceptedPerformer) ? `<button class="btn" id="downloadBookingReceiptBtn" type="button">Download booking receipt</button>` : "",
         summary?.role === "musician" && isAcceptedPerformer ? `<button class="btn" id="checkInBtn" ${checkIn.allowed ? "" : "disabled"}>${checkIn.label}</button>` : "",
+        gig.status === 'accepted' && (isHostOwner || isAcceptedPerformer) && gig.pendingAmendment ? `<div class="status" id="amendmentNotice"></div>${gig.pendingAmendment.proposedBy !== user.uid ? '<button class="btn primary" id="acceptAmendmentBtn" type="button">Accept proposed changes</button><button class="btn" id="declineAmendmentBtn" type="button">Decline changes</button>' : '<span class="status">Waiting for the other participant to accept your proposed changes.</span>'}` : "",
+        gig.status === 'accepted' && (isHostOwner || isAcceptedPerformer) && !gig.pendingAmendment ? `<button class="btn" id="proposeAmendmentBtn" type="button">Propose booking changes</button>` : "",
+        isHostOwner && gig.status === 'accepted' && !['pending', 'accepted'].includes(gig.replacementOffer?.status) ? `<button class="btn" id="offerReplacementBtn" type="button">Find a replacement performer</button>` : "",
+        isReplacementCandidate ? `<button class="btn primary" id="acceptReplacementBtn" type="button">Accept replacement booking</button><button class="btn" id="declineReplacementBtn" type="button">Decline replacement offer</button>` : "",
+        isHostOwner && gig.status === 'accepted' && isEventDay(gig) ? `<button class="btn" id="eventDayMessageBtn" type="button">Contact performer about an urgent event-day issue</button>` : "",
+        isAcceptedPerformer && gig.status === 'accepted' && isEventDay(gig) ? `<button class="btn" id="eventDayHostContactBtn" type="button">Call host event-day contact</button>` : "",
         `<a class="btn primary" href="${summary?.role === "host" ? "host-profile.html" : "musician-profile.html"}">Open Profile</a>`
       ].filter(Boolean).join("");
 
+      const amendmentNotice = document.getElementById('amendmentNotice');
+      if (amendmentNotice && gig.pendingAmendment) {
+        const changes = ['date', 'time', 'location', 'pay'].filter((key) => gig.pendingAmendment[key]).map((key) => `${key}: ${gig.pendingAmendment[key]}`);
+        amendmentNotice.textContent = `Proposed booking changes: ${changes.join(' · ')}`;
+      }
+
+      const actionButtons = [
+        ['acceptAmendmentBtn', 'acceptAmendment'], ['declineAmendmentBtn', 'declineAmendment'], ['acceptReplacementBtn', 'acceptReplacement'], ['declineReplacementBtn', 'declineReplacement']
+      ];
+      actionButtons.forEach(([id, action]) => {
+        const button = document.getElementById(id);
+        if (button) button.addEventListener('click', async () => {
+          button.disabled = true;
+          try { await performBookingAction(auth, bookingId, action); await renderBooking(user); }
+          catch (error) { statusEl.textContent = error.message; button.disabled = false; }
+        });
+      });
+
+      const proposeButton = document.getElementById('proposeAmendmentBtn');
+      if (proposeButton) proposeButton.addEventListener('click', async () => {
+        const payload = {};
+        for (const [field, label, current] of [['date', 'New date (YYYY-MM-DD)', gig.lockedDate || gig.date], ['time', 'New time (HH:MM)', gig.lockedTime || gig.time], ['location', 'New location', gig.lockedLocation || gig.location], ['pay', 'New pay', gig.lockedPay || gig.pay]]) {
+          const value = window.prompt(`${label}. Leave blank to keep current value.`, current || '');
+          if (value === null) return;
+          if (value.trim() && value.trim() !== String(current || '').trim()) payload[field] = value.trim();
+        }
+        if (!Object.keys(payload).length) { statusEl.textContent = 'No changes were proposed.'; return; }
+        try { await performBookingAction(auth, bookingId, 'proposeAmendment', payload); await renderBooking(user); }
+        catch (error) { statusEl.textContent = error.message; }
+      });
+
+      const replacementButton = document.getElementById('offerReplacementBtn');
+      if (replacementButton) replacementButton.addEventListener('click', async () => {
+        replacementButton.disabled = true;
+        try {
+          const candidates = await getDocs(query(collection(db, 'musicians'), where('available', '==', true), limit(60)));
+          const options = candidates.docs
+            .filter((candidate) => candidate.id !== gig.acceptedBy && candidate.data().type === 'musician'
+              && (!gig.performerType || gig.performerType === 'any' || !candidate.data().performerType || candidate.data().performerType === gig.performerType))
+            .map((candidate) => ({ id: candidate.id, data: candidate.data() }));
+          if (!options.length) throw new Error('No currently available performer profiles were found.');
+          const select = document.createElement('select');
+          select.setAttribute('aria-label', 'Choose replacement performer');
+          select.add(new Option('Choose an available performer', ''));
+          options.forEach(({ id, data }) => {
+            const name = data.stageName || [data.firstName, data.lastName].filter(Boolean).join(' ') || 'Performer';
+            const place = [data.city, data.state].filter(Boolean).join(', ');
+            select.add(new Option(`${name}${place ? ` · ${place}` : ''}`, id));
+          });
+          const panel = document.createElement('div');
+          panel.className = 'status';
+          panel.append(select);
+          const send = document.createElement('button');
+          send.className = 'btn'; send.type = 'button'; send.textContent = 'Send replacement offer';
+          panel.append(send); actionsEl.append(panel);
+          send.addEventListener('click', async () => {
+            if (!select.value) { statusEl.textContent = 'Choose an available performer first.'; return; }
+            send.disabled = true;
+            try { await performBookingAction(auth, bookingId, 'offerReplacement', { performerId: select.value }); await renderBooking(user); }
+            catch (error) { statusEl.textContent = error.message; send.disabled = false; }
+          });
+        } catch (error) { statusEl.textContent = error.message || 'Unable to find replacement performers.'; }
+        finally { replacementButton.disabled = false; }
+      });
+
+      const eventDayButton = document.getElementById('eventDayMessageBtn');
+      if (eventDayButton) eventDayButton.addEventListener('click', () => {
+        const message = document.getElementById('messageInput');
+        message.value = 'Urgent event-day issue: ';
+        message.focus();
+        message.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      const hostContactButton = document.getElementById('eventDayHostContactBtn');
+      if (hostContactButton) {
+        try {
+          const hostSnap = await getDoc(doc(db, 'hosts', gig.hostId));
+          const rawPhone = hostSnap.exists() ? String(hostSnap.data()?.phone || '').trim() : '';
+          const dialable = /^[+\d][\d\s().-]{5,22}$/.test(rawPhone) ? rawPhone.replace(/[\s().-]/g, '') : '';
+          if (!dialable) hostContactButton.replaceWith(Object.assign(document.createElement('span'), { className: 'status', textContent: 'The host has not added a call contact.' }));
+          else hostContactButton.addEventListener('click', () => {
+            if (window.confirm('Call the host contact saved on their profile? Your phone app will open.')) window.location.href = `tel:${dialable}`;
+          });
+        } catch (error) {
+          hostContactButton.replaceWith(Object.assign(document.createElement('span'), { className: 'status', textContent: 'Host contact is unavailable right now.' }));
+        }
+      }
+
       const checkInBtn = document.getElementById("checkInBtn");
       const receiptBtn = document.getElementById("downloadBookingReceiptBtn");
-      const checkInPanel = document.getElementById("checkInConsentPanel");
-      const checkInConsent = document.getElementById("checkInConsent");
-      const confirmCheckInBtn = document.getElementById("confirmCheckInBtn");
-      const cancelCheckInBtn = document.getElementById("cancelCheckInBtn");
-      const checkInConsentStatus = document.getElementById("checkInConsentStatus");
-      applyConnectionState(isBrowserOffline(navigator));
       if (receiptBtn) {
         receiptBtn.addEventListener("click", () => {
           try {
@@ -594,56 +684,16 @@
         });
       }
 
-      if (checkInBtn && checkIn.allowed && checkInPanel) {
-        checkInBtn.addEventListener("click", () => {
-          if (isBrowserOffline(navigator) || !checkInAllowed) return;
-          checkInConsent.checked = false;
-          confirmCheckInBtn.disabled = true;
-          checkInConsentStatus.textContent = "No check-in is recorded until you confirm.";
-          checkInPanel.hidden = false;
-          checkInConsent.focus();
-        });
-        checkInConsent.addEventListener("change", () => {
-          applyConnectionState(isBrowserOffline(navigator));
-          checkInConsentStatus.textContent = checkInConsent.checked
-            ? "Ready to record your arrival if you choose Confirm Arrival."
-            : "No check-in is recorded until you confirm.";
-        });
-        cancelCheckInBtn.addEventListener("click", () => {
-          checkInConsent.checked = false;
-          applyConnectionState(isBrowserOffline(navigator));
-          checkInPanel.hidden = true;
-          statusEl.textContent = "Check-in cancelled. No arrival was recorded.";
-          checkInBtn.focus();
-        });
-        confirmCheckInBtn.addEventListener("click", async () => {
-          const currentCheckIn = activeBooking ? checkInState(activeBooking) : { allowed: false };
-          const stillEligible = activeSummary?.role === "musician"
-            && activeBooking?.acceptedBy === activeUser?.uid
-            && activeUser?.uid === user.uid
-            && currentCheckIn.allowed
-            && checkInAllowed
-            && !isBrowserOffline(navigator);
-          if (!stillEligible || !checkInConsent.checked) {
-            checkInConsentStatus.textContent = "Check-in is unavailable or consent was not confirmed. No arrival was recorded.";
-            applyConnectionState(isBrowserOffline(navigator));
-            return;
-          }
-          confirmCheckInBtn.disabled = true;
-          checkInConsentStatus.textContent = "Recording your arrival…";
+      if (checkInBtn && checkIn.allowed) {
+        checkInBtn.addEventListener("click", async () => {
+          if (!window.confirm("Share your arrival check-in with the host? This records that you consent to confirm attendance.")) return;
           try {
-            await confirmArrivalWithConsent({
-              allowed: stillEligible,
-              consentChecked: checkInConsent.checked,
-              write: () => updateDoc(doc(db, "gigs", bookingId), { checkedInAt: serverTimestamp() })
-            });
-            checkInPanel.hidden = true;
+            await performBookingAction(auth, bookingId, "checkin");
             statusEl.textContent = "Checked in. The host can now see that you confirmed attendance.";
             await renderBooking(user);
           } catch (error) {
             console.error(error);
-            checkInConsentStatus.textContent = "Unable to confirm whether check-in completed. Reload the booking after reconnecting before trying again.";
-            applyConnectionState(isBrowserOffline(navigator));
+            statusEl.textContent = "Unable to confirm check-in right now.";
           }
         });
       }
@@ -661,6 +711,25 @@
         statusEl.textContent += ` Reason: ${gig.cancelReason}`;
       }
 
+      const auditSection = document.getElementById('bookingAuditTrail');
+      if (auditSection && (isHostOwner || isAcceptedPerformer)) {
+        try {
+          const auditSnap = await getDocs(query(collection(db, 'gigs', bookingId, 'audit'), orderBy('at', 'desc'), limit(20)));
+          auditSection.replaceChildren();
+          auditSnap.forEach((entry) => {
+            const data = entry.data();
+            const row = document.createElement('p');
+            const at = data.at?.toDate ? data.at.toDate().toLocaleString() : 'Time unavailable';
+            row.textContent = `${String(data.action || 'Booking update')} · ${at}`;
+            auditSection.append(row);
+          });
+          auditSection.hidden = auditSnap.empty;
+        } catch (error) {
+          auditSection.hidden = true;
+          console.warn('Booking audit trail unavailable.', error);
+        }
+      }
+
       bindMessages(gig, user, summary);
     }
 
@@ -676,6 +745,8 @@
         return;
       }
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
+      window.CLTCHBookingUserId = freshUser.uid;
+      window.PlatformComponents?.initDisputeFlow('disputeFlowComponent', bookingId, freshUser.uid);
       renderBooking(freshUser).catch((err) => {
         console.error(err);
         titleEl.textContent = "Booking unavailable";
@@ -686,11 +757,11 @@
 
     document.getElementById("signOutLink").addEventListener("click", async (event) => {
       event.preventDefault();
-      removeOfflineStatus();
       if (stopMessages) {
         stopMessages();
         stopMessages = null;
       }
+      if (stopMessageState) { stopMessageState(); stopMessageState = null; }
       clearResumeTarget();
       if (auth.currentUser) await recordAuthEvent(db, auth.currentUser, "sign_out").catch(() => {});
       await signOut(auth);
@@ -704,42 +775,124 @@
         renderMessageState(activeBooking, activeUser);
         return;
       }
-      if (isBrowserOffline(navigator)) {
-        messageStatusEl.textContent = "Message not sent: your browser reports no network. Your draft remains here; reconnect and press Send Message to try again.";
-        return;
-      }
       const text = messageInputEl.value.trim();
       if (!text) return;
       messageSendBtn.disabled = true;
-      const payload = {
-        gigId: activeBooking.id,
-        senderId: activeUser.uid,
-        senderRole: activeSummary.role === "host" ? "host" : "musician",
-        text
-      };
-      const result = await messageRetryGuard.send(payload, {
-        createRef: () => doc(collection(db, "gigs", activeBooking.id, "messages")),
-        read: async (ref) => {
-          const snapshot = await getDocFromServer(ref);
-          return snapshot.exists() ? snapshot.data() : null;
-        },
-        create: (ref, message) => setDoc(ref, {
-          senderId: message.senderId,
-          senderRole: message.senderRole,
-          text: message.text,
+      try {
+        if (!pendingMessage || pendingMessage.text !== text) pendingMessage = { id: crypto.randomUUID(), text };
+        const messageRef = doc(db, "gigs", activeBooking.id, "messages", pendingMessage.id);
+        const message = {
+          id: pendingMessage.id,
+          senderId: activeUser.uid,
+          senderRole: activeSummary.role === "host" ? "host" : "musician",
+          text,
           createdAt: serverTimestamp()
-        })
-      });
-      if (result.status === 'sent' || result.status === 'already-created') {
-        if (messageInputEl.value.trim() === text) messageInputEl.value = "";
+        };
+        await ensureMessageStored({
+          message,
+          lookup: async (id) => {
+            const existing = await getDoc(doc(db, "gigs", activeBooking.id, "messages", id));
+            return existing.exists() ? existing.data() : null;
+          },
+          write: (id) => setDoc(doc(db, "gigs", activeBooking.id, "messages", id), {
+            senderId: message.senderId, senderRole: message.senderRole, text: message.text, createdAt: message.createdAt
+          })
+        });
+        pendingMessage = null;
+        messageInputEl.value = "";
+        messageStatusEl.textContent = "Message sent. It will show as read after the other participant opens this thread.";
+      } catch (error) {
+        console.error(error);
+        messageStatusEl.textContent = "Message not confirmed. Your text is still here; press Send Message again to retry safely.";
       }
       renderMessageState(activeBooking, activeUser);
-      if (result.status === 'unknown') messageStatusEl.textContent = "Delivery is still unknown. This page will reuse the same message ID for this exact text; check the thread before retrying, and keep this page open.";
-      else if (result.status === 'pending-different-payload') messageStatusEl.textContent = "An earlier message still has unknown delivery. Check the thread before editing it or sending a different message; this page will not create another message yet.";
-      else if (result.status === 'already-created') messageStatusEl.textContent = "This exact message is already in the thread; no duplicate was created.";
-      else if (result.status === 'sent') messageStatusEl.textContent = "Message sent.";
-      else if (result.status === 'busy') messageStatusEl.textContent = "A message attempt is already being checked.";
-      else if (result.status === 'invalid') messageStatusEl.textContent = "Message not sent. Check the booking and message text, then try again.";
+    });
+
+    const supportPanel = document.getElementById("supportEscalationPanel");
+    const supportTicketStatus = document.getElementById("supportTicketStatus");
+    const supportTicketHistory = document.getElementById("supportTicketHistory");
+    document.getElementById("supportEscalationToggle").addEventListener("click", async () => {
+      supportPanel.hidden = !supportPanel.hidden;
+      if (!supportPanel.hidden) await loadSupportTicketHistory();
+    });
+
+    async function loadSupportTicketHistory() {
+      if (!activeUser || !activeBooking) return;
+      supportTicketHistory.replaceChildren();
+      try {
+        const snap = await getDocs(query(
+          collection(db, "supportTickets"),
+          where("uid", "==", activeUser.uid),
+          where("bookingId", "==", activeBooking.id),
+          orderBy("createdAt", "desc"),
+          limit(10)
+        ));
+        const tickets = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+        if (!tickets.length) return;
+        const heading = document.createElement("p");
+        heading.textContent = "Saved requests for this booking (not sent to support):";
+        supportTicketHistory.append(heading);
+        tickets.forEach((ticket) => {
+          const row = document.createElement("p");
+          const when = ticket.createdAt?.toDate?.()?.toLocaleString?.() || "time unavailable";
+          row.textContent = `${ticket.id} — ${ticket.status} — ${when}`;
+          supportTicketHistory.append(row);
+        });
+      } catch {
+        supportTicketHistory.textContent = "Could not load saved request status.";
+      }
+    }
+
+    document.getElementById("saveSupportTicket").addEventListener("click", async () => {
+      if (!activeUser || !activeBooking || !canUseMessages(activeBooking, activeUser)) return;
+      const description = document.getElementById("supportIssueDetails").value.trim();
+      if (!description || description.length > 1500) {
+        supportTicketStatus.textContent = "Describe the issue in 1 to 1,500 characters.";
+        return;
+      }
+      const includeConversation = document.getElementById("includeSupportConversation").checked;
+      const context = includeConversation
+        ? buildSupportConversationContext({ booking: activeBooking, messages: currentSupportMessages.filter((message) => !message.pendingWrite), includeMessages: true })
+        : "";
+      const ticketRef = doc(collection(db, "supportTickets"));
+      const ticket = {
+        uid: activeUser.uid,
+        bookingId: activeBooking.id,
+        subject: `Booking support: ${activeBooking.id}`,
+        description,
+        conversationContext: context,
+        status: "saved",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      const saveButton = document.getElementById("saveSupportTicket");
+      saveButton.disabled = true;
+      supportTicketStatus.textContent = "Saving request to your account…";
+      try {
+        await setDoc(ticketRef, ticket);
+        const copyText = buildSupportTicketCopy({ id: ticketRef.id, bookingId: activeBooking.id, description, context });
+        document.getElementById("supportTicketCopy").value = copyText;
+        document.getElementById("supportTicketActions").hidden = false;
+        document.getElementById("emailSupportTicket").href = `mailto:support@cltch.ntwrk?subject=${encodeURIComponent(ticket.subject)}`;
+        supportTicketStatus.textContent = `Request ${ticketRef.id} is saved under your account. It has not been sent to support; staff inbox access is not connected.`;
+        await loadSupportTicketHistory();
+      } catch (error) {
+        console.error("Support request save failed:", error);
+        supportTicketStatus.textContent = "Could not save this support request. Try again when your connection is available.";
+        saveButton.disabled = false;
+      }
+    });
+
+    document.getElementById("copySupportTicket").addEventListener("click", async () => {
+      const details = document.getElementById("supportTicketCopy");
+      try {
+        await navigator.clipboard.writeText(details.value);
+        supportTicketStatus.textContent = "Request details copied. Paste them into the support email.";
+      } catch {
+        details.focus();
+        details.select();
+        supportTicketStatus.textContent = "Select and copy the request details, then paste them into the support email.";
+      }
     });
   </script>
   <script src="scripts/legal-components.js"></script>
@@ -754,7 +907,7 @@
         const bookingId = new URLSearchParams(window.location.search).get('id') || 'unlinked';
         window.PlatformComponents.initBookingAgreement('bookingAgreementComponent', bookingId);
         window.PlatformComponents.initPaymentLifecycle('paymentLifecycleComponent', bookingId);
-        window.PlatformComponents.initDisputeFlow('disputeFlowComponent', bookingId);
+        if (window.CLTCHBookingUserId) window.PlatformComponents.initDisputeFlow('disputeFlowComponent', bookingId, window.CLTCHBookingUserId);
       }
     });
   </script>

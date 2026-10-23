@@ -23,7 +23,7 @@ assert.equal(deleteQuickReply('host-A', first.id, storage).length, MAX_QUICK_REP
 
 const page = await readFile(new URL('../booking.html', import.meta.url), 'utf8');
 assert.match(page, /Inserted text is not sent until you press Send Message/);
-assert.match(page, /orderBy\("createdAt", "desc"\), limit\(100\)/);
+assert.match(page, /orderBy\("createdAt", "desc"\),\s*orderBy\(documentId\(\), "desc"\),\s*limit\(100\)/);
 assert.match(page, /body\.textContent = String\(item\.text \|\| ''\)/);
 assert.match(page, /latest 100 messages in chronological order/);
 

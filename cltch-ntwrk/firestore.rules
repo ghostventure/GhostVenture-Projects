@@ -26,6 +26,11 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/musicians/$(request.auth.uid));
     }
 
+    function isBlockedBetween(userA, userB) {
+      return exists(/databases/$(database)/documents/userBlocks/$(userA)/blocked/$(userB))
+        || exists(/databases/$(database)/documents/userBlocks/$(userB)/blocked/$(userA));
+    }
+
     function has(field) {
       return field in request.resource.data;
     }
@@ -57,6 +62,13 @@ service cloud.firestore {
       return !has(field)
         || (request.resource.data[field] is string
             && request.resource.data[field].matches('^[0-9+()\\-\\.\\s]{7,20}$'));
+    }
+
+    function validOptionalAvailabilityResumeDate() {
+      return !has('availabilityResumeDate')
+        || (request.resource.data.availabilityResumeDate is string
+            && request.resource.data.availabilityResumeDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+            && request.resource.data.available == false);
     }
 
     function isOptionalUrl(field) {
@@ -147,6 +159,13 @@ service cloud.firestore {
             && request.resource.data[field].size() <= maxLen);
     }
 
+    function validAvailabilityDays() {
+      return !has('availabilityDays')
+        || (request.resource.data.availabilityDays is list
+            && request.resource.data.availabilityDays.size() <= 7
+            && request.resource.data.availabilityDays.toSet().hasOnly([0, 1, 2, 3, 4, 5, 6]));
+    }
+
     function gigCoreUnchanged() {
       return isUnchanged('hostId')
         && isUnchanged('venue')
@@ -155,6 +174,7 @@ service cloud.firestore {
         && isUnchanged('pay')
         && isUnchanged('date')
         && isUnchanged('time')
+        && sameOrAbsent('timeZone')
         && sameOrAbsent('notes')
         && sameOrAbsent('skillNeed')
         && sameOrAbsent('performerType')
@@ -253,6 +273,22 @@ service cloud.firestore {
           && (!('reviewed' in get(/databases/$(database)/documents/gigs/$(request.resource.data.gigId)).data)
               || get(/databases/$(database)/documents/gigs/$(request.resource.data.gigId)).data.reviewed != true);
         allow update, delete: if false;
+
+        match /responses/{performerId} {
+          allow read: if true;
+          allow create: if isOwner(performerId)
+            && performerId == userId
+            && request.resource.data.keys().hasOnly(['kind', 'message', 'createdAt'])
+            && request.resource.data.keys().hasAll(['kind', 'message', 'createdAt'])
+            && request.resource.data.kind in ['response', 'correction']
+            && request.resource.data.message is string
+            && request.resource.data.message.size() > 0
+            && request.resource.data.message.size() <= 500
+            && request.resource.data.createdAt is timestamp
+            && exists(/databases/$(database)/documents/musicians/$(userId)/reviews/$(reviewId))
+            && get(/databases/$(database)/documents/musicians/$(userId)/reviews/$(reviewId)).data.hostId != request.auth.uid;
+          allow update, delete: if false;
+        }
       }
 
       allow create: if isOwner(userId)
@@ -261,7 +297,8 @@ service cloud.firestore {
           'stageName', 'instruments', 'rate', 'bio', 'payoutHandle',
           'blackoutDates', 'bookedDates', 'type', 'available',
           'city', 'state', 'lat', 'lng', 'genres', 'experience',
-          'performerType', 'updatedAt', 'businessClassRequestedAt', 'businessClassActive'
+          'performerType', 'updatedAt', 'businessClassRequestedAt', 'businessClassActive',
+          'availabilityResumeDate', 'availabilityDays', 'availabilityTimeZone'
         ])
         && isString('firstName', 50)
         && isString('lastName', 50)
@@ -280,13 +317,16 @@ service cloud.firestore {
         && (!has('performerType') || request.resource.data.performerType in ['musician', 'dj', 'photographer', 'cinematographer', 'model'])
         && validListSize('blackoutDates', 400)
         && validListSize('bookedDates', 120)
+        && validAvailabilityDays()
+        && isOptionalString('availabilityTimeZone', 64)
         && isOptionalNumberInRange('lat', -90, 90)
         && isOptionalNumberInRange('lng', -180, 180)
         && (!has('updatedAt') || request.resource.data.updatedAt is timestamp)
         && (!has('businessClassRequestedAt') || request.resource.data.businessClassRequestedAt is timestamp)
         && (!has('businessClassActive') || request.resource.data.businessClassActive == false)
         && request.resource.data.type == 'musician'
-        && request.resource.data.available is bool;
+        && request.resource.data.available is bool
+        && validOptionalAvailabilityResumeDate();
 
       allow update: if isOwner(userId)
         && hasOnlyKeys([
@@ -294,7 +334,8 @@ service cloud.firestore {
           'stageName', 'instruments', 'rate', 'bio', 'payoutHandle',
           'blackoutDates', 'bookedDates', 'type', 'available',
           'city', 'state', 'lat', 'lng', 'genres', 'experience',
-          'performerType', 'updatedAt', 'overallGrade', 'reviewCount', 'businessClassRequestedAt', 'businessClassActive'
+          'performerType', 'updatedAt', 'overallGrade', 'reviewCount', 'businessClassRequestedAt', 'businessClassActive',
+          'availabilityResumeDate', 'availabilityDays', 'availabilityTimeZone'
         ])
         && isString('firstName', 50)
         && isString('lastName', 50)
@@ -313,12 +354,15 @@ service cloud.firestore {
         && (!has('performerType') || request.resource.data.performerType in ['musician', 'dj', 'photographer', 'cinematographer', 'model'])
         && validListSize('blackoutDates', 400)
         && validListSize('bookedDates', 120)
+        && validAvailabilityDays()
+        && isOptionalString('availabilityTimeZone', 64)
         && isOptionalNumberInRange('lat', -90, 90)
         && isOptionalNumberInRange('lng', -180, 180)
         && (!has('updatedAt') || request.resource.data.updatedAt is timestamp)
         && (!has('businessClassRequestedAt') || request.resource.data.businessClassRequestedAt is timestamp)
         && isUnchanged('type')
         && request.resource.data.available is bool
+        && validOptionalAvailabilityResumeDate()
         && sameOrAbsent('overallGrade')
         && sameOrAbsent('reviewCount')
         && sameOrAbsent('businessClassActive');
@@ -386,6 +430,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─── Private calendar subscription credentials (Functions only) ──
+    match /calendarSubscriptionOwners/{userId} {
+      allow read, write: if false;
+    }
+
+    match /calendarSubscriptionTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+
     // ─── User Roles ─────────────────────────────────────────────────
     match /userRoles/{userId} {
       allow read: if isOwner(userId);
@@ -398,6 +451,17 @@ service cloud.firestore {
         && request.resource.data.role in ['musician', 'host']
         && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is timestamp);
       allow delete: if false;
+    }
+
+    match /userBlocks/{userId}/blocked/{blockedUserId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && blockedUserId != userId
+        && request.resource.data.keys().hasOnly(['blockedAt'])
+        && request.resource.data.keys().hasAll(['blockedAt'])
+        && request.resource.data.blockedAt is timestamp;
+      allow update: if false;
+      allow delete: if isOwner(userId);
     }
 
     // ─── User Summaries ─────────────────────────────────────────────
@@ -448,6 +512,56 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /accountDeletionRequests/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && !exists(/databases/$(database)/documents/accountDeletionRequests/$(userId))
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'status', 'reason', 'createdAt', 'updatedAt'])
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'submitted'
+        && isOptionalString('reason', 500)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isOwner(userId)
+        && resource.data.status == 'submitted'
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'status', 'reason', 'createdAt', 'updatedAt'])
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.reason == resource.data.reason
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    match /supportTickets/{ticketId} {
+      allow read: if isVerifiedAuth() && resource.data.uid == request.auth.uid;
+      allow create: if isVerifiedAuth()
+        && request.resource.data.keys().hasOnly([
+          'uid', 'bookingId', 'subject', 'description', 'conversationContext',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'uid', 'bookingId', 'subject', 'description', 'conversationContext',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && isString('bookingId', 120)
+        && isString('subject', 160)
+        && isString('description', 1500)
+        && request.resource.data.conversationContext is string
+        && request.resource.data.conversationContext.size() <= 8000
+        && request.resource.data.status == 'saved'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/gigs/$(request.resource.data.bookingId))
+        && get(/databases/$(database)/documents/gigs/$(request.resource.data.bookingId)).data.status == 'accepted'
+        && (get(/databases/$(database)/documents/gigs/$(request.resource.data.bookingId)).data.hostId == request.auth.uid
+          || get(/databases/$(database)/documents/gigs/$(request.resource.data.bookingId)).data.acceptedBy == request.auth.uid);
+      allow update, delete: if false;
+    }
+
     // ─── Membership Grants (server-managed) ────────────────────────
     match /memberships/{userId} {
       allow read: if isOwner(userId);
@@ -470,6 +584,18 @@ service cloud.firestore {
 
     // ─── Gigs ───────────────────────────────────────────────────────
     match /gigs/{gigId} {
+
+      match /audit/{entryId} {
+        allow read: if isVerifiedAuth()
+          && exists(/databases/$(database)/documents/gigs/$(gigId))
+          && (get(/databases/$(database)/documents/gigs/$(gigId)).data.hostId == request.auth.uid
+            || get(/databases/$(database)/documents/gigs/$(gigId)).data.acceptedBy == request.auth.uid);
+        allow write: if false;
+      }
+
+      match /actionReceipts/{actionId} {
+        allow read, write: if false;
+      }
 
       match /messages/{messageId} {
         allow read: if isVerifiedAuth()
@@ -500,17 +626,46 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      match /messageStates/{userId} {
+        allow read: if isVerifiedAuth()
+          && exists(/databases/$(database)/documents/gigs/$(gigId))
+          && get(/databases/$(database)/documents/gigs/$(gigId)).data.status == 'accepted'
+          && (get(/databases/$(database)/documents/gigs/$(gigId)).data.hostId == request.auth.uid
+            || get(/databases/$(database)/documents/gigs/$(gigId)).data.acceptedBy == request.auth.uid);
+        allow create, update: if isOwner(userId)
+          && exists(/databases/$(database)/documents/gigs/$(gigId))
+          && get(/databases/$(database)/documents/gigs/$(gigId)).data.status == 'accepted'
+          && (get(/databases/$(database)/documents/gigs/$(gigId)).data.hostId == request.auth.uid
+            || get(/databases/$(database)/documents/gigs/$(gigId)).data.acceptedBy == request.auth.uid)
+          && request.resource.data.keys().hasOnly([
+            'lastReadAt', 'readModelVersion', 'lastReadMessageId', 'lastReadMessageCreatedAt'
+          ])
+          && request.resource.data.keys().hasAll(['lastReadAt', 'readModelVersion'])
+          && request.resource.data.lastReadAt == request.time
+          && request.resource.data.readModelVersion == 2
+          && ((!(('lastReadMessageId' in request.resource.data)) && !(('lastReadMessageCreatedAt' in request.resource.data)))
+            || (isString('lastReadMessageId', 128)
+              && request.resource.data.lastReadMessageCreatedAt is timestamp
+              && exists(/databases/$(database)/documents/gigs/$(gigId)/messages/$(request.resource.data.lastReadMessageId))
+              && get(/databases/$(database)/documents/gigs/$(gigId)/messages/$(request.resource.data.lastReadMessageId)).data.createdAt == request.resource.data.lastReadMessageCreatedAt));
+        allow delete: if false;
+      }
+
       allow read: if isVerifiedAuth()
         && (
           resource.data.status == 'open'
           || resource.data.hostId == request.auth.uid
           || (('acceptedBy' in resource.data) && resource.data.acceptedBy == request.auth.uid)
+          || (('replacementOffer' in resource.data)
+            && resource.data.replacementOffer.performerId == request.auth.uid
+            && resource.data.replacementOffer.status == 'pending')
         );
 
       allow create: if isVerifiedAuth()
         && hasHostProfile()
         && hasOnlyKeys([
           'hostId', 'venue', 'location', 'genre', 'pay', 'date', 'time',
+          'timeZone',
           'notes', 'skillNeed', 'performerType', 'status', 'createdAt',
           'lat', 'lng', 'payBaseAmount', 'processingFeeRate',
           'processingFeeAmount', 'hostTotalCharge', 'offerExpiryHours', 'expiresOn'
@@ -522,6 +677,7 @@ service cloud.firestore {
         && isString('pay', 100)
         && isString('date', 20)
         && isString('time', 10)
+        && isString('timeZone', 64)
         && isOptionalString('notes', 500)
         && isOptionalString('skillNeed', 120)
         && (!has('performerType') || request.resource.data.performerType in ['musician','dj','photographer','cinematographer','model','any'])
@@ -538,11 +694,13 @@ service cloud.firestore {
 
       allow update: if isVerifiedAuth()
         && isUnchanged('hostId')
+        // Reliability coverage markers are written only by bookingAction.
+        && sameOrAbsent('reliabilityAcceptanceTracked')
         && (
           (request.auth.uid == resource.data.hostId
             && hasHostProfile()
             && resource.data.status in ['open', 'cancelled']
-            && request.resource.data.status in ['open', 'cancelled']
+            && request.resource.data.status == resource.data.status
             && (
               request.resource.data.status == 'cancelled'
               ? sameOrAbsent('acceptedBy')
@@ -557,24 +715,8 @@ service cloud.firestore {
             && !('lockedHostTotalCharge' in request.resource.data)
             && !('checkedInAt' in request.resource.data)
             && sameOrAbsent('passedBy')
-            && sameOrAbsent('reviewed'))
-          ||
-          (request.auth.uid == resource.data.hostId
-            && hasHostProfile()
-            && resource.data.status == 'accepted'
-            && request.resource.data.status == 'cancelled'
-            && !('acceptedBy' in request.resource.data)
-            && !('acceptedAt' in request.resource.data)
-            && !('lockedPay' in request.resource.data)
-            && !('lockedDate' in request.resource.data)
-            && !('lockedTime' in request.resource.data)
-            && !('lockedLocation' in request.resource.data)
-            && !('lockedProcessingFeeAmount' in request.resource.data)
-            && !('lockedHostTotalCharge' in request.resource.data)
-            && !('checkedInAt' in request.resource.data)
-            && sameOrAbsent('passedBy')
             && sameOrAbsent('reviewed')
-            && gigCoreUnchanged())
+            && sameOrAbsent('timeZone'))
           ||
           (request.auth.uid == resource.data.hostId
             && hasHostProfile()
@@ -589,47 +731,7 @@ service cloud.firestore {
           ||
           (hasMusicianProfile()
             && request.auth.uid != resource.data.hostId
-            && resource.data.status == 'open'
-            && request.resource.data.status == 'accepted'
-            && request.resource.data.acceptedBy == request.auth.uid
-            && validAcceptanceLock()
-            && !('checkedInAt' in request.resource.data)
-            && sameOrAbsent('passedBy')
-            && sameOrAbsent('reviewed')
-            && gigCoreUnchanged())
-          ||
-          (hasMusicianProfile()
-            && request.auth.uid != resource.data.hostId
-            && resource.data.status == 'accepted'
-            && resource.data.acceptedBy == request.auth.uid
-            && request.resource.data.status == 'accepted'
-            && request.resource.data.acceptedBy == resource.data.acceptedBy
-            && request.resource.data.checkedInAt is timestamp
-            && (!('checkedInAt' in resource.data) || request.resource.data.checkedInAt == resource.data.checkedInAt)
-            && sameOrAbsent('passedBy')
-            && sameOrAbsent('reviewed')
-            && gigCoreUnchanged())
-          ||
-          (hasMusicianProfile()
-            && request.auth.uid != resource.data.hostId
-            && resource.data.status == 'accepted'
-            && resource.data.acceptedBy == request.auth.uid
-            && request.resource.data.status == 'open'
-            && !('acceptedBy' in request.resource.data)
-            && !('acceptedAt' in request.resource.data)
-            && !('lockedPay' in request.resource.data)
-            && !('lockedDate' in request.resource.data)
-            && !('lockedTime' in request.resource.data)
-            && !('lockedLocation' in request.resource.data)
-            && !('lockedProcessingFeeAmount' in request.resource.data)
-            && !('lockedHostTotalCharge' in request.resource.data)
-            && !('checkedInAt' in request.resource.data)
-            && sameOrAbsent('passedBy')
-            && sameOrAbsent('reviewed')
-            && gigCoreUnchanged())
-          ||
-          (hasMusicianProfile()
-            && request.auth.uid != resource.data.hostId
+            && !isBlockedBetween(request.auth.uid, resource.data.hostId)
             && resource.data.status == 'open'
             && request.resource.data.status == 'open'
             && request.resource.data.passedBy is list
@@ -642,6 +744,13 @@ service cloud.firestore {
 
       allow delete: if isVerifiedAuth()
         && request.auth.uid == resource.data.hostId;
+    }
+
+    // Publicly readable, server-maintained aggregate. It contains only bounded
+    // counts and a forward-only coverage timestamp; clients cannot write it.
+    match /hostBookingReliability/{hostId} {
+      allow read: if isVerifiedAuth();
+      allow create, update, delete: if false;
     }
 
   }

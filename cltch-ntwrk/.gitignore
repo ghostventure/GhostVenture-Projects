@@ -85,15 +85,6 @@ native-ios-swift/**/Pods/
 *.db-*
 *.pem
 *.key
-*.p12
-*.pfx
-*.p8
-*.jks
-*service-account*.json
-*service_account*.json
-*serviceaccount*.json
-*credentials*.json
-*credential*.json
 
 # Yarn Integrity file
 .yarn-integrity

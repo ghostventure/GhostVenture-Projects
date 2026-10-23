@@ -33,6 +33,6 @@ assert.equal(bounded.items[0].gigId, 'past-00');
 const host = await readFile(new URL('../host.html', import.meta.url), 'utf8');
 assert.match(host, /buildBookingHealth\(records\)/);
 assert.match(host, /booking\.html\?id=\$\{encodeURIComponent\(item\.gigId\)\}/);
-assert.match(host, /onSnapshot\(q, \(snapshot\) =>[\s\S]*?renderBookingHealth\(hostGigCache\);[\s\S]*?\}, \(\) => \{[\s\S]*?clearBookingHealthOnError\(\);[\s\S]*?\}\)\)/);
+assert.match(host, /onSnapshot\(q, \(snapshot\) =>[\s\S]*?renderBookingHealth\(hostGigCache\);[\s\S]*?\}, \(\) => clearBookingHealthOnError\(\)\)\)/);
 assert.match(host, /Counts use bookings already loaded for this host[\s\S]*?accepted events from today through the next 7 days/);
 console.log('Booking health smoke passed.');

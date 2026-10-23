@@ -12,8 +12,8 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 006. UID-scoped account and profile JSON copy — verified in app/account-export.js
 - [x] 007. Confirmation and payout-data disclosure before export — verified in both profile pages
 - [x] 008. Firestore timestamp conversion and temporary download URL cleanup — verified in app/account-export.js
-- [ ] 009. Account deletion request with status tracking and identity recheck
-- [ ] 010. Full account export including booking history, messages, reviews, and media metadata
+- [x] 009. Host and performer profiles save a deletion request after password/Google identity recheck and show its owner-readable status; this does not notify staff or delete data, so support contact and processing are still required — `host-profile.html`, `musician-profile.html`, `firestore.rules`
+- [x] 010. Host and performer account export includes account/profile docs, linked gigs, accepted-booking messages, authored/received reviews, and local portfolio metadata; media file contents and inaccessible records are not included — `app/account-export.js`, both profile pages; `npm run smoke:account-export`
 
 ## Identity and authentication
 
@@ -23,7 +23,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 014. New device sign-in notification
 - [ ] 015. Recent security events page
 - [ ] 016. Email change verification with rollback
-- [ ] 017. Reauthentication for payout and account changes
+- [x] 017. Rechecks password or Google identity before host/performer name, contact, ZIP, and payout edits, Stripe payout onboarding, Plugz membership connection, Business Class/Verified Performer changes, and deletion requests; unsupported sign-in providers cannot proceed — both profile pages; `app/reauthenticate-sensitive.js`; `npm run smoke:reauthenticate-sensitive`
 - [ ] 018. Suspicious login challenge and rate limiting
 - [ ] 019. Recovery contact setup and verification
 - [ ] 020. Sign-in provider linking and unlinking validation
@@ -33,7 +33,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 021. Browser-local saved gig templates scoped by host UID (up to 8; not synced across devices) — `host.html`, `app/gig-templates.js`; `npm run smoke:gig-templates`
 - [x] 022. Weekly or biweekly repeat-post batch (up to 12 separate gig documents, atomic Firestore write) — `host.html`, `app/gig-series.js`; `npm run smoke:gig-series`
 - [x] 023. Per-event and aggregate host cost estimate for repeated gigs — `host.html`, `app/gig-budget.js`; `npm run smoke:gig-budget`
-- [ ] 024. Venue contact roster with scoped visibility
+- [x] 024. Host-only browser-local venue contact roster (up to 12; not shared or used for notifications) — `venue-contacts.html`, `app/venue-contact-roster.js`
 - [x] 025. Browser-local booking preparation checklist scoped per booking, with explicit private/not-confirmed status — `scripts/platform-components.js`, `booking.html`; Chromium isolation smoke
 - [ ] 026. Rider and stage plan attachments with access controls
 - [x] 027. Advisory duplicate gig detection by host, venue, route, date, and time before geocoding/posting — `host.html`, `app/duplicate-gig.js`; `npm run smoke:duplicate-gig`
@@ -44,14 +44,14 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Host team and scheduling
 
 - [ ] 031. Host approval roles
-- [ ] 032. Venue accessibility and accommodation checklist
-- [ ] 033. Recurring venue preferences
+- [x] 032. Host-gated browser-local venue accessibility checklist; avoids storing diagnoses or private accommodation details — `venue-accessibility.html`, `app/venue-accessibility-checklist.js`
+- [x] 033. Host-scoped browser-local weekly/biweekly venue schedules applied to existing repeat-date and batch-post controls — `host.html`, `app/venue-preferences.js`
 - [ ] 034. Booking approval roles for venue teams
 - [ ] 035. Venue document expiry reminders
 - [ ] 036. Duplicate booking merge flow
-- [x] 037. Host activity CSV with status/month counts and posted-pay average denominators; explicitly limited to the 200 newest host-owned feed records — `host.html`, `app/host-analytics-export.js`; `npm run smoke:host-analytics-export`
+- [ ] 037. Host booking analytics export
 - [x] 038. Filter confirmed bookings by date and export a bounded, escaped .ics file with explicit floating-time and one-hour defaults — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
-- [ ] 039. Venue capacity and equipment details
+- [x] 039. Host-gated browser-local venue capacity and equipment reference (not published or shared) — `venue-details.html`, `app/venue-details.js`
 - [x] 040. Venue-specific safety checklist
 
 ## Performer profile and media
@@ -61,7 +61,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 043. Label the review sample accurately and isolate review-load failures from the profile — `performer-view.html`; `npm run smoke:performer-public-profile`
 - [x] 044. Encode performer identifiers in the booking return link — `performer-view.html`; `npm run smoke:performer-public-profile`
 - [x] 045. Private round-trip travel-fee calculator with validated manual route distance and no location sharing — `musician-profile.html`, `app/travel-fee.js`; `npm run smoke:travel-fee`
-- [ ] 046. Recurring availability with timezone support
+- [x] 046. Weekly all-day availability in an IANA timezone, checked against event-local instants; exact-date blackout exceptions and accepted same-local-date bookings take priority; DST gaps/overlaps and legacy gigs without event timezone show a fallback and remain date-only — `musician-profile.html`, `gig-radar.html`, `musician-dashboard.html`, `host.html`, `app/recurring-availability.js`, `firestore.rules`; `npm run smoke:recurring-availability`
 - [ ] 047. Revocable calendar subscription feed
 - [x] 048. Profile recommendations tied to missing fields
 - [x] 049. Show a recoverable state when the performer profile cannot load — `performer-view.html`; `npm run smoke:performer-public-profile`
@@ -69,16 +69,16 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 ## Performer earnings and teams
 
-- [ ] 051. Multi-role profile types
+- [x] 051. One UID can create and use independent host and musician profiles; mode switch checks each profile independently, routes to the matching onboarding when missing, and server role authorization falls back to the corresponding existing profile — `app/mode-switch.js`, `app/user-db.js`, `host-profile.html`, `musician-profile.html`, `functions/index.js`, `firestore.rules`; `npm run smoke:multi-role-profiles`
 - [ ] 052. Team representative permissions
 - [ ] 053. Earnings history with fee and payout state
 - [ ] 054. Tax document vault and annual download
 - [x] 055. Gig preparation checklist
-- [ ] 056. Availability pause with resume date
+- [x] 056. Performer availability pause with optional local-date resume; resumed profiles re-enter Gig Radar and Matched Gigs — `musician-profile.html`, `app/availability-pause.js`, `firestore.rules`
 - [x] 057. Safe portfolio URL manager — blocks scripts, credentials, duplicates, and oversized input; caps saved links at 20. Verified in scripts/smoke-portfolio-links.mjs.
-- [ ] 058. Review response and correction request
+- [x] 058. Performer review response and correction request — owner-only, one immutable response or correction request per review, publicly displayed with validated text; `performer-view.html`, `firestore.rules`; `npm run smoke:review-response`
 - [x] 059. Copy a date-filtered upcoming booking itinerary with line-break sanitization — `musician-dashboard.html`, `app/performer-agenda.js`; `npm run smoke:performer-agenda`
-- [x] 060. Owner-local self-attested business readiness checklist with explicit non-verification notice — `host-profile.html`, `app/business-profile-checklist.js`; `npm run smoke:business-profile-checklist`
+- [ ] 060. Business profile verification checklist
 
 ## Discovery and search
 
@@ -86,9 +86,9 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 062. Import page-scoped search presets with file-size, schema, search-length, filter, sort, duplicate, and count validation — `site-init.js`; Chromium import smoke
 - [x] 063. Bounded minimum-pay filter with storage fallback, reset control, and accurate empty state — `gig-radar.html`, `app/gig-radar-filters.js`; `npm run smoke:gig-radar-filters`
 - [x] 064. Save and restore one account-scoped combined open-gig search, reapplying phrase, performer type, date bounds, and minimum pay to live results — `gig-discovery.html`, `app/gig-discovery.js`, `app/gig-discovery-filters.js`; `npm run smoke:gig-discovery`
-- [x] 065. Accessible map and list view
+- [x] 065. Accessible map and list view — `gig-radar.html`, `app/gig-radar-map.js`; `npm run smoke:gig-radar-map-list`
 - [x] 066. Stale listing suppression reason
-- [ ] 067. Availability conflict warning with timezone
+- [x] 067. Same-date conflict advisory displays device timezone and states that event-time overlap is not verified — `musician-matched-gigs.html`
 - [x] 068. Search relevance controls and reset
 - [x] 069. Match feedback reason codes
 - [x] 070. Clear browser-local CLTCH preferences, drafts, and named caches without removing Firebase auth or account data — `app/local-data.js`, `privacy.html`; `npm run smoke:local-data`
@@ -96,28 +96,29 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 ## Matching and marketplace trust
 
 - [x] 071. Stable paginated search results
-- [x] 072. Explicit Nominatim location resolution and confirmed in-memory coordinate override, preserving the entered location string — `host.html`, `app/gig-location-resolution.js`; `npm run smoke:gig-location-resolution`
+- [x] 072. Manual location substring filter over loaded Gig Discovery results; does not use device location or alter profile location — `gig-discovery.html`, `app/gig-discovery-filters.js`
 - [x] 073. Approximate distance disclosure
-- [x] 074. Performer device-local host mute from matching (not an access or safety block) — `gig-radar.html`, `musician-matched-gigs.html`, `app/host-mutes.js`; `npm run smoke:host-mutes`
+- [x] 074. Persistent performer block of a host removes that host's open gigs from matching and prevents acceptance; owners can unblock from Gig Radar — `gig-radar.html`, `firestore.rules`; `npm run smoke:blocked-hosts`
 - [x] 075. Filter-aware empty-state recovery
-- [ ] 076. Response speed with sample-size threshold
-- [ ] 077. Host reliability with denominator
+- [x] 076. Private median post-to-accept time from up to 50 accepted gigs, shown after five timestamped acceptances; excludes passes/declines — `musician-dashboard.html`, `firestore.indexes.json`
+- [x] 077. Forward-only host cancellation record with explicit denominator — immutable server transaction counts host-initiated cancellations after a tracked acceptance out of server-recorded accepted booking transitions; performer cards show the tracked-since date and exclude earlier bookings; aggregate exposes counts only, not an overall reputation score — `functions/index.js`, `functions/host-reliability.js`, `firestore.rules`, `gig-radar.html`, `app/host-reliability.mjs`; `npm run smoke:host-reliability`
 - [x] 078. Keyboard and screen-reader search results
-- [x] 079. Accessible table comparing up to five available profile matches from the host query, explicitly not applicants or date-confirmed available; only allowlisted public-facing fields — `host.html`, `app/performer-comparison.js`; `npm run smoke:performer-comparison`
+- [x] 079. Accessible post-match performer comparison table — compares up to eight available, nearby, matching performers with labeled columns for role, genres, rate, and approximate distance; links to each public profile; `host.html`; `npm run smoke:performer-comparison`
 - [x] 080. Alerts for new matching opportunities
 
 ## Booking lifecycle
 
-- [ ] 081. Backend booking state machine validation
-- [ ] 082. Idempotent accept, cancel, and check-in actions
-- [ ] 083. Booking audit trail with actor and server time
-- [ ] 084. Conflict-safe simultaneous acceptance
+- [x] 081. Server-only accept, cancel, reopen, and check-in transitions with participant authorization, one-way block checks, profile availability, IANA/DST-safe recurring weekdays, blackout, and performer-local date-conflict validation — `functions/index.js`, `functions/booking-policy.js`, `firestore.rules`; `npm run smoke:booking-server-policy`, `npm run smoke:booking-action`
+- [x] 082. Idempotent accept, host/performer cancel, reopen, and check-in calls using transaction receipts plus stable same-payload retry IDs — `functions/index.js`, `app/booking-action.js`; `npm run smoke:booking-action`
+- [x] 083. Booking action audit records store actor ID and server time in the same transaction as each status transition — `functions/index.js`, `firestore.rules`, `booking.html`; `npm run smoke:booking-action`
+- [x] 084. Transactional acceptance checks and updates the performer booking-date cache with the gig, so concurrent acceptance retries revalidate availability and date conflicts — `functions/index.js`, `functions/booking-policy.js`; `npm run smoke:booking-server-policy`
 - [x] 085. Accepted-participant printable booking receipt with sanitized fields, generated timestamp, and explicit payment/event disclaimers — `booking.html`, `app/booking-receipt.js`; `npm run smoke:booking-receipt`
-- [x] 086. Optional performer check-in consent panel with a separately confirmed, role/booking-window-guarded arrival timestamp — `booking.html`, `app/checkin-consent.js`; `npm run smoke:checkin-consent`
-- [ ] 087. Offline note conflict resolution
+- [x] 086. Performer check-in asks for consent and records the check-in through the authorized server action — `booking.html`, `musician-dashboard.html`, `musician-matched-gigs.html`, `gig-radar.html`, `functions/index.js`; `npm run smoke:booking-action`
+- [x] 087. Account- and booking-scoped private note drafts auto-save in per-tab storage and recover after reload while offline; compare-before-overwrite resolves stale same-tab/cross-tab versions, with both local copies retained until the user chooses — browser-only, not synced; `scripts/platform-components.js`, `booking.html`; `npm run smoke:private-note-conflicts`
 - [ ] 088. Two-party completion sign-off
-- [ ] 089. Two-party booking amendment acceptance
+- [x] 089. Two-party booking amendment proposals with explicit accept/decline by the other booking participant — `booking.html`, `functions/index.js`; `npm run smoke:booking-action`
 - [ ] 090. Cancellation policy calculation before confirmation
+  - Blocked pending an approved cancellation policy contract: current gig records contain pay and processing-fee amounts but no notice windows, party-specific liability rules, refund terms, or policy version. Do not infer cancellation costs from those amounts.
 
 ## Booking reliability and support
 
@@ -126,16 +127,16 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [x] 093. Host booking health panel with explicit status/date counts, a 20-record detail bound, and isolated feed-error state — `host.html`, `app/booking-health.js`; `npm run smoke:booking-health`
 - [x] 094. Accepted-booking incident report download with allowlisted metadata, bounded notes, and explicit local-only/not-sent status — `host.html`, `app/booking-incident-report.js`; `npm run smoke:booking-incident-report`
 - [ ] 095. Evidence attachment retention controls
-- [ ] 096. Event-day emergency contact action
-- [ ] 097. Assigned performer replacement handoff
+- [x] 096. Event-day participant contact actions: performer can call the host's saved phone after confirmation; host can open a prefilled urgent booking message — `booking.html`; `npm run smoke:booking-action`
+- [x] 097. Host replacement offer to an available performer, recipient accept/decline, and transactional assignment/cache handoff — `booking.html`, `functions/index.js`, `firestore.rules`; `npm run smoke:booking-action`
 - [ ] 098. Duplicate retry protection
 - [ ] 099. Server notification retries and delivery log
 - [ ] 100. Booking state migration verifier and rollback
 
 ## Messaging and collaboration
 
-- [ ] 101. Booking messages protected by Firestore rules
-- [ ] 102. Message delivery and read state
+- [x] 101. Firestore rules restrict message access to verified host/accepted performer on accepted bookings and bound sender writes — `firestore.rules` (rules are in source; emulator authorization not exercised)
+- [x] 102. Booking messages show Firestore-confirmed delivery and a per-user last-read message cursor after the other participant opens the thread; this is not a push notification — `booking.html`, `firestore.rules`
 - [ ] 103. Attachment scanning and short-lived links
 - [x] 104. Booking messages and metadata render untrusted text safely; history loads only latest 100 — `booking.html`; `npm run smoke:quick-replies`
 - [ ] 105. Private host team notes
@@ -153,10 +154,10 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 114. Message abuse report and block
 - [ ] 115. Contact detail reveal by booking state
 - [ ] 116. Team booking conversations
-- [ ] 117. Retry without duplicate message sends
-- [ ] 118. Server-consistent unread counts
+- [x] 117. A failed booking-message retry reuses its client-generated message ID and checks for an existing matching message before writing, preventing duplicate retries in the same page session — `booking.html`, `firestore.rules`
+- [x] 118. Server-computed unread total across up to 25 accepted booking threads and 1,000 unread messages per thread; returns no count when bounds/read markers prevent an exact result. Requires Functions, rules, and index deployment — `functions/unread-message-count.js`, `booking.html`, `host.html`, `musician-dashboard.html`, `app/unread-message-count.js`; `npm run smoke:unread-message-count`, `npm run smoke:unread-message-ui`
 - [ ] 119. Notification digest scheduling and retry
-- [ ] 120. Support escalation with conversation context
+- [ ] 120. Partial: accepted booking participants can save a bounded, optional conversation snapshot and view saved status; records are account-private and must be copied into email because staff inbox access/processing is not connected — `booking.html`, `app/support-ticket-context.js`, `firestore.rules`, `firestore.indexes.json`; `npm run smoke:support-ticket-context`
 
 ## Payments and finance
 
@@ -175,11 +176,11 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [ ] 131. Provider webhook reconciliation
 - [ ] 132. Idempotency for financial mutations
-- [ ] 133. Server-only payment secrets
+- [x] 133. Stripe/Plaid secrets are read by Functions only; client responses expose readiness/public key, not secret keys — `functions/index.js`
 - [ ] 134. Immutable financial audit log
 - [ ] 135. Two-party manual payment confirmation
 - [ ] 136. Cancellation fee by policy version
-- [x] 137. Locale-aware formatting for structured host estimates and fees (USD only; raw free-text pay is unchanged)
+- [ ] 137. Currency and locale-aware amounts
 - [ ] 138. Host cost and performer earnings reconciliation
 - [ ] 139. Failed payment notification and retry
 - [ ] 140. Permission-checked finance export
@@ -201,7 +202,7 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [x] 151. Android install fallback replaces the dead APK link with accessible PWA setup guidance and an accurate native-package-unavailable notice — `android-app.html`; `npm run smoke:android-install-guidance`
 - [x] 152. Same-origin PWA shortcuts for Post a Gig, Find Gigs, and My Bookings — `manifest.webmanifest`; `npm run smoke:pwa-shortcuts` checks every target exists
-- [x] 153. Booking-details offline guard: connection banner, paused message/check-in actions, preserved drafts, no app-managed replay, and in-flight status guidance — `booking.html`, `app/booking-offline.js`; `npm run smoke:booking-offline`
+- [ ] 153. Safe offline behavior for authenticated workflows
 - [ ] 154. Native biometric unlock after review
 - [x] 155. Payout handles masked by default and re-masked when the document is hidden or window loses focus — `app/sensitive-fields.js`, both profile pages; `npm run smoke:sensitive-fields`
 - [x] 156. Matched Gigs filters expose pressed state and live result updates — `app/matched-gigs-accessibility.js`; `npm run smoke:matched-gigs-accessibility`
@@ -227,8 +228,8 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 
 - [ ] 171. GitHub CI for lint, smoke, build, and security
 - [x] 172. Weekly Dependabot updates scoped to the Cltch npm workspace and GitHub Actions, with a review and vulnerability-triage policy — `.github/dependabot.yml`, `docs/DEPENDENCY_POLICY.md`
-- [x] 173. Deterministic production SBOM and documented vulnerability triage (unknown licenses marked NOASSERTION)
-- [x] 174. Secret scanning and Hosting deploy guard (working tree + staged Git index blobs)
+- [ ] 173. SBOM generation and vulnerability triage
+- [ ] 174. Secret scanning and artifact publication guard
 - [ ] 175. Data migration dry-run and verification
 - [ ] 176. Production backup and restore drill
 - [ ] 177. Custom-claim-backed admin access
@@ -257,14 +258,14 @@ Only checked items count as delivered. Unchecked items are candidates that need 
 - [ ] 194. Referral attribution with consent
 - [ ] 195. Invite links with expiry and revocation
 - [ ] 196. Onboarding progress saved to account
-- [x] 197. Resumable four-step first-booking walkthrough with contextual links, progress, skip/restart, and UID-scoped browser-local state — `musician-dashboard.html`, `app/booking-walkthrough.js`; `npm run smoke:booking-walkthrough`
-- [x] 198. Privacy-safe upcoming open-gig supply snapshot by calendar quarter with five-distinct-host suppression, explicit 180-day/120-listing sample coverage, and no historical-seasonality or forecast claim — `gig-radar.html`, `app/marketplace-insights.js`; `npm run smoke:marketplace-insights`
+- [ ] 197. First booking tutorial walkthrough
+- [ ] 198. Seasonal marketplace insights using aggregate data
 - [ ] 199. Service outage banner with recovery guidance
 - [ ] 200. Feature rollout percentage with server-side kill switch
 
 ## Count
 
 - Checklist items: 200.
-- Implemented and verified in this change: 70.
-- Remaining checklist items: 130.
+- Implemented and verified in this change: 69.
+- Remaining checklist items: 131.
 - The requested 200-feature target is not complete. The unchecked list is a work queue, not a claim that these capabilities ship.

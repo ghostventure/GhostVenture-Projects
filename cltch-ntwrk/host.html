@@ -363,6 +363,13 @@
       color: #cf6679;
       display: block;
     }
+    .performer-compare-wrap { margin:14px 0 24px; overflow-x:auto; border:1px solid #27394b; border-radius:10px; }
+    .performer-compare { width:100%; min-width:600px; border-collapse:collapse; text-align:left; }
+    .performer-compare caption { padding:12px; text-align:left; font-weight:700; color:#eaf4ff; }
+    .performer-compare th,.performer-compare td { padding:10px 12px; border-top:1px solid #27394b; vertical-align:top; }
+    .performer-compare th { color:#a9bed2; font-size:12px; }
+    .performer-compare td { color:#e3edf6; font-size:13px; }
+    .performer-compare a { color:#9edcff; }
     .fee-note {
       margin-top: 8px;
       font-size: 12px;
@@ -576,6 +583,11 @@
             <span class="workspace-summary-value">Track open, accepted, canceled</span>
             <span class="workspace-summary-note">The workspace now reads more like an operating console than a plain form page.</span>
           </div>
+          <div class="workspace-summary-card">
+            <span class="workspace-summary-label">Unread Messages</span>
+            <span class="workspace-summary-value" id="unreadMessageSummary" role="status" aria-live="polite">Checking with server…</span>
+            <span class="workspace-summary-note"><a href="#command-center-panel">View accepted bookings</a> · <button type="button" id="refreshUnreadMessageCount" style="background:none;border:0;color:inherit;text-decoration:underline;cursor:pointer;">Refresh count</button></span>
+          </div>
         </div>
       </div>
     </section>
@@ -654,14 +666,6 @@
           <div id="bookingHealthCounts" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;" aria-label="Booking health counts"></div>
           <div id="bookingHealthList" style="font-size:13px;line-height:1.55;color:#c8d7ea;"></div>
         </section>
-        <section class="ops-detail-card" aria-labelledby="hostAnalyticsTitle" style="grid-column:1/-1;">
-          <div class="ops-detail-card-top">
-            <strong id="hostAnalyticsTitle" style="font-size:14px;">Booking Analytics Export</strong>
-            <button type="button" id="downloadHostAnalytics" disabled style="padding:8px 12px;border-radius:999px;border:1px solid #27425b;background:#111a24;color:#d8ecff;font-size:12px;font-weight:700;cursor:pointer;">Download CSV</button>
-          </div>
-          <p style="font-size:12px;line-height:1.5;color:#9fb5ca;margin:0 0 8px;">Exports aggregate counts by status and event month plus average posted performer pay. It uses only this host's currently loaded feed (up to the 200 newest gigs); older gigs may be omitted. Denominators and unavailable dates/pay are included. This is activity and posted-pay data, not transaction, payout, or reliability history.</p>
-          <div id="hostAnalyticsStatus" role="status" aria-live="polite" style="font-size:12px;color:#9fb5ca;">Waiting for your host booking feed…</div>
-        </section>
       </div>
     </section>
 
@@ -703,7 +707,7 @@
     <form id="gigForm">
       <div class="form-group">
         <label>Venue / Event Name</label>
-        <input type="text" id="venue" placeholder="e.g. The Blue Room" required>
+        <input type="text" id="venue" placeholder="e.g. The Blue Room" maxlength="100" required>
       </div>
 
       <div class="row">
@@ -715,6 +719,11 @@
           <label>Start Time</label>
           <input type="time" id="time" required>
         </div>
+      </div>
+      <div class="form-group">
+        <label for="eventTimeZone">Event timezone (IANA)</label>
+        <input type="text" id="eventTimeZone" maxlength="64" placeholder="America/New_York" required aria-describedby="eventTimeZoneHelp">
+        <p class="fee-note" id="eventTimeZoneHelp">Enter the timezone where the event starts. Example: America/New_York. This is used to compare recurring performer availability across timezones.</p>
       </div>
 
       <div class="row">
@@ -732,27 +741,24 @@
         </div>
       </div>
       <p class="fee-note">Repeated dates create separate gig posts with the same details in one all-or-nothing batch. Maximum 12 dates.</p>
+      <section aria-labelledby="venueRepeatPreferenceTitle" style="margin:12px 0 18px;padding:14px;border:1px solid #2b3b4c;border-radius:10px;background:#10161d;">
+        <h2 id="venueRepeatPreferenceTitle" style="font-size:15px;margin:0 0 6px;">Recurring venue preferences</h2>
+        <p class="fee-note" style="margin:0 0 10px;">Save a weekly or biweekly cadence and number of dates for a venue. Applying it sets the repeat controls in this form; you still choose the start date and review the gig details.</p>
+        <div class="row" style="align-items:end;">
+          <div class="form-group" style="flex:1;">
+            <label for="venueRepeatPreferenceSelect">Saved venue schedule</label>
+            <select id="venueRepeatPreferenceSelect"><option value="">No saved schedule selected</option></select>
+          </div>
+          <button class="ghost-btn" type="button" id="applyVenueRepeatPreferenceBtn" disabled>Apply schedule</button>
+          <button class="ghost-btn" type="button" id="saveVenueRepeatPreferenceBtn">Save current schedule</button>
+          <button class="ghost-btn" type="button" id="deleteVenueRepeatPreferenceBtn" disabled>Delete selected</button>
+        </div>
+        <p id="venueRepeatPreferenceStatus" class="fee-note" role="status" aria-live="polite" style="margin:8px 0 0;">Preferences are saved only in this browser for your signed-in host account. Up to 20 venues.</p>
+      </section>
 
       <div class="form-group">
-        <label for="location">Location</label>
+        <label>Location</label>
         <input type="text" id="location" placeholder="City, State" required>
-        <div id="gigLocationResolution" style="margin-top:10px;padding:12px;border:1px solid #354352;border-radius:10px;background:#101820;">
-          <p style="font-size:13px;line-height:1.5;color:#c8d7ea;">Optional coordinate correction: for this lookup, CLTCH sends the text in Location to the public Nominatim service only after you check consent and click Resolve. No device location is used. Confirming a result affects distance matching and map coordinates; the visible Location text stays as entered. If you post without a confirmed result, the existing posting flow may look up this text to find coordinates.</p>
-          <label for="gigLocationGeocodeConsent" style="display:flex;gap:9px;align-items:flex-start;margin:10px 0;font-size:13px;line-height:1.45;color:#c8d7ea;text-transform:none;letter-spacing:0;">
-            <input id="gigLocationGeocodeConsent" type="checkbox" style="margin-top:3px;">
-            <span>I agree to send this Location text to public Nominatim for coordinate lookup.</span>
-          </label>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;">
-            <button type="button" id="resolveGigLocationBtn" disabled style="min-height:40px;padding:8px 12px;border:1px solid #425263;border-radius:9px;background:#13202d;color:#f4f7fb;font-weight:700;">Resolve location</button>
-            <button type="button" id="cancelGigLocationResolutionBtn" style="min-height:40px;padding:8px 12px;border:1px solid #425263;border-radius:9px;background:transparent;color:#f4f7fb;">Cancel</button>
-          </div>
-          <p id="gigLocationResolutionStatus" role="status" aria-live="polite" style="font-size:12px;line-height:1.5;color:#9fb5ca;margin-top:8px;">No coordinate override selected. Gig posting will use the existing location lookup.</p>
-          <div id="gigLocationCandidatePanel" hidden style="margin-top:10px;padding:10px;border:1px solid #354352;border-radius:8px;">
-            <p id="gigLocationCandidateLabel" style="font-size:13px;line-height:1.5;color:#f4f7fb;"></p>
-            <p style="font-size:12px;line-height:1.5;color:#9fb5ca;margin:6px 0;">Review the candidate. Its coordinates are used only if you confirm.</p>
-            <button type="button" id="useGigLocationCandidateBtn" style="min-height:40px;padding:8px 12px;border:1px solid #355e4e;border-radius:9px;background:#15261f;color:#c7f0d7;font-weight:700;">Use these coordinates</button>
-          </div>
-        </div>
       </div>
 
       <div class="form-group">
@@ -838,10 +844,8 @@
       <button class="btn-post" type="submit" id="submitBtn">Post Gig &rarr;</button>
     </form>
 
-    <div class="status" id="statusMsg"></div>
-    <section id="performerComparison" hidden aria-labelledby="performerComparisonTitle" style="margin-top:16px;padding:14px;border:1px solid #344252;border-radius:12px;background:#10161d;color:#d8e3ee;font-size:13px;line-height:1.55;">
-      <h2 id="performerComparisonTitle" style="margin:0 0 8px;font-size:16px;color:#f4f7fb;">Available profile matches</h2>
-    </section>
+    <div class="status" id="statusMsg" role="status" aria-live="polite"></div>
+    <div id="performerComparison" aria-live="polite"></div>
         </div>
       </section>
 
@@ -895,13 +899,13 @@
 
   <!-- Firebase -->
   <script type="module">
-    import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, deleteField, serverTimestamp, writeBatch }
+    import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, getDoc, getDocs, updateDoc, serverTimestamp, writeBatch }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
-    import { formatUsd } from "./app/usd-format.js";
-    import { AVAILABLE_MUSICIAN_QUERY_LIMIT, buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
-    import { buildPerformerComparison, renderPerformerComparison } from "./app/performer-comparison.js";
+    import { performBookingAction } from "./app/booking-action.js";
+    import { refreshUnreadMessageCount } from "./app/unread-message-count.js";
+    import { buildAvailableMusiciansQuery, buildHostGigQuery } from "./app/gig-queries.js";
     import { findPotentialDuplicateGig } from "./app/duplicate-gig.js";
     import { generateGigDates } from "./app/gig-series.js";
     import { calculateGigSeriesBudget } from "./app/gig-budget.js";
@@ -912,10 +916,11 @@
     import { installUnsavedChangesGuard } from "./app/unsaved-changes.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
+    import { isValidTimeZone } from "./app/recurring-availability.js";
     import { buildBookingHealth } from "./app/booking-health.js";
-    import { HOST_ANALYTICS_FEED_LIMIT, buildHostAnalyticsCsv, downloadHostAnalyticsCsv } from "./app/host-analytics-export.js";
     import { buildBookingIncidentReport } from "./app/booking-incident-report.js";
     import { mountVenueSafetyChecklist } from "./app/venue-safety-checklist.js";
+    import { deleteVenuePreference, findVenuePreference, normalizeVenuePreferenceName, readVenuePreferences, saveVenuePreference } from "./app/venue-preferences.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -952,12 +957,17 @@
       }
     }
 
+    document.getElementById('refreshUnreadMessageCount').addEventListener('click', () => {
+      refreshUnreadMessageCount(auth.currentUser, document.getElementById('unreadMessageSummary'), document.getElementById('refreshUnreadMessageCount'));
+    });
+
     // Gate: must be signed in with a host profile
     onAuthStateChanged(auth, async (user) => {
       if (!user) { window.location.href = 'auth.html'; return; }
       const freshUser = await refreshUserVerification(user);
       if (requiresVerifiedEmail(freshUser)) { await redirectUnverifiedUser(); return; }
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
+      refreshUnreadMessageCount(freshUser, document.getElementById('unreadMessageSummary'), document.getElementById('refreshUnreadMessageCount'));
       const profileSnap = await getDoc(doc(db, 'hosts', freshUser.uid));
       HOST_ID = freshUser.uid;
       mountVenueSafetyChecklist(document.getElementById('venueSafetyChecklist'), { userId: HOST_ID });
@@ -997,15 +1007,47 @@
     const form = document.getElementById('gigForm');
     const seriesCadenceSelect = document.getElementById('gigSeriesCadence');
     const seriesCountInput = document.getElementById('gigSeriesCount');
+    const venueInput = document.getElementById('venue');
+    const venuePreferenceSelect = document.getElementById('venueRepeatPreferenceSelect');
+    const venuePreferenceStatus = document.getElementById('venueRepeatPreferenceStatus');
+    const applyVenuePreferenceBtn = document.getElementById('applyVenueRepeatPreferenceBtn');
+    const saveVenuePreferenceBtn = document.getElementById('saveVenueRepeatPreferenceBtn');
+    const deleteVenuePreferenceBtn = document.getElementById('deleteVenueRepeatPreferenceBtn');
     const savedGigTemplateSelect = document.getElementById('savedGigTemplate');
     const gigTemplateStatus = document.getElementById('gigTemplateStatus');
-    const templateFields = ['venue', 'location', 'genre', 'performerType', 'pay', 'skillNeed', 'notes'];
+    const templateFields = ['venue', 'location', 'genre', 'performerType', 'pay', 'skillNeed', 'notes', 'eventTimeZone'];
     function refreshGigTemplateOptions() {
       if (!savedGigTemplateSelect) return [];
       const templates = HOST_ID ? readGigTemplates(HOST_ID) : [];
       savedGigTemplateSelect.replaceChildren(new Option('Select a saved template', ''));
       templates.forEach((template) => savedGigTemplateSelect.add(new Option(template.name, template.id)));
       return templates;
+    }
+    function getVenuePreferenceStorage() {
+      try { return window.localStorage; } catch { return null; }
+    }
+    function readHostVenuePreferences() {
+      return HOST_ID ? readVenuePreferences(getVenuePreferenceStorage(), HOST_ID) : { items: [], persistent: false, recovered: false };
+    }
+    function refreshVenuePreferenceOptions() {
+      if (!venuePreferenceSelect) return [];
+      const saved = readHostVenuePreferences();
+      venuePreferenceSelect.replaceChildren(new Option('Select a saved venue schedule', ''));
+      saved.items.forEach((preference) => {
+        const cadenceLabel = preference.cadenceDays === 7 ? 'Weekly' : 'Every two weeks';
+        venuePreferenceSelect.add(new Option(`${preference.venue} — ${cadenceLabel}, ${preference.repeatCount} dates`, preference.key));
+      });
+      const currentName = normalizeVenuePreferenceName(venueInput?.value || '');
+      const matching = saved.items.find((preference) => preference.key === currentName);
+      if (matching) venuePreferenceSelect.value = matching.key;
+      applyVenuePreferenceBtn.disabled = !venuePreferenceSelect.value;
+      deleteVenuePreferenceBtn.disabled = !venuePreferenceSelect.value;
+      saveVenuePreferenceBtn.disabled = !venueInput?.value.trim() || Number(seriesCadenceSelect?.value) === 0 || Number(seriesCountInput?.value) < 2;
+      if (!saved.persistent) venuePreferenceStatus.textContent = 'Browser storage is unavailable. Venue schedule preferences cannot be saved on this device.';
+      else if (saved.recovered) venuePreferenceStatus.textContent = 'Some saved venue schedules were invalid and have been ignored.';
+      else if (saved.items.length === 0) venuePreferenceStatus.textContent = 'Preferences are saved only in this browser for your signed-in host account. Up to 20 venues.';
+      else venuePreferenceStatus.textContent = `${saved.items.length} venue schedule preference${saved.items.length === 1 ? '' : 's'} saved only in this browser for your host account.`;
+      return saved.items;
     }
     const syncSeriesCountState = () => {
       const repeating = Number(seriesCadenceSelect?.value || 0) > 0;
@@ -1017,13 +1059,61 @@
       renderPayEstimate();
     };
     seriesCadenceSelect?.addEventListener('change', syncSeriesCountState);
+    venueInput?.addEventListener('input', refreshVenuePreferenceOptions);
+    seriesCadenceSelect?.addEventListener('change', refreshVenuePreferenceOptions);
+    seriesCountInput?.addEventListener('input', refreshVenuePreferenceOptions);
+    venuePreferenceSelect?.addEventListener('change', () => {
+      applyVenuePreferenceBtn.disabled = !venuePreferenceSelect.value;
+      deleteVenuePreferenceBtn.disabled = !venuePreferenceSelect.value;
+    });
+    applyVenuePreferenceBtn?.addEventListener('click', () => {
+      const preference = findVenuePreference(readHostVenuePreferences().items, venuePreferenceSelect.value);
+      if (!preference) {
+        venuePreferenceStatus.textContent = 'Choose a saved venue schedule first.';
+        return;
+      }
+      venueInput.value = preference.venue;
+      venueInput.dispatchEvent(new Event('input', { bubbles: true }));
+      seriesCadenceSelect.value = String(preference.cadenceDays);
+      seriesCadenceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      seriesCountInput.value = String(preference.repeatCount);
+      seriesCountInput.dispatchEvent(new Event('input', { bubbles: true }));
+      seriesCountInput.dispatchEvent(new Event('change', { bubbles: true }));
+      venuePreferenceStatus.textContent = `Applied ${preference.cadenceDays === 7 ? 'weekly' : 'biweekly'} scheduling for ${preference.venue}. Choose a start date and review all gig details before posting.`;
+    });
+    saveVenuePreferenceBtn?.addEventListener('click', () => {
+      const result = saveVenuePreference(getVenuePreferenceStorage(), HOST_ID, venueInput.value, Number(seriesCadenceSelect.value), Number(seriesCountInput.value));
+      if (result.saved) {
+        refreshVenuePreferenceOptions();
+        venuePreferenceSelect.value = result.preference.key;
+        applyVenuePreferenceBtn.disabled = false;
+        deleteVenuePreferenceBtn.disabled = false;
+        venuePreferenceStatus.textContent = `Saved ${result.preference.cadenceDays === 7 ? 'weekly' : 'biweekly'} scheduling for ${result.preference.venue} (${result.preference.repeatCount} dates) in this browser.`;
+      } else if (result.reason === 'limit') {
+        venuePreferenceStatus.textContent = 'You have 20 saved venue schedules. Delete one before saving another venue.';
+      } else if (result.reason === 'storage') {
+        venuePreferenceStatus.textContent = 'Could not access browser storage. This schedule was not saved.';
+      } else {
+        venuePreferenceStatus.textContent = 'Enter a venue, choose weekly or every two weeks, and set 2 to 12 dates before saving.';
+      }
+    });
+    deleteVenuePreferenceBtn?.addEventListener('click', () => {
+      const preference = findVenuePreference(readHostVenuePreferences().items, venuePreferenceSelect.value);
+      if (!preference) return;
+      if (!window.confirm(`Delete the saved repeat schedule for ${preference.venue} from this browser?`)) return;
+      if (deleteVenuePreference(getVenuePreferenceStorage(), HOST_ID, preference.venue)) {
+        refreshVenuePreferenceOptions();
+        venuePreferenceStatus.textContent = `Deleted the saved repeat schedule for ${preference.venue} from this browser.`;
+      } else {
+        venuePreferenceStatus.textContent = 'Could not delete that saved venue schedule from browser storage.';
+      }
+    });
+    form?.addEventListener('reset', () => setTimeout(refreshVenuePreferenceOptions, 0));
     form?.addEventListener('reset', () => setTimeout(syncSeriesCountState, 0));
     const statusMsg = document.getElementById('statusMsg');
-    const performerComparisonEl = document.getElementById('performerComparison');
     const submitBtn = document.getElementById('submitBtn');
     const gigList = document.getElementById('gigList');
     const incidentReportStatus = document.getElementById('incidentReportStatus');
-    const hostAnalyticsButton = document.getElementById('downloadHostAnalytics');
     const payInput = document.getElementById('pay');
     const payEstimate = document.getElementById('payEstimate');
     const gigSearch = document.getElementById('gigSearch');
@@ -1044,20 +1134,6 @@
     const HOST_DRAFT_KEY = 'cltch_host_gig_draft_v1';
     const PROCESSING_FEE_RATE = 0.02;
     let hostGigCache = [];
-    let hostAnalyticsFeedState = 'loading';
-
-    function setHostAnalyticsFeedState(state) {
-      hostAnalyticsFeedState = state;
-      if (hostAnalyticsButton) hostAnalyticsButton.disabled = state !== 'ready';
-      const status = document.getElementById('hostAnalyticsStatus');
-      if (status) {
-        status.textContent = state === 'ready'
-          ? `Live host feed ready. Export summarizes up to ${HOST_ANALYTICS_FEED_LIMIT} newest gigs currently loaded.`
-          : state === 'error'
-            ? 'Could not load your host booking feed. Analytics export is disabled until the feed reconnects.'
-            : 'Waiting for your host booking feed…';
-      }
-    }
     const HOST_STYLE_OPTIONS = {
       any: {
         label: 'Style / Genre',
@@ -1091,7 +1167,7 @@
       }
     };
 
-    const DRAFT_FIELDS = ['venue', 'date', 'time', 'location', 'genre', 'performerType', 'pay', 'skillNeed', 'notes'];
+    const DRAFT_FIELDS = ['venue', 'date', 'time', 'eventTimeZone', 'location', 'genre', 'performerType', 'pay', 'skillNeed', 'notes'];
     const HOST_PRESETS = {
       rooftop: {
         performerType: 'musician',
@@ -1178,6 +1254,10 @@
       if (!match) return null;
       const n = Number(match[0]);
       return Number.isFinite(n) && n > 0 ? n : null;
+    }
+
+    function formatUsd(amount) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
     }
 
     function readDraft() {
@@ -1466,21 +1546,6 @@
       }
     }
 
-    hostAnalyticsButton?.addEventListener('click', () => {
-      const status = document.getElementById('hostAnalyticsStatus');
-      if (hostAnalyticsFeedState !== 'ready' || !HOST_ID) {
-        if (status) status.textContent = 'Analytics export is unavailable until the signed-in host feed finishes loading.';
-        return;
-      }
-      try {
-        const csv = buildHostAnalyticsCsv(hostGigCache, HOST_ID);
-        downloadHostAnalyticsCsv(csv);
-        if (status) status.textContent = 'Aggregate analytics CSV downloaded to this device. Figures cover the currently loaded host feed, up to the 200 newest gigs.';
-      } catch {
-        if (status) status.textContent = 'Could not prepare the analytics CSV. Reload the host workspace and try again.';
-      }
-    });
-
     function renderHostGigList() {
       const gigs = hostGigCache.filter(matchesGigFilter);
       if (!gigs.length) {
@@ -1607,6 +1672,7 @@
       document.getElementById('venue').value = gig.venue || '';
       document.getElementById('date').value = gig.date || '';
       document.getElementById('time').value = gig.time || '';
+      document.getElementById('eventTimeZone').value = isValidTimeZone(gig.timeZone) ? gig.timeZone : (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
       document.getElementById('location').value = gig.location || '';
       performerTypeSelect.value = gig.performerType || 'any';
       syncGenreOptionsForType(true);
@@ -1687,7 +1753,9 @@
       for (const field of templateFields) {
         if (field === 'performerType' || field === 'genre') continue;
         const input = document.getElementById(field);
-        if (input) input.value = template.fields[field];
+        if (input) input.value = field === 'eventTimeZone'
+          ? (isValidTimeZone(template.fields[field]) ? template.fields[field] : (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'))
+          : template.fields[field];
       }
       performerTypeSelect.value = template.fields.performerType || 'any';
       syncGenreOptionsForType(true);
@@ -1754,11 +1822,7 @@
       }
       if (!window.confirm('Reopen this gig and return it to the live matching feed?')) return;
       try {
-        await updateDoc(doc(db, 'gigs', gigId), {
-          status: 'open',
-          acceptedBy: deleteField(),
-          checkedInAt: deleteField()
-        });
+        await performBookingAction(auth, gigId, 'reopen');
         statusMsg.className = 'status success';
         statusMsg.textContent = 'Gig reopened and returned to the live matching feed with no prior performer attached.';
       } catch (err) {
@@ -1787,13 +1851,7 @@
       }
       const cancelReason = normalizeCancellationReason(reasonInput);
       try {
-        const payload = { status: 'cancelled' };
-        if (currentGig.acceptedBy) payload.acceptedBy = deleteField();
-        if (currentGig.checkedInAt) payload.checkedInAt = deleteField();
-        if (cancelReason) payload.cancelReason = String(cancelReason).slice(0, 160);
-        else if (currentGig.cancelReason) payload.cancelReason = deleteField();
-        payload.cancelledAt = serverTimestamp();
-        await updateDoc(doc(db, 'gigs', gigId), payload);
+        await performBookingAction(auth, gigId, 'cancel', { cancelReason });
         statusMsg.className = 'status success';
         statusMsg.textContent = currentGig.status === 'accepted'
           ? 'Gig cancelled. It is no longer active in the booking flow and no performer remains attached. No performer notification was sent.'
@@ -1818,68 +1876,6 @@
       return null;
     }
 
-    let confirmedGigCoordinates = null;
-    let gigLocationCandidate = null;
-    let gigLocationResolutionSequence = 0;
-    const gigLocationInput = document.getElementById('location');
-    const gigLocationConsent = document.getElementById('gigLocationGeocodeConsent');
-    const resolveGigLocationBtn = document.getElementById('resolveGigLocationBtn');
-    const cancelGigLocationResolutionBtn = document.getElementById('cancelGigLocationResolutionBtn');
-    const gigLocationResolutionStatus = document.getElementById('gigLocationResolutionStatus');
-    const gigLocationCandidatePanel = document.getElementById('gigLocationCandidatePanel');
-    const gigLocationCandidateLabel = document.getElementById('gigLocationCandidateLabel');
-    const useGigLocationCandidateBtn = document.getElementById('useGigLocationCandidateBtn');
-
-    gigLocationConsent.addEventListener('change', () => {
-      resolveGigLocationBtn.disabled = !gigLocationConsent.checked;
-    });
-    gigLocationInput.addEventListener('input', () => {
-      gigLocationResolutionSequence += 1;
-      confirmedGigCoordinates = null;
-      gigLocationCandidate = null;
-      gigLocationCandidatePanel.hidden = true;
-      gigLocationResolutionStatus.textContent = 'Location text changed. Resolve and confirm coordinates again if you want an override.';
-    });
-    resolveGigLocationBtn.addEventListener('click', async () => {
-      const location = gigLocationInput.value.trim();
-      if (!gigLocationConsent.checked || !location) {
-        gigLocationResolutionStatus.textContent = 'Check the consent box and enter a Location before resolving. No request was sent.';
-        return;
-      }
-      const sequence = ++gigLocationResolutionSequence;
-      confirmedGigCoordinates = null;
-      gigLocationCandidate = null;
-      gigLocationCandidatePanel.hidden = true;
-      resolveGigLocationBtn.disabled = true;
-      gigLocationResolutionStatus.textContent = 'Sending the entered Location text to Nominatim for a coordinate candidate…';
-      const result = await resolveGigLocationCandidate({ location, consentGiven: true });
-      if (sequence !== gigLocationResolutionSequence || location !== gigLocationInput.value.trim()) return;
-      resolveGigLocationBtn.disabled = !gigLocationConsent.checked;
-      if (!result.ok) {
-        gigLocationResolutionStatus.textContent = 'No valid coordinate candidate was returned. The normal gig location lookup remains available when you post.';
-        return;
-      }
-      gigLocationCandidate = result.candidate;
-      gigLocationCandidateLabel.textContent = result.candidate.label;
-      gigLocationCandidatePanel.hidden = false;
-      gigLocationResolutionStatus.textContent = 'Candidate ready. Confirm it to override the coordinates used for matching and maps.';
-    });
-    useGigLocationCandidateBtn.addEventListener('click', () => {
-      if (!gigLocationCandidate || !isValidGigCoordinatePoint(gigLocationCandidate)) return;
-      confirmedGigCoordinates = { lat: gigLocationCandidate.lat, lng: gigLocationCandidate.lng };
-      gigLocationResolutionStatus.textContent = 'Coordinate override confirmed for this gig only. The visible Location text is unchanged.';
-      gigLocationCandidatePanel.hidden = true;
-    });
-    cancelGigLocationResolutionBtn.addEventListener('click', () => {
-      gigLocationResolutionSequence += 1;
-      confirmedGigCoordinates = null;
-      gigLocationCandidate = null;
-      gigLocationConsent.checked = false;
-      resolveGigLocationBtn.disabled = true;
-      gigLocationCandidatePanel.hidden = true;
-      gigLocationResolutionStatus.textContent = 'Location coordinate lookup canceled. No override is selected.';
-    });
-
     // Haversine distance in miles
     function miles(lat1, lng1, lat2, lng2) {
       const R = 3958.8;
@@ -1891,10 +1887,9 @@
     }
 
     async function countMatches(genre, performerType, gigLat, gigLng, skillNeed) {
-      if (!Number.isFinite(gigLat) || !Number.isFinite(gigLng)) return { count: 0, radius: 40, comparison: null };
+      if (!Number.isFinite(gigLat) || !Number.isFinite(gigLng)) return { count: 0, radius: 40, candidates: [] };
       const snap = await getDocs(buildAvailableMusiciansQuery(db, performerType));
-      const candidates = [];
-      let count40 = 0, count65 = 0;
+      const count40 = [], count65 = [];
       snap.forEach(d => {
         const p = d.data();
         if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
@@ -1909,22 +1904,45 @@
         const skillMatch = skillMatchScore(skillNeed, p);
         if (!skillMatch.matched) return;
         const dist = miles(gigLat, gigLng, p.lat, p.lng);
-        if (dist <= 40) count40++;
-        else if (dist <= 65) count65++;
-        if (dist <= 65) candidates.push({ id: d.id, profile: p, distanceMiles: dist });
+        const candidate = { id: d.id, profile: p, distance: Math.round(dist) };
+        if (dist <= 40) count40.push(candidate);
+        else if (dist <= 65) count65.push(candidate);
       });
-      const radius = count40 > 0 ? 40 : 65;
-      const count = count40 > 0 ? count40 : count65;
-      const inRadius = candidates.filter((candidate) => candidate.distanceMiles <= radius);
-      return {
-        count,
-        radius,
-        comparison: buildPerformerComparison(inRadius, {
-          loadedCount: snap.size,
-          feedLimit: AVAILABLE_MUSICIAN_QUERY_LIMIT,
-          radius
-        })
-      };
+      const candidates = count40.length > 0 ? count40 : count65;
+      candidates.sort((a, b) => a.distance - b.distance || String(a.id).localeCompare(String(b.id)));
+      return { count: candidates.length, radius: count40.length > 0 ? 40 : 65, candidates: candidates.slice(0, 8) };
+    }
+
+    function renderPerformerComparison(candidates, radius) {
+      const container = document.getElementById('performerComparison');
+      container.replaceChildren();
+      if (!candidates?.length) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'performer-compare-wrap';
+      const table = document.createElement('table');
+      table.className = 'performer-compare';
+      const caption = document.createElement('caption');
+      caption.textContent = `Available performers matching this gig (nearest ${candidates.length}, within ${radius} miles)`;
+      table.append(caption);
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      [['Performer', 'Performer'], ['Role', 'Role'], ['Genres or specialties', 'Genres or specialties'], ['Rate', 'Rate'], ['Distance', 'Approximate distance']].forEach(([label, accessibleName]) => {
+        const th = document.createElement('th'); th.scope = 'col'; th.textContent = label; th.setAttribute('aria-label', accessibleName); headerRow.append(th);
+      });
+      thead.append(headerRow); table.append(thead);
+      const tbody = document.createElement('tbody');
+      candidates.forEach(({ id, profile, distance }) => {
+        const row = document.createElement('tr');
+        const name = profile.stageName || [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Performer';
+        const nameCell = document.createElement('th'); nameCell.scope = 'row';
+        const link = document.createElement('a'); link.href = `performer-view.html?id=${encodeURIComponent(id)}`; link.textContent = name; nameCell.append(link);
+        const role = document.createElement('td'); role.textContent = ({ musician:'Musician / Band', dj:'DJ', photographer:'Photographer', cinematographer:'Cinematographer', model:'Model' })[profile.performerType || 'musician'] || 'Performer';
+        const genres = document.createElement('td'); genres.textContent = Array.isArray(profile.genres) ? profile.genres.slice(0, 5).join(', ') : 'Not listed';
+        const rate = document.createElement('td'); rate.textContent = profile.rate || 'Negotiable';
+        const miles = document.createElement('td'); miles.textContent = `About ${distance} mi`;
+        row.append(nameCell, role, genres, rate, miles); tbody.append(row);
+      });
+      table.append(tbody); wrap.append(table); container.append(wrap);
     }
 
     function applyRebookDraftIfPresent() {
@@ -1952,12 +1970,15 @@
     }
 
     function startApp() {
+    const eventTimeZoneInput = document.getElementById('eventTimeZone');
+    if (eventTimeZoneInput && !eventTimeZoneInput.value) {
+      eventTimeZoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    }
     refreshGigTemplateOptions();
+    refreshVenuePreferenceOptions();
     applyRebookDraftIfPresent();
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      performerComparisonEl.hidden = true;
-      performerComparisonEl.replaceChildren(document.getElementById('performerComparisonTitle'));
       if (!hostProfileReady) {
         saveDraft();
         statusMsg.className = 'status error';
@@ -1975,8 +1996,17 @@
         venue: document.getElementById('venue').value.trim(),
         date: document.getElementById('date').value,
         time: document.getElementById('time').value,
+        timeZone: eventTimeZoneInput.value.trim(),
         location
       };
+      if (!isValidTimeZone(baseGig.timeZone)) {
+        statusMsg.className = 'status error';
+        statusMsg.textContent = 'Enter a valid IANA event timezone, such as America/New_York.';
+        eventTimeZoneInput.focus();
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Post Gig →';
+        return;
+      }
       let seriesDates;
       try {
         seriesDates = generateGigDates(baseGig.date, Number(seriesCountInput?.value || 1), Number(seriesCadenceSelect?.value || 0));
@@ -1999,9 +2029,7 @@
 
       // Geocode gig location before posting
       submitBtn.textContent = 'Locating…';
-      const coords = confirmedGigCoordinates && isValidGigCoordinatePoint(confirmedGigCoordinates)
-        ? confirmedGigCoordinates
-        : await geocode(location);
+      const coords = await geocode(location);
 
       const gig = {
         ...baseGig,
@@ -2045,14 +2073,16 @@
         const skillNeed = document.getElementById('skillNeed').value.trim();
         const match = coords
           ? await countMatches(genre, performerType, coords.lat, coords.lng, skillNeed)
-          : { count: 0, radius: 40 };
-        if (coords && match.comparison) renderPerformerComparison(performerComparisonEl, match.comparison);
+          : { count: 0, radius: 40, candidates: [] };
+
+        renderPerformerComparison(match.candidates, match.radius);
 
         statusMsg.className = 'status success';
         statusMsg.textContent = match.count > 0
           ? `${seriesDates.length} gig post${seriesDates.length === 1 ? '' : 's'} created. ${match.count} available performer profile${match.count === 1 ? '' : 's'} match within ${match.radius} miles; no notification was sent.`
           : `${seriesDates.length} gig post${seriesDates.length === 1 ? '' : 's'} created. No available performer profiles matched nearby; review the listing details or check back later.`;
         form.reset();
+        eventTimeZoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         renderPayEstimate();
         clearDraft();
         dirtyGuard.markSaved();
@@ -2074,14 +2104,10 @@
         nextHostGigCache.push({ gigId: docSnap.id, g: docSnap.data() });
       });
       hostGigCache = nextHostGigCache;
-      setHostAnalyticsFeedState('ready');
       updateHostOpsStats(hostGigCache.map((item) => item.g));
       renderHostGigList();
       renderBookingHealth(hostGigCache);
-    }, () => {
-      setHostAnalyticsFeedState('error');
-      clearBookingHealthOnError();
-    }));
+    }, () => clearBookingHealthOnError()));
 
     // ── Grade system ──────────────────────────────────────────────────
     const GRADES       = ['AA','A','B','C','D','F','N'];

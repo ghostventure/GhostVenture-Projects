@@ -257,6 +257,15 @@
     .review-date { font-size: 12px; color: #444; margin-bottom: 8px; }
     .review-text { font-size: 14px; color: #aaa; line-height: 1.6; font-style: italic; }
     .no-reviews  { color: #444; font-size: 14px; padding: 16px 0; }
+    .review-response { margin-top:12px; padding:12px; border-left:3px solid #f5a623; background:#101010; color:#ccc; }
+    .review-response p { margin-top:6px; line-height:1.5; overflow-wrap:anywhere; }
+    .review-response-form { display:grid; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid #292929; }
+    .review-response-form label { display:grid; gap:5px; color:#aaa; font-size:13px; }
+    .review-response-form select,.review-response-form textarea { width:100%; min-height:40px; padding:9px; color:#eee; background:#090909; border:1px solid #444; border-radius:7px; font:inherit; }
+    .review-response-form textarea { min-height:80px; resize:vertical; }
+    .review-response-form button { min-height:40px; justify-self:start; padding:0 14px; border:0; border-radius:7px; background:#f5a623; color:#111; font-weight:700; cursor:pointer; }
+    .review-response-form button:disabled { opacity:.6; cursor:wait; }
+    .review-response-form [role="status"] { color:#a9d8bc; font-size:13px; }
     .grade-breakdown { margin-bottom: 20px; }
     .grade-bar-row {
       display: flex;
@@ -340,7 +349,7 @@
   <footer>&copy; 2026 CLTCH.NTWRK &mdash; <a href="about.html" style="color:#555;text-decoration:none;margin:0 6px;">About</a> <a href="faq.html" style="color:#555;text-decoration:none;margin:0 6px;">FAQ</a> <a href="contact.html" style="color:#555;text-decoration:none;margin:0 6px;">Contact</a> <a href="press.html" style="color:#555;text-decoration:none;margin:0 6px;">Press</a> <a href="accessibility.html" style="color:#555;text-decoration:none;margin:0 6px;">Accessibility</a> <a href="dmca.html" style="color:#555;text-decoration:none;margin:0 6px;">DMCA</a> <a href="terms.html" style="color:#555;text-decoration:none;margin:0 6px;">Terms</a> <a href="privacy.html" style="color:#555;text-decoration:none;margin:0 6px;">Privacy</a></footer>
 
   <script type="module">
-    import { getFirestore, doc, getDoc, collection, query, orderBy, limit, getDocs }
+    import { getFirestore, doc, getDoc, setDoc, collection, query, orderBy, limit, getDocs, serverTimestamp }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, reload, signOut } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
@@ -440,12 +449,23 @@
       let reviewLoadFailed = false;
       try {
         const reviewsSnap = await getDocs(query(reviewsRef, orderBy('createdAt', 'desc'), limit(50)));
-        reviewsSnap.forEach(r => reviews.push(r.data()));
+        reviewsSnap.forEach(r => reviews.push({ ...r.data(), id: r.id }));
       } catch (error) {
         console.error('Could not load performer reviews', error);
         reviewLoadFailed = true;
       }
       const reviewCount = reviews.length;
+      const isOwnProfile = auth.currentUser?.uid === id;
+      const reviewResponses = new Map();
+      if (reviews.length) {
+        await Promise.all(reviews.slice(0, 10).map(async (review) => {
+          if (!review.id) return;
+          try {
+            const responseSnap = await getDoc(doc(db, 'musicians', id, 'reviews', review.id, 'responses', id));
+            if (responseSnap.exists()) reviewResponses.set(review.id, responseSnap.data());
+          } catch (error) { console.warn('Review response unavailable', error); }
+        }));
+      }
 
       // Grade tally
       const tally    = Object.fromEntries(GRADES_V.map(g => [g, 0]));
@@ -563,6 +583,7 @@
             : gradeBreakdown + reviews.slice(0,10).map(r => {
                 const color = GRADE_COLORS_V[r.grade] || '#555';
                 const date = reviewDateLabel(r.createdAt);
+                const response = reviewResponses.get(r.id);
                 return `
               <div class="review-card">
                 <div class="review-top">
@@ -571,11 +592,42 @@
                 </div>
                 <div class="review-date">${date}</div>
                 ${r.feedback ? `<div class="review-text">"${escapeHtml(r.feedback)}"</div>` : ''}
+                ${response ? `<div class="review-response"><strong>${response.kind === 'correction' ? 'Correction request' : 'Performer response'}</strong><p>${escapeHtml(response.message)}</p></div>` : ''}
+                ${isOwnProfile && r.id ? (response
+                  ? '<p class="review-date">You have submitted a response for this review.</p>'
+                  : `<form class="review-response-form" data-review-id="${escapeHtml(r.id)}"><label>Respond to this review <select name="kind" required><option value="response">Public response</option><option value="correction">Request a correction</option></select></label><label>Message <textarea name="message" maxlength="500" required aria-describedby="review-response-help-${escapeHtml(r.id)}"></textarea></label><small id="review-response-help-${escapeHtml(r.id)}">Up to 500 characters. This will be visible with the review.</small><button type="submit">Submit response</button><span role="status" aria-live="polite"></span></form>`
+                ) : ''}
               </div>`;}).join('')
           }
         </div>
       `;
       window.CLTCHLoading?.done();
+
+      document.querySelectorAll('.review-response-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const status = form.querySelector('[role="status"]');
+          const submit = form.querySelector('button[type="submit"]');
+          const message = String(new FormData(form).get('message') || '').trim();
+          const kind = new FormData(form).get('kind');
+          if (!message || message.length > 500 || !['response', 'correction'].includes(kind)) {
+            status.textContent = 'Enter a message up to 500 characters.';
+            return;
+          }
+          submit.disabled = true;
+          try {
+            await setDoc(doc(db, 'musicians', id, 'reviews', form.dataset.reviewId, 'responses', id), {
+              kind, message, createdAt: serverTimestamp()
+            });
+            status.textContent = 'Submitted. Your response is now attached to the review.';
+            form.replaceWith(Object.assign(document.createElement('p'), { className: 'review-date', textContent: 'You have submitted a response for this review.' }));
+          } catch (error) {
+            console.error('Could not submit review response', error);
+            status.textContent = 'Could not submit. Check your connection and try again.';
+            submit.disabled = false;
+          }
+        });
+      });
 
       // Show book bar
       document.getElementById('rateDisplay').textContent = d.rate || 'Negotiable';

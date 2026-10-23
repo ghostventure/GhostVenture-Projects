@@ -1357,7 +1357,6 @@
         <span class="count-pill" id="matchedQueueCount" style="display:none;"></span>
       </div>
       <p class="section-sub">All upcoming matched requests in one list. Review details, approve, or pass without digging through cards.</p>
-      <section id="hostMutePanel" aria-label="Mute hosts from matching" style="margin:12px 0;padding:14px;border:1px solid #2a3d50;border-radius:12px;background:#111923;"></section>
       <div id="matchedQueueList">
         <div class="empty-sm">No live matches yet.</div>
       </div>
@@ -1397,17 +1396,18 @@
 
   <script type="module">
     import { getFirestore, collection, query, where, orderBy, limit, onSnapshot,
-             doc, updateDoc, getDoc, getDocs, arrayUnion, deleteField, runTransaction, serverTimestamp }
+             doc, updateDoc, getDoc, getDocs, arrayUnion }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
+    import { performBookingAction } from "./app/booking-action.js";
     import { buildAcceptedGigQuery, buildOpenGigFeedQuery, isoToday } from "./app/gig-queries.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
+    import { availabilityPauseActive } from "./app/availability-pause.js";
     import { derivePerformerTier, describeTierProgress } from "./app/performer-tier.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
-    import { createHostMuteController, mountHostMutePanel, createHostMuteButton, filterMutedHostMatches } from "./app/host-mutes.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1429,7 +1429,6 @@
     let MUSICIAN_ID     = null;
     let musicianProfile = null;
     let matchedGigFeed  = [];
-    let hostMuteController = null;
     let reviewCache     = [];
     let activeGigFilter = localStorage.getItem('cltch_gig_filter_v1') || 'all';
 
@@ -1440,7 +1439,6 @@
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
       const profileSnap = await getDoc(doc(db, 'musicians', user.uid));
       MUSICIAN_ID     = user.uid;
-      initHostMuteControls(MUSICIAN_ID);
       musicianProfile = profileSnap.exists() ? profileSnap.data() : {};
       writeUserSummary(db, user.uid, {
         role: 'musician',
@@ -1768,32 +1766,8 @@
       });
     }
 
-    function getUnmutedMatches() {
-      return filterMutedHostMatches(matchedGigFeed, hostMuteController?.getMutedHostIds() || []);
-    }
-
-    function initHostMuteControls(userId) {
-      if (hostMuteController?.userId === userId) return;
-      hostMuteController = createHostMuteController({ userId });
-      mountHostMutePanel(document.getElementById('hostMutePanel'), hostMuteController, document);
-      hostMuteController.subscribe(() => {
-        const current = getUnmutedMatches();
-        analyticsState.activeMatches = current.length;
-        analyticsState.avgMatchPercent = current.length
-          ? Math.round(current.reduce((sum, item) => sum + (item.match.percent || 0), 0) / current.length)
-          : 0;
-        updateAnalyticsPanel();
-        renderQueues();
-      });
-    }
-
-    function appendHostMuteButton(container, hostId) {
-      const button = createHostMuteButton(hostId, hostMuteController, document);
-      if (button && container) container.append(button);
-    }
-
     function getVisibleMatches() {
-      return getUnmutedMatches().filter(matchesFeedControls);
+      return matchedGigFeed.filter(matchesFeedControls);
     }
 
     function renderQueues() {
@@ -1844,7 +1818,7 @@
       document.getElementById('dashStage').textContent    = p.stageName || meta.label;
       document.getElementById('dashLocation').textContent = p.location  || '';
       const pill = document.getElementById('dashAvailPill');
-      const open = p.available !== false;
+      const open = !availabilityPauseActive(p);
       pill.innerHTML = `
         <div class="avail-pill ${open ? 'open' : 'closed'}">
           <div class="avail-dot ${open ? 'open' : 'closed'}"></div>
@@ -2079,7 +2053,7 @@
 
     // Returns a match descriptor with a percent score (Uber-style confidence ranking).
     function matchScore(gig, profile, useFallback) {
-      if (!profile || profile.available === false) return null;
+      if (!profile || availabilityPauseActive(profile)) return null;
       if (!performerTypeMatch(gig, profile)) return null;
       if (!genreMatch(gig, profile)) return null;
       const skill = skillMatch(gig, profile);
@@ -2147,6 +2121,22 @@
       return Math.round((new Date(y,m-1,d) - new Date()) / 86400000);
     }
 
+    // Gig dates are stored as date-only values today, so a conflict means the
+    // same listed calendar date, not a verified time overlap. Show the
+    // viewer's device timezone and make that limitation explicit in the alert.
+    function conflictTimezoneLabel() {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'local device time';
+      } catch (_) {
+        return 'local device time';
+      }
+    }
+    function escapeConflictLabel(value) {
+      return String(value).replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[character]);
+    }
+
     // ── Open Requests Feed ────────────────────────────────────────────
     function startListening() {
       const blackouts      = new Set(musicianProfile.blackoutDates  || []);
@@ -2187,10 +2177,9 @@
           return daysUntil(a.docSnap.data().date) - daysUntil(b.docSnap.data().date);
         });
 
-        const visibleMatched = matched.filter(({ docSnap }) => !hostMuteController?.isMuted(docSnap.data().hostId));
-        analyticsState.activeMatches = visibleMatched.length;
-        analyticsState.avgMatchPercent = visibleMatched.length > 0
-          ? Math.round(visibleMatched.reduce((sum, item) => sum + (item.match.percent || 0), 0) / visibleMatched.length)
+        analyticsState.activeMatches = matched.length;
+        analyticsState.avgMatchPercent = matched.length > 0
+          ? Math.round(matched.reduce((sum, item) => sum + (item.match.percent || 0), 0) / matched.length)
           : 0;
         updateAnalyticsPanel();
         matchedGigFeed = matched.map(({ docSnap, match }) => {
@@ -2219,9 +2208,7 @@
       const visibleMatches = getVisibleMatches();
       if (!visibleMatches.length) {
         countEl.style.display = 'none';
-        listEl.innerHTML = matchedGigFeed.length
-          ? '<div class="empty-sm">Current matches from muted hosts are hidden on this browser and device. Unmute a host above to show them again. Booking access is unchanged.</div>'
-          : '<div class="empty-sm">No live matches yet. New matches will show up here as hosts post fitting gigs.</div>';
+        listEl.innerHTML = '<div class="empty-sm">No live matches yet. New matches will show up here as hosts post fitting gigs.</div>';
         return;
       }
       countEl.textContent = String(visibleMatches.length);
@@ -2237,7 +2224,7 @@
               <div class="matched-gig-tags">
                 <span class="matched-gig-tag">${match.percent}% match</span>
                 ${(match.reasons || []).slice(0, 3).map((reason) => `<span class="matched-gig-tag">${reason}</span>`).join('')}
-                ${hasConflict ? '<span class="matched-gig-tag warn">Date conflict</span>' : ''}
+                ${hasConflict ? `<span class="matched-gig-tag warn" title="Same listed calendar date; confirm event time and venue timezone. Device timezone: ${escapeConflictLabel(conflictTimezoneLabel())}">Date conflict · ${escapeConflictLabel(conflictTimezoneLabel())} (confirm event time)</span>` : ''}
               </div>
             </div>
             <div class="matched-gig-actions">
@@ -2247,9 +2234,6 @@
             </div>
           </div>`;
       }).join('');
-      visibleMatches.forEach((item, index) => {
-        appendHostMuteButton(listEl.children[index]?.querySelector('.matched-gig-actions'), item.g.hostId);
-      });
     }
 
     function renderOpenRequests() {
@@ -2257,17 +2241,15 @@
       const newBadge = document.getElementById('newBadge');
       const visibleMatches = getVisibleMatches();
 
-      if (!getUnmutedMatches().length) {
+      if (matchedGigFeed.length === 0) {
         newBadge.style.display = 'none';
-        gigList.innerHTML = matchedGigFeed.length
-          ? `<div class="empty"><span>🔕</span>Current matches from muted hosts are hidden on this browser and device. Unmute a host above to show them again. Booking access is unchanged.</div>`
-          : `<div class="empty"><span>🎵</span>No matching gigs right now. Tighten your profile, keep availability open, and check back as new host requests come in.</div>`;
+        gigList.innerHTML = `<div class="empty"><span>🎵</span>No matching gigs right now. Tighten your profile, keep availability open, and check back as new host requests come in.</div>`;
         return;
       }
 
       if (visibleMatches.length === 0) {
         newBadge.style.display = 'inline-block';
-        newBadge.textContent = `${getUnmutedMatches().length} LIVE`;
+        newBadge.textContent = `${matchedGigFeed.length} LIVE`;
         gigList.innerHTML = `<div class="empty"><span>🔎</span>No gigs match your current search or filter. Reset the queue controls or widen your view.</div>`;
         return;
       }
@@ -2290,7 +2272,7 @@
         if (hasConflict) card.style.borderColor = '#6e3a00';
 
         const conflictChip = hasConflict
-          ? `<span class="conflict-chip">⚠ Date Conflict</span>`
+          ? `<span class="conflict-chip" title="Same listed calendar date; confirm event time and venue timezone. Device timezone: ${escapeConflictLabel(conflictTimezoneLabel())}">⚠ Date conflict · ${escapeConflictLabel(conflictTimezoneLabel())} (confirm event time)</span>`
           : '';
 
         const dateLabel = (() => {
@@ -2327,7 +2309,6 @@
             <button class="btn btn-accept" onclick="respond('${gigId}','accept')">Accept</button>
             <button class="btn btn-pass"   onclick="respond('${gigId}','pass')">Pass</button>
           </div>`;
-        appendHostMuteButton(card.querySelector('.actions'), g.hostId);
         gigList.appendChild(card);
         addSwipeGesture(card, gigId);
       });
@@ -2400,66 +2381,11 @@
           }
 
           exitCard(card, 'right');
-          let acceptedGig = null;
-          const musicianRef = doc(db, 'musicians', MUSICIAN_ID);
-
-          await runTransaction(db, async (tx) => {
-            const gigSnap = await tx.get(gigRef);
-            const musicianSnap = await tx.get(musicianRef);
-            if (!gigSnap.exists()) throw new Error('Gig is no longer available.');
-
-            const liveGig = gigSnap.data();
-            if (liveGig.hostId === MUSICIAN_ID) {
-              throw new Error('You cannot accept your own gig as a performer.');
-            }
-            if (liveGig.status !== 'open') {
-              throw new Error('This gig has already been taken.');
-            }
-
-            tx.update(gigRef, {
-              status:'accepted',
-              acceptedBy: MUSICIAN_ID,
-              acceptedAt: serverTimestamp(),
-              lockedPay: liveGig.pay || '',
-              lockedDate: liveGig.date || '',
-              lockedTime: liveGig.time || '',
-              lockedLocation: liveGig.location || '',
-              ...(Number.isFinite(Number(liveGig.processingFeeAmount)) ? { lockedProcessingFeeAmount: Number(liveGig.processingFeeAmount) } : {}),
-              ...(Number.isFinite(Number(liveGig.hostTotalCharge)) ? { lockedHostTotalCharge: Number(liveGig.hostTotalCharge) } : {})
-            });
-            acceptedGig = liveGig;
-
-            if (liveGig.date) {
-              const booking = {
-                gigId,
-                id: gigId,
-                date:     liveGig.date,
-                venue:    liveGig.venue    || '',
-                time:     liveGig.time     || '',
-                pay:      liveGig.pay      || '',
-                location: liveGig.location || '',
-                genre:    liveGig.genre    || ''
-              };
-              const bookedDates = Array.isArray(musicianSnap.data()?.bookedDates) ? musicianSnap.data().bookedDates : [];
-              tx.update(musicianRef, {
-                bookedDates: pruneBookedDatesCache(bookedDates, booking)
-              });
-            }
-          });
-
-          if (acceptedGig && acceptedGig.date) {
-            const booking = {
-              gigId,
-              id: gigId,
-              date:     acceptedGig.date,
-              venue:    acceptedGig.venue    || '',
-              time:     acceptedGig.time     || '',
-              pay:      acceptedGig.pay      || '',
-              location: acceptedGig.location || '',
-              genre:    acceptedGig.genre    || ''
-            };
-            const existingBookings = musicianProfile.bookedDates || [];
-            musicianProfile.bookedDates = pruneBookedDatesCache(existingBookings, booking);
+          const actionResult = await performBookingAction(auth, gigId, 'accept');
+          const acceptedGig = actionResult.booking || gigDataCache[gigId];
+          if (acceptedGig?.date) {
+            const booking = { gigId, id: gigId, date: acceptedGig.date, venue: acceptedGig.venue || '', time: acceptedGig.time || '', pay: acceptedGig.pay || '', location: acceptedGig.location || '', genre: acceptedGig.genre || '' };
+            musicianProfile.bookedDates = pruneBookedDatesCache(musicianProfile.bookedDates || [], booking);
           }
 
           loadUpcomingGigs();
@@ -2482,6 +2408,7 @@
         }
       } catch (err) {
         console.error(err);
+        if (action === 'accept') alert(err.message || 'Unable to accept this booking right now.');
         responding.delete(gigId);
         card.style.transform=''; card.style.opacity='';
         card.querySelectorAll('.btn').forEach(b => b.disabled=false);
@@ -2490,8 +2417,6 @@
 
     window.cancelBooking = async (gigId) => {
       if (!gigId) return;
-      const gigRef = doc(db, 'gigs', gigId);
-      const musicianRef = doc(db, 'musicians', MUSICIAN_ID);
       const currentGig = gigDataCache[gigId];
       if (currentGig?.date && currentGig.date < new Date().toISOString().slice(0, 10)) {
         alert('Past gigs cannot be canceled from this list.');
@@ -2499,29 +2424,7 @@
       }
       if (!window.confirm('Cancel this booking and reopen it for other performers?')) return;
       try {
-        await runTransaction(db, async (tx) => {
-          const gigSnap = await tx.get(gigRef);
-          const musicianSnap = await tx.get(musicianRef);
-          if (!gigSnap.exists()) throw new Error('This booking no longer exists.');
-          const gig = gigSnap.data();
-          if (gig.acceptedBy !== MUSICIAN_ID) throw new Error('This booking is no longer assigned to you.');
-          const bookedDates = Array.isArray(musicianSnap.data()?.bookedDates) ? musicianSnap.data().bookedDates : [];
-          tx.update(gigRef, {
-            status: 'open',
-            acceptedBy: deleteField(),
-            acceptedAt: deleteField(),
-            lockedPay: deleteField(),
-            lockedDate: deleteField(),
-            lockedTime: deleteField(),
-            lockedLocation: deleteField(),
-            lockedProcessingFeeAmount: deleteField(),
-            lockedHostTotalCharge: deleteField(),
-            checkedInAt: deleteField()
-          });
-          tx.update(musicianRef, {
-            bookedDates: pruneBookedDatesCache(bookedDates.filter((booking) => booking && booking.gigId !== gigId))
-          });
-        });
+        await performBookingAction(auth, gigId, 'cancel');
         if (Array.isArray(musicianProfile.bookedDates)) {
           musicianProfile.bookedDates = pruneBookedDatesCache(musicianProfile.bookedDates.filter((booking) => booking && booking.gigId !== gigId));
         }
@@ -2553,8 +2456,9 @@
         alert(state.reason || 'This booking cannot be checked in right now.');
         return;
       }
+      if (!window.confirm('Share your arrival check-in with the host?')) return;
       try {
-        await updateDoc(doc(db, 'gigs', gigId), { checkedInAt: serverTimestamp() });
+        await performBookingAction(auth, gigId, 'checkin');
         if (gigDataCache[gigId]) gigDataCache[gigId].checkedInAt = new Date().toISOString();
         await loadUpcomingGigs();
       } catch (err) {

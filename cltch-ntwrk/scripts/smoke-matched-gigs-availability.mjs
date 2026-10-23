@@ -8,13 +8,16 @@ const radar = await readFile(new URL('../gig-radar.html', import.meta.url), 'utf
 const matchStart = page.indexOf('function matchScore(gig, profile, useFallback) {');
 assert.notEqual(matchStart, -1, 'matched gigs must keep the expected match scorer');
 const matchBody = page.slice(matchStart, page.indexOf('\n    }', matchStart));
-assert.match(matchBody, /^function matchScore\(gig, profile, useFallback\) \{\s*if \(!profile \|\| profile\.available === false\) return null;/,
+assert.match(matchBody, /^function matchScore\(gig, profile, useFallback\) \{\s*if \(!profile \|\| availabilityPauseActive\(profile\)\) return null;/,
   'paused or missing profiles must be rejected before match scoring');
 assert.match(matchBody, /if \(!performerTypeMatch\(gig, profile\)\) return null;/,
   'available profiles must continue through normal match scoring');
 
-assert.match(profile, /available\s*,\s*performerType/,
+assert.match(profile, /available,\s*availabilityResumeDate:/,
   'the existing profile save must continue to persist the owner availability control');
-assert.match(radar, /if \(!profile \|\| profile\.available === false\) return false;/,
+assert.match(profile, /availabilityDays,\s*availabilityTimeZone,\s*performerType,/,
+  'recurring schedule and performer role must be saved alongside availability');
+assert.match(page, /import \{ availabilityPauseActive \} from "\.\/app\/availability-pause\.js";/);
+assert.match(radar, /if \(!profile \|\| availabilityPauseActive\(profile\)\) return false;/,
   'Gig Radar must retain its existing unavailable-profile gate');
 console.log('Matched Gigs availability smoke passed: owner pause state is persisted and both gig queues honor it.');

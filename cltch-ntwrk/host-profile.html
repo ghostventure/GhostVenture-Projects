@@ -281,6 +281,9 @@
         <button class="mode-btn" type="button" data-mode="musician">Performer</button>
       </div>
       <a href="host.html">Post a Gig</a>
+      <a href="venue-accessibility.html">Venue Accessibility Checklist</a>
+      <a href="venue-details.html">Venue Capacity &amp; Equipment</a>
+      <a href="venue-contacts.html">Private Venue Contacts</a>
       <a href="support.html">Support</a>
       <a href="auth.html" id="signOutLink">Sign Out</a>
     </nav>
@@ -304,7 +307,15 @@
         <button type="button" id="clearLocalDraft" class="btn-plaid" style="min-height:40px;width:auto;">Clear local draft</button>
         <span id="accountCopyStatus" role="status" aria-live="polite" style="font-size:12px;color:#8f8f8f;"></span>
       </div>
-      <p style="font-size:11px;color:#8f8f8f;line-height:1.5;margin-top:6px;">The file contains your account and profile records, including payout contact details. It is saved to this device.</p>
+      <p style="font-size:11px;color:#8f8f8f;line-height:1.5;margin-top:6px;">The file includes account and profile records, linked gigs, accepted-booking messages, reviews, and saved portfolio links. It can contain payout details. Uploaded media files and records your account cannot access are not included.</p>
+      <div style="border-top:1px solid #262626;margin-top:14px;padding-top:14px;">
+        <strong style="font-size:14px;">Request account deletion</strong>
+        <p style="font-size:12px;color:#8f8f8f;line-height:1.5;margin:6px 0;">This saves a request in your account after an identity recheck. It does not delete your account or notify support; contact privacy support to ensure the request reaches staff.</p>
+        <label for="deletionReason" style="font-size:12px;">Optional note for support</label>
+        <textarea id="deletionReason" maxlength="500" rows="3" style="display:block;width:100%;margin:6px 0;"></textarea>
+        <button type="button" id="requestAccountDeletion" class="btn-plaid" style="width:auto;">Request account deletion</button>
+        <span id="deletionRequestStatus" role="status" aria-live="polite" style="font-size:12px;"></span>
+      </div>
     </div>
     <div style="background:#111;border:1px solid #262626;border-radius:14px;padding:16px 18px;margin-bottom:18px;">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
@@ -318,7 +329,6 @@
       </label>
       <button type="button" class="btn-plaid" id="plugzMembershipBtn" style="width:auto;min-width:160px;border-color:#f5a623;background:#f5a623;color:#000;">Connect Plugz</button>
     </div>
-    <section id="businessProfileChecklist" aria-label="Business profile readiness checklist" style="background:#111;border:1px solid #262626;border-radius:14px;padding:16px 18px;margin-bottom:18px;"></section>
 
     <form id="profileForm">
 
@@ -440,9 +450,9 @@
 
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script type="module">
-    import { doc, setDoc, getDoc, serverTimestamp, collection, getDocs, query, orderBy, limit, documentId, startAfter, where }
+    import { doc, setDoc, getDoc, serverTimestamp, collection, collectionGroup, getDocs, query, where, orderBy }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
-    import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { onAuthStateChanged, signOut, reload, EmailAuthProvider, GoogleAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
@@ -452,27 +462,7 @@
     import { installUnsavedChangesGuard } from "./app/unsaved-changes.js";
     import { activatePlugzMembershipForCurrentCltchUser, finishPendingPlugzProfileActivation } from "./app/plugz-bridge.js";
     import { buildOneId, readUserSummary, recordAuthEvent, writeUserSummary } from "./app/user-db.js";
-    import { mountBusinessProfileChecklist } from "./app/business-profile-checklist.js";
-
-    async function readAllPages(ref, filters = []) {
-      const rows = [];
-      let cursor = null;
-      while (true) {
-        const constraints = [...filters, orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(100)];
-        const page = await getDocs(query(ref, ...constraints));
-        rows.push(...page.docs.map((item) => ({ id: item.id, data: item.data() })));
-        if (page.size < 100) return rows;
-        cursor = page.docs[page.docs.length - 1];
-      }
-    }
-
-    async function readExportMessages(uid, gigId) {
-      const current = await getDoc(doc(db, 'gigs', gigId));
-      if (!current.exists()) throw new Error('Booking is no longer available');
-      const latest = current.data();
-      if (latest.status !== 'accepted' || (latest.hostId !== uid && latest.acceptedBy !== uid)) throw new Error('Booking participant access is no longer available');
-      return readAllPages(collection(db, 'gigs', gigId, 'messages'));
-    }
+    import { reauthenticateSensitiveUser } from "./app/reauthenticate-sensitive.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -492,6 +482,8 @@
     }
 
     let HOST_ID    = null;
+    let originalPayout = { method: '', handle: '' };
+    let originalIdentity = { firstName: '', lastName: '', phone: '', zip: '' };
     let resolvedGeo = null;
     const HOST_PROFILE_DRAFT_KEY = 'cltch_host_profile_draft_v1';
     let profileDraftApi = null;
@@ -561,7 +553,7 @@
       if (requiresVerifiedEmail(freshUser)) { await redirectUnverifiedUser(); return; }
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
       HOST_ID = freshUser.uid;
-      mountBusinessProfileChecklist(document.getElementById('businessProfileChecklist'), { userId: HOST_ID });
+      refreshDeletionRequest(freshUser);
       initModeSwitch('host', HOST_ID);
       document.getElementById('payMethod').value = 'applepay';
       window.updatePayHandle();
@@ -583,31 +575,73 @@
       const button = document.getElementById('downloadAccountCopy');
       const status = document.getElementById('accountCopyStatus');
       if (!HOST_ID || !auth.currentUser) return;
-      if (!window.confirm('Download an account copy to this device? It includes your account/profile records (including payout contact details), your host and assigned-performer booking history, messages for accepted bookings you participate in, and reviews on your performer profile or authored for your hosted bookings with an assigned performer. Manager-only data, unscoped portfolio highlights, and media files are excluded; this build has no owner-scoped media metadata.')) return;
+      if (!window.confirm('Download your account records, linked gigs, booking messages, reviews, and portfolio metadata to this device? The file may contain payout contact details.')) return;
       button.disabled = true;
       status.textContent = 'Preparing your account copy…';
       try {
         const snapshot = await createAccountExport({
           user: auth.currentUser,
+          readCollection: async (name, uid) => {
+            const [hostSnap, performerSnap] = await Promise.all([
+              getDocs(query(collection(db, name), where('hostId', '==', uid))),
+              getDocs(query(collection(db, name), where('acceptedBy', '==', uid)))
+            ]);
+            const byId = new Map();
+            [hostSnap, performerSnap].forEach((snap) => snap.forEach((item) => byId.set(item.id, { id: item.id, ...item.data() })));
+            return [...byId.values()];
+          },
+          readSubcollection: async (name, parentId, child) => {
+            const snap = await getDocs(query(collection(db, name, parentId, child), orderBy('createdAt', 'asc')));
+            return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+          },
+          readCollectionGroup: async (name, field, value) => {
+            const snap = await getDocs(query(collectionGroup(db, name), where(field, '==', value)));
+            return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+          },
           readDocument: async (collection, uid) => {
             const result = await getDoc(doc(db, collection, uid));
             return result.exists() ? result.data() : null;
-          },
-          readGigsByHost: (uid) => readAllPages(collection(db, 'gigs'), [where('hostId', '==', uid)]),
-          readGigsByPerformer: (uid) => readAllPages(collection(db, 'gigs'), [where('acceptedBy', '==', uid)]),
-          readBookingMessages: readExportMessages,
-          readPerformerReviews: (uid) => readAllPages(collection(db, 'musicians', uid, 'reviews')),
-          readReviewsForBooking: (uid, gigId, performerId) => readAllPages(collection(db, 'musicians', performerId, 'reviews'), [where('gigId', '==', gigId)])
+          }
         });
         downloadAccountExport(snapshot);
-        status.textContent = snapshot.completeness.status === 'incomplete'
-          ? 'Account copy downloaded, but one or more permitted record groups could not be read. See the completeness section in the file. Media metadata is unavailable and media files are not included. Store the file privately.'
-          : 'Available account records downloaded. This build has no owner-scoped media metadata; media files are not included. Store the file privately.';
+        try { snapshot.data.localPortfolioMetadata = JSON.parse(localStorage.getItem('cltch_platform_component:portfolio_manager') || '[]'); } catch { snapshot.data.localPortfolioMetadata = []; }
+        status.textContent = 'Account copy includes records available to this account; uploaded media contents are not included. Store the file somewhere private.';
       } catch (error) {
         console.error('Account export failed:', error);
         status.textContent = 'Could not prepare the account copy. Try again when your connection is available.';
       } finally {
         button.disabled = false;
+      }
+    });
+
+    const deletionButton = document.getElementById('requestAccountDeletion');
+    const deletionStatus = document.getElementById('deletionRequestStatus');
+    async function refreshDeletionRequest(user) {
+      try {
+        const snap = await getDoc(doc(db, 'accountDeletionRequests', user.uid));
+        if (snap.exists()) {
+          deletionStatus.textContent = ` Request saved: ${snap.data().status}. Support is not notified by this form; contact privacy support to have it processed.`;
+          deletionButton.disabled = true;
+        } else deletionStatus.textContent = ' No deletion request is on file.';
+      } catch { deletionStatus.textContent = ' Could not load deletion request status.'; }
+    }
+    deletionButton.addEventListener('click', async () => {
+      const user = auth.currentUser;
+      if (!user || !window.confirm('Submit a request for support to review account deletion? This does not delete your account immediately.')) return;
+      deletionButton.disabled = true;
+      deletionStatus.textContent = ' Rechecking your identity…';
+      try {
+        await reauthenticateForSensitiveChange(user, 'account deletion request');
+        const requestRef = doc(db, 'accountDeletionRequests', user.uid);
+        if (!(await getDoc(requestRef)).exists()) await setDoc(requestRef, {
+          uid: user.uid, email: user.email || '', status: 'submitted',
+          reason: document.getElementById('deletionReason').value.trim(),
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+        await refreshDeletionRequest(user);
+      } catch (error) {
+        deletionStatus.textContent = ` ${error.message || 'Request could not be recorded.'}`;
+        deletionButton.disabled = false;
       }
     });
 
@@ -775,6 +809,8 @@
       const snap = await getDoc(profileRef);
       if (snap.exists()) {
         const d = snap.data();
+        originalPayout = { method: d.payMethod || '', handle: d.payHandle || '' };
+        originalIdentity = { firstName: d.firstName || '', lastName: d.lastName || '', phone: d.phone || '', zip: d.zip || '' };
         document.getElementById('firstName').value  = d.firstName  || '';
         document.getElementById('lastName').value   = d.lastName   || '';
         document.getElementById('phone').value      = d.phone      || '';
@@ -862,7 +898,17 @@
       };
 
       try {
+        const identityChanged = profile.firstName !== originalIdentity.firstName
+          || profile.lastName !== originalIdentity.lastName || profile.phone !== originalIdentity.phone
+          || profile.zip !== originalIdentity.zip;
+        if (identityChanged || payMethod !== originalPayout.method || payHandle !== originalPayout.handle) {
+          statusMsg.className = 'status';
+          statusMsg.textContent = 'Rechecking your identity before saving account or payout changes…';
+          await reauthenticateForSensitiveChange(auth.currentUser, 'account or payout changes');
+        }
         await setDoc(doc(db, 'hosts', HOST_ID), profile, { merge: true });
+        originalPayout = { method: payMethod, handle: payHandle };
+        originalIdentity = { firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone, zip: profile.zip };
         await writeUserSummary(db, HOST_ID, {
           role: 'host',
           displayName: `${profile.firstName} ${profile.lastName}`.trim() || profile.venueName,
@@ -879,13 +925,24 @@
         setTimeout(() => window.location.href = 'host.html', 1000);
       } catch (err) {
         statusMsg.className = 'status error';
-        statusMsg.textContent = 'Error saving profile.';
+        statusMsg.textContent = err?.message || 'Error saving profile.';
         console.error(err);
       }
 
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Profile';
     });
+
+    async function reauthenticateForSensitiveChange(user, action = 'this account change') {
+      return reauthenticateSensitiveUser(user, {
+        action,
+        promptPassword: (message) => window.prompt(message),
+        makePasswordCredential: (email, password) => EmailAuthProvider.credential(email, password),
+        reauthenticateWithCredential,
+        makeGoogleProvider: () => new GoogleAuthProvider(),
+        reauthenticateWithPopup
+      });
+    }
 
     const plugzMembershipBtn = document.getElementById('plugzMembershipBtn');
     if (plugzMembershipBtn) {
@@ -900,6 +957,7 @@
         plugzMembershipBtn.disabled = true;
         plugzMembershipBtn.textContent = 'Checking Plugz...';
         try {
+          await reauthenticateForSensitiveChange(auth.currentUser, 'Plugz account and membership changes');
           const bridge = await activatePlugzMembershipForCurrentCltchUser(auth, 'host', { acceptedTerms: true });
           if (!bridge) return;
           statusMsg.className = 'status success';

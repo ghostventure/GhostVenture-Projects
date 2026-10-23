@@ -1,6 +1,34 @@
 (function () {
   var STORAGE_PREFIX = "cltch_platform_component:";
 
+  function readPrivateNoteRecord(storage, key, fallback) {
+    try { var raw = storage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
+    catch (error) { return fallback; }
+  }
+  function writePrivateNoteDraft(storage, key, draft) {
+    try { storage.setItem(key, JSON.stringify(Object.assign({}, draft, { savedAt: Date.now() }))); return true; }
+    catch (error) { return false; }
+  }
+  function clearPrivateNoteDraft(storage, key) {
+    try { storage.removeItem(key); return true; } catch (error) { return false; }
+  }
+  function writeComparedNote(storage, key, draft, expectedRevision) {
+    var current = readPrivateNoteRecord(storage, key, { revision: "" }) || { revision: "" };
+    if (String(current.revision || "") !== String(expectedRevision || "")) return { status: "conflict", current: current };
+    var revision = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    var saved = { reason: String(draft.reason || ""), note: String(draft.note || ""), revision: revision, updatedAt: Date.now() };
+    try {
+      storage.setItem(key, JSON.stringify(saved));
+      var confirmed = readPrivateNoteRecord(storage, key, null);
+      return confirmed && confirmed.revision === revision ? { status: "saved", current: saved } : { status: "conflict", current: confirmed || current };
+    } catch (error) { return { status: "unavailable", current: current }; }
+  }
+  function savePrivateNoteCompareAndSwap(storage, key, draft, expectedRevision) {
+    var locks = window.navigator && window.navigator.locks;
+    if (locks && locks.request) return locks.request("cltch-private-note:" + key, { mode: "exclusive" }, function () { return writeComparedNote(storage, key, draft, expectedRevision); });
+    return Promise.resolve(writeComparedNote(storage, key, draft, expectedRevision));
+  }
+
   function readState(key, fallback) {
     try {
       var raw = window.localStorage.getItem(STORAGE_PREFIX + key);
@@ -13,7 +41,8 @@
   function writeState(key, value) {
     try {
       window.localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
-    } catch (error) {}
+      return true;
+    } catch (error) { return false; }
   }
 
   function normalizeExternalUrl(value) {
@@ -118,11 +147,25 @@
     ]);
   }
 
-  function initDisputeFlow(containerId, bookingId) {
+  function initDisputeFlow(containerId, bookingId, userId) {
     var container = document.getElementById(containerId);
     if (!container) return;
-    var key = scopedBookingKey("dispute_flow", bookingId);
-    var state = readState(key, { reason: "", note: "" });
+    var key = STORAGE_PREFIX + scopedBookingKey("dispute_flow", (userId || "local") + ":" + bookingId);
+    var storage = null;
+    try { storage = window.localStorage; } catch (error) {}
+    var draftStorage = null;
+    try { draftStorage = window.sessionStorage; } catch (error) {}
+    var draftKey = key + ":draft";
+    var state = readPrivateNoteRecord(storage, key, { reason: "", note: "", revision: "" }) || { reason: "", note: "", revision: "" };
+    var draft = readPrivateNoteRecord(draftStorage, draftKey, null);
+    var baseRevision = String(state.revision || "");
+    var conflict = null;
+    var dirty = !!draft;
+    if (draft && draft.baseRevision === baseRevision && draft.reason === state.reason && draft.note === state.note) {
+      clearPrivateNoteDraft(draftStorage, draftKey);
+      draft = null;
+    }
+    if (draft && draft.baseRevision !== baseRevision) conflict = { saved: state, draft: draft, observedRevision: baseRevision };
     container.innerHTML = "";
     var form = el("form", "cltch-component-form");
     form.innerHTML = [
@@ -138,16 +181,119 @@
       "<label>Private planning note</label>",
       "<textarea name=\"note\" rows=\"3\" maxlength=\"1000\" placeholder=\"Keep a private reminder for yourself. Do not enter sensitive details.\"></textarea>",
       "<button type=\"submit\">Save Local Note</button>",
-      "<p class=\"cltch-component-status\"></p>"
+      "<p class=\"cltch-component-status\" role=\"status\" aria-live=\"polite\"></p>",
+      "<section class=\"cltch-note-conflict\" hidden aria-label=\"Private note versions conflict\"></section>"
     ].join("");
-    form.reason.value = state.reason || "";
-    form.note.value = state.note || "";
+    form.reason.value = draft ? (draft.reason || "") : (state.reason || "");
+    form.note.value = draft ? (draft.note || "") : (state.note || "");
+    var status = form.querySelector(".cltch-component-status");
+    var conflictPanel = form.querySelector(".cltch-note-conflict");
+    function renderConflict() {
+      if (!conflict) { conflictPanel.hidden = true; conflictPanel.replaceChildren(); return; }
+      conflictPanel.hidden = false;
+      conflictPanel.replaceChildren();
+      var title = el("strong", "", "This browser has two private note versions");
+      var savedLabel = el("p", "", "Saved version in this browser");
+      var savedText = el("pre", "cltch-note-version", (conflict.saved.reason ? conflict.saved.reason + "\\n" : "") + (conflict.saved.note || ""));
+      var draftLabel = el("p", "", "Your unsaved draft in this tab");
+      var draftText = el("pre", "cltch-note-version", (conflict.draft.reason ? conflict.draft.reason + "\\n" : "") + (conflict.draft.note || ""));
+      var keep = el("button", "", "Keep my draft and replace saved version");
+      keep.type = "button";
+      var load = el("button", "", "Use saved version");
+      load.type = "button";
+      keep.addEventListener("click", async function () {
+        var result = await savePrivateNoteCompareAndSwap(storage, key, conflict.draft, conflict.observedRevision);
+        if (result.status === "saved") {
+          state = result.current; baseRevision = result.current.revision; conflict = null;
+          dirty = false;
+          writePrivateNoteDraft(draftStorage, draftKey, { reason: state.reason, note: state.note, baseRevision: baseRevision });
+          status.textContent = "Your choice was saved in this browser only.";
+          renderConflict();
+        } else {
+          conflict = { saved: result.current, draft: conflict.draft, observedRevision: String(result.current?.revision || "") };
+          status.textContent = result.status === "unavailable" ? "Browser storage is unavailable; neither note version was replaced." : "The saved note changed again. Compare the versions before choosing.";
+          renderConflict();
+        }
+      });
+      load.addEventListener("click", function () {
+        var latest = readPrivateNoteRecord(storage, key, { reason: "", note: "", revision: "" }) || { reason: "", note: "", revision: "" };
+        state = latest; baseRevision = String(latest.revision || "");
+        form.reason.value = latest.reason || ""; form.note.value = latest.note || "";
+        clearPrivateNoteDraft(draftStorage, draftKey); conflict = null;
+        dirty = false;
+        status.textContent = "Using the saved version from this browser. It has not been shared.";
+        renderConflict();
+      });
+      conflictPanel.append(title, savedLabel, savedText, draftLabel, draftText, keep, load);
+    }
+    function saveDraftLocally() {
+      dirty = true;
+      var next = { reason: form.reason.value, note: form.note.value, baseRevision: baseRevision };
+      if (!writePrivateNoteDraft(draftStorage, draftKey, next)) {
+        status.textContent = "Tab storage is unavailable; this draft is only in the open page.";
+        return;
+      }
+      if (conflict) conflict.draft = next;
+      else status.textContent = "Draft saved in this tab only; not shared with support or the other participant.";
+      renderConflict();
+    }
+    if (draft && !conflict) status.textContent = "Restored an unsaved draft from this tab after reload. It has not been shared.";
+    if (conflict) {
+      status.textContent = "This saved note changed in another tab. Compare both local versions before saving.";
+      renderConflict();
+    }
+    form.reason.addEventListener("input", saveDraftLocally);
+    form.note.addEventListener("input", saveDraftLocally);
     form.addEventListener("submit", function (event) {
       event.preventDefault();
-      state.reason = form.reason.value;
-      state.note = form.note.value.trim();
-      writeState(key, state);
-      form.querySelector(".cltch-component-status").textContent = "Saved in this browser only; not sent to support or the other booking participant.";
+      if (conflict) {
+        status.textContent = "Resolve the two local note versions before saving.";
+        return;
+      }
+      var next = { reason: form.reason.value, note: form.note.value.trim() };
+      var result = savePrivateNoteCompareAndSwap(storage, key, next, baseRevision);
+      Promise.resolve(result).then(function (saved) {
+        if (saved.status === "conflict") {
+          conflict = { saved: saved.current, draft: { ...next, baseRevision: baseRevision }, observedRevision: String(saved.current?.revision || "") };
+          writePrivateNoteDraft(draftStorage, draftKey, conflict.draft);
+          status.textContent = "The saved note changed in another tab. Compare both local versions before saving.";
+          renderConflict();
+          return;
+        }
+        if (saved.status !== "saved") {
+          status.textContent = "Browser storage is unavailable; neither note version was replaced.";
+          return;
+        }
+        state = saved.current; baseRevision = saved.current.revision;
+        writePrivateNoteDraft(draftStorage, draftKey, { reason: next.reason, note: next.note, baseRevision: baseRevision });
+        dirty = false;
+        status.textContent = "Saved in this browser only; not sent to support or the other booking participant.";
+      });
+    });
+    window.addEventListener("storage", function (event) {
+      if (event.key !== key || !event.newValue) return;
+      var latest;
+      try { latest = JSON.parse(event.newValue); } catch (error) { return; }
+      if (String(latest.revision || "") === baseRevision) return;
+      if (!dirty) {
+        if ((state.reason || "") !== (latest.reason || "") || (state.note || "") !== (latest.note || "")) {
+          var previousVersion = { reason: state.reason || "", note: state.note || "", baseRevision: baseRevision };
+          writePrivateNoteDraft(draftStorage, draftKey, previousVersion);
+          conflict = { saved: latest, draft: previousVersion, observedRevision: String(latest.revision || "") };
+          status.textContent = "Another tab saved a different version. Compare the two browser-local copies.";
+          renderConflict();
+          return;
+        }
+        state = latest; baseRevision = String(latest.revision || "");
+        form.reason.value = latest.reason || ""; form.note.value = latest.note || "";
+        status.textContent = "Loaded the latest private note from this browser.";
+        return;
+      }
+      var localDraft = { reason: form.reason.value, note: form.note.value, baseRevision: baseRevision };
+      writePrivateNoteDraft(draftStorage, draftKey, localDraft);
+      conflict = { saved: latest, draft: localDraft, observedRevision: String(latest.revision || "") };
+      status.textContent = "The saved note changed in another tab. Compare both local versions before saving.";
+      renderConflict();
     });
     container.appendChild(form);
   }
@@ -265,6 +411,12 @@
     initTrustVerification: initTrustVerification,
     initPortfolioManager: initPortfolioManager,
     initOperationsDashboard: initOperationsDashboard,
-    normalizeExternalUrl: normalizeExternalUrl
+    normalizeExternalUrl: normalizeExternalUrl,
+    privateNoteConflicts: {
+      read: readPrivateNoteRecord,
+      saveDraft: writePrivateNoteDraft,
+      clearDraft: clearPrivateNoteDraft,
+      compareAndSave: savePrivateNoteCompareAndSwap
+    }
   };
 })();

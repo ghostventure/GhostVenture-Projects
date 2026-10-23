@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="description" content="A private browser-local roster for a CLTCH host's venue contacts.">
+  <link rel="stylesheet" href="cltch-boilerplate.css">
+  <script src="site-init.js" defer></script>
+  <title>Venue Contact Roster | CLTCH.NTWRK</title>
+  <style>
+    body { min-height:100vh; background:#0a0a0a; color:#f0f0f0; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+    header { padding:18px 24px; border-bottom:1px solid #1e1e1e; }
+    a { color:#9edcff; }
+    main { width:min(760px,calc(100% - 32px)); margin:32px auto 60px; }
+    .intro,.roster { padding:18px; border:1px solid #24394b; border-radius:14px; background:#101923; }
+    h1 { margin:0 0 8px; font-size:clamp(24px,5vw,34px); }
+    .intro p { color:#b8c7d8; line-height:1.6; }
+    #venueContactRoster { margin-top:16px; }
+    #venueContactRoster form { display:grid; gap:12px; }
+    #venueContactRoster form > label { display:grid; gap:6px; color:#dce7f4; line-height:1.45; }
+    #venueContactRoster input,#venueContactRoster select { width:100%; min-height:42px; padding:8px 10px; border:1px solid #46576b; border-radius:8px; background:#0b1118; color:#fff; font:inherit; }
+    #venueContactRoster button { min-height:42px; margin:4px 8px 4px 0; padding:0 12px; border:1px solid #52677e; border-radius:8px; background:#172331; color:#eef6ff; font:inherit; font-weight:700; cursor:pointer; }
+    #venueContactRoster button:focus-visible,#venueContactRoster input:focus-visible,#venueContactRoster select:focus-visible,a:focus-visible { outline:3px solid #9edcff; outline-offset:3px; }
+    #venueContactRoster button:disabled { opacity:.55; cursor:not-allowed; }
+    #venueContactRoster h2 { margin:24px 0 10px; font-size:19px; }
+    #venueContactRoster article { margin:10px 0; padding:14px; border:1px solid #2a4054; border-radius:10px; overflow-wrap:anywhere; }
+    #venueContactRoster article h3 { margin:0 0 6px; font-size:17px; }
+    #venueContactRoster article p { margin:4px 0; color:#c3d0df; }
+    #venueContactRoster [role="status"] { min-height:1.5em; color:#cbd9e8; line-height:1.5; }
+    footer { padding:20px; text-align:center; color:#8290a0; font-size:12px; }
+    @media (max-width:520px) { main { margin-top:20px; } .intro,.roster { padding:14px; } }
+  </style>
+</head>
+<body>
+  <header><a href="host.html">← Back to Host Workspace</a></header>
+  <main>
+    <section class="intro">
+      <h1>Venue contact roster</h1>
+      <p>Keep up to 12 operational contacts for your own reference. Names, roles, email addresses, and phone numbers are stored only in this browser under your signed-in host account. This roster is not shared with performers, is not sent to CLTCH, and does not send notifications or messages. Avoid adding contacts unless you have permission to store their details.</p>
+    </section>
+    <p id="venueContactsAccessStatus" role="status" aria-live="polite">Checking host sign-in…</p>
+    <a id="venueContactsSignIn" href="auth.html?next=venue-contacts.html" hidden>Sign in to manage your private venue roster</a>
+    <section id="venueContactRoster" class="roster" aria-label="Private venue contact roster" hidden></section>
+  </main>
+  <footer>CLTCH.NTWRK · Local browser reference only. No contact is notified.</footer>
+  <script type="module">
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+    import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+    import { auth, db } from "./app/firebase-client.js";
+    import { mountVenueContactRoster } from "./app/venue-contact-roster.js";
+
+    const status = document.getElementById('venueContactsAccessStatus');
+    const signIn = document.getElementById('venueContactsSignIn');
+    const roster = document.getElementById('venueContactRoster');
+    onAuthStateChanged(auth, async (user) => {
+      roster.hidden = true;
+      signIn.hidden = true;
+      if (!user) {
+        status.textContent = 'Sign in with a host account to open this private roster.';
+        signIn.hidden = false;
+        return;
+      }
+      status.textContent = 'Checking host workspace…';
+      try {
+        const host = await getDoc(doc(db, 'hosts', user.uid));
+        if (!host.exists()) {
+          status.textContent = 'This roster is available to accounts with a host profile.';
+          return;
+        }
+        roster.hidden = false;
+        mountVenueContactRoster(roster, { userId: user.uid });
+        status.textContent = 'Your private venue roster is ready.';
+      } catch (error) {
+        console.error('Could not verify host workspace for venue contact roster.', error);
+        status.textContent = 'Could not verify your host workspace. Refresh the page or try again later.';
+      }
+    }, (error) => {
+      console.error('Could not verify sign-in for venue contact roster.', error);
+      status.textContent = 'Sign-in could not be verified. Refresh the page and sign in again.';
+      signIn.hidden = false;
+    });
+  </script>
+</body>
+</html>

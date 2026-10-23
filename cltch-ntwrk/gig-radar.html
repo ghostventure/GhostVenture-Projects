@@ -542,6 +542,15 @@
       background: #20150a;
       color: #f0c17a;
     }
+    .host-booking-history {
+      margin-top: 10px;
+      padding: 9px 11px;
+      border-left: 3px solid #3e657d;
+      background: #0d141b;
+      color: #b7c7d7;
+      font-size: 12px;
+      line-height: 1.5;
+    }
     .radar-foot {
       display:flex;
       justify-content:space-between;
@@ -898,17 +907,6 @@
       </div>
     </section>
 
-    <section class="command-bar workspace-scope" id="marketplaceInsights" aria-labelledby="marketplaceInsightsTitle">
-      <div class="command-top">
-        <h2 class="command-title" id="marketplaceInsightsTitle">Upcoming supply snapshot</h2>
-      </div>
-      <p style="font-size:12px;line-height:1.55;color:#9fb5ca;margin:0 0 10px;">A privacy-safe count of open listings by calendar quarter. No host, performer, or venue details are shown.</p>
-      <div id="marketplaceInsightsCoverage" style="font-size:12px;line-height:1.55;color:#cfd7e2;">Waiting for the current open-gig feed…</div>
-      <ul id="marketplaceInsightsList" aria-label="Open listing counts by quarter" style="margin:8px 0;padding-left:20px;color:#cfd7e2;"></ul>
-      <p id="marketplaceInsightsPrivacy" style="font-size:12px;line-height:1.55;color:#9fb5ca;margin:0 0 6px;">Quarter groups are shown only when at least five distinct hosts are represented.</p>
-      <p id="marketplaceInsightsLimitations" style="font-size:12px;line-height:1.55;color:#9fb5ca;margin:0;">This current snapshot uses the upcoming 180-day open-gig feed (up to 120 listings) and may contain partial calendar quarters. It describes only the currently loaded feed; it is not historical seasonality and is not a forecast.</p>
-    </section>
-
     <section class="command-bar workspace-scope" id="queueControlsBar">
       <div class="command-top">
         <span class="command-title">Queue Controls</span>
@@ -1051,7 +1049,6 @@
         <h2>New match alerts</h2>
         <p>Sign in to manage local alerts for new matching gigs.</p>
       </section>
-      <section id="hostMutePanel" aria-label="Mute hosts from matching" style="margin:12px 0;padding:14px;border:1px solid #2a3d50;border-radius:12px;background:#111923;"></section>
       <div class="map-list-controls" role="group" aria-label="Gig display mode">
         <button type="button" id="gigListMode" aria-pressed="true">List view</button>
         <button type="button" id="gigMapMode" aria-pressed="false">Map view</button>
@@ -1059,6 +1056,11 @@
       <div id="gigList">
         <div class="empty"><span>🎵</span>Looking for gigs&hellip;</div>
       </div>
+      <section aria-labelledby="blockedHostsHeading" style="margin-top:18px;padding:14px;border:1px solid #293847;border-radius:12px;background:#10161d;">
+        <h2 id="blockedHostsHeading" style="font-size:15px;margin:0 0 8px;">Blocked hosts</h2>
+        <p style="font-size:12px;color:#a9bacb;margin:0 0 10px;">Blocked hosts are removed from your matching feed. You can unblock them here.</p>
+        <div id="blockedHostsList" aria-live="polite" style="font-size:13px;color:#c9d7e5;">Loading blocked hosts…</div>
+      </section>
       <section id="gigMapView" class="gig-map-view" aria-label="Gig map view" hidden>
         <h3>Choose a gig to view on a map</h3>
         <p>Only gigs with a stored location coordinate can be shown. Your performer profile location is never sent to the map provider.</p>
@@ -1095,23 +1097,25 @@
   <footer>&copy; 2026 CLTCH.NTWRK &mdash; <a href="about.html" style="color:#555;text-decoration:none;margin:0 6px;">About</a> <a href="faq.html" style="color:#555;text-decoration:none;margin:0 6px;">FAQ</a> <a href="contact.html" style="color:#555;text-decoration:none;margin:0 6px;">Contact</a> <a href="press.html" style="color:#555;text-decoration:none;margin:0 6px;">Press</a> <a href="accessibility.html" style="color:#555;text-decoration:none;margin:0 6px;">Accessibility</a> <a href="dmca.html" style="color:#555;text-decoration:none;margin:0 6px;">DMCA</a> <a href="terms.html" style="color:#555;text-decoration:none;margin:0 6px;">Terms</a> <a href="privacy.html" style="color:#555;text-decoration:none;margin:0 6px;">Privacy</a></footer>
 
   <script type="module">
-    import { getFirestore, collection, query, where, orderBy, limit, onSnapshot,
-             doc, updateDoc, getDoc, getDocs, arrayUnion, deleteField, runTransaction, serverTimestamp }
+    import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, documentId,
+             doc, updateDoc, getDoc, getDocs, setDoc, deleteDoc, arrayUnion, deleteField, runTransaction, serverTimestamp }
       from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut, reload } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
     import { auth, db } from "./app/firebase-client.js";
+    import { performBookingAction } from "./app/booking-action.js";
     import { buildAcceptedGigQuery, buildOpenGigFeedQuery, isoToday } from "./app/gig-queries.js";
     import { DEFAULT_TIMEOUT_MS, clearResumeTarget, installIdleLogout } from "./app/idle-logout.js";
     import { approximateGigDistanceLabel } from "./app/gig-distance.js";
+    import { availabilityPauseActive } from "./app/availability-pause.js";
+    import { recurringAvailabilityForGig } from "./app/recurring-availability.js";
+    import { formatHostBookingReliability } from "./app/host-reliability.mjs";
     import { buildOpenStreetMapEmbedUrl, isValidGigMapPoint } from "./app/gig-radar-map.js";
-    import { describeUpcomingSupply, summarizeUpcomingSupply } from "./app/marketplace-insights.js";
     import { bindModeSwitch } from "./app/mode-switch.js";
     import { subscribeWhenVisible } from "./app/visible-snapshot.js";
     import { recordAuthEvent, writeUserSummary } from "./app/user-db.js";
     import { meetsMinimumGigPay, readMinimumGigPay, saveMinimumGigPay } from "./app/gig-radar-filters.js";
     import { readMatchAlerts, setMatchAlertsEnabled, addNewMatchAlerts, clearMatchAlerts, renderMatchAlertPanel } from "./app/match-alerts.js";
     import { mountMatchFeedback } from "./app/match-feedback.js";
-    import { createHostMuteController, mountHostMutePanel, createHostMuteButton, filterMutedHostMatches } from "./app/host-mutes.js";
 
     async function refreshUserVerification(user) {
       if (!user) return user;
@@ -1135,7 +1139,6 @@
     let matchedGigFeed  = [];
     let previousMatchedIds = null;
     let matchAlertState = null;
-    let hostMuteController = null;
     let staleOpenListingDocs = [];
     let staleListingState = 'loading';
     let staleListingLimitReached = false;
@@ -1143,6 +1146,11 @@
     let activeGigFilter = localStorage.getItem('cltch_gig_filter_v1') || 'all';
     let activeGigSort   = localStorage.getItem('cltch_gig_sort_v1') || 'best';
     let savedGigIds     = new Set();
+    let blockedHostIds  = new Set();
+    const hostBookingReliabilityCache = new Map();
+    const hostBookingReliabilityPending = new Set();
+    let openFeedVisibilityCleanup = null;
+    let staleFeedVisibilityCleanup = null;
 
     // Gate: must be signed in with a profile
     onAuthStateChanged(auth, async (user) => {
@@ -1151,7 +1159,7 @@
       installIdleLogout(auth, DEFAULT_TIMEOUT_MS);
       const profileSnap = await getDoc(doc(db, 'musicians', user.uid));
       MUSICIAN_ID     = user.uid;
-      initHostMuteControls(MUSICIAN_ID);
+      await loadBlockedHosts();
       matchAlertState = readMatchAlerts(safeLocalStorage(), MUSICIAN_ID);
       renderNewMatchAlerts();
       loadSavedGigIds();
@@ -1185,30 +1193,45 @@
       try { return window.localStorage; } catch { return null; }
     }
 
-    function getUnmutedMatches() {
-      return filterMutedHostMatches(matchedGigFeed, hostMuteController?.getMutedHostIds() || []);
+    async function loadBlockedHosts() {
+      try {
+        const snapshot = await getDocs(collection(db, 'userBlocks', MUSICIAN_ID, 'blocked'));
+        blockedHostIds = new Set(snapshot.docs.map((entry) => entry.id));
+        renderBlockedHosts();
+      } catch (error) {
+        console.error('Could not load blocked hosts', error);
+        document.getElementById('blockedHostsList').textContent = 'Blocked hosts could not be loaded. Matching may include hosts you blocked until this list is available.';
+        blockedHostIds = new Set();
+      }
     }
 
-    function initHostMuteControls(userId) {
-      if (hostMuteController?.userId === userId) return;
-      hostMuteController = createHostMuteController({ userId });
-      mountHostMutePanel(document.getElementById('hostMutePanel'), hostMuteController, document);
-      hostMuteController.subscribe(() => {
-        const current = getUnmutedMatches();
-        analyticsState.activeMatches = current.length;
-        analyticsState.avgMatchPercent = current.length
-          ? Math.round(current.reduce((sum, item) => sum + (item.match.percent || 0), 0) / current.length)
-          : 0;
-        previousMatchedIds = new Set(current.map((item) => item.gigId));
-        updateAnalyticsPanel();
-        renderRadarSummary();
-        renderQueues();
+    function renderBlockedHosts() {
+      const list = document.getElementById('blockedHostsList');
+      list.replaceChildren();
+      if (!blockedHostIds.size) {
+        list.textContent = 'No hosts blocked.';
+        return;
+      }
+      [...blockedHostIds].sort().forEach((hostId) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid #253340;';
+        const label = document.createElement('span'); label.textContent = `Host ID ${hostId}`;
+        const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Unblock'; button.setAttribute('aria-label', `Unblock host ${hostId}`);
+        button.addEventListener('click', () => unblockHost(hostId));
+        row.append(label, button); list.append(row);
       });
     }
 
-    function appendHostMuteButton(container, hostId) {
-      const button = createHostMuteButton(hostId, hostMuteController, document);
-      if (button && container) container.append(button);
+    async function unblockHost(hostId) {
+      try {
+        await deleteDoc(doc(db, 'userBlocks', MUSICIAN_ID, 'blocked', hostId));
+        blockedHostIds.delete(hostId);
+        renderBlockedHosts();
+        startListening();
+      } catch (error) {
+        console.error('Could not unblock host', error);
+        window.alert('Could not unblock this host. Check your connection and try again.');
+      }
     }
 
     function renderNewMatchAlerts() {
@@ -1462,36 +1485,6 @@
       renderMusicianNotifications();
     }
 
-    function renderUpcomingSupplySnapshot(gigRecords, hasError = false) {
-      const coverageEl = document.getElementById('marketplaceInsightsCoverage');
-      const listEl = document.getElementById('marketplaceInsightsList');
-      const privacyEl = document.getElementById('marketplaceInsightsPrivacy');
-      const limitationsEl = document.getElementById('marketplaceInsightsLimitations');
-      if (!coverageEl || !listEl || !privacyEl || !limitationsEl) return;
-      if (hasError) {
-        coverageEl.textContent = 'The current open-gig feed is unavailable. Reload the page to try again.';
-        listEl.replaceChildren();
-        return;
-      }
-      const snapshot = summarizeUpcomingSupply(gigRecords);
-      const copy = describeUpcomingSupply(snapshot);
-      coverageEl.textContent = copy.coverage;
-      privacyEl.textContent = copy.privacy;
-      limitationsEl.textContent = copy.limitations;
-      listEl.replaceChildren();
-      if (snapshot.visibleQuarters.length) {
-        for (const quarter of snapshot.visibleQuarters) {
-          const item = document.createElement('li');
-          item.textContent = `${quarter.label}: ${quarter.listingCount} open listings`;
-          listEl.appendChild(item);
-        }
-      } else {
-        const item = document.createElement('li');
-        item.textContent = copy.empty;
-        listEl.appendChild(item);
-      }
-    }
-
     function renderMusicianNotifications() {
       const el = document.getElementById('musicianNotifications');
       if (!el) return;
@@ -1640,7 +1633,7 @@
     }
 
     function getVisibleMatches() {
-      return getUnmutedMatches().filter(matchesFeedControls).sort(compareGigItems);
+      return matchedGigFeed.filter(matchesFeedControls).sort(compareGigItems);
     }
 
     function clearGigMapEmbed() {
@@ -1762,7 +1755,7 @@
       staleOpenListingDocs.forEach((docSnap) => {
         const gig = docSnap.data();
         if (!gig?.date || gig.date >= today) return;
-        if (gig.hostId === MUSICIAN_ID || hostMuteController?.isMuted(gig.hostId) || (gig.passedBy || []).includes(MUSICIAN_ID)) return;
+        if (gig.hostId === MUSICIAN_ID || (gig.passedBy || []).includes(MUSICIAN_ID)) return;
         if (!isGigActionable({ ...gig, id: docSnap.id }, blackouts, bookedGigIds, bookedDatesSet)) return;
         if (!matchScore(gig, musicianProfile, false) && !matchScore(gig, musicianProfile, true)) return;
         count += 1;
@@ -1834,7 +1827,7 @@
     }
 
     function isProfileRadarReady(profile) {
-      if (!profile || profile.available === false) return false;
+      if (!profile || availabilityPauseActive(profile)) return false;
       const hasIdentity = !!(profile.stageName || profile.firstName || profile.lastName);
       const hasGenres = Array.isArray(profile.genres) && profile.genres.length > 0;
       return hasIdentity && hasGenres;
@@ -1842,9 +1835,12 @@
 
     function isGigActionable(gig, blackouts, bookedGigIds, bookedDatesSet) {
       if (!gig || !gig.date) return false;
+      const recurringAvailability = recurringAvailabilityForGig(musicianProfile, gig);
+      if (!recurringAvailability.eligible) return false;
+      const performerLocalDate = recurringAvailability.localDate || gig.date;
       if (bookedGigIds.has(gig.id || gig.gigId || '')) return false;
-      if (bookedDatesSet.has(gig.date)) return false;
-      if (blackouts.has(gig.date)) return false;
+      if (bookedDatesSet.has(performerLocalDate)) return false;
+      if (blackouts.has(performerLocalDate)) return false;
       return true;
     }
 
@@ -1861,10 +1857,9 @@
 
       const ordered = getVisibleMatches();
       const best = ordered[0];
-      const unmutedMatches = getUnmutedMatches();
-      const urgent = unmutedMatches.filter((item) => item.daysAway <= 7).length;
-      const saved = unmutedMatches.filter((item) => item.isSaved).length;
-      const actionable = unmutedMatches.filter((item) => item.isActionable).length;
+      const urgent = matchedGigFeed.filter((item) => item.daysAway <= 7).length;
+      const saved = matchedGigFeed.filter((item) => item.isSaved).length;
+      const actionable = matchedGigFeed.filter((item) => item.isActionable).length;
 
       bestValue.textContent = best ? `${best.match.percent}%` : '—';
       bestNote.textContent = best ? `${best.g.venue || 'Opportunity'} • ${best.g.pay || 'Pay pending'}` : 'Waiting for live gigs.';
@@ -1907,7 +1902,7 @@
       document.getElementById('dashStage').textContent    = p.stageName || meta.label;
       document.getElementById('dashLocation').textContent = p.location  || '';
       const pill = document.getElementById('dashAvailPill');
-      const open = p.available !== false;
+      const open = !availabilityPauseActive(p);
       pill.innerHTML = `
         <div class="avail-pill ${open ? 'open' : 'closed'}">
           <div class="avail-dot ${open ? 'open' : 'closed'}"></div>
@@ -2137,7 +2132,7 @@
 
     // Returns a match descriptor with a percent score (Uber-style confidence ranking).
     function matchScore(gig, profile, useFallback) {
-      if (profile.available === false) return null;
+      if (availabilityPauseActive(profile)) return null;
       if (!performerTypeMatch(gig, profile)) return null;
       if (!genreMatch(gig, profile)) return null;
       const skill = skillMatch(gig, profile);
@@ -2215,13 +2210,9 @@
       const today = isoToday();
       const q = buildOpenGigFeedQuery(db, { today });
 
-      subscribeWhenVisible(() => onSnapshot(q, (snapshot) => {
-        const docs = [];
-        snapshot.forEach(d => docs.push(d));
-        renderUpcomingSupplySnapshot(docs.map((docSnap) => {
-          const gig = docSnap.data();
-          return { date: gig.date, hostId: gig.hostId };
-        }));
+      openFeedVisibilityCleanup?.();
+      staleFeedVisibilityCleanup?.();
+      openFeedVisibilityCleanup = subscribeWhenVisible(() => onSnapshot(q, (snapshot) => {
         if (!isProfileRadarReady(musicianProfile)) {
           matchedGigFeed = [];
           analyticsState.activeMatches = 0;
@@ -2231,12 +2222,15 @@
           renderQueues();
           return;
         }
+        const docs = [];
+        snapshot.forEach(d => docs.push(d));
 
         // Hard filters: already-passed, already-accepted, blocked date, booked date, or self-booking
         const eligible = docs.filter(d => {
           const g = d.data();
           if ((g.passedBy || []).includes(MUSICIAN_ID)) return false;
           if (g.hostId === MUSICIAN_ID) return false;
+          if (blockedHostIds.has(g.hostId)) return false;
           if (!isGigActionable({ ...g, id: d.id }, blackouts, bookedGigIds, bookedDatesSet)) return false;
           return true;
         });
@@ -2259,10 +2253,9 @@
           return daysUntil(a.docSnap.data().date) - daysUntil(b.docSnap.data().date);
         });
 
-        const visibleMatched = matched.filter(({ docSnap }) => !hostMuteController?.isMuted(docSnap.data().hostId));
-        analyticsState.activeMatches = visibleMatched.length;
-        analyticsState.avgMatchPercent = visibleMatched.length > 0
-          ? Math.round(visibleMatched.reduce((sum, item) => sum + (item.match.percent || 0), 0) / visibleMatched.length)
+        analyticsState.activeMatches = matched.length;
+        analyticsState.avgMatchPercent = matched.length > 0
+          ? Math.round(matched.reduce((sum, item) => sum + (item.match.percent || 0), 0) / matched.length)
           : 0;
         updateAnalyticsPanel();
         const nextMatchedGigFeed = matched.map(({ docSnap, match }) => {
@@ -2279,10 +2272,11 @@
             isSaved: isSavedGig(gigId),
             daysAway,
             payAmount: parseCurrencyAmount(g.pay) || 0,
+            recurringAvailability: recurringAvailabilityForGig(musicianProfile, g),
             searchText: normalizeText([g.venue, g.location, g.genre, g.pay, g.notes].join(' '))
           };
         });
-        const currentMatchedIds = new Set(filterMutedHostMatches(nextMatchedGigFeed, hostMuteController?.getMutedHostIds() || []).map((item) => item.gigId));
+        const currentMatchedIds = new Set(nextMatchedGigFeed.map((item) => item.gigId));
         if (previousMatchedIds !== null && matchAlertState?.enabled) {
           const newIds = [...currentMatchedIds].filter((gigId) => !previousMatchedIds.has(gigId));
           if (newIds.length) {
@@ -2294,7 +2288,7 @@
         matchedGigFeed = nextMatchedGigFeed;
         renderRadarSummary();
         renderQueues();
-      }, () => renderUpcomingSupplySnapshot([], true)));
+      }));
 
       if (!isProfileRadarReady(musicianProfile)) {
         staleListingState = 'ready';
@@ -2313,7 +2307,7 @@
         orderBy('date', 'asc'),
         limit(STALE_LISTING_QUERY_LIMIT)
       );
-      subscribeWhenVisible(() => onSnapshot(staleQuery, (snapshot) => {
+      staleFeedVisibilityCleanup = subscribeWhenVisible(() => onSnapshot(staleQuery, (snapshot) => {
         staleOpenListingDocs = [];
         snapshot.forEach((docSnap) => staleOpenListingDocs.push(docSnap));
         staleListingLimitReached = snapshot.size >= STALE_LISTING_QUERY_LIMIT;
@@ -2334,9 +2328,7 @@
       const visibleMatches = getVisibleMatches();
       if (!visibleMatches.length) {
         countEl.style.display = 'none';
-        listEl.innerHTML = matchedGigFeed.length
-          ? '<div class="empty-sm">Current matches from muted hosts are hidden on this browser and device. Unmute a host above to show them again. Booking access is unchanged.</div>'
-          : '<div class="empty-sm">No live matches yet. New matches will show up here as hosts post fitting gigs.</div>';
+        listEl.innerHTML = '<div class="empty-sm">No live matches yet. New matches will show up here as hosts post fitting gigs.</div>';
         return;
       }
       countEl.textContent = String(visibleMatches.length);
@@ -2359,7 +2351,7 @@
                 </div>
                 <div class="radar-insight ${insight.cls}">${insight.text}</div>
               </div>
-              <div class="host-mute-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button type="button" onclick="toggleSavedGig('${gigId}')" class="save-btn ${isSaved ? 'saved' : ''}">${isSaved ? 'Saved' : 'Save'}</button>
                 <a href="booking.html?id=${gigId}" style="display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 12px;border-radius:10px;border:1px solid #2a3d50;background:#13202d;color:#f4f7fb;text-decoration:none;font-size:12px;font-weight:700;">Details</a>
                 <button type="button" onclick="respond('${gigId}','accept')" style="min-height:38px;padding:0 12px;border-radius:10px;border:0;background:#f5a623;color:#111;font-size:12px;font-weight:800;cursor:pointer;">Approve</button>
@@ -2368,9 +2360,6 @@
             </div>
           </div>`;
       }).join('');
-      visibleMatches.forEach((item, index) => {
-        appendHostMuteButton(listEl.children[index]?.querySelector('.host-mute-actions'), item.g.hostId);
-      });
     }
 
     function renderOpenRequests() {
@@ -2380,11 +2369,9 @@
       announceVisibleGigResults(visibleMatches.length);
       if (gigDisplayMode === 'map') renderGigMapLocations(visibleMatches);
 
-      if (!getUnmutedMatches().length) {
+      if (matchedGigFeed.length === 0) {
         newBadge.style.display = 'none';
-        gigList.innerHTML = matchedGigFeed.length
-          ? `<div class="empty"><span>🔕</span>Current matches from muted hosts are hidden on this browser and device. Unmute a host above to show them again. Booking access is unchanged.</div>`
-          : `<div class="empty"><span>🎵</span>No matching gigs right now. Tighten your profile, keep availability open, and check back as new host requests come in.</div>`;
+        gigList.innerHTML = `<div class="empty"><span>🎵</span>No matching gigs right now. Tighten your profile, keep availability open, and check back as new host requests come in.</div>`;
         return;
       }
 
@@ -2449,23 +2436,67 @@
             <span>💵 ${g.pay}</span>
             ${g.performerType && g.performerType !== 'any' ? `<span>🎭 ${(PERFORMER_META[g.performerType] || PERFORMER_META.musician).label}</span>` : ''}
           </div>
+          ${item.recurringAvailability?.fallback ? `<div class="gig-notes">${Array.isArray(musicianProfile.availabilityDays) ? 'Recurring availability was not applied for this event because its timezone or local event time could not be confirmed. Exact-date blocks still apply.' : 'No recurring schedule is saved; this gig uses exact-date availability blocks only.'}</div>` : ''}
           ${g.skillNeed ? `<div class="gig-notes"><strong>Skill focus:</strong> ${g.skillNeed}</div>` : ''}
           ${g.notes ? `<div class="gig-notes">${g.notes}</div>` : ''}
           <div class="radar-insight ${insight.cls}">${insight.text}</div>
           <div class="actions">
             <a class="btn btn-pass" href="booking.html?id=${gigId}" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">Details</a>
+            <button class="btn btn-pass" type="button" onclick="blockHostForGig('${gigId}')" aria-label="Block this gig host">Block host</button>
             <button class="btn btn-accept" onclick="respond('${gigId}','accept')">Accept</button>
             <button class="btn btn-pass"   onclick="respond('${gigId}','pass')">Pass</button>
           </div>
           <div class="radar-foot"><span>${daysUntil(g.date) <= 2 ? 'Moves fast' : 'Still open'}</span><span>${isSaved ? 'Saved in radar' : 'Live in radar now'}</span></div>`;
+        const reliability = document.createElement('p');
+        reliability.className = 'host-booking-history';
+        reliability.dataset.hostBookingReliability = g.hostId || '';
+        reliability.textContent = 'Loading server-recorded host booking history…';
+        card.appendChild(reliability);
         const feedbackContainer = document.createElement('div');
         feedbackContainer.style.marginTop = '12px';
         mountMatchFeedback(feedbackContainer, { userId: MUSICIAN_ID, gigId, documentRef: document });
         card.appendChild(feedbackContainer);
-        appendHostMuteButton(card.querySelector('.actions'), g.hostId);
         gigList.appendChild(card);
         addSwipeGesture(card, gigId);
       });
+      loadHostBookingReliability(visibleMatches.map((item) => item.g.hostId).filter(Boolean));
+    }
+
+    function updateHostBookingReliabilityLabels(hostIds) {
+      const wanted = new Set(hostIds);
+      document.querySelectorAll('[data-host-booking-reliability]').forEach((label) => {
+        const hostId = label.dataset.hostBookingReliability;
+        if (!wanted.has(hostId)) return;
+        if (hostBookingReliabilityCache.has(hostId)) {
+          const record = hostBookingReliabilityCache.get(hostId);
+          label.textContent = record
+            ? (formatHostBookingReliability(record, navigator.language) || 'Server-recorded host booking history is unavailable.')
+            : 'No forward-only host booking history has been recorded yet.';
+        } else if (hostBookingReliabilityPending.has(hostId)) {
+          label.textContent = 'Loading server-recorded host booking history…';
+        }
+      });
+    }
+
+    async function loadHostBookingReliability(hostIds) {
+      const ids = [...new Set(hostIds)].filter((id) => !hostBookingReliabilityCache.has(id) && !hostBookingReliabilityPending.has(id));
+      if (!ids.length) { updateHostBookingReliabilityLabels(hostIds); return; }
+      ids.forEach((id) => hostBookingReliabilityPending.add(id));
+      updateHostBookingReliabilityLabels(ids);
+      for (let offset = 0; offset < ids.length; offset += 30) {
+        const batch = ids.slice(offset, offset + 30);
+        try {
+          const snapshot = await getDocs(query(collection(db, 'hostBookingReliability'), where(documentId(), 'in', batch)));
+          batch.forEach((id) => hostBookingReliabilityCache.set(id, null));
+          snapshot.forEach((entry) => hostBookingReliabilityCache.set(entry.id, entry.data()));
+        } catch (error) {
+          console.warn('Host booking history unavailable:', error);
+          batch.forEach((id) => hostBookingReliabilityCache.set(id, { unavailable: true }));
+        } finally {
+          batch.forEach((id) => hostBookingReliabilityPending.delete(id));
+          updateHostBookingReliabilityLabels(batch);
+        }
+      }
     }
 
     // ── Swipe Gesture ─────────────────────────────────────────────────
@@ -2516,6 +2547,24 @@
     // ── Respond (accept / pass) ────────────────────────────────────────
     window.toggleSavedGig = (gigId) => toggleSavedGig(gigId);
 
+    window.blockHostForGig = async (gigId) => {
+      const hostId = gigDataCache[gigId]?.hostId;
+      if (!hostId || hostId === MUSICIAN_ID || blockedHostIds.has(hostId)) return;
+      if (!window.confirm('Block this host? Their open gigs will be removed from your matching feed. You can unblock them later.')) return;
+      try {
+        await setDoc(doc(db, 'userBlocks', MUSICIAN_ID, 'blocked', hostId), { blockedAt: serverTimestamp() });
+        blockedHostIds.add(hostId);
+        renderBlockedHosts();
+        matchedGigFeed = matchedGigFeed.filter((item) => item.g.hostId !== hostId);
+        previousMatchedIds = new Set(matchedGigFeed.map((item) => item.gigId));
+        renderRadarSummary();
+        renderQueues();
+      } catch (error) {
+        console.error('Could not block host', error);
+        window.alert('Could not block this host. Check your connection and try again.');
+      }
+    };
+
     window.respond = async (gigId, action, card) => {
       if (responding.has(gigId)) return;
       responding.add(gigId);
@@ -2537,66 +2586,11 @@
           }
 
           exitCard(card, 'right');
-          let acceptedGig = null;
-          const musicianRef = doc(db, 'musicians', MUSICIAN_ID);
-
-          await runTransaction(db, async (tx) => {
-            const gigSnap = await tx.get(gigRef);
-            const musicianSnap = await tx.get(musicianRef);
-            if (!gigSnap.exists()) throw new Error('Gig is no longer available.');
-
-            const liveGig = gigSnap.data();
-            if (liveGig.hostId === MUSICIAN_ID) {
-              throw new Error('You cannot accept your own gig as a performer.');
-            }
-            if (liveGig.status !== 'open') {
-              throw new Error('This gig has already been taken.');
-            }
-
-            tx.update(gigRef, {
-              status:'accepted',
-              acceptedBy: MUSICIAN_ID,
-              acceptedAt: serverTimestamp(),
-              lockedPay: liveGig.pay || '',
-              lockedDate: liveGig.date || '',
-              lockedTime: liveGig.time || '',
-              lockedLocation: liveGig.location || '',
-              ...(Number.isFinite(Number(liveGig.processingFeeAmount)) ? { lockedProcessingFeeAmount: Number(liveGig.processingFeeAmount) } : {}),
-              ...(Number.isFinite(Number(liveGig.hostTotalCharge)) ? { lockedHostTotalCharge: Number(liveGig.hostTotalCharge) } : {})
-            });
-            acceptedGig = liveGig;
-
-            if (liveGig.date) {
-              const booking = {
-                gigId,
-                id: gigId,
-                date:     liveGig.date,
-                venue:    liveGig.venue    || '',
-                time:     liveGig.time     || '',
-                pay:      liveGig.pay      || '',
-                location: liveGig.location || '',
-                genre:    liveGig.genre    || ''
-              };
-              const bookedDates = Array.isArray(musicianSnap.data()?.bookedDates) ? musicianSnap.data().bookedDates : [];
-              tx.update(musicianRef, {
-                bookedDates: pruneBookedDatesCache(bookedDates, booking)
-              });
-            }
-          });
-
-          if (acceptedGig && acceptedGig.date) {
-            const booking = {
-              gigId,
-              id: gigId,
-              date:     acceptedGig.date,
-              venue:    acceptedGig.venue    || '',
-              time:     acceptedGig.time     || '',
-              pay:      acceptedGig.pay      || '',
-              location: acceptedGig.location || '',
-              genre:    acceptedGig.genre    || ''
-            };
-            const existingBookings = musicianProfile.bookedDates || [];
-            musicianProfile.bookedDates = pruneBookedDatesCache(existingBookings, booking);
+          const actionResult = await performBookingAction(auth, gigId, 'accept');
+          const acceptedGig = actionResult.booking || gigDataCache[gigId];
+          if (acceptedGig?.date) {
+            const booking = { gigId, id: gigId, date: recurringAvailabilityForGig(musicianProfile, acceptedGig).localDate || acceptedGig.date, venue: acceptedGig.venue || '', time: acceptedGig.time || '', pay: acceptedGig.pay || '', location: acceptedGig.location || '', genre: acceptedGig.genre || '' };
+            musicianProfile.bookedDates = pruneBookedDatesCache(musicianProfile.bookedDates || [], booking);
           }
 
           loadUpcomingGigs();
@@ -2619,6 +2613,7 @@
         }
       } catch (err) {
         console.error(err);
+        if (action === 'accept') alert(err.message || 'Unable to accept this booking right now.');
         responding.delete(gigId);
         card.style.transform=''; card.style.opacity='';
         card.querySelectorAll('.btn').forEach(b => b.disabled=false);
@@ -2627,8 +2622,6 @@
 
     window.cancelBooking = async (gigId) => {
       if (!gigId) return;
-      const gigRef = doc(db, 'gigs', gigId);
-      const musicianRef = doc(db, 'musicians', MUSICIAN_ID);
       const currentGig = gigDataCache[gigId];
       if (currentGig?.date && currentGig.date < new Date().toISOString().slice(0, 10)) {
         alert('Past gigs cannot be canceled from this list.');
@@ -2636,29 +2629,7 @@
       }
       if (!window.confirm('Cancel this booking and reopen it for other performers?')) return;
       try {
-        await runTransaction(db, async (tx) => {
-          const gigSnap = await tx.get(gigRef);
-          const musicianSnap = await tx.get(musicianRef);
-          if (!gigSnap.exists()) throw new Error('This booking no longer exists.');
-          const gig = gigSnap.data();
-          if (gig.acceptedBy !== MUSICIAN_ID) throw new Error('This booking is no longer assigned to you.');
-          const bookedDates = Array.isArray(musicianSnap.data()?.bookedDates) ? musicianSnap.data().bookedDates : [];
-          tx.update(gigRef, {
-            status: 'open',
-            acceptedBy: deleteField(),
-            acceptedAt: deleteField(),
-            lockedPay: deleteField(),
-            lockedDate: deleteField(),
-            lockedTime: deleteField(),
-            lockedLocation: deleteField(),
-            lockedProcessingFeeAmount: deleteField(),
-            lockedHostTotalCharge: deleteField(),
-            checkedInAt: deleteField()
-          });
-          tx.update(musicianRef, {
-            bookedDates: pruneBookedDatesCache(bookedDates.filter((booking) => booking && booking.gigId !== gigId))
-          });
-        });
+        await performBookingAction(auth, gigId, 'cancel');
         if (Array.isArray(musicianProfile.bookedDates)) {
           musicianProfile.bookedDates = pruneBookedDatesCache(musicianProfile.bookedDates.filter((booking) => booking && booking.gigId !== gigId));
         }
@@ -2690,8 +2661,9 @@
         alert(state.reason || 'This booking cannot be checked in right now.');
         return;
       }
+      if (!window.confirm('Share your arrival check-in with the host?')) return;
       try {
-        await updateDoc(doc(db, 'gigs', gigId), { checkedInAt: serverTimestamp() });
+        await performBookingAction(auth, gigId, 'checkin');
         if (gigDataCache[gigId]) gigDataCache[gigId].checkedInAt = new Date().toISOString();
         await loadUpcomingGigs();
       } catch (err) {

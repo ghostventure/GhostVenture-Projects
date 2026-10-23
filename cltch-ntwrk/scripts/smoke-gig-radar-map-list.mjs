@@ -16,6 +16,7 @@ const page = await readFile(new URL('../gig-radar.html', import.meta.url), 'utf8
 const app = await readFile(new URL('../app/gig-radar-map.js', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const featureAudit = await readFile(new URL('../docs/FEATURE_AUDIT_200.md', import.meta.url), 'utf8');
+const firebaseConfig = JSON.parse(await readFile(new URL('../firebase.json', import.meta.url), 'utf8'));
 assert.match(page, /id="gigListMode" aria-pressed="true"/);
 assert.match(page, /id="gigMapMode" aria-pressed="false"/);
 assert.match(page, /id="gigMapView"[^>]*hidden/);
@@ -32,5 +33,9 @@ assert.match(page, /if \(!showingMap && gigMapFrameHost\.childElementCount\)/);
 assert.match(app, /return `https:\/\/www\.openstreetmap\.org\/export\/embed\.html\?/);
 assert.equal(packageJson.scripts['smoke:gig-radar-map-list'], 'node scripts/smoke-gig-radar-map-list.mjs');
 assert.match(featureAudit, /\[x\] 065\. Accessible map and list view/);
+const contentSecurityPolicy = firebaseConfig.hosting.headers
+  .flatMap((entry) => entry.headers)
+  .find((header) => header.key === 'Content-Security-Policy')?.value || '';
+assert.match(contentSecurityPolicy, /frame-src[^;]*https:\/\/www\.openstreetmap\.org/);
 
 console.log('Gig Radar map/list smoke passed: list is the default, invalid points are omitted, OSM is explicit-consent only, and the original list remains available.');

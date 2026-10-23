@@ -1,6 +1,6 @@
 const FUNCTION_BASE_URL = "https://us-central1-cltch-ntwrk.cloudfunctions.net";
-const BACKEND_DISABLED = true;
-const BACKEND_DISABLED_MESSAGE = "This feature requires the Blaze backend setup and is temporarily disabled.";
+export const BACKEND_DISABLED = true;
+export const BACKEND_DISABLED_MESSAGE = "This feature requires the Blaze backend setup and is temporarily disabled.";
 
 const FUNCTION_NAMES = {
   health: "apiHealth",

@@ -1,6 +1,6 @@
 export const MAX_GIG_TEMPLATES = 8;
-const TEMPLATE_FIELDS = ['venue', 'location', 'genre', 'performerType', 'pay', 'skillNeed', 'notes'];
-const FIELD_LIMITS = { venue: 120, location: 200, genre: 80, performerType: 40, pay: 40, skillNeed: 240, notes: 1200 };
+const TEMPLATE_FIELDS = ['venue', 'location', 'genre', 'performerType', 'pay', 'skillNeed', 'notes', 'eventTimeZone'];
+const FIELD_LIMITS = { venue: 120, location: 200, genre: 80, performerType: 40, pay: 40, skillNeed: 240, notes: 1200, eventTimeZone: 64 };
 const PREFIX = 'cltch_host_gig_templates_v1:';
 
 function resolveStorage(storage) {

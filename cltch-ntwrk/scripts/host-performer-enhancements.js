@@ -1,36 +1,4 @@
 (function () {
-  function readSyncState() {
-    try {
-      return JSON.parse(window.localStorage.getItem('cltch_availability_sync') || 'false');
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function writeSyncState(value) {
-    try {
-      window.localStorage.setItem('cltch_availability_sync', JSON.stringify(value));
-    } catch (error) {}
-  }
-
-  function initAvailabilitySync(buttonId, statusId) {
-    var button = document.getElementById(buttonId);
-    var status = document.getElementById(statusId);
-    if (!button || !status) return;
-    function update() {
-      var synced = readSyncState();
-      status.textContent = synced ? 'Connected: calendar sync active' : 'Not connected';
-      status.classList.toggle('synced', synced);
-      button.textContent = synced ? 'Disconnect Calendar' : 'Connect Calendar';
-    }
-    button.addEventListener('click', function () {
-      var next = !readSyncState();
-      writeSyncState(next);
-      update();
-    });
-    update();
-  }
-
   function initAssurancePack(containerId) {
     var container = document.getElementById(containerId);
     if (!container) return;
@@ -164,7 +132,6 @@
   }
 
   window.Enhancements = {
-    initAvailabilitySync: initAvailabilitySync,
     initAssurancePack: initAssurancePack,
     initFeedbackForms: initFeedbackForms,
     initLocalLawAlerts: initLocalLawAlerts,

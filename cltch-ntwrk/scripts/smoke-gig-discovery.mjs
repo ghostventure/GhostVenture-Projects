@@ -20,7 +20,7 @@ const search = normalizeGigSearch({
   toDate: "2026-11-30", minimumPay: "300.4"
 });
 assert.deepEqual(search, {
-  phrase: "Blue Note", performerType: "dj", fromDate: "2026-11-01",
+  phrase: "Blue Note", location: "", performerType: "dj", fromDate: "2026-11-01",
   toDate: "2026-11-30", minimumPay: 300
 });
 assert.equal(saveGigSearch(search, storage, "user-a"), true);
