@@ -11,13 +11,13 @@ export const navItems = [
   { href: '/contact/', label: 'Contact' },
 ]
 
-export const downloadHref = '/downloads/OverHead-Desktop-0.3.24-win-x64.zip'
-export const cylinderDownloadHref = '/downloads/OverHead-Cylinder-0.3.24-win-x64.zip'
-export const cylinderClientDownloadHref = '/downloads/OverHead-Cylinder-Client-0.3.24-win-x64.zip'
+export const downloadHref = '/downloads/#desktop'
+export const cylinderDownloadHref = '/downloads/#cylinder-server'
+export const cylinderClientDownloadHref = '/downloads/#cylinder-client'
 export const iosSourceHref = '/downloads/OverHead-iOS-SwiftUI-source.zip'
-export const checksumHref = '/downloads/SHA256SUMS.txt'
-export const cylinderChecksumHref = '/downloads/CYLINDER-SHA256SUMS.txt'
-export const cylinderClientChecksumHref = '/downloads/CYLINDER-CLIENT-SHA256SUMS.txt'
+export const checksumHref = '/downloads/#desktop'
+export const cylinderChecksumHref = '/downloads/#cylinder-server'
+export const cylinderClientChecksumHref = '/downloads/#cylinder-client'
 export const cylinderPageHref = '/cylinder/'
 export const investorBrochureHref = '/downloads/OverHead-Investor-Brochure.pdf'
 export const businessGuideHref = '/user-guide/'

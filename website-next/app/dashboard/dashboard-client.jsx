@@ -33,7 +33,7 @@ function displayError(error) {
     return "Permission denied. Ensure your email is verified and your account has the required role.";
   }
   if (code.includes("network-request-failed") || code.includes("unavailable")) {
-    return "Network connection unavailable. Changes will sync once reconnected.";
+    return "Network connection unavailable. Check your connection and try again; this action may not have completed.";
   }
   return error?.message || "The workspace action could not be completed.";
 }
@@ -106,7 +106,7 @@ export default function DashboardClient() {
     setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
     const handleOnline = () => {
       setIsOnline(true);
-      showNotice("Network connection restored. Syncing data...", "success");
+      showNotice("Network connection restored. Workspace updates are available again.", "success");
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -577,7 +577,7 @@ export default function DashboardClient() {
               marginBottom: 16,
             }}
           >
-            <strong>Offline Mode:</strong> Network disconnected. Local changes will sync when connection returns.
+            <strong>Offline:</strong> Network disconnected. Reconnect to make workspace changes.
           </div>
         )}
 
@@ -653,25 +653,32 @@ export default function DashboardClient() {
         )}
 
         {/* Topline Welcome & Status */}
-        <div className="dashboard-topline">
+        <div className="dashboard-topline dashboard-welcome">
           <div>
-            <p className="eyebrow">{profile.role} dashboard</p>
+            <p className="eyebrow">{profile.role} | browser workspace</p>
             <h1>Good to see you, {firstName}.</h1>
             <p>
-              Shared workspace data is scoped to {profile.business_name}. Your
-              role determines which changes you can make.
+              Work with your team's shared tasks, customers, and approvals for {profile.business_name}. Your role determines which changes you can make.
             </p>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          <div className="dashboard-welcome-actions">
             <Link className="primary" href={downloadHref}>
-              Download desktop app
+              Get OverHead for Windows
             </Link>
-            {lastSyncedAt && (
-              <span style={{ fontSize: 11, color: "var(--ink-muted, #718096)" }}>
-                Last workspace update: {lastSyncedAt.toLocaleTimeString()}
-              </span>
-            )}
+            <span>Desktop tools are available in the Windows app.</span>
           </div>
+        </div>
+
+        <div className="dashboard-sync-status" aria-label="Workspace connection status">
+          <span className={isOnline ? "dashboard-connection is-online" : "dashboard-connection is-offline"}>
+            <span aria-hidden="true" />
+            {isOnline ? "Network available" : "Offline"}
+          </span>
+          <span>
+            {lastSyncedAt
+              ? <>Latest workspace update {lastSyncedAt.toLocaleTimeString()}</>
+              : "Waiting for workspace data"}
+          </span>
         </div>
 
         {/* Metric Cards */}
@@ -719,36 +726,27 @@ export default function DashboardClient() {
             </div>
 
             {/* Task Filter Tabs */}
-            <div style={{ display: "flex", gap: 8, margin: "8px 0 14px" }}>
+            <div className="dashboard-task-filters" role="group" aria-label="Filter priority tasks">
               <button
                 type="button"
-                className="mini-button"
-                style={{
-                  background: taskFilter === "all" ? "var(--cyan, #00d2d3)" : "transparent",
-                  color: taskFilter === "all" ? "var(--void, #111)" : "inherit",
-                }}
+                className={`mini-button${taskFilter === "all" ? " is-active" : ""}`}
+                aria-pressed={taskFilter === "all"}
                 onClick={() => setTaskFilter("all")}
               >
                 All ({tasks.length})
               </button>
               <button
                 type="button"
-                className="mini-button"
-                style={{
-                  background: taskFilter === "active" ? "var(--cyan, #00d2d3)" : "transparent",
-                  color: taskFilter === "active" ? "var(--void, #111)" : "inherit",
-                }}
+                className={`mini-button${taskFilter === "active" ? " is-active" : ""}`}
+                aria-pressed={taskFilter === "active"}
                 onClick={() => setTaskFilter("active")}
               >
                 Active ({openTasks})
               </button>
               <button
                 type="button"
-                className="mini-button"
-                style={{
-                  background: taskFilter === "done" ? "var(--cyan, #00d2d3)" : "transparent",
-                  color: taskFilter === "done" ? "var(--void, #111)" : "inherit",
-                }}
+                className={`mini-button${taskFilter === "done" ? " is-active" : ""}`}
+                aria-pressed={taskFilter === "done"}
                 onClick={() => setTaskFilter("done")}
               >
                 Done ({tasks.length - openTasks})

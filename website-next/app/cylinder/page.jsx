@@ -98,8 +98,8 @@ export default function CylinderPage() {
       </div>
       <div className="cylinder-download-actions">
         <Link className="primary" href={cylinderDownloadHref}>Download Cylinder Server 0.3.24</Link>
-        <Link className="secondary" href={cylinderClientDownloadHref}>Download Cylinder Client 0.3.24</Link>
         <Link className="secondary" href={cylinderChecksumHref}>Get Server installer checksums</Link>
+        <Link className="secondary" href={cylinderClientDownloadHref}>Download Cylinder Client 0.3.24</Link>
         <Link className="secondary" href={cylinderClientChecksumHref}>Get Client installer checksums</Link>
       </div>
     </section>

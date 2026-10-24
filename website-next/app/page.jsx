@@ -1,4 +1,5 @@
 import Link from "next/link";
+import "./home.css";
 import ExecutiveSummaryFeature from './executive-summary/feature';
 import { CTA, CardGrid, SiteShell } from "./components";
 import { businessFoundation } from "./business-foundation";
@@ -90,19 +91,20 @@ export default function HomePage() {
     <SiteShell>
       <main>
         <section className="home-hero">
+          <div className="home-hero-layout">
           <div className="hero-inner">
             <p className="eyebrow">
               Windows office software for owner-led businesses
             </p>
-            <h1>Find the customer work that is costing you money.</h1>
+            <h1>Know what needs attention. Keep the next step clear.</h1>
             <p className="lede">
-              Use OverHead to run an Office Revenue Leak Check: find open
-              quotes, unpaid invoices, missed follow-up, waiting approvals, and
-              work assigned to nobody before they quietly become lost revenue.
+              OverHead brings customer context, daily work, and practical
+              review checks into one Windows desktop workspace, so you can see
+              what is moving, what is stuck, and what deserves a closer look.
             </p>
             <div className="hero-actions">
               <Link className="primary" href={downloadHref}>
-                Start your Revenue Leak Check
+                Explore OverHead Desktop
               </Link>
               <Link
                 className="text-link hero-guide-link"
@@ -111,10 +113,7 @@ export default function HomePage() {
                 See how it works
               </Link>
             </div>
-            <p className="hero-note">
-              <strong>90-day free Gold trial.</strong> No card is required to
-              evaluate the workflow. Start with one customer and one task.
-            </p>
+            <p className="hero-note">Start with the work already on your desk. Keep decisions and customer follow-through in view.</p>
             <div className="hero-readout" aria-label="Product capabilities">
               <div>
                 <span>01</span>
@@ -130,6 +129,12 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+          <figure className="home-hero-preview">
+            <div className="home-preview-caption"><span>OVERHEAD DESKTOP</span><span>OVERVIEW</span></div>
+            <img src="/assets/overhead-console-proof.png" alt="OverHead Desktop Overview with session privacy, local integrity status, workspace profile, current work, and readiness checks" />
+            <figcaption>Overview and workspace controls in the installed Windows app</figcaption>
+          </figure>
+          </div>
         </section>
 
         <ExecutiveSummaryFeature />
@@ -137,30 +142,30 @@ export default function HomePage() {
           <p className="eyebrow">Current release · 0.3.24</p>
           <h2 id="release-title">Move through office work with less friction.</h2>
           <p className="section-copy">
-            Desktop, Cylinder Server, and Cylinder Client share the latest
-            workspace improvements: a searchable command palette, keyboard
-            navigation, a Work Planner, recent-record history, bulk status
-            previews, lazy-loaded workspaces, and batched local saves.
+            OverHead Desktop 0.3.24 adds a more useful daily overview, clearer
+            workspace navigation, and a personal profile center. These are
+            desktop capabilities; the website does not provide the installed
+            app&apos;s local records, checks, or controls.
           </p>
           <div className="card-grid three">
             <article>
-              <span>Find work</span>
-              <strong>Jump to an action with Ctrl+K.</strong>
-              <p>Search workspaces and common actions from the keyboard.</p>
+              <span>Overview checks</span>
+              <strong>See what may need attention today.</strong>
+              <p>Review today&apos;s work, appointment overlaps, possible duplicate customers, and missing customer details.</p>
             </article>
             <article>
-              <span>Plan the day</span>
-              <strong>Keep the next handoff visible.</strong>
-              <p>Use the Work Planner and recent history to pick up active work.</p>
+              <span>Review before action</span>
+              <strong>Know what a change will do.</strong>
+              <p>Preview selected task updates and inspect CSV structure before deciding what to do next.</p>
             </article>
             <article>
-              <span>Update work in batches</span>
-              <strong>Preview changes before applying them.</strong>
-              <p>Review bulk status updates before saving the selected records.</p>
+              <span>Local operations</span>
+              <strong>Keep recovery details visible.</strong>
+              <p>Check local backup status, device export history, and supported draft recovery in the desktop app.</p>
             </article>
           </div>
           <p className="office-fit-note">
-            Desktop is the individual-user edition. Cylinder is the
+            These Overview and profile features are in OverHead Desktop. Desktop is the individual-user edition. Cylinder is the
             multi-user department edition: its Server host manages employee
             Ranks and device access, while its separate Client runs on Windows
             10/11 workstations and remote-desktop endpoints. Cylinder&apos;s
@@ -249,21 +254,22 @@ export default function HomePage() {
 
         <section className="section home-product-proof">
           <div>
-            <p className="eyebrow">See the product</p>
-            <h2>A real desktop workspace for the work already on your desk.</h2>
+            <p className="eyebrow">A profile that feels like yours</p>
+            <h2>Set up your work identity, while keeping account access clear.</h2>
             <p className="section-copy">
-              The command console brings customer records, current work, office
-              readiness, and key controls into one place. The screenshots below
-              are from the installed product.
+              The User Profile Center gives you a setup checklist and editable
+              work details such as title, location, and time zone. Account
+              identity and permissions remain managed separately.
             </p>
           </div>
-          <figure>
-            <img
-              src="/assets/overhead-console-proof.png"
-              alt="OverHead desktop command console showing workspace overview, customer database, current work queue, and office readiness"
-            />
-            <figcaption>OverHead Desktop command console</figcaption>
-          </figure>
+          <div className="home-profile-card">
+            <div className="home-profile-top"><span className="home-profile-avatar">OH</span><div><small>YOUR OVERHEAD PROFILE</small><strong>Work details, in one place</strong></div><span className="home-profile-badge">LOCAL</span></div>
+            <div className="home-profile-progress"><div><span>Profile setup</span><strong>Checklist</strong></div><span className="home-profile-progress-track"><i /></span><small>A guide to completing your workspace details</small></div>
+            <div className="home-profile-fields"><span>Role or title</span><span>Work location</span><span>Time zone</span><span>Work hours</span></div>
+            <p className="home-profile-note">Editable profile details are saved in this installation and are not synced to another device.</p>
+            <p className="home-profile-note">Privacy mode can mask customer and evidence details on screen. Lock the app when leaving your desk; masking does not delete records or change permissions.</p>
+            <Link className="text-link" href={businessGuideHref}>See profile and privacy details in the user guide</Link>
+          </div>
         </section>
 
         <section className="section">
