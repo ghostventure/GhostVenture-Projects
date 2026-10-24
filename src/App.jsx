@@ -3,6 +3,7 @@ import { RecentRecords } from './features/FeatureWave101Helpers'
 import UXCompanionPanel from './features/UXCompanionPanel'
 import { UXNavigationToolkit } from './features/UXNavigationToolkit'
 import InAppHelpSearch from './features/InAppHelpSearch.jsx'
+import UserProfileCenter from './features/UserProfileCenter.jsx'
 import {
   BadgeCheck,
   BarChart3,
@@ -807,9 +808,6 @@ function App() {
                 privacyMode={privacyMode}
                 setPrivacyMode={setPrivacyMode}
                 session={session}
-                draftSession={draftSession}
-                updateDraft={updateDraft}
-                signIn={signIn}
                 backendState={backendState}
                 refreshBackend={refreshBackend}
                 operationNotice={operationNotice}
@@ -3425,7 +3423,7 @@ function SecuritySection({ backendState, session, refreshBackend, setOperationNo
   )
 }
 
-function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session, draftSession, updateDraft, signIn, backendState, refreshBackend, operationNotice, setOperationNotice, allowedSections = [] }) {
+function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session, backendState, refreshBackend, operationNotice, setOperationNotice, allowedSections = [] }) {
   const [reduceMotion, setReduceMotion] = useState(() => {
     const saved = window.localStorage.getItem('overhead.reduceMotion.v1')
     return saved === null ? Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) : saved === 'true'
@@ -3663,6 +3661,7 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
         </div>
         <Settings2 size={20} />
       </div>
+      <UserProfileCenter session={session} backendState={backendState} />
       <div className="settings-layout">
         <div className="settings-grid">
           {themes.map((item) => (
@@ -3770,19 +3769,6 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
               ))}
             </div>
           </div>
-          <FormField label="Owner name" value={draftSession.ownerName} onChange={(value) => updateDraft('ownerName', value)} placeholder="Owner name" />
-          <FormField label="Business name" value={draftSession.businessName} onChange={(value) => updateDraft('businessName', value)} placeholder="Business name" />
-          <FormField label="Email" value={draftSession.email} onChange={(value) => updateDraft('email', value)} placeholder="owner@example.com" />
-          <label>
-            Role
-            <select value={draftSession.role} onChange={(event) => updateDraft('role', event.target.value)}>
-              <option>Owner</option>
-              <option>Front Desk</option>
-              <option>Bookkeeper</option>
-              <option>Support</option>
-            </select>
-          </label>
-          <button className="primary-action" type="button" onClick={signIn}>Save Profile</button>
         </div>
       </div>
     </section>
