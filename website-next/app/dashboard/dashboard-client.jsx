@@ -46,13 +46,20 @@ export default function DashboardClient() {
   const [approvals, setApprovals] = useState([]);
   const [members, setMembers] = useState([]);
   const [licenses, setLicenses] = useState([]);
-  const [billedSeatCount, setBilledSeatCount] = useState(0);
-  const activeSeatCount = Math.max(1, billedSeatCount, members.filter((member) => member.status === "Active").length);
-  const activeTier = String(licenses.find((license) => license.user_uid === profile?.uid)?.tier || licenses[0]?.tier || "silver");
-  const activePlan = activeTier.charAt(0).toUpperCase() + activeTier.slice(1);
-  const monthlySeatQuote = desktopSeatPricing(activePlan, activeSeatCount);
-  const annualCylinderQuote = desktopSeatPricing(activePlan, activeSeatCount, "annual");
-  const cylinderRecommended = monthlySeatQuote.cylinderRecommended || annualCylinderQuote.cylinderRecommended;
+  const [myLicense, setMyLicense] = useState(null);
+  const [billedSeatCount, setBilledSeatCount] = useState(null);
+  const [membersLoaded, setMembersLoaded] = useState(false);
+  const seatCountLoaded = billedSeatCount !== null || membersLoaded;
+  const activeSeatCount = Math.max(Number(billedSeatCount) || 0, members.filter((member) => member.status === "Active").length);
+  const activeTier = ["silver", "gold", "black"].includes(String(myLicense?.tier || "").toLowerCase())
+    ? String(myLicense.tier).toLowerCase()
+    : null;
+  const activePlan = activeTier ? activeTier.charAt(0).toUpperCase() + activeTier.slice(1) : null;
+  const monthlySeatQuote = activePlan && activeSeatCount > 0 ? desktopSeatPricing(activePlan, activeSeatCount) : null;
+  const annualCylinderQuote = activePlan && activeSeatCount > 0 ? desktopSeatPricing(activePlan, activeSeatCount, "annual") : null;
+  const cylinderRecommended = monthlySeatQuote && annualCylinderQuote
+    ? monthlySeatQuote.cylinderRecommended || annualCylinderQuote.cylinderRecommended
+    : false;
 
   // Draft states
   const [draft, setDraft] = useState("");
@@ -103,7 +110,7 @@ export default function DashboardClient() {
     };
     const handleOffline = () => {
       setIsOnline(false);
-      showNotice("You are currently offline. Changes will resume when connected.", "error");
+      showNotice("You are offline. Workspace changes require a network connection.", "error");
     };
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -112,17 +119,6 @@ export default function DashboardClient() {
       window.removeEventListener("offline", handleOffline);
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     };
-  }, []);
-
-  // Background tab visibility tracking: record sync time on return
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        setLastSyncedAt(new Date());
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
   // Authenticate user & load workspace profile
@@ -140,7 +136,6 @@ export default function DashboardClient() {
           return;
         }
         setProfile(snapshot.data());
-        setLastSyncedAt(new Date());
       } catch (error) {
         showNotice(displayError(error), "error");
       }
@@ -210,6 +205,7 @@ export default function DashboardClient() {
         setMembers(
           snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
         );
+        setMembersLoaded(true);
         setLastSyncedAt(new Date());
       },
       (error) => showNotice(displayError(error), "error"),
@@ -221,7 +217,24 @@ export default function DashboardClient() {
     if (!profile?.workspace_id) return undefined;
     return onSnapshot(
       doc(firebaseDb, "workspaces", profile.workspace_id, "billing", "current"),
-      (snapshot) => setBilledSeatCount(Number(snapshot.data()?.seat_count) || 0),
+      (snapshot) => {
+        const seatCount = snapshot.data()?.seat_count;
+        setBilledSeatCount(Number.isFinite(Number(seatCount)) && seatCount !== undefined && seatCount !== null ? Number(seatCount) : null);
+        setLastSyncedAt(new Date());
+      },
+      (error) => showNotice(displayError(error), "error"),
+    );
+  }, [profile?.workspace_id]);
+
+  useEffect(() => {
+    const userId = firebaseAuth.currentUser?.uid;
+    if (!profile?.workspace_id || !userId) return undefined;
+    return onSnapshot(
+      doc(firebaseDb, "workspaces", profile.workspace_id, "licenses", userId),
+      (snapshot) => {
+        setMyLicense(snapshot.exists() ? snapshot.data() : null);
+        setLastSyncedAt(new Date());
+      },
       (error) => showNotice(displayError(error), "error"),
     );
   }, [profile?.workspace_id]);
@@ -655,7 +668,7 @@ export default function DashboardClient() {
             </Link>
             {lastSyncedAt && (
               <span style={{ fontSize: 11, color: "var(--ink-muted, #718096)" }}>
-                ● Live sync active
+                Last workspace update: {lastSyncedAt.toLocaleTimeString()}
               </span>
             )}
           </div>
@@ -1021,7 +1034,7 @@ export default function DashboardClient() {
                 <span>Administrator controls</span>
                 <h2>Invite and manage your team</h2>
               </div>
-              <strong>{activeSeatCount} billable seats</strong>
+              <strong>{seatCountLoaded ? `${activeSeatCount} billable seats` : "Loading seat count..."}</strong>
             </div>
             <div className="invite-form">
               <label>
@@ -1088,14 +1101,20 @@ export default function DashboardClient() {
               Invitees create their own password at the shared sign-in page.
               Give them the workspace ID (<strong>{profile.workspace_id}</strong>) shown in the confirmation.
             </p>
-            <p className="admin-hint">
-              Seat pricing guide: every Desktop plan includes 1 user. Each added seat is half the previous seat price, rounded down to a whole dollar, with a $14.99/month minimum; the next {activePlan} seat would be ${ (monthlySeatQuote.nextSeatCents / 100).toFixed(2) }. Total Desktop charges are capped at $499/month. The first paid month is free at checkout and does not stack with the existing 90-day Gold trial. Seat charges are included in checkout and adjusted on the next subscription invoice. Cylinder includes up to 50 users at its separate server price.
-            </p>
-            <p className="admin-hint" role="status">
-              {cylinderRecommended
-                ? `Cylinder may cost less for ${activeSeatCount} active ${activePlan} users. Current uncapped Desktop estimate: $${(monthlySeatQuote.uncappedCents / 100).toFixed(2)}/month, capped at $499/month. Compare Cylinder's $499/month or $4,990/year plan. Cylinder requires a supported Windows Server or Windows IoT host.`
-                : `${activeSeatCount} active ${activePlan} users. Compare Cylinder at ${cylinderCrossoverUsers(activePlan, "annual")} users on its annual price or ${cylinderCrossoverUsers(activePlan)} users month to month, based on the selected Desktop price and half-price additional seats.`}
-            </p>
+            {activePlan && monthlySeatQuote && annualCylinderQuote ? (
+              <>
+                <p className="admin-hint">
+                  Seat pricing guide: every Desktop plan includes 1 user. Each added seat is half the previous seat price, rounded down to a whole dollar, with a $14.99/month minimum; the next {activePlan} seat would be ${ (monthlySeatQuote.nextSeatCents / 100).toFixed(2) }. Total Desktop charges are capped at $499/month. The first paid month is free at checkout and does not stack with the existing 90-day Gold trial. Seat charges are included in checkout and adjusted on the next subscription invoice. Cylinder includes up to 50 users at its separate server price.
+                </p>
+                <p className="admin-hint" role="status">
+                  {cylinderRecommended
+                    ? `Cylinder may cost less for ${activeSeatCount} active ${activePlan} users. Current uncapped Desktop estimate: $${(monthlySeatQuote.uncappedCents / 100).toFixed(2)}/month, capped at $499/month. Compare Cylinder's $499/month or $4,990/year plan. Cylinder requires a supported Windows Server or Windows IoT host.`
+                    : `${activeSeatCount} active ${activePlan} users. Compare Cylinder at ${cylinderCrossoverUsers(activePlan, "annual")} users on its annual price or ${cylinderCrossoverUsers(activePlan)} users month to month, based on the selected Desktop price and half-price additional seats.`}
+                </p>
+              </>
+            ) : (
+              <p className="admin-hint">Seat pricing estimates will appear when an active license and current seat count are available.</p>
+            )}
             <div className="member-list">
               {members.map((member) => (
                 <article key={member.id}>

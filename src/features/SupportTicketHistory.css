@@ -1,0 +1,96 @@
+.support-ticket-history {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 16px;
+  background: var(--panel, rgba(15, 23, 42, .42));
+  color: var(--text, inherit);
+}
+
+.support-ticket-history__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.support-ticket-history__heading h3 { margin: 0; }
+.support-ticket-history__heading p,
+.support-ticket-history__empty { margin: 5px 0 0; color: var(--muted, #94a3b8); line-height: 1.5; }
+
+.support-ticket-history__selector {
+  display: grid;
+  gap: 5px;
+  min-width: min(360px, 48%);
+  color: var(--muted, #94a3b8);
+  font-size: .82rem;
+}
+
+.support-ticket-history__selector select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, .32);
+  border-radius: 9px;
+  background: var(--surface, #0f172a);
+  color: var(--text, #e2e8f0);
+}
+
+.support-ticket-history__scope {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, .08);
+}
+
+.support-ticket-history__scope span,
+.support-ticket-history__timeline small { color: var(--muted, #94a3b8); }
+
+.support-ticket-history__timeline {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.support-ticket-history__timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  padding: 4px 0 14px;
+}
+
+.support-ticket-history__timeline li:not(:last-child)::before {
+  position: absolute;
+  top: 17px;
+  bottom: -1px;
+  left: 6px;
+  width: 2px;
+  background: rgba(148, 163, 184, .3);
+  content: '';
+}
+
+.support-ticket-history__marker {
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border: 2px solid var(--accent, #60a5fa);
+  border-radius: 50%;
+  background: var(--surface, #0f172a);
+}
+
+.support-ticket-history__timeline li > div { display: grid; gap: 3px; }
+.support-ticket-history__timeline time { color: var(--muted, #94a3b8); font-size: .84rem; }
+.support-ticket-history__timeline small { font-size: .78rem; }
+
+@media (max-width: 620px) {
+  .support-ticket-history__heading { display: grid; }
+  .support-ticket-history__selector { min-width: 0; width: 100%; }
+}

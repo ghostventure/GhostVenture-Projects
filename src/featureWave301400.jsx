@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import SupportTicketHistory from './features/SupportTicketHistory.jsx'
 
 const defaultPreferences = { textScale: 'normal', locale: 'en-US', density: 'comfortable', language: 'en', notificationSound: 'off' }
 const assistModes = [
@@ -319,17 +320,37 @@ function LocalAudioNoteRecorder() {
   return <div className="backend-health local-audio-note"><strong>Local audio note</strong><p>Recording begins only when you select Start. Audio stays in memory until you download or clear it; maximum 10 minutes or 50 MB.</p><label>Note title<input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} disabled={recording} /></label><div className="button-row">{recording ? <button className="mini-button" type="button" onClick={stopRecording}>Stop recording ({Math.floor(duration / 60)}:{String(duration % 60).padStart(2, '0')})</button> : <button className="mini-button" type="button" onClick={startRecording}>Start audio recording</button>}{recordedUrl && <button className="mini-button" type="button" onClick={clearRecording}>Clear recording</button>}</div>{recordedUrl && <><audio controls src={recordedUrl}>Audio playback is unavailable.</audio><a className="ghost-button" href={recordedUrl} download={`${fileTitle}.${extension}`}>Download audio note</a></>}{error && <small className="form-error" role="alert">{error}</small>}</div>
 }
 
-export function SupportOperationsPanel({ tickets = [], users = [], session, setOperationNotice }) {
+export function SupportOperationsPanel({ tickets = [], users = [], auditEvents = [], session, setOperationNotice }) {
+  const queueFilterStorageKey = 'overhead.support.queue-filter.v1'
+  const validQueueFilters = ['needs-attention', 'unassigned', 'unresponded', 'overdue', 'all']
   const [records, setRecords] = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [internalNote, setInternalNote] = useState('')
+  const [internalNoteError, setInternalNoteError] = useState('')
   const [feedback, setFeedback] = useState(5)
   const [outageNotice, setOutageNotice] = useState('')
   const [routingTarget, setRoutingTarget] = useState('Support lead')
   const [error, setError] = useState('')
+  const [queueFilter, setQueueFilter] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(queueFilterStorageKey)
+      return validQueueFilters.includes(saved) ? saved : 'needs-attention'
+    } catch { return 'needs-attention' }
+  })
+  const [queueSearch, setQueueSearch] = useState('')
+  useEffect(() => {
+    try { window.localStorage.setItem(queueFilterStorageKey, queueFilter) } catch { /* Device storage can be unavailable; queue filtering remains usable. */ }
+  }, [queueFilter])
   useEffect(() => {
     let active = true
-    window.overheadBackend?.listFeatureRecords?.('support').then((rows) => { if (active) setRecords(rows) }).catch((reason) => { if (active) setError(reason.message) })
+    const loadRecords = window.overheadBackend?.listFeatureRecords
+    if (!loadRecords) {
+      setError('Support assignment details are unavailable in this app build. The ticket queue is still available.')
+      return () => { active = false }
+    }
+    Promise.resolve(loadRecords('support'))
+      .then((rows) => { if (active) setRecords(Array.isArray(rows) ? rows : []) })
+      .catch((reason) => { if (active) setError(reason?.message || 'Support assignment details could not be loaded.') })
     return () => { active = false }
   }, [])
   const ticket = tickets.find((item) => item.id === selectedId) || tickets[0]
@@ -338,6 +359,33 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
   const firstResponseAt = metadata.first_response_at || ''
   const priorities = { Low: 72, Normal: 24, High: 8, Urgent: 2 }
   const slaDeadline = ticket?.created_at ? new Date(new Date(ticket.created_at).getTime() + (priorities[ticket.priority] || 24) * 3600000) : null
+  const queueItems = tickets.map((item) => {
+    const itemMeta = records.find((record) => record.ticket_id === item.id) || {}
+    const targetHours = priorities[item.priority] || 24
+    const createdAt = item.created_at ? new Date(item.created_at) : null
+    const deadline = createdAt && Number.isFinite(createdAt.getTime()) ? new Date(createdAt.getTime() + targetHours * 3600000) : null
+    const open = !item.closed_at && !/closed|resolved|complete/i.test(item.status || '')
+    const remaining = deadline ? deadline.getTime() - Date.now() : null
+    const overdue = open && remaining !== null && remaining < 0 && !itemMeta.first_response_at
+    const atRisk = open && remaining !== null && remaining >= 0 && remaining <= targetHours * 3600000 * 0.2 && !itemMeta.first_response_at
+    const unassigned = open && !itemMeta.assignee && !item.assignee
+    const unresponded = open && !itemMeta.first_response_at
+    return { item, itemMeta, deadline, open, overdue, atRisk, unassigned, unresponded }
+  }).sort((a, b) => Number(b.overdue) - Number(a.overdue) || Number(b.atRisk) - Number(a.atRisk) || (a.deadline?.getTime() ?? Infinity) - (b.deadline?.getTime() ?? Infinity))
+  const activeQueue = queueItems.filter((entry) => entry.open)
+  const queueFilteredItems = queueItems.filter((entry) => {
+    if (queueFilter === 'needs-attention') return entry.open && (entry.overdue || entry.atRisk || entry.unassigned)
+    if (queueFilter === 'unassigned') return entry.unassigned
+    if (queueFilter === 'unresponded') return entry.unresponded
+    if (queueFilter === 'overdue') return entry.overdue
+    return entry.open
+  })
+  const normalizedQueueSearch = queueSearch.trim().toLocaleLowerCase()
+  const filteredQueue = queueFilteredItems.filter(({ item, itemMeta }) => {
+    if (!normalizedQueueSearch) return true
+    return [item.subject, item.id, item.status, itemMeta.assignee, item.assignee]
+      .some((value) => String(value || '').toLocaleLowerCase().includes(normalizedQueueSearch))
+  })
   const roundRobin = users.filter((user) => ['Owner', 'Support', 'Bookkeeper'].includes(user.role) && user.status === 'Active')
   async function saveMeta(patch) {
     if (!ticket?.id) return
@@ -350,9 +398,19 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
   }
   async function addInternalNote() {
     if (!internalNote.trim()) return
-    const note = { text: internalNote.trim(), author: session.email, created_at: new Date().toISOString() }
+    const noteText = internalNote.trim()
+    // This is a local precaution against common pasted credentials, not a complete secret scanner.
+    const looksLikeCredential = /\b(?:password|passwd|secret|api[_ -]?key|access[_ -]?token|client[_ -]?secret|private[_ -]?key)\b\s*[:=]\s*[^\s,;]+/i.test(noteText)
+      || /\bBearer\s+[A-Za-z0-9._~+\/-]{16,}={0,}/i.test(noteText)
+      || /\b(?:sk_(?:live|test)_[A-Za-z0-9]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{16,}|AIza[A-Za-z0-9_-]{30,}|AKIA[A-Z0-9]{16}|ya29\.[A-Za-z0-9_-]{20,})\b/i.test(noteText)
+      || /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/.test(noteText)
+    if (looksLikeCredential) {
+      setInternalNoteError('This note looks like it may contain a password, token, or API key. Remove the secret before saving. This local check catches common patterns but cannot detect every secret; do not put credentials in support notes.')
+      return
+    }
+    const note = { text: noteText, author: session.email, created_at: new Date().toISOString() }
     await saveMeta({ internal_notes: [...(metadata.internal_notes || []), note] })
-    setInternalNote('')
+    setInternalNote(''); setInternalNoteError('')
   }
   async function convertToProject() {
     if (!ticket || !['Owner', 'Front Desk', 'Bookkeeper'].includes(session.role)) return setError('Your role cannot create project records from support tickets.')
@@ -384,6 +442,25 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
   const [macroIndex, setMacroIndex] = useState(0)
   return <section className="backend-health support-operations">
     <strong>Support operations</strong>
+    <div className="support-queue" aria-label="Support ticket triage queue" style={{ marginTop: 12, padding: 12, border: '1px solid var(--border, #39445a)', borderRadius: 10 }}>
+      <div className="button-row" role="group" aria-label="Filter support queue" style={{ flexWrap: 'wrap' }}>
+        {[['needs-attention', 'Needs attention'], ['unassigned', 'Unassigned'], ['unresponded', 'Awaiting response'], ['overdue', 'Past target'], ['all', 'All open']].map(([value, label]) => <button className="mini-button" type="button" key={value} aria-pressed={queueFilter === value} onClick={() => setQueueFilter(value)}>{label}</button>)}
+      </div>
+      <div className="button-row" style={{ alignItems: 'end', marginTop: 10 }}>
+        <label style={{ flex: '1 1 240px' }}>Search tickets by subject, ticket ID, status, or assignee<input type="search" value={queueSearch} onChange={(event) => setQueueSearch(event.target.value)} placeholder="Search the selected queue" aria-describedby="support-queue-search-help" /></label>
+        {queueSearch && <button className="mini-button" type="button" onClick={() => setQueueSearch('')} aria-label="Clear support ticket search">Clear search</button>}
+      </div>
+      <small id="support-queue-search-help">Search applies within the selected queue. It does not change ticket data.</small>
+      <p aria-live="polite">{activeQueue.length} open ticket{activeQueue.length === 1 ? '' : 's'} · {activeQueue.filter((entry) => entry.overdue).length} past first-response target · {activeQueue.filter((entry) => entry.unassigned).length} unassigned. Targets are local guidance based on ticket priority and creation time.</p>
+      {tickets.length === 0 ? <p>No support tickets are available for this workspace yet.</p> : filteredQueue.length ? <div className="support-queue-list" style={{ display: 'grid', gap: 8 }}>{filteredQueue.slice(0, 8).map(({ item, itemMeta, deadline, overdue, atRisk, unassigned }) => {
+        const selected = (selectedId || tickets[0]?.id) === item.id
+        const signal = overdue ? 'Past target' : atRisk ? 'Target soon' : unassigned ? 'Unassigned' : itemMeta.first_response_at ? 'Responded' : 'Awaiting response'
+        return <button className="support-queue-item" type="button" key={item.id} aria-pressed={selected} onClick={() => setSelectedId(item.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, width: '100%', padding: 10, textAlign: 'left', border: '1px solid var(--border, #39445a)', borderRadius: 8, background: selected ? 'var(--surface-raised, rgba(120,140,180,.12))' : 'transparent', color: 'inherit', cursor: 'pointer' }}>
+          <span style={{ display: 'grid', gap: 4 }}><strong>{item.subject || item.id}</strong><small>{item.priority || 'Normal'} priority · {item.status || 'Open'} · {itemMeta.assignee || item.assignee || 'No owner'}</small></span>
+          <span className={`support-queue-signal${overdue ? ' is-overdue' : atRisk ? ' is-risk' : ''}`} style={{ display: 'grid', textAlign: 'right', color: overdue ? 'var(--danger, #b42318)' : atRisk ? 'var(--warning, #a15c00)' : 'inherit' }}>{signal}{deadline && !itemMeta.first_response_at && <small>Target {deadline.toLocaleString()}</small>}</span>
+        </button>
+      })}</div> : normalizedQueueSearch ? <p role="status">No tickets in this queue match “{queueSearch.trim()}”. Clear the search or choose another queue.</p> : queueFilteredItems.length === 0 ? <p role="status">No tickets match this queue filter.</p> : <p role="status">No tickets match this search.</p>}
+    </div>
     <div className="support-ops-grid">
       <div>
         <label>Ticket<select value={ticket?.id || ''} onChange={(event) => setSelectedId(event.target.value)}><option value="">Select a ticket</option>{tickets.map((item) => <option key={item.id} value={item.id}>{item.subject || item.id} · {item.status || 'Open'}</option>)}</select></label>
@@ -396,7 +473,8 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
           <label>Escalation path<select value={metadata.escalation_path || 'support_lead'} onChange={(event) => saveMeta({ escalation_path: event.target.value })}><option value="support_lead">Support lead review</option><option value="workspace_owner">Workspace Owner review</option><option value="billing_owner">Billing owner review</option><option value="privacy_lead">Privacy/security owner review</option></select></label>
           <label>Assign support owner<select value={metadata.assignee || ''} onChange={(event) => saveMeta({ assignee: event.target.value })}><option value="">Unassigned</option>{roundRobin.map((user) => <option key={user.email} value={user.email}>{user.owner_name || user.email}</option>)}</select></label>
           <div className="button-row"><button className="mini-button" type="button" onClick={advanceRoundRobin}>Assign next in rotation</button><button className="mini-button" type="button" onClick={convertToProject}>Create follow-up project</button></div>
-          <label>Internal collaboration note<input value={internalNote} onChange={(event) => setInternalNote(event.target.value)} placeholder="Staff-only, non-sensitive handoff" /></label><button className="mini-button" type="button" onClick={addInternalNote}>Add internal note</button>
+          <label>Internal collaboration note<input value={internalNote} aria-invalid={Boolean(internalNoteError)} aria-describedby={internalNoteError ? 'internal-note-secret-warning' : undefined} onChange={(event) => { setInternalNote(event.target.value); if (internalNoteError) setInternalNoteError('') }} placeholder="Staff-only, non-sensitive handoff" /></label><button className="mini-button" type="button" onClick={addInternalNote}>Add internal note</button>
+          {internalNoteError && <p id="internal-note-secret-warning" role="alert">{internalNoteError}</p>}
           {(metadata.internal_notes || []).slice(-3).map((note, index) => <small key={`${note.created_at}-${index}`}>{note.author}: {note.text}</small>)}
           <label>Customer satisfaction rating<select value={feedback} onChange={(event) => setFeedback(Number(event.target.value))}>{[5, 4, 3, 2, 1].map((score) => <option key={score} value={score}>{score} / 5</option>)}</select></label><button className="mini-button" type="button" onClick={() => saveMeta({ satisfaction: feedback })}>Record rating</button>
           <label>Closure checklist</label>{['Customer updated', 'Workaround or resolution recorded', 'No sensitive credentials in notes', 'Follow-up owner assigned'].map((item) => <label className="checkbox-line" key={item}><input type="checkbox" checked={(metadata.closure_checklist || []).includes(item)} onChange={(event) => saveMeta({ closure_checklist: event.target.checked ? [...(metadata.closure_checklist || []), item] : (metadata.closure_checklist || []).filter((value) => value !== item) })} /><span>{item}</span></label>)}
@@ -417,6 +495,7 @@ export function SupportOperationsPanel({ tickets = [], users = [], session, setO
         <small>First-response reporting uses staff-recorded timestamps; email mailbox ingestion/forwarding are not available in this local-only view. Ticket macros are draft text only. Public notices require an approved publishing channel.</small>
       </div>
     </div>
+    <SupportTicketHistory auditEvents={auditEvents} tickets={tickets} />
     {error && <p className="form-error" role="alert">{error}</p>}
   </section>
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FeatureTabs, useFeatureRecords } from './FeatureWave101Helpers'
+import './WorkPlanner.css'
 
 const DONE = new Set(['Done', 'Complete', 'Completed', 'Canceled', 'Rejected'])
 const formatHours = (seconds) => (Math.max(0, seconds) / 3600).toFixed(2)
@@ -14,6 +15,8 @@ export default function WorkPlanner({ backendState = {}, session = {}, setOperat
   const [assignId, setAssignId] = useState('')
   const [assignee, setAssignee] = useState('')
   const [handoff, setHandoff] = useState('')
+  const [handoffPreview, setHandoffPreview] = useState('')
+  const [queueFilter, setQueueFilter] = useState('all')
   const [checklistName, setChecklistName] = useState('')
   const [checklistRole, setChecklistRole] = useState('Front Desk')
   const [checklistText, setChecklistText] = useState('')
@@ -47,7 +50,17 @@ export default function WorkPlanner({ backendState = {}, session = {}, setOperat
     const dependency = tasks.find((item) => item.id === dependencyId)
     return { task, dependency, blocked: Boolean(dependency && !DONE.has(dependency.status)) }
   }).filter(({ task, dependency }) => task.depends_on || dependency)
-  const today = new Date().toISOString().slice(0, 10)
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const queueRows = openTasks.filter((task) => {
+    if (queueFilter === 'overdue') return Boolean(task.due && task.due < today)
+    if (queueFilter === 'today') return task.due === today
+    if (queueFilter === 'unassigned') return !String(task.assignee || '').trim()
+    if (queueFilter === 'mine') return String(task.assignee || '').toLowerCase() === String(session.email || '').toLowerCase()
+    return true
+  }).sort((a, b) => String(a.due || '9999-12-31').localeCompare(String(b.due || '9999-12-31')))
+  const completedTasks = tasks.filter((task) => DONE.has(task.status)).length
+  const taskProgress = tasks.length ? Math.round(completedTasks / tasks.length * 100) : 0
   const escalationRows = openTasks.filter((task) => task.due && task.due < today).map((task) => {
     const overdueDays = Math.max(0, Math.floor((Date.now() - Date.parse(`${task.due}T12:00:00`)) / 86400000))
     const threshold = Math.max(1, Number(task.escalationDays) || 3)
@@ -84,12 +97,17 @@ export default function WorkPlanner({ backendState = {}, session = {}, setOperat
     await save({ ...selectedTask, assignee, revisionHistory: [...(selectedTask.revisionHistory || []), { at: new Date().toISOString(), by: session.email || 'Workspace user', changes: [{ field: 'assignee', before: selectedTask.assignee || '', after: assignee }] }].slice(-20) })
     setOperationNotice(`Assigned ${selectedTask.title || 'task'} to ${assignee}.`); setAssignId(''); setAssignee('')
   }
-  async function exportHandoff() {
+  function buildHandoff() {
     const selected = openTasks.filter((task) => !handoffTaskId || task.id === handoffTaskId)
     const body = [`OverHead shift handoff · ${new Date().toLocaleString()}`, `Prepared by: ${session.ownerName || session.email || 'Workspace user'}`, '', 'Open work', ...selected.map((task) => `• ${task.title} · ${task.status || 'Open'} · ${task.assignee || 'Unassigned'} · due ${task.due || 'unscheduled'}${task.notes ? ` · ${task.notes}` : ''}`), '', `Notes: ${handoff || 'No extra handoff notes.'}`].join('\n')
-    const blob = new Blob([body], { type: 'text/plain;charset=utf-8' })
+    setHandoffPreview(body)
+    setOperationNotice(`Handoff preview ready with ${selected.length} open task${selected.length === 1 ? '' : 's'}. Review the content before exporting.`)
+  }
+  function exportHandoff() {
+    if (!handoffPreview) return
+    const blob = new Blob([handoffPreview], { type: 'text/plain;charset=utf-8' })
     const href = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = href; link.download = `overhead-handoff-${today}.txt`; link.click(); URL.revokeObjectURL(href)
-    setOperationNotice(`Handoff packet exported with ${selected.length} open task${selected.length === 1 ? '' : 's'}.`)
+    setOperationNotice('Reviewed handoff packet exported as a local text file.')
   }
   function addMention() { if (!mention) return; setMentionText((text) => `${text}${text ? ' ' : ''}@${mention}`); setMention('') }
   async function useChecklist(item) { setChecklistDraft(item.items.join('\n')); setOperationNotice(`Loaded ${item.title} checklist for ${item.role}.`) }
@@ -102,6 +120,7 @@ export default function WorkPlanner({ backendState = {}, session = {}, setOperat
     {tab === 'flow' && <div className="work-planner-grid">
       <article className="panel"><h3>Task dependency map</h3><p className="panel-copy">See prerequisites and blocked work. Manage dependencies in Growth &amp; Work.</p>{dependencyRows.length ? dependencyRows.map(({ task, dependency, blocked }) => <div className="planner-row" key={task.id}><strong>{task.title || 'Untitled task'}</strong><span>{blocked ? 'Blocked' : 'Ready'} · {task.status || 'Open'}</span><small>{dependency ? `Waiting for: ${dependency.title || dependency.id} (${dependency.status || 'Open'})` : 'Prerequisite not found'}</small></div>) : <p className="queue-empty">No task dependencies are configured.</p>}</article>
       <article className="panel"><h3>Escalation timeline</h3><p className="panel-copy">Shows overdue tasks and the remaining days before their configured escalation threshold.</p>{escalationRows.length ? escalationRows.slice(0, 12).map(({ task, overdueDays, threshold, next }) => <div className="planner-row" key={task.id}><strong>{task.title || 'Untitled task'}</strong><span>{overdueDays} day{overdueDays === 1 ? '' : 's'} overdue · threshold {threshold} days</span><small>{task.escalatedAt ? `Escalated ${new Date(task.escalatedAt).toLocaleString()}${task.escalatedTo ? ` to ${task.escalatedTo}` : ''}` : next ? `${next} day${next === 1 ? '' : 's'} until escalation` : 'Ready for escalation review'}</small></div>) : <p className="queue-empty">No overdue tasks need escalation.</p>}</article>
+      <article className="panel task-queue-panel"><h3>Prioritized work queue</h3><p className="panel-copy">Filter open tasks by urgency and assignment. Due dates use the device’s local calendar date.</p><label>Show<select value={queueFilter} onChange={(event) => setQueueFilter(event.target.value)}><option value="all">All open work</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="unassigned">Unassigned</option>{session.email && <option value="mine">Assigned to me</option>}</select></label><div className="planner-progress" role="progressbar" aria-label="Task completion" aria-valuemin="0" aria-valuemax="100" aria-valuenow={taskProgress}><span style={{ width: `${taskProgress}%` }} /></div><small>{completedTasks} of {tasks.length} tasks complete ({taskProgress}%)</small>{queueRows.length ? queueRows.slice(0, 20).map((task) => <div className="planner-row" key={task.id}><strong>{task.title || 'Untitled task'}</strong><span>{task.assignee || 'Unassigned'} · {task.due ? `due ${task.due}` : 'no due date'}</span><small>{task.status || 'Open'}</small></div>) : <p className="queue-empty">No tasks match this queue filter.</p>}</article>
     </div>}
     {tab === 'capacity' && <div className="work-planner-grid">
       <article className="panel"><h3>Weekly availability heat map</h3><p className="panel-copy">Compare assigned estimates against each teammate’s weekly capacity.</p>{capacityRows.length ? capacityRows.map((row) => <div className="capacity-row" key={row.owner}><div><strong>{row.owner}</strong><span>{row.estimate.toFixed(1)} / {row.limit.toFixed(1)} hours</span></div><div className="capacity-track"><i style={{ width: `${Math.min(100, Math.max(4, row.ratio * 100))}%`, background: row.ratio > 1 ? 'var(--danger, #c54848)' : 'var(--accent)' }} /></div><small>{row.limit ? `${Math.round(row.ratio * 100)}% loaded` : 'Set weekly hours in People / Growth'}</small></div>) : <p className="queue-empty">Add a team capacity record to see planned availability.</p>}</article>
@@ -109,7 +128,7 @@ export default function WorkPlanner({ backendState = {}, session = {}, setOperat
     </div>}
     {tab === 'time' && <div className="work-planner-grid">
       <article className="panel"><h3>Task timer</h3><p className="panel-copy">Timer state stays on this device. Saving creates an encrypted submitted time entry.</p><label>Task<select value={timerTaskId} onChange={(event) => setTimerTaskId(event.target.value)} disabled={Boolean(clock)}><option value="">Choose a task</option>{openTasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>{clock ? <><p className="timer-readout">{Math.floor(elapsed / 3600).toString().padStart(2, '0')}:{Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0')}:{(elapsed % 60).toString().padStart(2, '0')}</p><strong>{clock.title}</strong><div className="button-row"><button className="primary-action" type="button" onClick={() => saveTimer().catch((reason) => setOperationNotice(reason.message))}>Stop and save time</button><button className="ghost-button" type="button" onClick={() => setClock(null)}>Discard timer</button></div></> : <button className="primary-action" type="button" disabled={!timerTaskId} onClick={startTimer}>Start task timer</button>}</article>
-      <article className="panel"><h3>Shift handoff packet</h3><p className="panel-copy">Prepare a local text handoff from the current open task list. Review it before sharing.</p><label>Handoff note<textarea rows="4" maxLength="1000" value={handoff} onChange={(event) => setHandoff(event.target.value)} placeholder="What should the next person know?" /></label><label>Limit packet to task<select value={handoffTaskId} onChange={(event) => setHandoffTaskId(event.target.value)}><option value="">All open tasks</option>{openTasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label><button className="primary-action" type="button" onClick={exportHandoff}>Review and export handoff</button><small>The exported file may include internal notes. Store it with the same care as workspace data.</small></article>
+      <article className="panel"><h3>Shift handoff packet</h3><p className="panel-copy">Prepare a local text handoff from the current open task list. Inspect the exact contents before exporting.</p><label>Handoff note<textarea rows="4" maxLength="1000" value={handoff} onChange={(event) => { setHandoff(event.target.value); setHandoffPreview('') }} placeholder="What should the next person know?" /></label><label>Limit packet to task<select value={handoffTaskId} onChange={(event) => { setHandoffTaskId(event.target.value); setHandoffPreview('') }}><option value="">All open tasks</option>{openTasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label><button className="primary-action" type="button" onClick={buildHandoff}>Prepare preview</button>{handoffPreview && <><pre className="handoff-preview" tabIndex="0" aria-label="Handoff export preview">{handoffPreview}</pre><button className="ghost-button" type="button" onClick={exportHandoff}>Export reviewed handoff</button></>}<small>The exported file may include internal notes. Store it with the same care as workspace data.</small></article>
     </div>}
     {tab === 'team' && <div className="work-planner-grid">
       <article className="panel"><h3>Role-specific checklists</h3><p className="panel-copy">Save and reuse operational checklists by staff role.</p><label>Checklist name<input value={checklistName} onChange={(event) => setChecklistName(event.target.value)} maxLength="80" /></label><label>Role<select value={checklistRole} onChange={(event) => setChecklistRole(event.target.value)}>{['Owner', 'Front Desk', 'Bookkeeper', 'Support'].map((role) => <option key={role}>{role}</option>)}</select></label><label>Steps, one per line<textarea rows="4" value={checklistText} onChange={(event) => setChecklistText(event.target.value)} /></label><button className="primary-action" type="button" onClick={() => saveChecklist().catch((reason) => setOperationNotice(reason.message))}>Save checklist</button>{checklists.map((item) => <div className="planner-row" key={item.id}><strong>{item.title} · {item.role}</strong><span>{item.items?.length || 0} steps</span><button className="text-button" type="button" onClick={() => useChecklist(item)}>Load</button></div>)}{checklistDraft && <label>Loaded checklist<textarea rows="4" value={checklistDraft} onChange={(event) => setChecklistDraft(event.target.value)} /></label>}</article>

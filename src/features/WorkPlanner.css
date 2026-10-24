@@ -1,0 +1,32 @@
+.planner-progress {
+  height: 9px;
+  margin: 10px 0 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted, #e7eaf0);
+}
+
+.planner-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #5865d8);
+  transition: width 160ms ease;
+}
+
+.handoff-preview {
+  max-height: 260px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line, #d6dbe5);
+  border-radius: 10px;
+  color: var(--text, #202536);
+  background: var(--surface-muted, #f5f6f9);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 0.85rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planner-progress span { transition: none; }
+}

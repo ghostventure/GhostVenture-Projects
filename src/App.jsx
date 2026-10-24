@@ -1,5 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RecentRecords } from './features/FeatureWave101Helpers'
+import UXCompanionPanel from './features/UXCompanionPanel'
+import { UXNavigationToolkit } from './features/UXNavigationToolkit'
+import InAppHelpSearch from './features/InAppHelpSearch.jsx'
 import {
   BadgeCheck,
   BarChart3,
@@ -34,7 +37,7 @@ import {
 } from 'lucide-react'
 import { workflowBoilerplates } from './boilerplates'
 import { customerDatabaseSchema } from './customerDatabase'
-import { complianceBadges, helpArticles, legalDocuments, marketableFeatures, planTiers, supportChannels } from './productBlueprint'
+import { complianceBadges, legalDocuments, marketableFeatures, planTiers, supportChannels } from './productBlueprint'
 import { themes } from './themes'
 const GrowthWorkspace = lazy(() => import('./features/GrowthWorkspace'))
 const SalesWorkspace = lazy(() => import('./features/SalesWorkspace'))
@@ -46,6 +49,7 @@ const DocumentControlWorkspace = lazy(() => import('./features/DocumentControlWo
 const CollaborationWorkspace = lazy(() => import('./features/CollaborationWorkspace'))
 const ControlCenter = lazy(() => import('./features/ControlCenter'))
 const IntegrationStudio = lazy(() => import('./IntegrationStudio').then((module) => ({ default: module.IntegrationStudio })))
+const AccessibilityReviewPanel = lazy(() => import('./features/AccessibilityReviewPanel.jsx'))
 const AutomationStudio = lazy(() => import('./AutomationStudio.jsx').then((module) => ({ default: module.AutomationStudio })))
 const ReportStudio = lazy(() => import('./ReportStudio.jsx').then((module) => ({ default: module.ReportStudio })))
 const AccountGovernancePanel = lazy(() => import('./featureWave301400.jsx').then((module) => ({ default: module.AccountGovernancePanel })))
@@ -57,6 +61,7 @@ const WorkloadAgendaPanel = lazy(() => import('./features/UXBatchC.jsx').then((m
 const UXPreferencesPanel = lazy(() => import('./features/UXBatchC.jsx').then((module) => ({ default: module.UXPreferencesPanel })))
 const UserExperienceSuite = lazy(() => import('./features/UserExperienceSuite.jsx'))
 const WorkPlanner = lazy(() => import('./features/WorkPlanner.jsx'))
+const OperationsQualityPanel = lazy(() => import('./features/OperationsQualityPanel.jsx'))
 import './App.css'
 
 const navSections = [
@@ -573,7 +578,7 @@ function App() {
 
           <nav className="nav-list">
             <button className="ghost-button" type="button" onClick={() => setNavCustomizeOpen((open) => !open)} aria-expanded={navCustomizeOpen}>{navCustomizeOpen ? 'Close navigation editor' : 'Customize navigation'}</button>
-            {recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).length > 0 && <div className="nav-group"><strong>Recent workspaces</strong>{recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; return <button className="nav-item" type="button" key={`recent-${id}`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{navLabels[id] || section.label}</strong><small>Recently opened</small></span></button> })}</div>}
+            {recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).length > 0 && <div className="nav-group"><div className="nav-group-heading-row"><strong>Recent workspaces</strong><button className="text-button" type="button" onClick={() => { setRecentWorkspaces([]); window.localStorage.removeItem('overhead.recentWorkspaces.v1') }}>Clear</button></div>{recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; return <button className="nav-item" type="button" key={`recent-${id}`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{navLabels[id] || section.label}</strong><small>Recently opened</small></span></button> })}</div>}
             {favoritePages.filter((id) => teamSections.includes(id)).length > 0 && <div className="nav-group"><strong>Favorites</strong>{favoritePages.filter((id) => teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; return <button className={section.id === activeSection ? 'nav-item active' : 'nav-item'} type="button" key={`favorite-${id}`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{navLabels[id] || section.label}</strong><small>Favorite page</small></span></button> })}</div>}
             {navCustomizeOpen && <details className="nav-customizer" open><summary>Labels, favorites and shortcuts</summary>{navSections.filter((section) => teamSections.includes(section.id)).map((section) => <div key={`pref-${section.id}`}><label>{section.label}<input aria-label={`Custom label for ${section.label}`} maxLength={28} value={navLabels[section.id] || ''} placeholder={section.label} onChange={(event) => setNavLabels((current) => ({ ...current, [section.id]: event.target.value }))}/></label><label><input type="checkbox" checked={favoritePages.includes(section.id)} onChange={(event) => setFavoritePages((current) => event.target.checked ? [...new Set([...current, section.id])] : current.filter((id) => id !== section.id))}/>Favorite</label><label>Alt+Shift+<input aria-label={`Shortcut key for ${section.label}`} maxLength={1} value={shortcutKeys[section.id] || ''} onChange={(event) => setShortcutKeys((current) => { const key = event.target.value.slice(-1); const next = Object.fromEntries(Object.entries(current).filter(([id, assigned]) => id === section.id || !key || String(assigned).toLowerCase() !== key.toLowerCase())); return { ...next, [section.id]: key } })}/></label></div>)}</details>}
             {navGroups.map(([group, groupSections]) => <div className="nav-group" key={group}><button className="nav-group-heading" type="button" aria-expanded={!collapsedNavGroups[group]} onClick={() => setCollapsedNavGroups((current) => ({ ...current, [group]: !current[group] }))}>{group}</button>{!collapsedNavGroups[group] && groupSections.map((section) => {
@@ -664,6 +669,8 @@ function App() {
             setOperationNotice={setOperationNotice}
           /></Suspense>
 
+          <UXNavigationToolkit sections={navSections} activeSection={activeSection} labels={navLabels} onNavigate={setActiveSection} />
+          <UXCompanionPanel backendState={backendState} session={session} onNavigate={setActiveSection} setOperationNotice={setOperationNotice} />
           <Suspense fallback={<div className="workspace-loading" role="status">Loading workspace…</div>}><section className="workspace-content" id="active-workspace-panel" role="tabpanel" tabIndex={0} aria-labelledby={`workspace-tab-${activeSection}`}>
             {activeSection === 'overview' && (
               <OverviewSection
@@ -687,7 +694,7 @@ function App() {
             {activeSection === 'finance' && <CustomerFinanceWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
             {activeSection === 'people' && <PeopleOperationsWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
             {activeSection === 'rule-center' && <AutomationStudio backendState={backendState} sessionRole={session.role} setOperationNotice={setOperationNotice} refreshBackend={refreshBackend} />}
-            {activeSection === 'integrations' && <IntegrationStudio backendState={backendState} sessionRole={session.role} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'integrations' && <IntegrationStudio backendState={backendState} sessionRole={session.role} session={session} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />}
             {activeSection === 'search' && <ControlCenter area="search" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'admin-security' && <ControlCenter area="security" backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'work' && (
@@ -1184,17 +1191,7 @@ function PublicPlans({ activePlan, choosePlan }) {
 function PublicHelp() {
   return (
     <>
-      <h2>Help center</h2>
-      <p>Startup help, account recovery, plan basics, and developer escalation.</p>
-      <div className="help-article-stack">
-        {helpArticles.map((article) => (
-          <article key={article.title}>
-            <span>{article.category}</span>
-            <strong>{article.title}</strong>
-            <p>{article.body}</p>
-          </article>
-        ))}
-      </div>
+      <InAppHelpSearch />
     </>
   )
 }
@@ -1357,6 +1354,9 @@ function OverviewSection({ session, secureView, integrity, backendState, refresh
         <button className="ghost-button" type="button" aria-expanded={customizeOpen} onClick={() => setCustomizeOpen((open) => !open)}>{customizeOpen ? 'Done customizing' : 'Customize dashboard'}</button>
       </div>
       <RecentRecords />
+      <Suspense fallback={<div className="workspace-loading" role="status">Loading operations review…</div>}>
+        <OperationsQualityPanel backendState={backendState} session={session} setOperationNotice={setOperationNotice} />
+      </Suspense>
       {customizeOpen && <fieldset className="dashboard-widget-picker">
         <legend>Dashboard panels</legend>
         <div className="button-row"><label>Layout density<select value={dashboardDensity} onChange={(event) => setDashboardDensity(event.target.value)}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><button className="ghost-button" type="button" onClick={saveDashboardPreset}>Save current preset</button></div>
@@ -2094,7 +2094,7 @@ function SupportSection({ activeLegal, selectedLegal, setActiveLegal, session, b
           ))}
         </div>
       </div>
-      {(session.role === 'Owner' || session.role === 'Support') && <SupportOperationsPanel tickets={sharedTickets} users={backendState.userProfiles || []} session={session} setOperationNotice={setOperationNotice} />}
+      {(session.role === 'Owner' || session.role === 'Support') && <SupportOperationsPanel tickets={sharedTickets} users={backendState.userProfiles || []} auditEvents={backendState.auditEvents || []} session={session} setOperationNotice={setOperationNotice} />}
     </section>
   )
 }
@@ -3434,6 +3434,18 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
   const [restoreConfirmation, setRestoreConfirmation] = useState('')
   const [updater, setUpdater] = useState({ status: 'not-checked', autoCheck: true, message: 'Update status is loading.' })
   const [developerTools, setDeveloperTools] = useState({ configured: false, workspacePath: '', preferredEditor: 'auto', editors: [] })
+  const [backups, setBackups] = useState([])
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [backupPreview, setBackupPreview] = useState(null)
+  const [supportBundleAcknowledged, setSupportBundleAcknowledged] = useState(false)
+  const [dataExportPreview, setDataExportPreview] = useState(null)
+  const [dataExportAcknowledged, setDataExportAcknowledged] = useState(false)
+
+  async function refreshBackups() {
+    if (!window.overheadBackend?.listBackups) return setBackups([])
+    try { setBackups(await window.overheadBackend.listBackups()) }
+    catch (error) { setOperationNotice(userFacingError(error, 'Could not load backup inventory.')) }
+  }
 
   useEffect(() => {
     let active = true
@@ -3451,6 +3463,16 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
   }, [])
 
   useEffect(() => {
+    if (!['Owner', 'Bookkeeper'].includes(session.role)) return
+    let active = true
+    if (window.overheadBackend?.listBackups) {
+      window.overheadBackend.listBackups().then((items) => { if (active) setBackups(Array.isArray(items) ? items : []) })
+        .catch((error) => { if (active) setOperationNotice(userFacingError(error, 'Could not load backup inventory.')) })
+    }
+    return () => { active = false }
+  }, [session.role, setOperationNotice])
+
+  useEffect(() => {
     if (session.role !== 'Owner' || !window.overheadBackend?.developerWorkspace) return
     let active = true
     Promise.all([window.overheadBackend.developerWorkspace(), window.overheadBackend.developerEditors?.() || []])
@@ -3460,27 +3482,83 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
   }, [session.role, setOperationNotice])
 
   async function createBackup() {
-    if (window.overheadBackend?.createBackup) {
+    if (!window.overheadBackend?.createBackup) return setOperationNotice('Backup creation is unavailable in this app build.')
+    setBackupBusy(true)
+    try {
       const result = await window.overheadBackend.createBackup()
-      setOperationNotice(`Backup created: ${result.backupPath}`)
-      await refreshBackend()
-    }
+      setOperationNotice(`Verified backup created: ${result.backupPath}`)
+      await Promise.all([refreshBackend(), refreshBackups()])
+    } catch (error) { setOperationNotice(userFacingError(error, 'Could not create a verified backup.')) }
+    finally { setBackupBusy(false) }
+  }
+
+  async function verifyBackup(backupPath) {
+    if (!window.overheadBackend?.verifyBackup) return setOperationNotice('Backup verification is unavailable in this app build.')
+    setBackupBusy(true)
+    try {
+      const result = await window.overheadBackend.verifyBackup(backupPath)
+      setOperationNotice(result.valid ? `Backup verified: ${result.fileName} (schema ${result.schema}).` : `Backup rejected: ${result.fileName}.`)
+      await refreshBackups()
+    } catch (error) { setOperationNotice(userFacingError(error, 'Could not verify this backup.')) }
+    finally { setBackupBusy(false) }
+  }
+
+  async function previewBackupRestore(backupPath) {
+    if (!window.overheadBackend?.previewBackupRestore) return setOperationNotice('Restore preview is unavailable in this app build.')
+    setBackupBusy(true)
+    setBackupPreview(null)
+    try {
+      const preview = await window.overheadBackend.previewBackupRestore(backupPath)
+      setBackupPreview(preview)
+      setOperationNotice(`Restore preview ready for ${preview.fileName}. No data was changed.`)
+    } catch (error) { setOperationNotice(userFacingError(error, 'Could not preview this backup.')) }
+    finally { setBackupBusy(false) }
   }
 
   async function createSupportBundle() {
-    if (window.overheadBackend?.createSupportBundle) {
+    if (!supportBundleAcknowledged) {
+      setOperationNotice('Review the support bundle contents and confirm before creating it.')
+      return
+    }
+    if (!window.overheadBackend?.createSupportBundle) {
+      setOperationNotice('Support bundle export is unavailable in this app build.')
+      return
+    }
+    setBackupBusy(true)
+    try {
       const result = await window.overheadBackend.createSupportBundle()
       setOperationNotice(`Support bundle created: ${result.bundlePath}`)
       await refreshBackend()
-    }
+    } catch (error) {
+      setOperationNotice(userFacingError(error, 'Could not create the support bundle.'))
+    } finally { setBackupBusy(false) }
   }
 
   async function createDataExport() {
-    if (window.overheadBackend?.createDataExport) {
+    if (!dataExportPreview || !dataExportAcknowledged) return setOperationNotice('Preview the data export and confirm its contents before creating it.')
+    if (!window.overheadBackend?.createDataExport) return setOperationNotice('Data export is unavailable in this app build.')
+    setBackupBusy(true)
+    try {
       const result = await window.overheadBackend.createDataExport()
       setOperationNotice(`Data export created: ${result.exportPath}`)
+      setDataExportPreview(null)
+      setDataExportAcknowledged(false)
       await refreshBackend()
-    }
+    } catch (error) { setOperationNotice(userFacingError(error, 'Could not create the data export.')) }
+    finally { setBackupBusy(false) }
+  }
+
+  async function previewDataExport() {
+    if (!window.overheadBackend?.previewDataExport) return setOperationNotice('Data export preview is unavailable in this app build.')
+    setBackupBusy(true)
+    setDataExportPreview(null)
+    setDataExportAcknowledged(false)
+    try {
+      const preview = await window.overheadBackend.previewDataExport()
+      setDataExportPreview(preview)
+      setOperationNotice(`Export preview ready: ${preview.totalRecords} records across ${preview.collections.length} collections. No file was created.`)
+    } catch (error) { setOperationNotice(userFacingError(error, 'Could not preview the data export.')) }
+    finally { setBackupBusy(false) }
   }
 
   async function validateRestore() {
@@ -3602,6 +3680,7 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
             <span><strong>Reduce motion</strong><small>Limit interface animation and scrolling effects.</small></span>
           </label>
         </div>
+        <AccessibilityReviewPanel />
         <FeatureWavePreferences session={session} backendState={backendState} operationNotice={operationNotice} setOperationNotice={setOperationNotice} />
         <UXPreferencesPanel allowedSections={allowedSections} setOperationNotice={setOperationNotice} />
         <div className="profile-form">
@@ -3614,13 +3693,25 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
               {' '} - {backendState.health?.exportCount ?? 0} exports
             </span>
             <div className="button-row">
-              <button className="ghost-button" type="button" onClick={createBackup}>Create Backup</button>
-              <button className="ghost-button" type="button" onClick={createSupportBundle}>Support Bundle</button>
-              <button className="ghost-button" type="button" onClick={createDataExport}>Data Export</button>
+              {['Owner', 'Bookkeeper'].includes(session.role) && <button className="ghost-button" type="button" disabled={backupBusy} onClick={createBackup}>{backupBusy ? 'Working…' : 'Create Verified Backup'}</button>}
+              {['Owner', 'Support'].includes(session.role) && <button className="ghost-button" type="button" disabled={backupBusy || !supportBundleAcknowledged} onClick={createSupportBundle}>Create Support Bundle</button>}
+              {['Owner', 'Bookkeeper'].includes(session.role) && <><button className="ghost-button" type="button" disabled={backupBusy} onClick={previewDataExport}>Preview Data Export</button><button className="ghost-button" type="button" disabled={backupBusy || !dataExportPreview || !dataExportAcknowledged} onClick={createDataExport}>Create Data Export</button></>}
             </div>
+            {['Owner', 'Support'].includes(session.role) && <label className="checkbox-line"><input type="checkbox" disabled={backupBusy} checked={supportBundleAcknowledged} onChange={(event) => setSupportBundleAcknowledged(event.target.checked)} /><span>I understand this bundle includes customer records, task details, recent audit events, and diagnostics. I will review it and share it only through a trusted support channel.</span></label>}
+            {dataExportPreview && ['Owner', 'Bookkeeper'].includes(session.role) && <div className="backend-health" aria-labelledby="data-export-preview-title"><strong id="data-export-preview-title">Data export preview</strong><span>{dataExportPreview.format} · {dataExportPreview.totalRecords} records in {dataExportPreview.collections.length} collections · contains personal information: {dataExportPreview.containsPersonalInformation ? 'Yes' : 'No'}</span><div className="task-list">{dataExportPreview.collections.map((collection) => <p key={collection.name}><strong>{collection.name}</strong> · {collection.count} records · {collection.fieldCategories.join(', ')}{collection.includesPersonalInformation ? ' · includes personal information' : ''}</p>)}</div>{dataExportPreview.notes.map((note) => <small key={note}>{note}</small>)}<label className="checkbox-line"><input type="checkbox" disabled={backupBusy} checked={dataExportAcknowledged} onChange={(event) => setDataExportAcknowledged(event.target.checked)} /><span>I reviewed these contents and understand that the archive may contain personal and support information.</span></label></div>}
             <small>Backups and exports are local artifacts. Store them securely, verify a restore before relying on it, and share support bundles only after reviewing their contents.</small>
             {operationNotice && <small>{operationNotice}</small>}
           </div>
+          {['Owner', 'Bookkeeper'].includes(session.role) && <div className="backend-health backup-inventory">
+            <div className="section-head"><div><strong>Backup inventory</strong><small>Local encrypted snapshots. Verification checks readability and the restore data structure.</small></div><button className="ghost-button" type="button" disabled={backupBusy} onClick={refreshBackups}>Refresh list</button></div>
+            {backups.length ? <div className="task-list">{backups.map((backup) => <article className="task-row" key={backup.fileName}>
+              <strong>{backup.fileName}</strong><span>{backup.createdAt ? new Date(backup.createdAt).toLocaleString() : 'Date unavailable'} · {Number(backup.sizeBytes || 0).toLocaleString()} bytes · schema {backup.schema || 'unknown'}</span>
+              <span role="status">{backup.verified ? 'Verified' : backup.error ? `Could not verify: ${backup.error}` : 'Not verified'}</span>
+              {!backup.verified && <button className="mini-button" type="button" disabled={backupBusy} onClick={() => verifyBackup(backup.backupPath)}>Verify backup</button>}
+              {session.role === 'Owner' && <button className="mini-button" type="button" disabled={backupBusy} onClick={() => previewBackupRestore(backup.backupPath)}>Preview restore</button>}
+            </article>)}</div> : <p>No local backups are listed yet.</p>}
+            {backupPreview && <div className="backend-health" role="status" aria-live="polite"><strong>Restore preview: {backupPreview.fileName}</strong><span>Validated schema {backupPreview.schema} · {Number(backupPreview.sizeBytes || 0).toLocaleString()} bytes · created {backupPreview.createdAt ? new Date(backupPreview.createdAt).toLocaleString() : 'date unavailable'}</span><span>{Object.entries(backupPreview.collectionCounts || {}).map(([name, count]) => `${name}: ${count}`).join(' · ') || 'No collection counts supplied'}</span><small>This preview displays metadata and record counts only. No workspace data was changed.</small></div>}
+          </div>}
           <div className="backend-health">
             <strong>Restore workspace</strong>
             <span>Validate first. Restoring replaces the local workspace, creates a safety backup, and signs you out.</span>

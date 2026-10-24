@@ -1,0 +1,83 @@
+.accessibility-review {
+  display: grid;
+  gap: 14px;
+}
+
+.accessibility-review-heading h2 {
+  margin: 0;
+  color: var(--heading, inherit);
+  font-size: 1.1rem;
+}
+
+.accessibility-review-heading p,
+.accessibility-review-note {
+  margin: 5px 0 0;
+  color: var(--muted, #667085);
+  font-size: 0.9rem;
+}
+
+.accessibility-review-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--line, #d7dde4);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.accessibility-review-toggle input {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent, #456de0);
+}
+
+.accessibility-review-toggle span {
+  display: grid;
+  gap: 4px;
+}
+
+.accessibility-review-toggle small,
+.accessibility-review-status small {
+  color: var(--muted, #667085);
+  line-height: 1.45;
+}
+
+.accessibility-review-status {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--soft-bg, #f4f6f8);
+  line-height: 1.4;
+}
+
+.accessibility-review-status strong {
+  color: var(--heading, inherit);
+}
+
+.accessibility-review-note {
+  font-size: 0.78rem;
+}
+
+html[data-accessibility-underline-links='true'] a[href] {
+  text-decoration-line: underline !important;
+  text-decoration-thickness: max(1px, 0.08em);
+  text-underline-offset: 0.15em;
+}
+
+html[data-accessibility-focus-ring='true'] :focus-visible {
+  outline: 3px solid CanvasText !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 2px Canvas !important;
+}
+
+@media (forced-colors: active) {
+  html[data-accessibility-focus-ring='true'] :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 3px !important;
+    box-shadow: none !important;
+  }
+}

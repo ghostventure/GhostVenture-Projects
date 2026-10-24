@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import IntegrationStatusCenter from './features/IntegrationStatusCenter.jsx'
 
 const mappings = [
   { id: 'overhead', label: 'OverHead standard', columns: ['businessName', 'ownerName', 'email', 'industry', 'serviceArea', 'preferredContact'] },
@@ -23,7 +24,7 @@ function parseCsv(source) {
   })
 }
 
-export function IntegrationStudio({ backendState = {}, sessionRole = 'Owner', refreshBackend = async () => {}, setOperationNotice = () => {} }) {
+export function IntegrationStudio({ backendState = {}, sessionRole = 'Owner', session = {}, refreshBackend = async () => {}, setOperationNotice = () => {} }) {
   const [csvText, setCsvText] = useState('')
   const [mappingId, setMappingId] = useState('overhead')
   const [mappingPreset, setMappingPreset] = useState('')
@@ -31,17 +32,14 @@ export function IntegrationStudio({ backendState = {}, sessionRole = 'Owner', re
   const [preview, setPreview] = useState([])
   const [format, setFormat] = useState('quickbooks')
   const [busy, setBusy] = useState(false)
+  const [importProgress, setImportProgress] = useState(null)
+  const importLock = useRef(false)
   const [error, setError] = useState('')
   const customerList = backendState.customers || []
   useEffect(() => { window.overheadBackend.listFeatureRecords('integrations').then((items) => setPresets(items.filter((item) => item.kind === 'csv_mapping'))).catch(() => {}) }, [])
-  const connectionRows = useMemo(() => [
-    { name: 'Microsoft 365 / Business Central', connected: (backendState.microsoftConnections || []).length > 0, detail: `${(backendState.microsoftConnections || []).length} read-only connection(s)` },
-    { name: 'Stripe', connected: (backendState.stripeConnections || []).length > 0, detail: `${(backendState.stripeConnections || []).length} connection(s); payment snapshots ${backendState.stripeImports?.length || 0}` },
-    { name: 'Square', connected: (backendState.squareConnections || []).length > 0, detail: `${(backendState.squareConnections || []).length} connection(s); payment snapshots ${backendState.squareImports?.length || 0}` },
-    ...['Google Calendar', 'Microsoft 365 Calendar', 'Google Drive', 'OneDrive', 'Dropbox', 'Slack', 'Microsoft Teams'].map((name) => ({ name, connected: false, detail: 'No account-scoped connector configured' })),
-  ], [backendState])
-
   function createPreview() {
+    if (importLock.current) return
+    setImportProgress(null)
     const table = parseCsv(csvText)
     if (table.length < 2) { setError('Choose a CSV with a header row and at least one record.'); setPreview([]); return }
     const headers = table[0].map((value) => value.trim().replace(/^"|"$/g, ''))
@@ -63,17 +61,31 @@ export function IntegrationStudio({ backendState = {}, sessionRole = 'Owner', re
     setPreview(rows); setError('')
   }
   async function importPreview() {
+    if (importLock.current || busy) return
     if (!preview.length || preview.some((row) => !row.valid)) { setError('Fix or remove invalid rows before importing. Duplicates are skipped.'); return }
-    setBusy(true); let imported = 0; let skipped = 0
+    importLock.current = true
+    setBusy(true); setError(''); let imported = 0; let skipped = 0; let completed = 0
+    const total = preview.length
+    setImportProgress({ total, completed, imported, skipped, currentRow: preview[0]?.sourceRow, state: 'Import started.' })
     try {
       for (const row of preview) {
-        if (row.duplicate) { skipped += 1; continue }
+        if (row.duplicate) {
+          skipped += 1; completed += 1
+          setImportProgress({ total, completed, imported, skipped, currentRow: row.sourceRow, state: `Row ${row.sourceRow} skipped because its email is a duplicate.` })
+          continue
+        }
         await window.overheadBackend.createCustomer({ businessName: row.businessName, ownerName: row.ownerName, email: row.email, industry: row.industry, serviceArea: row.serviceArea, preferredContact: row.preferredContact })
         imported += 1
+        completed += 1
+        setImportProgress({ total, completed, imported, skipped, currentRow: row.sourceRow, state: `Row ${row.sourceRow} imported successfully.` })
       }
-      setError(''); setCsvText(''); setPreview([]); await refreshBackend(); setOperationNotice(`Imported ${imported} customers; skipped ${skipped} duplicates.`)
-    } catch (reason) { setError(`${String(reason?.message || 'Import stopped.')} ${imported} rows imported before the error; inspect the customer list before retrying.`); await refreshBackend() }
-    finally { setBusy(false) }
+      setError(''); setCsvText(''); setPreview([]); setImportProgress({ total, completed, imported, skipped, currentRow: null, state: `Import complete. ${imported} imported; ${skipped} duplicates skipped.` }); await refreshBackend(); setOperationNotice(`Imported ${imported} customers; skipped ${skipped} duplicates.`)
+    } catch (reason) {
+      const failedRow = preview[completed]
+      setError(`${String(reason?.message || 'Import stopped.')} ${imported} rows imported before the error; inspect the customer list before retrying.`)
+      setImportProgress({ total, completed, imported, skipped, currentRow: failedRow?.sourceRow ?? null, state: `Import stopped at row ${failedRow?.sourceRow ?? 'unknown'}. ${completed} of ${total} rows processed; ${imported} imported and ${skipped} duplicates skipped.` })
+      await refreshBackend()
+    } finally { importLock.current = false; setBusy(false) }
   }
   async function saveMapping() {
     if (!mappingPreset.trim()) { setError('Name the import mapping preset.'); return }
@@ -93,9 +105,9 @@ export function IntegrationStudio({ backendState = {}, sessionRole = 'Owner', re
   }
   return <section className="panel page-panel" aria-labelledby="integration-studio-title">
     <div className="section-head"><div><p className="eyebrow">Local and account-scoped connections</p><h2 id="integration-studio-title">Integration health</h2></div></div>
-    <div className="dashboard-grid">{connectionRows.map((item) => <article className="backend-health" key={item.name}><strong>{item.name}</strong><span>{item.connected ? 'Connected' : 'Not configured'} · {item.detail}</span></article>)}</div>
+    <IntegrationStatusCenter backendState={backendState} session={session} refreshBackend={refreshBackend} setOperationNotice={setOperationNotice} />
     <article className="panel"><h3>Accounting exports</h3><p>Produce a reviewable CSV for accounting import. OverHead does not connect directly to accounting accounts or claim a tax-ready mapping.</p><div className="report-controls"><label>Format<select style={css} value={format} onChange={(event) => setFormat(event.target.value)}><option value="quickbooks">QuickBooks-compatible CSV</option><option value="xero">Xero-compatible CSV</option></select></label><button className="primary-action" type="button" onClick={exportAccounting}>Export invoices and expenses</button></div></article>
-    <article className="panel"><h3>Customer CSV import</h3><p>Preview up to 200 rows locally; duplicate emails are marked and skipped. Imported rows use OverHead's normal validation and permissions.</p><label>Mapping preset<select style={css} value={mappingId} onChange={(event) => setMappingId(event.target.value)}>{mappings.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label><label>CSV file<input type="file" accept=".csv,text/csv" onChange={async (event) => { const file = event.target.files?.[0]; if (file) setCsvText(await file.text()) }} /></label><textarea style={{ ...css, width: '100%', minHeight: 100, marginTop: 8 }} value={csvText} onChange={(event) => setCsvText(event.target.value)} placeholder="business_name,email,owner_name" /><div className="button-row"><button className="ghost-button" type="button" onClick={createPreview}>Validate preview</button><button className="primary-action" type="button" disabled={busy || !preview.length} onClick={importPreview}>Import valid rows</button><input style={css} value={mappingPreset} onChange={(event) => setMappingPreset(event.target.value)} placeholder="Preset name" /><button className="ghost-button" type="button" onClick={saveMapping}>Save mapping</button></div>{preview.length > 0 && <div className="task-list">{preview.slice(0, 12).map((row) => <div className="task-row" key={row.sourceRow}><strong>Row {row.sourceRow}: {row.businessName || 'Missing business name'}</strong><span>{row.email}</span><span>{row.duplicate ? 'Duplicate · skipped' : row.valid ? 'Ready' : row.issue}</span></div>)}</div>}{presets.map((item) => <p className="form-hint" key={item.id}>Saved mapping: {item.title} ({item.mapping_id})</p>)}</article>
+    <article className="panel"><h3>Customer CSV import</h3><p>Preview up to 200 rows locally; duplicate emails are marked and skipped. Imported rows use OverHead's normal validation and permissions.</p><label>Mapping preset<select style={css} value={mappingId} onChange={(event) => setMappingId(event.target.value)}>{mappings.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label><label>CSV file<input type="file" accept=".csv,text/csv" disabled={busy} onChange={async (event) => { const file = event.target.files?.[0]; if (file) { setCsvText(await file.text()); setPreview([]); setImportProgress(null); setError('') } }} /></label><textarea style={{ ...css, width: '100%', minHeight: 100, marginTop: 8 }} value={csvText} disabled={busy} onChange={(event) => { setCsvText(event.target.value); setPreview([]); setImportProgress(null); setError('') }} placeholder="business_name,email,owner_name" /><div className="button-row"><button className="ghost-button" type="button" disabled={busy} onClick={createPreview}>Validate preview</button><button className="primary-action" type="button" disabled={busy || !preview.length} onClick={importPreview}>{busy ? 'Importing…' : 'Import valid rows'}</button><input style={css} value={mappingPreset} onChange={(event) => setMappingPreset(event.target.value)} placeholder="Preset name" /><button className="ghost-button" type="button" onClick={saveMapping}>Save mapping</button></div>{importProgress && <div className="form-hint" role="status" aria-live="polite" aria-atomic="true">Customer import: {importProgress.completed} / {importProgress.total} rows processed. {importProgress.state}</div>}{preview.length > 0 && <div className="task-list">{preview.slice(0, 12).map((row) => <div className="task-row" key={row.sourceRow}><strong>Row {row.sourceRow}: {row.businessName || 'Missing business name'}</strong><span>{row.email}</span><span>{row.duplicate ? 'Duplicate · skipped' : row.valid ? 'Ready' : row.issue}</span></div>)}</div>}{presets.map((item) => <p className="form-hint" key={item.id}>Saved mapping: {item.title} ({item.mapping_id})</p>)}</article>
     <div className="backend-health"><strong>External actions that need account setup</strong><p>Calendar, cloud-drive, chat, Zapier, Make, and public webhook delivery need provider consent and account-scoped credentials. No secrets are stored in feature records. Stripe and Square access use their existing validated connection flows.</p></div>
     {error && <p className="form-error">{error}</p>}
   </section>

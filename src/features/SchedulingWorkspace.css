@@ -1,0 +1,63 @@
+.calendar-view-controls {
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.agenda-day-tools {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(170px, 240px));
+  gap: 10px;
+  align-items: end;
+  margin: 10px 0;
+}
+
+.agenda-day-tools .form-field { margin: 0; }
+.agenda-summary { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.agenda-summary span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface, #fff); font-size: .84rem; }
+.agenda-summary strong { color: var(--text); }
+.schedule-agenda-row { align-items: start; }
+.schedule-change-editor { display: grid; gap: 8px; flex-basis: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+.schedule-change-editor label,
+.appointment-preparation-card > label { display: grid; gap: 5px; }
+.appointment-preparation-card,
+.appointment-reminder-queue { display: grid; gap: 10px; margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, #fff); }
+.appointment-preparation-card h3,
+.appointment-reminder-queue h3 { margin: 0; }
+.appointment-preparation-card p,
+.appointment-reminder-queue p { margin: 0; color: var(--muted); }
+.appointment-prep-checklist { display: grid; gap: 8px; }
+.appointment-prep-checklist label { display: flex; gap: 8px; align-items: flex-start; }
+.appointment-prep-checklist input { flex: 0 0 auto; width: auto; margin-top: 3px; }
+
+@media (max-width: 760px) {
+  .agenda-day-tools { grid-template-columns: 1fr; }
+}
+
+@media print {
+  body * { visibility: hidden !important; }
+  .daily-sheet-print-area,
+  .daily-sheet-print-area * { visibility: visible !important; }
+  .daily-sheet-print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    color: #111 !important;
+    background: #fff !important;
+  }
+  .daily-sheet-print-area::before {
+    content: "OverHead daily schedule";
+    display: block;
+    margin: 0 0 16px;
+    font-size: 20pt;
+    font-weight: 700;
+  }
+  .no-print,
+  .calendar-view-controls,
+  .agenda-day-tools { display: none !important; }
+  .daily-sheet-print-area .task-row {
+    break-inside: avoid;
+    border-color: #999 !important;
+    color: #111 !important;
+  }
+}

@@ -1048,63 +1048,127 @@ function decryptStore(payload) {
   return payload
 }
 
-function seed() {
-  if (!state.customers.length) {
-    const createdAt = now()
-    state.customers.push({
-      id: 'oh-cust-001',
-      business_name: 'Oak City Detail',
-      owner_name: 'Jordan Miles',
-      email: 'owner@oakcity.example',
-      industry: 'Auto detailing',
-      service_area: 'Raleigh, Cary, Knightdale',
-      preferred_contact: 'Email',
-      status: 'Active setup',
-      created_at: createdAt,
-      updated_at: createdAt,
-    })
-    state.workflowPreferences.push({
-      customer_id: 'oh-cust-001',
-      booking_rules: 'Require service type, vehicle size, address, date window, and deposit status.',
-      answer_tone: 'Direct, polite, short. Escalate pricing exceptions to owner.',
-      quote_rules: 'Use base package, add pet hair, heavy soil, mobile travel, and ceramic add-ons.',
-      invoice_rules: 'Send invoice after service completion. Remind at day 3 and day 7 if unpaid.',
-      followup_rules: 'Send review request after paid invoice. Send maintenance reminder after 30 days.',
-      human_review_required: 1,
-    })
-    ;[
-      ['Approve quote policy', 'Workflows', 'Open', 'High', 1],
-      ['Review customer policy record', 'Customers', 'Open', 'High', 1],
-      ['Prepare support export', 'Support', 'Queued', 'Normal', 0],
-      ['Run integrity snapshot', 'Evidence', 'Open', 'High', 0],
-    ].forEach(([title, area, status, priority, isProtected]) => {
-      state.adminTasks.push({
-        id: createId('task'),
-        customer_id: 'oh-cust-001',
+function isUntouchedBuiltInSampleCustomer(customer) {
+  if (!customer?.created_at || customer.updated_at !== customer.created_at) return false
+  const expected = {
+    id: 'oh-cust-001',
+    business_name: 'Oak City Detail',
+    owner_name: 'Jordan Miles',
+    email: 'owner@oakcity.example',
+    industry: 'Auto detailing',
+    service_area: 'Raleigh, Cary, Knightdale',
+    preferred_contact: 'Email',
+    status: 'Active setup',
+    created_at: customer.created_at,
+    updated_at: customer.created_at,
+  }
+  return Object.keys(customer).length === Object.keys(expected).length
+    && Object.entries(expected).every(([key, value]) => customer[key] === value)
+}
+
+function migrateBuiltInSampleData() {
+  const customerId = 'oh-cust-001'
+  const customer = state.customers.find((item) => item.id === customerId)
+  const hasExactFields = (record, expected) => record
+    && Object.keys(record).length === Object.keys(expected).length
+    && Object.entries(expected).every(([key, value]) => record[key] === value)
+  if (!isUntouchedBuiltInSampleCustomer(customer)) return
+
+  const expectedPreferences = {
+    customer_id: customerId,
+    booking_rules: 'Require service type, vehicle size, address, date window, and deposit status.',
+    answer_tone: 'Direct, polite, short. Escalate pricing exceptions to owner.',
+    quote_rules: 'Use base package, add pet hair, heavy soil, mobile travel, and ceramic add-ons.',
+    invoice_rules: 'Send invoice after service completion. Remind at day 3 and day 7 if unpaid.',
+    followup_rules: 'Send review request after paid invoice. Send maintenance reminder after 30 days.',
+    human_review_required: 1,
+  }
+  const preferenceRows = state.workflowPreferences.filter((item) => item.customer_id === customerId)
+  if (preferenceRows.length > 1) return
+  const untouchedPreferences = preferenceRows.filter((item) => hasExactFields(item, expectedPreferences))
+  const sampleTaskFields = [
+    ['Approve quote policy', 'Workflows', 'Open', 'High', 1],
+    ['Review customer policy record', 'Customers', 'Open', 'High', 1],
+    ['Prepare support export', 'Support', 'Queued', 'Normal', 0],
+    ['Run integrity snapshot', 'Evidence', 'Open', 'High', 0],
+  ]
+  const untouchedTasks = []
+  for (const [title, area, status, priority, isProtected] of sampleTaskFields) {
+    const matching = state.adminTasks.filter((task) => task.customer_id === customerId && task.title === title)
+    const untouched = matching.find((task) => /^task_[0-9a-f-]{36}$/i.test(task.id || '')
+      && task.created_at === customer.created_at
+      && hasExactFields(task, {
+        id: task.id,
+        customer_id: customerId,
         title,
         area,
         status,
         priority,
-        due_at: createdAt,
+        due_at: customer.created_at,
         protected: isProtected,
-        created_at: createdAt,
-        updated_at: createdAt,
-      })
-    })
+        created_at: customer.created_at,
+        updated_at: customer.created_at,
+      }))
+    if (untouched) untouchedTasks.push(untouched)
   }
 
+  // Do not detach data from this customer. Ignore only the exact seed rows that
+  // are eligible for removal; any other reference makes the migration preserve
+  // the customer and all its candidate seed rows.
+  const removableRows = new Set([customer, ...untouchedPreferences, ...untouchedTasks])
+  const removableIds = new Set([customerId, ...untouchedTasks.map((task) => task.id)])
+  const visited = new WeakSet()
+  const hasReference = (value) => {
+    if (!value || typeof value !== 'object' || visited.has(value)) return false
+    visited.add(value)
+    if (removableRows.has(value)) return false
+    if (Array.isArray(value)) return value.some((entry) => removableIds.has(entry) || hasReference(entry))
+    return Object.values(value).some((entry) => removableIds.has(entry) || hasReference(entry))
+  }
+  if (hasReference(state)) return
+  if (preferenceRows.length !== untouchedPreferences.length) return
+  if (state.adminTasks.some((task) => task.customer_id === customerId && !untouchedTasks.includes(task))) return
+
+  state.customers = state.customers.filter((item) => item !== customer)
+  state.workflowPreferences = state.workflowPreferences.filter((item) => !untouchedPreferences.includes(item))
+  state.adminTasks = state.adminTasks.filter((item) => !untouchedTasks.includes(item))
+}
+
+function seed() {
+  migrateBuiltInSampleData()
+  const originalLegalDrafts = new Map([
+    ['Terms of Use', ['Draft included', 'OverHead local desktop terms placeholder for customer review before production release.']],
+    ['Privacy Notice', ['Draft included', 'OverHead stores local records on this device unless export or provider sync is enabled.']],
+    ['Acceptable Use Policy', ['Draft included', 'Users may not use OverHead for fraud, credential sharing, deceptive billing, or unauthorized data access.']],
+    ['AI Use Disclosure', ['Draft included', 'AI-assisted drafts are suggestions and require owner review before customer-facing use.']],
+    ['Data Retention Policy', ['Draft included', 'Customer records should be retained only as long as needed for service, support, and business records.']],
+    ['Data Responsibility Disclaimer', ['Draft included', 'OverHead is responsible for the functionality of the program. The customer is responsible for backups, user-entered records, data decisions, data loss, and data manipulation performed by authorized users or outside parties.']],
+    ['Support Policy', ['Draft included', 'Support exports can include diagnostics, app version, profile status, and recent audit entries.']],
+    ['Subscription Billing & Authorization Policy', ['Draft - legal review required', 'Paid plans renew on the billing interval shown at checkout until canceled. Owners must review plan, price, billing interval, and recurring authorization before checkout. Stripe is the authoritative payment record.']],
+    ['Free Trial Policy', ['Draft - legal review required', 'One 90-day, no-card Gold-equivalent trial is available per workspace. It ends automatically, is not transferable or extendable, and may not be recreated through additional accounts or workspaces.']],
+    ['Cancellation & Prorated Refund Policy', ['Draft - legal review required', 'Eligible unused time in the current paid period is refunded proportionally to the original payment method after immediate cancellation. Trials, fully used periods, unpaid amounts, and ineligible requests are not refundable.']],
+    ['Workspace License & Access Policy', ['Draft - legal review required', 'Licenses are automatically assigned to active workspace members, are not transferable, and may be suspended for trial expiry, cancellation, nonpayment, or misuse.']],
+  ])
+  for (const document of state.legalDocuments) {
+    const original = originalLegalDrafts.get(document.title)
+    if (original && document.version === '0.1' && document.effective_at === '' && document.status === original[0] && document.body === original[1]) {
+      document.status = original[0] === 'Draft included' ? 'Template - draft, not approved' : 'Template - draft, legal review required'
+      document.body = `${document.body} Template only; not approved or effective.`
+      document.updated_at = now()
+    }
+  }
   ;[
-    ['Terms of Use', 'Draft included', 'OverHead local desktop terms placeholder for customer review before production release.'],
-    ['Privacy Notice', 'Draft included', 'OverHead stores local records on this device unless export or provider sync is enabled.'],
-    ['Acceptable Use Policy', 'Draft included', 'Users may not use OverHead for fraud, credential sharing, deceptive billing, or unauthorized data access.'],
-    ['AI Use Disclosure', 'Draft included', 'AI-assisted drafts are suggestions and require owner review before customer-facing use.'],
-    ['Data Retention Policy', 'Draft included', 'Customer records should be retained only as long as needed for service, support, and business records.'],
-    ['Data Responsibility Disclaimer', 'Draft included', 'OverHead is responsible for the functionality of the program. The customer is responsible for backups, user-entered records, data decisions, data loss, and data manipulation performed by authorized users or outside parties.'],
-    ['Support Policy', 'Draft included', 'Support exports can include diagnostics, app version, profile status, and recent audit entries.'],
-    ['Subscription Billing & Authorization Policy', 'Draft - legal review required', 'Paid plans renew on the billing interval shown at checkout until canceled. Owners must review plan, price, billing interval, and recurring authorization before checkout. Stripe is the authoritative payment record.'],
-    ['Free Trial Policy', 'Draft - legal review required', 'One 90-day, no-card Gold-equivalent trial is available per workspace. It ends automatically, is not transferable or extendable, and may not be recreated through additional accounts or workspaces.'],
-    ['Cancellation & Prorated Refund Policy', 'Draft - legal review required', 'Eligible unused time in the current paid period is refunded proportionally to the original payment method after immediate cancellation. Trials, fully used periods, unpaid amounts, and ineligible requests are not refundable.'],
-    ['Workspace License & Access Policy', 'Draft - legal review required', 'Licenses are automatically assigned to active workspace members, are not transferable, and may be suspended for trial expiry, cancellation, nonpayment, or misuse.'],
+    ['Terms of Use', 'Template - draft, not approved', 'OverHead local desktop terms placeholder for customer review before production release. Template only; not approved or effective.'],
+    ['Privacy Notice', 'Template - draft, not approved', 'OverHead stores local records on this device unless export or provider sync is enabled. Template only; confirm actual product behavior and obtain legal review before approval.'],
+    ['Acceptable Use Policy', 'Template - draft, not approved', 'Users may not use OverHead for fraud, credential sharing, deceptive billing, or unauthorized data access. Template only; not approved or effective.'],
+    ['AI Use Disclosure', 'Template - draft, not approved', 'AI-assisted drafts are suggestions and require owner review before customer-facing use. Template only; not approved or effective.'],
+    ['Data Retention Policy', 'Template - draft, not approved', 'Customer records should be retained only as long as needed for service, support, and business records. Template only; confirm actual retention behavior and obtain legal review before approval.'],
+    ['Data Responsibility Disclaimer', 'Template - draft, not approved', 'OverHead is responsible for the functionality of the program. The customer is responsible for backups, user-entered records, data decisions, data loss, and data manipulation performed by authorized users or outside parties. Template only; not approved or effective.'],
+    ['Support Policy', 'Template - draft, not approved', 'Support exports can include diagnostics, app version, profile status, and recent audit entries. Template only; confirm actual support behavior and obtain legal review before approval.'],
+    ['Subscription Billing & Authorization Policy', 'Template - draft, legal review required', 'Paid plans renew on the billing interval shown at checkout until canceled. Owners must review plan, price, billing interval, and recurring authorization before checkout. Stripe is the authoritative payment record. Template only; not approved or effective.'],
+    ['Free Trial Policy', 'Template - draft, legal review required', 'One 90-day, no-card Gold-equivalent trial is available per workspace. It ends automatically, is not transferable or extendable, and may not be recreated through additional accounts or workspaces. Template only; verify current terms and obtain legal review before approval.'],
+    ['Cancellation & Prorated Refund Policy', 'Template - draft, legal review required', 'Eligible unused time in the current paid period is refunded proportionally to the original payment method after immediate cancellation. Trials, fully used periods, unpaid amounts, and ineligible requests are not refundable. Template only; verify current terms and obtain legal review before approval.'],
+    ['Workspace License & Access Policy', 'Template - draft, legal review required', 'Licenses are automatically assigned to active workspace members, are not transferable, and may be suspended for trial expiry, cancellation, nonpayment, or misuse. Template only; verify current terms and obtain legal review before approval.'],
   ].forEach(([title, status, body]) => {
     if (!state.legalDocuments.some((document) => document.title === title)) {
       state.legalDocuments.push({
@@ -2819,10 +2883,6 @@ function customerTime(value) {
   return Number.isNaN(parsed) ? 0 : parsed
 }
 
-function isSampleCustomer(customer) {
-  return customer.id === 'oh-cust-001' && customer.business_name === 'Oak City Detail'
-}
-
 function sharedCustomerFields(customer, workspaceId) {
   return {
     workspace_id: workspaceId,
@@ -2888,7 +2948,7 @@ async function performCustomerSync() {
   let uploaded = 0
   let downloaded = 0
 
-  for (const localCustomer of state.customers.filter((customer) => !customer.merged_into && !isSampleCustomer(customer))) {
+  for (const localCustomer of state.customers.filter((customer) => !customer.merged_into && !isUntouchedBuiltInSampleCustomer(customer))) {
     const remoteId = localCustomer.shared_customer_id || localCustomer.id
     const remoteCustomer = remoteById.get(remoteId)
     if (!remoteCustomer) {
@@ -3355,10 +3415,130 @@ function createBackup() {
   requireFeature('backups')
   const backupDir = path.join(dataRoot, 'backups')
   fs.mkdirSync(backupDir, { recursive: true })
-  const backupPath = path.join(backupDir, `overhead-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.secure`)
-  fs.copyFileSync(dbPath, backupPath)
+  const backupName = `overhead-backup-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomBytes(4).toString('hex')}.secure`
+  const backupPath = path.join(backupDir, backupName)
+  const temporaryPath = `${backupPath}.partial`
+  try {
+    // Publish only a complete, readable snapshot. The exclusive temporary file
+    // also prevents a stale partial from being silently overwritten.
+    fs.copyFileSync(dbPath, temporaryPath, fs.constants.COPYFILE_EXCL)
+    const backupContents = fs.readFileSync(temporaryPath, 'utf8')
+    const backupState = JSON.parse(decryptStore(backupContents))
+    if (!validRestoreState(backupState)) throw new Error('The saved data structure is invalid.')
+    fs.renameSync(temporaryPath, backupPath)
+  } catch (error) {
+    try { fs.rmSync(temporaryPath, { force: true }) } catch {}
+    throw new Error(`A verified backup could not be created. Your current data was not changed. ${error.message}`)
+  }
   recordAudit('backup.created', 'Local database backup created', { backupPath })
   return { backupPath, createdAt: now() }
+}
+
+function getBackupPath(filePath) {
+  if (!filePath || typeof filePath !== 'string') throw new Error('Backup file path is required.')
+  const backupDir = path.resolve(path.join(dataRoot, 'backups'))
+  const resolved = path.resolve(filePath)
+  const relative = path.relative(backupDir, resolved)
+  if (!relative || relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) {
+    throw new Error('The selected file is not inside the OverHead backups folder.')
+  }
+  if (path.extname(resolved).toLowerCase() !== '.secure') throw new Error('The selected file is not a supported OverHead backup.')
+  const stat = fs.lstatSync(resolved)
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('The selected backup is not a regular file.')
+  return { resolved, stat }
+}
+
+function readBackupSnapshot(filePath) {
+  const { resolved, stat } = getBackupPath(filePath)
+  const contents = fs.readFileSync(resolved, 'utf8')
+  const parsed = JSON.parse(decryptStore(contents))
+  const valid = validRestoreState(parsed)
+  return {
+    parsed,
+    metadata: {
+      valid,
+      fileName: path.basename(resolved),
+      backupPath: resolved,
+      createdAt: stat.mtime.toISOString(),
+      sizeBytes: stat.size,
+      sha256: crypto.createHash('sha256').update(contents).digest('hex'),
+      schema: parsed?.schema || 'unknown',
+    },
+  }
+}
+
+function inspectBackup(filePath) {
+  return readBackupSnapshot(filePath).metadata
+}
+
+function verifyBackup(filePath) {
+  requireRole(['Owner', 'Bookkeeper'], 'backup verification')
+  requireFeature('backups')
+  const result = inspectBackup(filePath)
+  recordAudit('backup.verified', result.valid ? 'Local backup verified' : 'Local backup rejected', { fileName: result.fileName, valid: result.valid })
+  return result
+}
+
+function previewBackupRestore(filePath) {
+  requireRole(['Owner'], 'restore preview')
+  requireFeature('restore_validation')
+  let snapshot
+  try {
+    snapshot = readBackupSnapshot(filePath)
+  } catch {
+    throw new Error('The selected backup could not be opened. Choose a valid OverHead backup from the backups folder.')
+  }
+  if (!snapshot.metadata.valid) throw new Error('The selected backup data structure is invalid and cannot be restored.')
+
+  const collectionCounts = Object.fromEntries(Object.entries(snapshot.parsed)
+    .filter(([, value]) => Array.isArray(value))
+    .map(([key, value]) => [key, value.length]))
+  const preview = {
+    valid: true,
+    fileName: snapshot.metadata.fileName,
+    createdAt: snapshot.metadata.createdAt,
+    sizeBytes: snapshot.metadata.sizeBytes,
+    sha256: snapshot.metadata.sha256,
+    schema: snapshot.metadata.schema,
+    collectionCounts,
+  }
+  recordAudit('restore.previewed', 'Validated local backup restore preview created', {
+    fileName: preview.fileName,
+    schema: preview.schema,
+    collectionCounts,
+  })
+  return preview
+}
+
+function listBackups() {
+  requireRole(['Owner', 'Bookkeeper'], 'backup inventory')
+  requireFeature('backups')
+  const backupDir = path.join(dataRoot, 'backups')
+  if (!fs.existsSync(backupDir)) return []
+  return fs.readdirSync(backupDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && path.extname(entry.name).toLowerCase() === '.secure')
+    .map((entry) => {
+      const backupPath = path.join(backupDir, entry.name)
+      try {
+        const verification = inspectBackup(backupPath)
+        return { ...verification, verified: verification.valid, error: null }
+      } catch (error) {
+        let stat = null
+        try { stat = fs.statSync(backupPath) } catch {}
+        return {
+          valid: false,
+          verified: false,
+          fileName: entry.name,
+          backupPath,
+          createdAt: stat?.mtime?.toISOString() || null,
+          sizeBytes: stat?.size ?? null,
+          sha256: null,
+          schema: null,
+          error: error.message,
+        }
+      }
+    })
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
 }
 
 function createDataExport() {
@@ -3386,6 +3566,87 @@ function createDataExport() {
   zip.writeZip(exportPath)
   recordAudit('data.exported', 'Data export created', { exportPath })
   return { exportPath, createdAt: now() }
+}
+
+function previewDataExport() {
+  requireRole(['Owner', 'Bookkeeper'], 'data export preview')
+  requireFeature('data_export')
+
+  // Match the collections and visibility rules used by createDataExport without
+  // serializing record values or creating an archive on disk.
+  const collections = [
+    {
+      name: 'customers',
+      count: state.customers.filter((customer) => !customer.merged_into).length,
+      fieldCategories: ['identity', 'contact details', 'business details', 'preferences', 'record timestamps'],
+      includesPersonalInformation: true,
+    },
+    {
+      name: 'tasks',
+      count: state.adminTasks.filter((task) => !task.notice_role || activeSession.role === 'Owner' || task.notice_role === activeSession.role).length,
+      fieldCategories: ['task descriptions', 'status and priority', 'assignment', 'scheduling', 'record references'],
+      includesPersonalInformation: false,
+    },
+    {
+      name: 'legalDocuments',
+      count: state.legalDocuments.length,
+      fieldCategories: ['document titles', 'legal text', 'document metadata'],
+      includesPersonalInformation: false,
+    },
+    {
+      name: 'legalAcknowledgements',
+      count: state.legalAcknowledgements.length,
+      fieldCategories: ['acknowledgement records', 'user identity', 'timestamps'],
+      includesPersonalInformation: true,
+    },
+    {
+      name: 'workflowJobs',
+      count: state.workflowJobs.length,
+      fieldCategories: ['job type', 'status and retries', 'workflow details', 'record references'],
+      includesPersonalInformation: false,
+    },
+    {
+      name: 'supportTickets',
+      count: state.supportTickets.length,
+      fieldCategories: ['support messages', 'contact details', 'ticket status', 'timestamps'],
+      includesPersonalInformation: true,
+    },
+    {
+      name: 'auditEvents',
+      count: Math.min(500, state.auditEvents.length),
+      fieldCategories: ['event descriptions', 'actor identity', 'event details', 'timestamps'],
+      includesPersonalInformation: true,
+    },
+    {
+      name: 'settings',
+      count: Object.keys(state.settings || {}).length,
+      fieldCategories: ['application preferences', 'setting values', 'timestamps'],
+      includesPersonalInformation: false,
+    },
+  ]
+  const collectionCounts = Object.fromEntries(collections.map(({ name, count }) => [name, count]))
+  const preview = {
+    previewedAt: now(),
+    format: 'ZIP archive containing overhead-export.json and README.txt',
+    fileNamePattern: 'overhead-export-<timestamp>.zip',
+    createsFile: false,
+    totalRecords: collections.reduce((total, collection) => total + collection.count, 0),
+    containsPersonalInformation: collections.some((collection) => collection.includesPersonalInformation),
+    collections,
+    notes: [
+      'Counts describe the current local data snapshot; they can change before an export is created.',
+      'The export contains customer, support, legal acknowledgement, and audit information. Review and protect the completed archive accordingly.',
+    ],
+  }
+
+  // Keep the audit payload to aggregate metadata only; never copy customer or
+  // support record values into the audit log as part of a preview.
+  recordAudit('data.export.previewed', 'Data export contents previewed', {
+    collectionCounts,
+    totalRecords: preview.totalRecords,
+    containsPersonalInformation: preview.containsPersonalInformation,
+  }, activeSession.email)
+  return preview
 }
 
 function saveStripeConnection(payload) {
@@ -4029,12 +4290,16 @@ function restoreFromPackage(payload = {}) {
   return { restored: true, safetyBackupPath: backup.backupPath }
 }
 
-function createSupportBundle(integrityReport = null) {
+async function createSupportBundle(integrityReport = null) {
   requireRole(['Owner', 'Support'], 'support bundle creation')
   requireFeature('support_bundle')
+  const session = activeSession
+  const store = state
   const bundleDir = path.join(dataRoot, 'support-bundles')
   fs.mkdirSync(bundleDir, { recursive: true })
-  const bundlePath = path.join(bundleDir, `overhead-support-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`)
+  const bundleName = `overhead-support-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomBytes(4).toString('hex')}.zip`
+  const bundlePath = path.join(bundleDir, bundleName)
+  const temporaryBundlePath = `${bundlePath}.partial`
   const zip = new AdmZip()
   zip.addFile('health.json', Buffer.from(JSON.stringify(getHealth(), null, 2)))
   zip.addFile('audit-events.json', Buffer.from(JSON.stringify(listAuditEvents(100), null, 2)))
@@ -4050,7 +4315,17 @@ function createSupportBundle(integrityReport = null) {
     }
     zip.addFile('overhead-store.json', Buffer.from(JSON.stringify(supportState, null, 2)))
   }
-  zip.writeZip(bundlePath)
+  // AdmZip's sync writer compresses the whole archive on Electron's main
+  // thread. Its async encoder yields during compression; write to a temporary
+  // path and rename only after the complete archive is safely on disk.
+  try {
+    await zip.writeZipPromise(temporaryBundlePath)
+    if (activeSession !== session || state !== store) throw new Error('The account changed while the support bundle was being prepared. Sign in and retry.')
+    fs.renameSync(temporaryBundlePath, bundlePath)
+  } catch (error) {
+    try { fs.rmSync(temporaryBundlePath, { force: true }) } catch {}
+    throw error
+  }
 
   const createdAt = now()
   state.supportTickets.unshift({
@@ -4128,6 +4403,9 @@ function getHealth() {
 module.exports = {
   acknowledgeLegal,
   createBackup,
+  listBackups,
+  verifyBackup,
+  previewBackupRestore,
   createCustomer,
   mergeCustomers,
   createAppointment,
@@ -4146,6 +4424,7 @@ module.exports = {
   undoMicrosoftImport,
   applyCustomerPlaybook,
   buildGuidedLaunchPlan,
+  previewDataExport,
   createDataExport,
   attachCustomerDocument,
   annotateStoredPdf,
