@@ -3935,9 +3935,9 @@ class TimmyNativeApp:
         if preview_button is not None:
             preview_button.configure(text=f"Preview {target}")
 
-    def _preview_current_plans(self, config: BotConfig) -> str:
+    def _preview_current_plans(self, config: BotConfig, plans_override: list | None = None) -> str:
         config = self._execution_config(config)
-        plans = list(self.plans)
+        plans = list(self.plans if plans_override is None else plans_override)
         if not plans:
             return "No executable plans at current controls. Refresh or lower Min Score."
         broker = WebullOpenApiBroker(config)
@@ -4077,12 +4077,21 @@ class TimmyNativeApp:
         self.status_bar.configure(text="Power cycling Timmy...")
         self.root.after(250, self.close)
 
-    def live_preview_then_submit(self, refresh: bool = True) -> str:
+    def live_preview_then_submit(
+        self,
+        refresh: bool = True,
+        plans_override: list | None = None,
+        scheduled_automation: bool = False,
+    ) -> str:
         if refresh:
             self._refresh_payload()
         config = self._load_config_safe()
-        preview_result = self._preview_current_plans(config)
-        submit_result = self.live_submit(refresh=False)
+        preview_result = self._preview_current_plans(config, plans_override=plans_override)
+        submit_result = self.live_submit(
+            refresh=False,
+            plans_override=plans_override,
+            scheduled_automation=scheduled_automation,
+        )
         return "\n\n".join((
             "Exact Webull preview completed:",
             preview_result,
@@ -4090,12 +4099,17 @@ class TimmyNativeApp:
             submit_result,
         ))
 
-    def live_submit(self, refresh: bool = True) -> str:
+    def live_submit(
+        self,
+        refresh: bool = True,
+        plans_override: list | None = None,
+        scheduled_automation: bool = False,
+    ) -> str:
         if refresh:
             self._refresh_payload()
         config = self._execution_config(self._load_config_safe())
         self._plan_limit(config)
-        plans = list(self.plans)
+        plans = list(self.plans if plans_override is None else plans_override)
         if not plans:
             return "No executable plans at current controls. Live order was not submitted."
         missing_previews = [plan.symbol for plan in plans[: self.plan_limit_value] if not self._has_fresh_preview(plan, config)]
@@ -4124,6 +4138,8 @@ class TimmyNativeApp:
                 "event_type": "live-order-intent",
                 "status": "pending-submit",
                 "symbol": plan.symbol.upper(),
+                "automation_scheduled": bool(scheduled_automation),
+                "automation_candle_timestamp": self._latest_candle_timestamp(plan.symbol),
                 "client_order_id": client_order_id,
                 "quantity": plan.quantity,
                 "buy_price": plan.limit_price,
@@ -4132,7 +4148,10 @@ class TimmyNativeApp:
             })
             result = broker.submit_order(plan, client_order_id=client_order_id)
             try:
-                self._append_execution_event(self._event_from_broker_result(result, mode="live"))
+                live_event = self._event_from_broker_result(result, mode="live")
+                live_event["automation_scheduled"] = bool(scheduled_automation)
+                live_event["automation_candle_timestamp"] = self._latest_candle_timestamp(plan.symbol)
+                self._append_execution_event(live_event)
             except Exception as exc:
                 # Stop the batch immediately. The broker call has happened, so
                 # an unpersisted response must be reconciled before any retry.
@@ -4285,6 +4304,32 @@ class TimmyNativeApp:
             selected.append(plan)
         return selected, skipped
 
+    def _scheduled_live_lane_plans(self) -> tuple[list, list[str]]:
+        """Skip Live Auto symbols already attempted against the same candle."""
+        existing = set()
+        for event in getattr(self, "execution_events", []):
+            if (
+                event.get("mode") != "live"
+                or event.get("automation_scheduled") is not True
+                or event.get("event_type") not in {"live-order-intent", "buy-order"}
+            ):
+                continue
+            symbol = str(event.get("symbol") or "").upper()
+            candle = event.get("automation_candle_timestamp")
+            if symbol and candle:
+                existing.add((symbol, str(candle)))
+
+        selected = []
+        skipped = []
+        for plan in self.plans[: self.plan_limit_value]:
+            key = (plan.symbol.upper(), str(self._latest_candle_timestamp(plan.symbol) or "unknown"))
+            if key in existing:
+                skipped.append(plan.symbol.upper())
+                continue
+            existing.add(key)
+            selected.append(plan)
+        return selected, skipped
+
     def _run_automation_lanes(
         self,
         paper_enabled: bool,
@@ -4333,10 +4378,20 @@ class TimmyNativeApp:
         if live_enabled:
             self.execution_target_var.set("Live")
             try:
-                live_result = self.live_preview_then_submit(refresh=False)
-                live_expectation = self._feedback_expectation(live_result)
-                self._record_automation_feedback("live", live_expectation, "Live lane previewed and submitted guarded plans.")
-                results.append("Live lane result:\n" + live_result)
+                lane_plans, skipped = self._scheduled_live_lane_plans()
+                if lane_plans:
+                    live_result = self.live_preview_then_submit(
+                        refresh=False,
+                        plans_override=lane_plans,
+                        scheduled_automation=True,
+                    )
+                    live_expectation = self._feedback_expectation(live_result)
+                    self._record_automation_feedback("live", live_expectation, f"Live Auto previewed {len(lane_plans)} new candle plan(s) and submitted through existing guards.")
+                    results.append("Live lane result:\n" + live_result)
+                else:
+                    detail = "No new Live Auto entries; current symbols already have a scheduled attempt for this daily candle."
+                    self._record_automation_feedback("live", "above-expectation", detail)
+                    results.append(f"Live lane skipped: {detail} {', '.join(skipped)}")
             except Exception as exc:
                 self._record_automation_feedback("live", "below-expectation", str(exc))
                 results.append(f"Live lane blocked:\n{exc}")
