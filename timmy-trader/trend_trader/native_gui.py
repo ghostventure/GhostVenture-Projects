@@ -15,7 +15,7 @@ import tkinter.font as tkfont
 import traceback
 from collections import deque
 from collections.abc import Iterable
-from dataclasses import is_dataclass, replace
+from dataclasses import dataclass, is_dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
@@ -72,6 +72,14 @@ ACCOUNT_REFRESH_MS = max(5, int(os.getenv("TIMMY_ACCOUNT_REFRESH_MINUTES", "15")
 AUTOMATION_RETRY_MS = 5_000
 LIVE_PREVIEW_TTL_SECONDS = 180
 TRADING_PRINCIPLE = "Make money, but never be reckless, clumsy, or wasteful."
+
+
+@dataclass(frozen=True)
+class MarketRefreshOutcome:
+    state: str
+    requested: int = 0
+    returned: int = 0
+    cached_symbols: int = 0
 
 
 def _write_private_json(path: Path, payload: dict) -> None:
@@ -716,6 +724,10 @@ class TimmyNativeApp:
         self.terminal_data_label = tk.Label(terminal_strip, text="DATA · CHECKING", bg=self.colors["runtime"],
                                             fg=self.colors["muted"], font=("Sans", 8, "bold"), anchor="e")
         self.terminal_data_label.grid(row=0, column=2, sticky="e", padx=(10, 16))
+        self._add_tooltip(
+            self.terminal_data_label,
+            "Compact data state. Full provider, timestamp, and candle age are shown in Runtime.",
+        )
         self.terminal_mode_label = tk.Label(terminal_strip, text="PAPER · USER", bg=self.colors["runtime"],
                                             fg=self.colors["green"], font=("Sans", 8, "bold"), anchor="e")
         self.terminal_mode_label.grid(row=0, column=3, sticky="e", padx=(6, 18))
@@ -801,7 +813,7 @@ class TimmyNativeApp:
             self.market_masthead,
             text="Scan status · waiting for first market refresh",
             bg=self.colors["panel"], fg=self.colors["muted"],
-            font=("Sans", 8), anchor="w", justify="left",
+            font=("Sans", 8), anchor="w", justify="left", wraplength=800,
         )
         self.market_scan_status_label.grid(row=2, column=1, columnspan=3, sticky="ew",
                                            padx=(16, 12), pady=(0, 8))
@@ -2164,7 +2176,11 @@ class TimmyNativeApp:
             return
         if not hasattr(self, "metrics") or getattr(self, "active_tab", None) != "Overview":
             return
-        compact = self.root.winfo_width() < 1120
+        window_width = self.root.winfo_width()
+        compact = window_width < 1120
+        scan_label = getattr(self, "market_scan_status_label", None)
+        if scan_label is not None:
+            scan_label.configure(wraplength=max(360, min(860, window_width - 520)))
         if compact:
             for idx in range(3):
                 self.metrics.columnconfigure(idx, weight=1)
@@ -2660,19 +2676,20 @@ class TimmyNativeApp:
 
         def refresh_market_data() -> None:
             error = None
+            outcome = None
             try:
                 # Network requests and watchlist rotation can take several seconds.
                 # Keep them off Tk's event loop so the window remains responsive.
-                self._refresh_market_data_if_needed(config=refresh_config)
+                outcome = self._refresh_market_data_if_needed(config=refresh_config)
             except Exception as exc:
                 error = exc
             if not self.closing:
                 try:
-                    self.root.after(0, lambda error=error: finish_refresh(error))
+                    self.root.after(0, lambda error=error, outcome=outcome: finish_refresh(error, outcome))
                 except tk.TclError:
                     pass
 
-        def finish_refresh(error: Exception | None) -> None:
+        def finish_refresh(error: Exception | None, outcome: MarketRefreshOutcome | None) -> None:
             self._refresh_in_progress = False
             if self.closing:
                 return
@@ -2699,8 +2716,36 @@ class TimmyNativeApp:
                     self.status_bar.configure(
                         text="Refresh finished; synthetic sample data is displayed (not market quotes)."
                     )
+                elif outcome is not None and outcome.state == "empty":
+                    if self.bars_by_symbol:
+                        if outcome.returned:
+                            message = (
+                                f"Provider returned {outcome.returned:,} bars, but none matched the active cache; "
+                                "the saved data was kept."
+                            )
+                        else:
+                            message = "Provider returned no usable bars; the saved data was kept."
+                        self.status_bar.configure(
+                            text=f"{message} Showing {len(self.bars_by_symbol):,} previously saved symbols."
+                        )
+                    else:
+                        self.status_bar.configure(text="Provider returned no usable bars; no market data is available.")
+                elif outcome is not None and outcome.state == "updated":
+                    if outcome.returned < outcome.requested:
+                        self.status_bar.configure(
+                            text=(f"Market data updated for {outcome.cached_symbols:,} symbols; "
+                                  f"provider returned {outcome.returned:,}/{outcome.requested:,} requested.")
+                        )
+                    else:
+                        self.status_bar.configure(
+                            text=f"Market data refresh complete for {outcome.cached_symbols:,} symbols."
+                        )
+                elif outcome is not None and outcome.state == "cached":
+                    self.status_bar.configure(text="Saved market data is still within its freshness window.")
+                elif outcome is not None and outcome.state == "csv":
+                    self.status_bar.configure(text="Market data is read from the configured CSV file.")
                 elif self.bars_by_symbol:
-                    self.status_bar.configure(text="Market data refresh complete.")
+                    self.status_bar.configure(text="Using the saved market data cache.")
                 else:
                     self.status_bar.configure(text="Refresh finished; no market data is available from the selected source.")
                 if self._settings_save_error:
@@ -2731,8 +2776,13 @@ class TimmyNativeApp:
                     return
                 self.status_bar.configure(text=text)
                 label = getattr(self, "market_scan_status_label", None)
-                if label is not None:
-                    label.configure(text=self._market_scan_status_line())
+                progress = getattr(self, "_movement_scan_progress", {})
+                live_scan = isinstance(progress, dict) and progress.get("phase") in {"started", "progress"}
+                if label is not None and live_scan:
+                    label.configure(
+                        text=self._market_scan_status_line(),
+                        fg=self.colors["teal"],
+                    )
             self.root.after(0, apply_status)
         except (tk.TclError, RuntimeError):
             pass
@@ -3676,14 +3726,14 @@ class TimmyNativeApp:
         except OSError:
             pass
 
-    def _refresh_market_data_if_needed(self, config: BotConfig | None = None) -> None:
+    def _refresh_market_data_if_needed(self, config: BotConfig | None = None) -> MarketRefreshOutcome:
         config = config or self.config or self._load_config_safe()
         if config.market_data_provider == "csv":
-            return
+            return MarketRefreshOutcome("csv")
         if self.data_file.exists():
             age_seconds = datetime.now().timestamp() - self.data_file.stat().st_mtime
             if age_seconds < config.market_data_max_age_minutes * 60 and not self._sample_marker_matches():
-                return
+                return MarketRefreshOutcome("cached")
         watchlist_path = self._runtime_path(config.watchlist_path or self.watchlist_path)
         write_watchlist_template(watchlist_path, config.watchlist_template)
         if config.watchlist_universe == "all-us":
@@ -3747,7 +3797,8 @@ class TimmyNativeApp:
                     write_csv_bars(self.data_file, selected_bars)
                     self._clear_sample_data_marker()
                     self._set_status_from_worker(f"Market data refreshed for {len(selected_bars)} custom watchlist symbols.")
-                return
+                    return MarketRefreshOutcome("updated", len(candidates), len(bars), len(selected_bars))
+                return MarketRefreshOutcome("empty", len(candidates), len(bars), 0)
         symbols = load_watchlist(watchlist_path, config.symbol_whitelist)
         bars = fetch_daily_bars(
             config.market_data_provider,
@@ -3760,6 +3811,8 @@ class TimmyNativeApp:
             write_csv_bars(self.data_file, bars)
             self._clear_sample_data_marker()
             self._set_status_from_worker(f"Market data refreshed for {len(bars)} symbols.")
+            return MarketRefreshOutcome("updated", len(symbols), len(bars), len(bars))
+        return MarketRefreshOutcome("empty", len(symbols), 0, 0)
 
     def _write_generated_watchlists(
         self,
@@ -4271,7 +4324,12 @@ class TimmyNativeApp:
         self.last_update_label.configure(text=self._data_freshness_line())
         scan_status_label = getattr(self, "market_scan_status_label", None)
         if scan_status_label is not None and not self._refresh_in_progress:
-            scan_status_label.configure(text=self._market_scan_status_line())
+            progress = getattr(self, "_movement_scan_progress", {})
+            unavailable = int(progress.get("failed", 0) or 0) if isinstance(progress, dict) else 0
+            scan_status_label.configure(
+                text=self._market_scan_status_line(),
+                fg=self.colors["gold"] if unavailable else self.colors["muted"],
+            )
         session = market_session()
         if session.is_open and session.closes_at:
             session_text = f"US EQUITIES · OPEN TILL {session.closes_at.strftime('%I:%M %p').lstrip('0')} ET"
@@ -4288,7 +4346,17 @@ class TimmyNativeApp:
             terminal_session.configure(text=session_text, fg=session_color)
         terminal_data = getattr(self, "terminal_data_label", None)
         if terminal_data is not None:
-            terminal_data.configure(text=f"DATA · {self._data_freshness_line()}".upper())
+            if self._market_data_load_error:
+                data_state, data_color = "INVALID", self.colors["red"]
+            elif self._sample_data_in_use:
+                data_state, data_color = "SAMPLE", self.colors["gold"]
+            elif not self.bars_by_symbol:
+                data_state, data_color = "MISSING", self.colors["gold"]
+            elif self._data_is_stale():
+                data_state, data_color = "STALE", self.colors["gold"]
+            else:
+                data_state, data_color = "FRESH", self.colors["green"]
+            terminal_data.configure(text=f"DATA · {data_state}", fg=data_color)
         terminal_mode = getattr(self, "terminal_mode_label", None)
         if terminal_mode is not None:
             mode_text = self.execution_mode_var.get().upper()

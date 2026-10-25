@@ -78,6 +78,8 @@ The browser dashboard remains only a development fallback. The main operating su
 
 - The native GUI groups navigation into workflow and operations sections, presents a guided market overview, places account and order actions in their relevant work areas, and scrolls on smaller displays.
 - Market-data refresh and watchlist rotation run in a background worker so slow network requests do not block native GUI input and redraws. The UI reports refresh progress and returns to cached-data rendering if a refresh fails.
+- Provider bars are checked for finite positive OHLC prices, consistent high/low ranges, non-negative finite volume, valid timestamps, and matching symbols before they enter scans or the local cache.
+- Market-data CSV updates are written to a same-directory temporary file, flushed, and atomically replaced so a failed refresh cannot leave a partially truncated cache. Existing file permissions are retained.
 - The Scanner tab filters visible rows as text is entered and shows the number of matches. Press Escape in the filter field to clear it.
 - Large market-data fetches keep a bounded number of requests in flight and queued, rather than creating one future for every symbol up front.
 - Stooq responses fall back to Yahoo per missing symbol, and market-data worker concurrency is capped at 24.

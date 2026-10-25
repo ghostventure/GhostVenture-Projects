@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timedelta
@@ -107,13 +108,27 @@ def _fetch_parallel(
             completed, _ = wait(pending, return_when=FIRST_COMPLETED)
             for future in completed:
                 symbol = pending.pop(future)
+                request_raised = False
                 try:
                     candles = future.result()
                 except Exception:
                     candles = []
                     failed_count += 1
+                    request_raised = True
                 if candles:
-                    bars[symbol] = candles[-days:]
+                    valid_candles = [
+                        candle for candle in candles
+                        if _valid_provider_candle(candle, symbol)
+                    ]
+                    if valid_candles:
+                        ordered = sorted(valid_candles, key=lambda candle: candle.timestamp.timestamp())
+                        bars[symbol] = ordered[-max(1, int(days)):]
+                    else:
+                        failed_count += 1
+                elif not request_raised:
+                    # Empty provider responses are unavailable symbols too;
+                    # reporting zero failures would make a thin scan look complete.
+                    failed_count += 1
                 completed_count += 1
                 report("progress", symbol)
                 next_symbol = next(symbols_to_fetch, None)
@@ -121,6 +136,29 @@ def _fetch_parallel(
                     pending[executor.submit(_fetch_one_with_retry, fetch_one, next_symbol)] = next_symbol
     report("completed")
     return bars
+
+
+def _valid_provider_candle(candle: Candle, expected_symbol: str) -> bool:
+    """Reject malformed provider rows before they enter scans or local caches."""
+    try:
+        if not isinstance(candle, Candle) or candle.symbol.strip().upper() != expected_symbol:
+            return False
+        if not isinstance(candle.timestamp, datetime):
+            return False
+        candle.timestamp.timestamp()
+        open_price, high, low, close = (
+            float(candle.open), float(candle.high), float(candle.low), float(candle.close)
+        )
+        volume = float(candle.volume)
+        if not all(math.isfinite(value) and value > 0 for value in (open_price, high, low, close)):
+            return False
+        if high < max(open_price, low, close):
+            return False
+        if low > min(open_price, high, close):
+            return False
+        return math.isfinite(volume) and volume >= 0
+    except (AttributeError, OSError, TypeError, ValueError, OverflowError):
+        return False
 
 
 def _fetch_one_with_retry(fetch_one, symbol: str) -> list[Candle]:

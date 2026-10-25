@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import csv
 import math
+import os
+import stat
+import tempfile
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -67,24 +70,64 @@ def load_csv_bars(path: str | Path) -> dict[str, list[Candle]]:
 
 def write_csv_bars(path: str | Path, bars_by_symbol: dict[str, list[Candle]]) -> None:
     target = Path(path)
+    if target.is_symlink():
+        target = target.resolve(strict=False)
     target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=["symbol", "timestamp", "open", "high", "low", "close", "volume"])
-        writer.writeheader()
-        for symbol in sorted(bars_by_symbol):
-            items = bars_by_symbol[symbol]
-            chronological = all(
-                items[index - 1].timestamp <= items[index].timestamp
-                for index in range(1, len(items))
+    try:
+        existing_mode = stat.S_IMODE(target.stat().st_mode)
+    except FileNotFoundError:
+        existing_mode = None
+
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", newline="", encoding="utf-8", dir=target.parent,
+            prefix=f".{target.name}.", suffix=".tmp", delete=False,
+        ) as file:
+            temporary_path = Path(file.name)
+            writer = csv.DictWriter(
+                file,
+                fieldnames=["symbol", "timestamp", "open", "high", "low", "close", "volume"],
             )
-            ordered_items = items if chronological else sorted(items, key=lambda item: item.timestamp)
-            for bar in ordered_items:
-                writer.writerow({
-                    "symbol": bar.symbol,
-                    "timestamp": bar.timestamp.isoformat(),
-                    "open": bar.open,
-                    "high": bar.high,
-                    "low": bar.low,
-                    "close": bar.close,
-                    "volume": bar.volume,
-                })
+            writer.writeheader()
+            for symbol in sorted(bars_by_symbol):
+                items = bars_by_symbol[symbol]
+                chronological = all(
+                    items[index - 1].timestamp <= items[index].timestamp
+                    for index in range(1, len(items))
+                )
+                ordered_items = items if chronological else sorted(items, key=lambda item: item.timestamp)
+                for bar in ordered_items:
+                    writer.writerow({
+                        "symbol": bar.symbol,
+                        "timestamp": bar.timestamp.isoformat(),
+                        "open": bar.open,
+                        "high": bar.high,
+                        "low": bar.low,
+                        "close": bar.close,
+                        "volume": bar.volume,
+                    })
+            file.flush()
+            os.fsync(file.fileno())
+
+        if existing_mode is not None:
+            os.chmod(temporary_path, existing_mode)
+        os.replace(temporary_path, target)
+        temporary_path = None
+
+        # Persist the rename across a sudden power loss where the platform
+        # supports directory fsync. The completed file remains valid either way.
+        try:
+            directory_fd = os.open(target.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            pass
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass

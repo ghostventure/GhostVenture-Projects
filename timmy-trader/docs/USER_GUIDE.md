@@ -104,16 +104,21 @@ bar interval and do not account for exchange sessions, weekends, or holidays.
 Check the raw timestamps and provider if a warning appears. The dashboard's
 latest-candle timestamp is not proof of a live quote.
 
-The header distinguishes `FRESH`, `STALE`, `MISSING`, and synthetic data and
-shows the provider, latest candle timestamp, and approximate candle age. Use
-**Scan** or **F5** for a manual refresh. Automatic refresh runs at the interval
-set by `TIMMY_DASHBOARD_REFRESH_SECONDS`; provider requests are skipped while
+The terminal strip shows a compact, color-coded `FRESH`, `STALE`, `MISSING`,
+`INVALID`, or `SAMPLE` data state. Hover over that state for help; the Runtime
+panel shows the provider, latest candle timestamp, and approximate candle age.
+Use **Scan** or **F5** for a manual refresh. Automatic refresh runs at the
+interval set by `TIMMY_DASHBOARD_REFRESH_SECONDS`; provider requests are skipped while
 the saved market-data cache is younger than `MARKET_DATA_MAX_AGE_MINUTES`.
 The Signal Desk status line reports live batch progress and the most recent
 scan coverage, returned symbols, provider failures, and an approximate full
 universe pass time. A full pass estimate assumes each configured batch refresh
 succeeds at the current cache cadence; rate limits, outages, and unsupported
 symbols can make actual coverage slower or incomplete.
+
+If a provider returns no usable bars, Timmy keeps the existing cache and reports
+that it is showing previously saved symbols. A refresh is reported as complete
+only when new bars were actually written or the existing cache was still fresh.
 
 ### Rolling 96-hour movers and upside shortlist
 
