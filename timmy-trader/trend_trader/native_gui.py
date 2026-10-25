@@ -48,6 +48,7 @@ from .shortcut_help import ShortcutHelpRegistry
 from .journal_filters import JournalFilterState, filter_journal_events
 from .readiness import readiness_flags
 from .risk import create_order_plan, enforce_live_guards
+from .risk_planning_lab import RiskPlanningLab
 from .runtime_health import build_runtime_health, pre_market_system_check
 from .sample_data import write_sample_bars
 from .strategy import rank_signals
@@ -1893,6 +1894,9 @@ class TimmyNativeApp:
                                        style="Vertical.TScrollbar")
         self.plan_text.configure(yscrollcommand=plan_scrollbar.set)
         plan_scrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 10), pady=(0, 12))
+        self._button(order_panel, "Open risk & plan review", self._open_risk_planning_lab,
+                     tooltip="Review risk, compare plans, and inspect hypothetical changes without editing the queue").grid(
+                         row=2, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 14))
 
         broker_panel = self._panel(right)
         self.broker_panel = broker_panel
@@ -6868,6 +6872,18 @@ class TimmyNativeApp:
             )
         lines.extend(("", preview.note, "No order is created or sent by this preview."))
         messagebox.showinfo("Sizing preview", "\n".join(lines), parent=self.root)
+
+    def _open_risk_planning_lab(self) -> None:
+        existing = getattr(self, "_risk_planning_lab", None)
+        if existing is not None:
+            try:
+                if existing.window.winfo_exists():
+                    existing.window.lift()
+                    existing._reload_data()
+                    return
+            except tk.TclError:
+                pass
+        self._risk_planning_lab = RiskPlanningLab(self.root, self)
 
     def _edit_selected_symbol_note(self) -> None:
         symbol = getattr(self, "selected_chart_symbol", "")
