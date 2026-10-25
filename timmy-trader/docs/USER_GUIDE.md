@@ -43,6 +43,7 @@ timestamps shown by Timmy before relying on a scan.
 | --- | --- |
 | **Market** | Ranked radar, selected-symbol chart, Decision Brief, and current order plan. |
 | **Scanner** | Search, filter, sort, and inspect the full signal list. Saved scanner filters only affect the displayed scan view. |
+| **Research** | Inspect scan coverage, compare local evidence, preview CSV imports, plan market sessions, compare symbol groups, and export a redacted snapshot. |
 | **Strategy** | Review style, enabled patterns, score thresholds, readiness gates, and why a candidate is blocked. |
 | **Universe** | Inspect the symbol universe and generated watchlist status. |
 | **Portfolio** | Review the local paper ledger and a separately checked broker-cash snapshot. Portfolio positions and P&L are paper-ledger data. |
@@ -105,6 +106,30 @@ Select a ticker, create a personal group, then use **+ Group** to add the
 selected ticker. Pinning lets you filter the radar to pinned symbols. These
 groups are stored in the local profile as organizational aids. They do not
 change the active watchlist, scan universe, broker watchlists, or trading scope.
+
+### Research workbench
+
+Open **Research** for a bounded history of the last 60 scan-coverage records,
+including per-symbol returned/missing state and safe provider failure details.
+The multi-chart board and group comparison use only currently loaded local
+candles. Provider Evidence compares recorded scans; it never makes a second
+request to a provider, and runs from different symbols or dates are not a
+controlled benchmark. The Data Issue Inbox combines missing coverage and
+candle-quality warnings, then opens a unified symbol view with its local chart,
+scan result, quality detail, and private local note.
+
+Use **Import CSV** to map symbol, timestamp, and OHLCV fields, review row-level
+validation, and preview sample rows before confirming a merge. An invalid row
+blocks the whole import. Confirmation merges by symbol and timestamp and writes
+the local candle file atomically; imported values replace matching timestamps.
+The import is local, makes no provider request, and cannot place orders.
+
+The session planner shows a 35-day US-equities planning horizon in Eastern
+Time. Holiday/early-close confidence is only maintained for 2026; future-year
+weekdays are labeled for verification. Named scanner table layouts round-trip
+column order, visibility, and sorting separately from scanner filters. Research
+snapshots export a small whitelisted set of symbols, scan scores, and issue
+details; account, broker, credential, and profile fields are excluded.
 
 ### Data freshness and quality
 

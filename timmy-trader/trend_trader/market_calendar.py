@@ -68,6 +68,27 @@ def seconds_until_next_open(now: datetime | None = None) -> int:
     return max(1, int((next_market_open(current) - current).total_seconds()))
 
 
+def market_session_calendar(now: datetime | None = None, days: int = 35) -> tuple[dict[str, str], ...]:
+    """Return a local planning horizon with holiday confidence made explicit."""
+    current = (now or datetime.now(tz=MARKET_TZ)).astimezone(MARKET_TZ)
+    safe_days = max(1, min(int(days), 62))
+    rows: list[dict[str, str]] = []
+    for offset in range(safe_days):
+        day = current.date() + timedelta(days=offset)
+        if day.weekday() >= 5:
+            rows.append({"date": day.isoformat(), "state": "Weekend", "hours": "Closed", "confidence": "Known"})
+        elif day in NYSE_FULL_CLOSES_2026:
+            rows.append({"date": day.isoformat(), "state": "Exchange holiday", "hours": "Closed", "confidence": "Known 2026 calendar"})
+        elif day in NYSE_EARLY_CLOSES_2026:
+            close = NYSE_EARLY_CLOSES_2026[day]
+            rows.append({"date": day.isoformat(), "state": "Early close", "hours": f"9:30 AM–{close.strftime('%-I:%M %p')} ET", "confidence": "Known 2026 calendar"})
+        elif day.year == 2026:
+            rows.append({"date": day.isoformat(), "state": "Regular session", "hours": "9:30 AM–4:00 PM ET", "confidence": "Known 2026 calendar"})
+        else:
+            rows.append({"date": day.isoformat(), "state": "Weekday (verify holiday)", "hours": "Expected 9:30 AM–4:00 PM ET", "confidence": "Holiday calendar unavailable"})
+    return tuple(rows)
+
+
 def _is_trading_day(day: date) -> bool:
     if day.weekday() >= 5:
         return False

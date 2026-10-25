@@ -21,37 +21,44 @@ STOOQ_DAILY_URL = "https://stooq.com/q/d/l/"
 def fetch_stooq_daily(
     symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 6,
     progress_callback: Callable[[dict], None] | None = None,
+    diagnostic_callback: Callable[[dict], None] | None = None,
 ) -> dict[str, list[Candle]]:
     return _fetch_parallel(
         symbols, lambda symbol: _fetch_one_stooq_symbol(symbol, days=days, timeout=timeout),
         days, max_workers, provider="stooq", progress_callback=progress_callback,
+        diagnostic_callback=diagnostic_callback,
     )
 
 
 def fetch_yahoo_daily(
     symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 6,
     progress_callback: Callable[[dict], None] | None = None,
+    diagnostic_callback: Callable[[dict], None] | None = None,
 ) -> dict[str, list[Candle]]:
     return _fetch_parallel(
         symbols, lambda symbol: _fetch_one_yahoo_symbol(symbol, days=days, timeout=timeout),
         days, max_workers, provider="yahoo", progress_callback=progress_callback,
+        diagnostic_callback=diagnostic_callback,
     )
 
 
 def fetch_daily_bars(
     provider: str, symbols: list[str], days: int = 90, timeout: int = 10, max_workers: int = 6,
     progress_callback: Callable[[dict], None] | None = None,
+    diagnostic_callback: Callable[[dict], None] | None = None,
 ) -> dict[str, list[Candle]]:
     if provider == "stooq":
         bars = fetch_stooq_daily(
             symbols, days=days, timeout=timeout, max_workers=max_workers,
             progress_callback=progress_callback,
+            diagnostic_callback=diagnostic_callback,
         )
         missing_symbols = [symbol.upper() for symbol in symbols if symbol.strip() and symbol.upper() not in bars]
         if missing_symbols:
             yahoo_bars = fetch_yahoo_daily(
                 missing_symbols, days=days, timeout=timeout, max_workers=max_workers,
                 progress_callback=progress_callback,
+                diagnostic_callback=diagnostic_callback,
             )
             bars.update(yahoo_bars)
         return bars
@@ -59,6 +66,7 @@ def fetch_daily_bars(
         return fetch_yahoo_daily(
             symbols, days=days, timeout=timeout, max_workers=max_workers,
             progress_callback=progress_callback,
+            diagnostic_callback=diagnostic_callback,
         )
     raise ValueError(f"Unsupported market data provider: {provider}")
 
@@ -66,6 +74,7 @@ def fetch_daily_bars(
 def _fetch_parallel(
     symbols: list[str], fetch_one, days: int, max_workers: int, *, provider: str,
     progress_callback: Callable[[dict], None] | None = None,
+    diagnostic_callback: Callable[[dict], None] | None = None,
 ) -> dict[str, list[Candle]]:
     bars: dict[str, list[Candle]] = {}
     clean_symbols = sorted(dict.fromkeys(symbol.upper() for symbol in symbols if symbol.strip()))
@@ -111,10 +120,23 @@ def _fetch_parallel(
                 request_raised = False
                 try:
                     candles = future.result()
-                except Exception:
+                except Exception as error:
                     candles = []
                     failed_count += 1
                     request_raised = True
+                    if diagnostic_callback:
+                        if isinstance(error, HTTPError):
+                            category, detail = "provider_http", f"Provider returned HTTP {error.code}; retry or confirm symbol availability."
+                            status_code = error.code
+                        elif isinstance(error, (URLError, TimeoutError, ConnectionError, OSError)):
+                            category, detail, status_code = "network", "Provider request timed out or could not connect; check network and retry.", None
+                        else:
+                            category, detail, status_code = "provider_error", f"Provider request failed ({type(error).__name__}); retry or confirm symbol format.", None
+                        try:
+                            diagnostic_callback({"symbol": symbol, "provider": provider, "category": category,
+                                                 "status_code": status_code, "detail": detail})
+                        except Exception:
+                            pass
                 if candles:
                     valid_candles = [
                         candle for candle in candles
@@ -125,10 +147,22 @@ def _fetch_parallel(
                         bars[symbol] = ordered[-max(1, int(days)):]
                     else:
                         failed_count += 1
+                        if diagnostic_callback:
+                            try:
+                                diagnostic_callback({"symbol": symbol, "provider": provider, "category": "invalid_data",
+                                                     "status_code": None, "detail": "Provider rows failed OHLCV or symbol validation."})
+                            except Exception:
+                                pass
                 elif not request_raised:
                     # Empty provider responses are unavailable symbols too;
                     # reporting zero failures would make a thin scan look complete.
                     failed_count += 1
+                    if diagnostic_callback:
+                        try:
+                            diagnostic_callback({"symbol": symbol, "provider": provider, "category": "no_data",
+                                                 "status_code": None, "detail": "Provider returned no bars for this symbol."})
+                        except Exception:
+                            pass
                 completed_count += 1
                 report("progress", symbol)
                 next_symbol = next(symbols_to_fetch, None)

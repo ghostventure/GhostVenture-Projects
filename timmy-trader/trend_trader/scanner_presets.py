@@ -192,3 +192,74 @@ class ScannerPresetStore:
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
+
+
+class ScannerTablePresetStore:
+    """Named round-trip presets for table column order, visibility, and sort."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path).expanduser()
+        self._presets: dict[str, dict] = {}
+        self._load()
+
+    @property
+    def presets(self) -> tuple[dict, ...]:
+        return tuple(self._presets[name] for name in sorted(self._presets, key=str.casefold))
+
+    def save(self, name: str, state: dict) -> dict:
+        clean_name = _clean_text(name, "table preset name", 48)
+        if not isinstance(state, dict):
+            raise ValueError("Table layout must be a mapping.")
+        safe_state = {
+            "columns": list(state.get("columns", [])),
+            "visible_columns": list(state.get("visible_columns", [])),
+            "sort_column": str(state.get("sort_column", "")),
+            "descending": state.get("descending", True),
+        }
+        if not safe_state["columns"] or not safe_state["visible_columns"] or not isinstance(safe_state["descending"], bool):
+            raise ValueError("Table layout must include visible columns and a sort direction.")
+        if clean_name not in self._presets and len(self._presets) >= 30:
+            raise ValueError("A maximum of 30 named table layouts is allowed.")
+        record = {"name": clean_name, **safe_state}
+        self._presets[clean_name] = record
+        self._write()
+        return record
+
+    def delete(self, name: str) -> bool:
+        if name not in self._presets:
+            return False
+        del self._presets[name]
+        self._write()
+        return True
+
+    def get(self, name: str) -> dict | None:
+        record = self._presets.get(name)
+        return dict(record) if record else None
+
+    def _load(self) -> None:
+        try:
+            if self.path.stat().st_size > MAX_FILE_BYTES:
+                return
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            rows = payload.get("presets") if isinstance(payload, dict) and payload.get("version") == 1 else None
+            if isinstance(rows, list) and len(rows) <= 30:
+                self._presets = {row["name"]: row for row in rows if isinstance(row, dict) and isinstance(row.get("name"), str)}
+        except (OSError, ValueError, TypeError, KeyError):
+            self._presets = {}
+
+    def _write(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        encoded = json.dumps({"version": 1, "presets": list(self._presets.values())}, indent=2, sort_keys=True) + "\n"
+        if len(encoded.encode("utf-8")) > MAX_FILE_BYTES:
+            raise ValueError("Named table layouts exceed the storage limit.")
+        fd, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=self.path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(encoded)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)

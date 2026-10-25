@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import csv
 import json
 import math
 import os
@@ -28,7 +29,7 @@ from .brokers.webull_openapi import WebullOpenApiBroker
 from .config import BotConfig, load_config
 from .data import load_csv_bars, write_csv_bars
 from .data_quality import summarize_candle_quality
-from .market_calendar import market_session, seconds_until_next_open
+from .market_calendar import market_session, market_session_calendar, seconds_until_next_open
 from .market_data import fetch_daily_bars
 from .market_universe import fetch_us_listed_symbols, load_bundled_us_listed_instruments, load_bundled_us_listed_symbols
 from .movement_tracker import (
@@ -55,7 +56,7 @@ from .strategy import rank_signals
 from .strategy_presets import list_strategy_presets
 from .updates import check_and_install_update
 from .symbol_notes import SymbolNotesStore
-from .scanner_presets import ScannerPresetStore
+from .scanner_presets import ScannerPresetStore, ScannerTablePresetStore
 from .scanner_view_state import make_scanner_view, scanner_view_from_dict, scanner_view_to_dict
 from .settings_backups import backup_raw_ui_settings, backup_ui_settings
 from .settings_profile import create_config_version, list_config_versions, rollback_config_version
@@ -66,6 +67,14 @@ from .trader_profile_score import (
 )
 from .watchlist import DEFAULT_ROTATION_CANDIDATES, load_watchlist, rotate_watchlist, write_watchlist, write_watchlist_template
 from .workspace_tools import ActionRegistry, WorkspaceStore
+from .research_workbench import (
+    ScanCoverageStore,
+    compare_symbol_groups,
+    merge_imported_candles,
+    preview_csv_import,
+    provider_evidence,
+    redacted_research_snapshot,
+)
 from .watchlist_organization import WatchlistOrganizationStore
 from .watchlist_change_explanations import explain_membership_changes
 from .webull_watchlists import sync_generated_watchlists
@@ -83,6 +92,8 @@ class MarketRefreshOutcome:
     requested: int = 0
     returned: int = 0
     cached_symbols: int = 0
+    issues: tuple[dict, ...] = ()
+    returned_symbols: tuple[str, ...] = ()
 
 
 def _write_private_json(path: Path, payload: dict) -> None:
@@ -160,6 +171,8 @@ class TimmyNativeApp:
         self._latest_generated_watchlist_change_notes: list[str] = []
         self.symbol_notes = SymbolNotesStore(home)
         self.scanner_presets = ScannerPresetStore(home / "scanner-presets.json")
+        self.scanner_table_presets = ScannerTablePresetStore(home / "scanner-table-presets.json")
+        self.scan_coverage = ScanCoverageStore(home / "scan-coverage-history.json")
         self.alert_store = AlertStore(home / "timmy-alerts.json")
         self.watchlist_organization = WatchlistOrganizationStore(home)
         self.action_registry = ActionRegistry()
@@ -651,7 +664,7 @@ class TimmyNativeApp:
 
         nav_sections = (
             ("WORKSPACES", ("Overview", "Portfolio", "Automation", "Alerts")),
-            ("RESEARCH", ("Scanner", "Strategy", "Universe")),
+            ("RESEARCH", ("Scanner", "Research", "Strategy", "Universe")),
             ("EXECUTION", ("Execution", "Broker")),
             ("SYSTEM", ("Setup", "Audit", "Health")),
         )
@@ -1273,6 +1286,8 @@ class TimmyNativeApp:
                                      insertbackground=self.colors["text"], relief="flat", padx=14, pady=12,
                                      font=("Monospace", 10), wrap="word")
         self.universe_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+
+        self._build_research_panel(body)
 
         setup_panel = self._panel(body)
         self.setup_panel = setup_panel
@@ -1973,6 +1988,57 @@ class TimmyNativeApp:
     def _panel(self, parent: tk.Widget) -> tk.Frame:
         return tk.Frame(parent, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
 
+    def _build_research_panel(self, parent: tk.Widget) -> None:
+        panel = self._panel(parent)
+        self.research_panel = panel
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(3, weight=1)
+        self._section_header(panel, "LOCAL EVIDENCE", "Research Workbench",
+                             "Refresh coverage", self.refresh_all)
+        actions = tk.Frame(panel, bg=self.colors["panel"])
+        actions.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 12))
+        action_specs = (
+            ("Coverage Explorer", self._open_scan_coverage),
+            ("Multi-chart Board", self._open_chart_board),
+            ("Provider Evidence", self._open_provider_comparison),
+            ("Import CSV…", self._open_csv_import),
+            ("Session Planner", self._open_session_planner),
+            ("Data Issue Inbox", self._open_data_issue_inbox),
+            ("Compare Groups", self._open_group_comparison),
+            ("Export Snapshot", self._export_research_snapshot),
+            ("Save Table Layout", self._save_scanner_table_preset),
+            ("Load Table Layout", self._open_scanner_table_preset),
+            ("Open Symbol Research", self._open_symbol_research_drawer),
+        )
+        for index, (label, callback) in enumerate(action_specs):
+            button = self._button(actions, label, callback, accent="teal" if index in {0, 3, 7} else None)
+            button.grid(row=index // 5, column=index % 5, sticky="ew", padx=4, pady=4)
+            actions.columnconfigure(index % 5, weight=1)
+        self.research_status_label = tk.Label(
+            panel,
+            text="Coverage and comparison use only locally loaded candle data. Provider evidence never triggers a second fetch.",
+            bg=self.colors["panel"], fg=self.colors["muted"], anchor="w", justify="left", wraplength=1200,
+        )
+        self.research_status_label.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 8))
+        table_box = tk.Frame(panel, bg=self.colors["panel_2"])
+        table_box.grid(row=3, column=0, sticky="nsew", padx=16, pady=(0, 16))
+        table_box.columnconfigure(0, weight=1)
+        table_box.rowconfigure(1, weight=1)
+        tk.Label(table_box, text="SCAN COVERAGE HISTORY · DOUBLE-CLICK A RUN FOR SYMBOL DETAIL",
+                 bg=self.colors["panel_2"], fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
+        columns = ("time", "provider", "source", "coverage", "returned", "requested")
+        tree = ttk.Treeview(table_box, columns=columns, show="headings", height=12, selectmode="browse")
+        self.research_coverage_tree = tree
+        for key, title, width in (("time", "Recorded", 175), ("provider", "Provider", 100),
+                                  ("source", "Source", 90), ("coverage", "Coverage", 100),
+                                  ("returned", "Returned", 90), ("requested", "Requested", 90)):
+            tree.heading(key, text=title)
+            tree.column(key, width=width, anchor="w" if key in {"time", "provider", "source"} else "e")
+        tree.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        tree.bind("<Double-1>", lambda _event: self._open_selected_coverage_detail())
+        self._render_scan_coverage()
+
     def _mini_stat(self, parent: tk.Widget, column: int, title: str) -> tk.Label:
         frame = tk.Frame(parent, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
         frame.grid(row=0, column=column, sticky="ew", padx=6)
@@ -2030,6 +2096,7 @@ class TimmyNativeApp:
         self.strategy_tab_panel.grid_remove()
         self.execution_tab_panel.grid_remove()
         self.health_panel.grid_remove()
+        self.research_panel.grid_remove()
         self.right_panel.grid_remove()
         for panel in (self.decision_panel, self.order_panel, self.broker_panel, self.journal_panel):
             panel.grid_remove()
@@ -2368,6 +2435,10 @@ class TimmyNativeApp:
         elif tab == "Scanner":
             self.body.columnconfigure(0, weight=1)
             self.signals_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Research":
+            self.body.columnconfigure(0, weight=1)
+            self._render_scan_coverage()
+            self.research_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         elif tab == "Portfolio":
             self.body.columnconfigure(0, weight=1)
             self._render_portfolio_panel()
@@ -2441,7 +2512,7 @@ class TimmyNativeApp:
         state = self._last_workspace_state
         workspace = state.get("workspace", "Overview")
         valid_tabs = {"Overview", "Market", "Setup", "Universe", "Scanner", "Portfolio", "Automation",
-                      "Alerts", "Strategy", "Execution", "Health", "Broker", "Audit"}
+                      "Research", "Alerts", "Strategy", "Execution", "Health", "Broker", "Audit"}
         if workspace not in valid_tabs:
             workspace = "Overview"
         self.overview_radar_visible_var.set(state.get("overview_radar_visible") is not False)
@@ -3011,6 +3082,10 @@ class TimmyNativeApp:
                 return
             try:
                 self._refresh_payload(skip_market_refresh=True)
+                try:
+                    self._record_research_scan(outcome, refresh_error=error)
+                except (OSError, ValueError, tk.TclError) as record_error:
+                    self.status_bar.configure(text=f"Scan completed, but coverage history was not saved: {record_error}")
                 if error is not None:
                     detail = str(error).strip() or error.__class__.__name__
                     if self._market_data_load_error:
@@ -4044,6 +4119,7 @@ class TimmyNativeApp:
 
     def _refresh_market_data_if_needed(self, config: BotConfig | None = None) -> MarketRefreshOutcome:
         config = config or self.config or self._load_config_safe()
+        diagnostics: list[dict] = []
         if config.market_data_provider == "csv":
             return MarketRefreshOutcome("csv")
         if self.data_file.exists():
@@ -4067,6 +4143,7 @@ class TimmyNativeApp:
                 timeout=config.market_data_fetch_timeout_seconds,
                 max_workers=config.market_data_fetch_workers,
                 progress_callback=self._record_movement_scan_progress,
+                diagnostic_callback=diagnostics.append,
             )
             self._refresh_movement_watchlist(
                 movement_bars,
@@ -4092,6 +4169,7 @@ class TimmyNativeApp:
                 candidates,
                 timeout=config.market_data_fetch_timeout_seconds,
                 max_workers=config.market_data_fetch_workers,
+                diagnostic_callback=diagnostics.append,
             )
             if bars:
                 candidate_signals = rank_signals(bars, config)
@@ -4113,22 +4191,23 @@ class TimmyNativeApp:
                     write_csv_bars(self.data_file, selected_bars)
                     self._clear_sample_data_marker()
                     self._set_status_from_worker(f"Market data refreshed for {len(selected_bars)} custom watchlist symbols.")
-                    return MarketRefreshOutcome("updated", len(candidates), len(bars), len(selected_bars))
-                return MarketRefreshOutcome("empty", len(candidates), len(bars), 0)
+                    return MarketRefreshOutcome("updated", len(candidates), len(bars), len(selected_bars), tuple(diagnostics), tuple(bars))
+                return MarketRefreshOutcome("empty", len(candidates), len(bars), 0, tuple(diagnostics), tuple(bars))
         symbols = load_watchlist(watchlist_path, config.symbol_whitelist)
         bars = fetch_daily_bars(
             config.market_data_provider,
             symbols,
             timeout=config.market_data_fetch_timeout_seconds,
             max_workers=config.market_data_fetch_workers,
+            diagnostic_callback=diagnostics.append,
         )
         if bars:
             self._refresh_movement_watchlist(bars, rank_signals(bars, config))
             write_csv_bars(self.data_file, bars)
             self._clear_sample_data_marker()
             self._set_status_from_worker(f"Market data refreshed for {len(bars)} symbols.")
-            return MarketRefreshOutcome("updated", len(symbols), len(bars), len(bars))
-        return MarketRefreshOutcome("empty", len(symbols), 0, 0)
+            return MarketRefreshOutcome("updated", len(symbols), len(bars), len(bars), tuple(diagnostics), tuple(bars))
+        return MarketRefreshOutcome("empty", len(symbols), 0, 0, tuple(diagnostics), ())
 
     def _write_generated_watchlists(
         self,
@@ -7373,6 +7452,475 @@ class TimmyNativeApp:
     def _chart_window_selected(self) -> None:
         self._save_runtime_settings()
         self._draw_market_chart()
+
+    def _record_research_scan(self, outcome: MarketRefreshOutcome | None, *, refresh_error: Exception | None = None) -> None:
+        config = self.config or self._load_config_safe()
+        source = "failed" if refresh_error else (outcome.state if outcome else "manual")
+        provider = str(getattr(config, "market_data_provider", "unknown") or "unknown")
+        if source == "csv":
+            provider = "CSV"
+        try:
+            requested = load_watchlist(self._runtime_path(config.watchlist_path or self.watchlist_path), config.symbol_whitelist)
+        except (OSError, ValueError):
+            requested = sorted(self.bars_by_symbol)
+        if source in {"csv", "cached"}:
+            requested = sorted(set(requested) | set(self.bars_by_symbol))
+        returned_symbols = set() if refresh_error else set(
+            outcome.returned_symbols if outcome and outcome.state in {"updated", "empty"} else self.bars_by_symbol)
+        issues = {
+            symbol: "No candle bars returned in this scan; older local candles may still be available. Confirm provider coverage or symbol format."
+            for symbol in requested if symbol not in returned_symbols
+        }
+        if refresh_error:
+            safe_category = type(refresh_error).__name__
+            issues = {symbol: f"Refresh failed ({safe_category}); older local candles may still be available. Review provider configuration and retry."
+                      for symbol in requested}
+        if outcome:
+            for issue in outcome.issues:
+                symbol = str(issue.get("symbol", "")).upper()
+                if symbol in issues:
+                    code = f" HTTP {issue['status_code']}" if issue.get("status_code") else ""
+                    issues[symbol] = f"{issue.get('provider', provider)} · {issue.get('category', 'provider')}:{code} {issue.get('detail', '')}".strip()
+        record = self.scan_coverage.record(
+            requested, returned_symbols, provider=provider, source=source, issues=issues)
+        self._latest_research_coverage = record
+        if hasattr(self, "research_status_label"):
+            self.research_status_label.configure(
+                text=(f"Latest local scan: {record['returned']}/{record['requested']} symbols covered "
+                      f"({record['coverage_pct']:.1f}%) · {provider.upper()} · {source}. "
+                      "Provider comparison uses saved evidence only; no extra market-data request is made.")
+            )
+        self._render_scan_coverage()
+
+    def _render_scan_coverage(self) -> None:
+        tree = getattr(self, "research_coverage_tree", None)
+        if tree is None:
+            return
+        for item in tree.get_children():
+            tree.delete(item)
+        self._research_coverage_by_id = {}
+        history = self.scan_coverage.history()
+        for row in reversed(history):
+            run_id = str(row.get("id", ""))
+            self._research_coverage_by_id[run_id] = row
+            when = str(row.get("at", "")).replace("T", " ")[:19]
+            tree.insert("", "end", iid=run_id, values=(when, row.get("provider", "unknown"), row.get("source", "unknown"),
+                                                         f"{row.get('coverage_pct', 0)}%", row.get("returned", 0), row.get("requested", 0)))
+
+    def _research_window(self, title: str, geometry: str = "860x560") -> tk.Toplevel:
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.geometry(geometry)
+        dialog.minsize(620, 380)
+        dialog.transient(self.root)
+        dialog.configure(bg=self.colors["panel"])
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        return dialog
+
+    def _open_scan_coverage(self) -> None:
+        self._show_tab("Research")
+        selection = self.research_coverage_tree.selection()
+        if not selection:
+            items = self.research_coverage_tree.get_children()
+            if items:
+                selection = (items[0],)
+        if selection:
+            self.research_coverage_tree.selection_set(selection[0])
+            self._open_selected_coverage_detail()
+        else:
+            messagebox.showinfo("Scan coverage", "Refresh market data to create the first coverage-history record.", parent=self.root)
+
+    def _open_selected_coverage_detail(self) -> None:
+        selection = self.research_coverage_tree.selection()
+        row = self._research_coverage_by_id.get(selection[0]) if selection else None
+        if not row:
+            return
+        dialog = self._research_window("Scan coverage by symbol", "760x600")
+        tk.Label(dialog, text=f"{row.get('provider', 'Unknown')} · {row.get('at', '')} · {row.get('coverage_pct', 0)}% covered",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 10, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=14, pady=12)
+        tree = ttk.Treeview(dialog, columns=("symbol", "state", "issue"), show="headings", height=18)
+        for key, title, width in (("symbol", "Symbol", 100), ("state", "Coverage", 110), ("issue", "Coverage note", 460)):
+            tree.heading(key, text=title)
+            tree.column(key, width=width, anchor="w", stretch=key == "issue")
+        tree.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 12))
+        tree.bind("<Double-1>", lambda _event: self._research_symbol_from_issue(tree))
+        for item in row.get("symbols", []):
+            tree.insert("", "end", values=(item.get("symbol", ""), "Covered" if item.get("covered") else "Missing",
+                                           item.get("issue", "")))
+
+    def _open_provider_comparison(self) -> None:
+        rows = provider_evidence(self.scan_coverage.history())
+        dialog = self._research_window("Provider evidence comparison", "760x440")
+        tk.Label(dialog, text="SAVED LOCAL EVIDENCE ONLY · THIS VIEW DOES NOT REQUEST PROVIDER DATA",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=14, pady=12)
+        tree = ttk.Treeview(dialog, columns=("provider", "at", "coverage", "returned", "requested", "source"), show="headings", height=12)
+        for key, title, width in (("provider", "Provider", 120), ("at", "Latest evidence", 180), ("coverage", "Coverage", 90),
+                                  ("returned", "Returned", 90), ("requested", "Requested", 90), ("source", "Source", 100)):
+            tree.heading(key, text=title)
+            tree.column(key, width=width, anchor="w" if key in {"provider", "at", "source"} else "e")
+        tree.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 12))
+        for row in rows:
+            tree.insert("", "end", values=(row.get("provider"), str(row.get("at", ""))[:19], f"{row.get('coverage_pct', 0)}%",
+                                           row.get("returned", 0), row.get("requested", 0), row.get("source", "")))
+        tk.Label(dialog, text="Only providers recorded during normal scans appear. Historical coverage may use different symbols or dates, so it is not a controlled price-quality benchmark.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], wraplength=710, justify="left", anchor="w").grid(
+                     row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+    def _open_session_planner(self) -> None:
+        rows = market_session_calendar(days=35)
+        dialog = self._research_window("Market session planner", "680x600")
+        tk.Label(dialog, text="US EQUITIES · EASTERN TIME · PLANNING AID",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=14, pady=12)
+        tree = ttk.Treeview(dialog, columns=("date", "state", "hours", "confidence"), show="headings", height=20)
+        for key, title, width in (("date", "Date", 120), ("state", "Session", 180), ("hours", "Hours", 180), ("confidence", "Calendar", 160)):
+            tree.heading(key, text=title)
+            tree.column(key, width=width, anchor="w")
+        tree.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 12))
+        for row in rows:
+            tree.insert("", "end", values=tuple(row[key] for key in ("date", "state", "hours", "confidence")))
+        tk.Label(dialog, text="Holiday dates are maintained only for 2026. Future-year weekdays are marked for verification; this planner never changes automation or order permissions.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], wraplength=620, justify="left", anchor="w").grid(
+                     row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+    def _open_chart_board(self) -> None:
+        selected = getattr(self, "selected_chart_symbol", "")
+        raw = simpledialog.askstring("Multi-chart board", "Enter 2–6 symbols, separated by commas. Uses current local candles only:",
+                                     initialvalue=", ".join(([selected] if selected else []) + ["SPY"]), parent=self.root)
+        if not raw:
+            return
+        symbols = list(dict.fromkeys(token.strip().upper() for token in raw.split(",") if token.strip()))[:6]
+        if len(symbols) < 2:
+            messagebox.showinfo("Multi-chart board", "Choose at least two symbols.", parent=self.root)
+            return
+        dialog = self._research_window("Multi-symbol chart board", "940x700")
+        dialog.columnconfigure((0, 1), weight=1)
+        dialog.rowconfigure(1, weight=1)
+        tk.Label(dialog, text="NORMALIZED CLOSE · COMMON 20-BAR WINDOW · LOCAL CANDLES",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, columnspan=2, sticky="ew", padx=14, pady=12)
+        for index, symbol in enumerate(symbols):
+            canvas = tk.Canvas(dialog, height=230, bg=self.colors["panel_2"], highlightthickness=1,
+                               highlightbackground=self.colors["line"])
+            canvas.grid(row=1 + index // 2, column=index % 2, sticky="nsew", padx=10, pady=10)
+            bars = self.bars_by_symbol.get(symbol, [])[-20:]
+            canvas.create_text(12, 12, text=f"{symbol} · {len(bars)} bars", fill=self.colors["text"], anchor="nw", font=("Sans", 10, "bold"))
+            if len(bars) < 2:
+                canvas.create_text(12, 42, text="Not enough local candles", fill=self.colors["muted"], anchor="nw")
+                continue
+            base = float(bars[0].close)
+            vals = [float(bar.close) / base * 100 - 100 for bar in bars]
+            low, high = min(vals), max(vals)
+            span = max(high - low, 0.01)
+            width, height = 420, 155
+            points = []
+            for i, value in enumerate(vals):
+                x = 16 + i * (width - 32) / max(1, len(vals) - 1)
+                y = 194 - (value - low) / span * (height - 20)
+                points.extend((x, y))
+            canvas.create_line(*points, fill=self.colors["teal"], width=2, smooth=True)
+            canvas.create_text(12, 32, text=f"20-bar return: {vals[-1]:+.2f}%", fill=self.colors["muted"], anchor="nw")
+        tk.Label(dialog, text="Comparison is descriptive and not a trading recommendation. Missing local history stays visible as a gap.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], anchor="w").grid(row=4, column=0, columnspan=2, sticky="ew", padx=14, pady=8)
+
+    def _open_group_comparison(self) -> None:
+        groups = {group.name: group.symbols for group in self.watchlist_organization.groups}
+        groups["Active watchlist"] = tuple(load_watchlist(self._runtime_path(self.watchlist_path), getattr(self.config, "symbol_whitelist", None)))
+        if self.watchlist_organization.pinned_symbols:
+            groups["Pinned symbols"] = self.watchlist_organization.pinned_symbols
+        rows = compare_symbol_groups(groups, self.bars_by_symbol)
+        dialog = self._research_window("Research group comparison", "720x480")
+        tk.Label(dialog, text="GROUP PERFORMANCE · LOCAL DAILY CANDLES · NO EXTRA PROVIDER CALLS",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=14, pady=12)
+        tree = ttk.Treeview(dialog, columns=("group", "symbols", "covered", "return"), show="headings", height=14)
+        for key, title, width in (("group", "Group / List", 220), ("symbols", "Symbols", 100), ("covered", "With data", 100), ("return", "Mean 20-bar return", 170)):
+            tree.heading(key, text=title)
+            tree.column(key, width=width, anchor="w" if key == "group" else "e")
+        tree.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 12))
+        for row in rows:
+            ret = "—" if row["mean_return_pct"] is None else f"{row['mean_return_pct']:+.2f}%"
+            tree.insert("", "end", values=(row["name"], row["symbols"], row["covered"], ret))
+        tk.Label(dialog, text="Groups are organizational only and do not change the scan universe or trading scope.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], anchor="w").grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+    def _open_data_issue_inbox(self) -> None:
+        history = self.scan_coverage.history()
+        latest = history[-1] if history else None
+        dialog = self._research_window("Symbol data issue inbox", "820x560")
+        tk.Label(dialog, text="LOCAL COVERAGE AND CANDLE QUALITY · ACTIONS ARE READ-ONLY",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=14, pady=12)
+        tree = ttk.Treeview(dialog, columns=("symbol", "state", "detail", "action"), show="headings", height=18)
+        for key, title, width in (("symbol", "Symbol", 90), ("state", "Issue", 120), ("detail", "Evidence", 360), ("action", "Suggested next step", 210)):
+            tree.heading(key, text=title)
+            tree.column(key, width=width, anchor="w", stretch=key in {"detail", "action"})
+        tree.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 12))
+        issues = []
+        if latest:
+            issues.extend({"symbol": item.get("symbol"), "state": "No candle data", "detail": item.get("issue", "Coverage missing"),
+                           "action": "Confirm symbol / provider coverage"} for item in latest.get("symbols", []) if not item.get("covered"))
+        for symbol, bars in self.bars_by_symbol.items():
+            quality = summarize_candle_quality(bars, interval_minutes=1440).symbols
+            if quality and quality[0].label not in {"CURRENT"}:
+                q = quality[0]
+                issues.append({"symbol": symbol, "state": q.label, "detail": "; ".join(q.details),
+                               "action": "Review timestamps and source; refresh if stale"})
+        for item in issues:
+            tree.insert("", "end", values=(item.get("symbol"), item.get("state"), item.get("detail"), item.get("action")))
+        if not issues:
+            tree.insert("", "end", values=("—", "No open issues", "No missing coverage or candle-quality warnings in the latest local evidence.", "Refresh after the next session"))
+        tree.bind("<Double-1>", lambda _event: self._research_symbol_from_issue(tree))
+        tk.Label(dialog, text="Provider failures are inferred from missing symbols unless the provider supplied a safe structured error; raw provider responses are not stored here.",
+                 bg=self.colors["panel"], fg=self.colors["muted"], wraplength=760, justify="left", anchor="w").grid(
+                     row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+    def _research_symbol_from_issue(self, tree) -> None:
+        selection = tree.selection()
+        if not selection:
+            return
+        values = tree.item(selection[0], "values")
+        if not values or not values[0] or values[0] == "—":
+            return
+        self._open_symbol_research_drawer_for(str(values[0]))
+
+    def _open_csv_import(self) -> None:
+        path = filedialog.askopenfilename(parent=self.root, title="Choose market-data CSV", filetypes=(("CSV files", "*.csv"), ("All files", "*")))
+        if not path:
+            return
+        try:
+            with open(path, newline="", encoding="utf-8-sig") as stream:
+                headers = next(csv.reader(stream), [])
+        except (OSError, UnicodeError, csv.Error) as exc:
+            messagebox.showerror("CSV import", f"Could not read the CSV header: {exc}", parent=self.root)
+            return
+        headers = [str(header).strip() for header in headers if str(header).strip()]
+        if not headers:
+            messagebox.showerror("CSV import", "The selected file has no usable header row.", parent=self.root)
+            return
+        dialog = self._research_window("Preview and map market-data CSV", "860x640")
+        tk.Label(dialog, text=f"SOURCE · {Path(path).name} · MAP FIELDS, PREVIEW VALIDATION, THEN CONFIRM MERGE",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w").grid(
+                     row=0, column=0, sticky="ew", padx=14, pady=12)
+        mapping_box = tk.Frame(dialog, bg=self.colors["panel"])
+        mapping_box.grid(row=1, column=0, sticky="ew", padx=14)
+        mapping_vars = {}
+        aliases = {"symbol": ("symbol", "ticker", "stock"), "timestamp": ("timestamp", "datetime", "date", "time"),
+                   "open": ("open", "o"), "high": ("high", "h"), "low": ("low", "l"),
+                   "close": ("close", "c", "adj close"), "volume": ("volume", "vol", "v")}
+        for index, field in enumerate(("symbol", "timestamp", "open", "high", "low", "close", "volume")):
+            tk.Label(mapping_box, text=field.title(), bg=self.colors["panel"], fg=self.colors["muted"], anchor="w").grid(
+                row=index // 4 * 2, column=index % 4, sticky="w", padx=4, pady=(6, 0))
+            var = tk.StringVar()
+            mapping_vars[field] = var
+            default = next((header for header in headers if header.strip().lower() in aliases[field]), "")
+            var.set(default)
+            ttk.Combobox(mapping_box, textvariable=var, values=headers, state="readonly", width=18).grid(
+                row=index // 4 * 2 + 1, column=index % 4, sticky="ew", padx=4, pady=(0, 6))
+        for col in range(4):
+            mapping_box.columnconfigure(col, weight=1)
+        preview = tk.Text(dialog, height=20, bg=self.colors["panel_2"], fg=self.colors["text"], wrap="word", relief="flat")
+        preview.grid(row=2, column=0, sticky="nsew", padx=14, pady=10)
+        state = {"result": None}
+        actions = tk.Frame(dialog, bg=self.colors["panel"])
+        actions.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 12))
+        confirm = self._button(actions, "Confirm atomic merge", lambda: None, accent="teal")
+        confirm.pack(side="right")
+        confirm.configure(state="disabled")
+
+        def run_preview() -> None:
+            mapping = {field: var.get() for field, var in mapping_vars.items()}
+            try:
+                result = preview_csv_import(path, mapping)
+            except (OSError, ValueError, UnicodeError) as exc:
+                messagebox.showerror("CSV preview", str(exc), parent=dialog)
+                return
+            state["result"] = result
+            preview.delete("1.0", "end")
+            preview.insert("end", f"Rows parsed: {result.total_rows:,} · Valid rows: {len(result.candles):,} · Status: {'READY' if result.ready else 'BLOCKED'}\n")
+            if result.errors:
+                preview.insert("end", "\nValidation issues (showing up to 100):\n" + "\n".join(result.errors))
+            else:
+                preview.insert("end", "\nPreview rows:\n")
+                for bar in result.candles[:15]:
+                    preview.insert("end", f"{bar.symbol} · {bar.timestamp.isoformat()} · O {bar.open:g} H {bar.high:g} L {bar.low:g} C {bar.close:g} · V {bar.volume:g}\n")
+                preview.insert("end", "\nExisting data will be merged by symbol and timestamp; the imported row wins on duplicate timestamps. The original remains untouched until confirmation.")
+            confirm.configure(state="normal" if result.ready else "disabled")
+
+        def commit_import() -> None:
+            result = state.get("result")
+            if not result or not result.ready:
+                return
+            if not messagebox.askyesno("Confirm CSV merge", f"Merge {len(result.candles):,} validated rows into the local market-data file? This will not contact a provider or place orders.", parent=dialog):
+                return
+            try:
+                existing = load_csv_bars(self.data_file) if self.data_file.exists() else {}
+                merged = merge_imported_candles(existing, result.candles)
+                write_csv_bars(self.data_file, merged)
+                self._clear_sample_data_marker()
+                self._refresh_payload(skip_market_refresh=True)
+                self._record_research_scan(MarketRefreshOutcome("csv", returned_symbols=tuple(merged)))
+                self.status_bar.configure(text=f"Imported {len(result.candles):,} validated CSV rows; market data updated atomically.")
+                dialog.destroy()
+            except (OSError, ValueError) as exc:
+                messagebox.showerror("CSV import not committed", f"The existing data was preserved: {exc}", parent=dialog)
+
+        confirm.configure(command=commit_import)
+        self._button(actions, "Preview mapping", run_preview).pack(side="right", padx=(0, 8))
+        self._button(actions, "Cancel", dialog.destroy).pack(side="left")
+
+    def _export_research_snapshot(self) -> None:
+        target = filedialog.asksaveasfilename(parent=self.root, title="Export redacted research snapshot",
+                                              defaultextension=".json", filetypes=(("JSON snapshot", "*.json"),))
+        if not target:
+            return
+        signals = []
+        for signal in self.signals:
+            symbol = str(getattr(signal, "symbol", "")).upper()
+            bars = self.bars_by_symbol.get(symbol, [])
+            change = None
+            if len(bars) > 1 and bars[-2].close:
+                change = (bars[-1].close / bars[-2].close - 1) * 100
+            signals.append({"symbol": symbol, "close": float(bars[-1].close) if bars else None,
+                            "change_pct": change, "score": getattr(signal, "score", None),
+                            "decision": getattr(signal, "decision", "")})
+        history = self.scan_coverage.history()
+        issues = []
+        if history:
+            issues = [{"symbol": row.get("symbol"), "provider": history[-1].get("provider"),
+                       "category": "coverage", "detail": row.get("issue"),
+                       "action": "Confirm symbol / provider coverage"}
+                      for row in history[-1].get("symbols", []) if not row.get("covered")]
+        snapshot = redacted_research_snapshot(
+            provider=str(getattr(self.config, "market_data_provider", "unknown")),
+            as_of=datetime.now().astimezone(), symbols=signals, issues=issues)
+        try:
+            _write_private_json(Path(target), snapshot)
+            messagebox.showinfo("Snapshot exported", "Redacted research data saved. Account, broker, order, credential, and private profile fields are excluded.", parent=self.root)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Snapshot export", str(exc), parent=self.root)
+
+    def _save_scanner_table_preset(self) -> None:
+        name = simpledialog.askstring("Save scanner table layout", "Name this table and column layout:", parent=self.root)
+        if name is None:
+            return
+        sort_column = self._scanner_sort_column if self._scanner_sort_column in self.scanner_visible_columns else next(iter(self.scanner_visible_columns), "symbol")
+        try:
+            view = make_scanner_view(name, self.scanner_column_order, self.scanner_visible_columns, sort_column,
+                                     self._scanner_sort_reverse, allowed_columns=self.scanner_column_order)
+            self.scanner_table_presets.save(name, scanner_view_to_dict(view))
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Table layout not saved", str(exc), parent=self.root)
+            return
+        self.status_bar.configure(text=f"Scanner table layout '{name.strip()}' saved; columns, visibility, and sorting will round-trip.")
+
+    def _open_scanner_table_preset(self) -> None:
+        presets = self.scanner_table_presets.presets
+        if not presets:
+            messagebox.showinfo("Scanner table layouts", "No named table layouts are saved yet.", parent=self.root)
+            return
+        dialog = self._research_window("Load scanner table layout", "520x420")
+        tk.Label(dialog, text="NAMED PRESENTATION PRESETS · DOES NOT CHANGE SCANNER FILTERS OR TRADING SETTINGS",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 9, "bold"), anchor="w", wraplength=470).grid(
+                     row=0, column=0, sticky="ew", padx=14, pady=12)
+        listbox = tk.Listbox(dialog, bg=self.colors["panel_2"], fg=self.colors["text"], selectbackground=self.colors["selected"], relief="flat")
+        listbox.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 10))
+        for preset in presets:
+            listbox.insert("end", preset["name"])
+        actions = tk.Frame(dialog, bg=self.colors["panel"])
+        actions.grid(row=2, column=0, sticky="e", padx=14, pady=(0, 12))
+
+        def load_selected() -> None:
+            selected = listbox.curselection()
+            if not selected:
+                return
+            preset = presets[int(selected[0])]
+            try:
+                view = scanner_view_from_dict(preset, allowed_columns=self.scanner_column_order)
+                self._apply_scanner_view(view)
+                self.status_bar.configure(text=f"Scanner table layout '{preset['name']}' loaded.")
+                dialog.destroy()
+            except (KeyError, TypeError, ValueError) as exc:
+                messagebox.showerror("Layout unavailable", str(exc), parent=dialog)
+
+        self._button(actions, "Cancel", dialog.destroy).pack(side="right", padx=(8, 0))
+        self._button(actions, "Load", load_selected, accent="teal").pack(side="right")
+        self._button(actions, "Delete", lambda: self._delete_scanner_table_preset(listbox, presets)).pack(side="left")
+
+    def _delete_scanner_table_preset(self, listbox, presets) -> None:
+        selected = listbox.curselection()
+        if not selected:
+            return
+        preset = presets[int(selected[0])]
+        if messagebox.askyesno("Delete layout", f"Remove '{preset['name']}'?", parent=listbox.winfo_toplevel()):
+            self.scanner_table_presets.delete(preset["name"])
+            listbox.delete(selected[0])
+
+    def _open_symbol_research_drawer(self) -> None:
+        symbol = str(getattr(self, "selected_chart_symbol", "") or "").strip().upper()
+        if not symbol:
+            symbol = simpledialog.askstring("Symbol research", "Enter a symbol from your local data:", parent=self.root) or ""
+            symbol = symbol.strip().upper()
+        if not symbol:
+            return
+        self._open_symbol_research_drawer_for(symbol)
+
+    def _open_symbol_research_drawer_for(self, symbol: str) -> None:
+        bars = self.bars_by_symbol.get(symbol, [])
+        signal = self.signal_by_symbol.get(symbol)
+        note = self.symbol_notes.get(symbol)
+        quality = summarize_candle_quality(bars, interval_minutes=1440).symbols[0] if bars else None
+        dialog = self._research_window(f"{symbol} · unified research", "900x680")
+        dialog.columnconfigure((0, 1), weight=1)
+        tk.Label(dialog, text=f"{symbol} · CHART / DATA QUALITY / SCAN CONTEXT / NOTE",
+                 bg=self.colors["panel"], fg=self.colors["teal"], font=("Sans", 10, "bold"), anchor="w").grid(
+                     row=0, column=0, columnspan=2, sticky="ew", padx=14, pady=12)
+        canvas = tk.Canvas(dialog, height=240, bg=self.colors["panel_2"], highlightthickness=1, highlightbackground=self.colors["line"])
+        canvas.grid(row=1, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 10))
+        closes = [float(bar.close) for bar in bars[-60:]]
+        if len(closes) >= 2:
+            low, high = min(closes), max(closes)
+            span = max(high - low, 0.0001)
+            points = []
+            for index, value in enumerate(closes):
+                points.extend((20 + index * 820 / (len(closes) - 1), 210 - (value - low) / span * 180))
+            canvas.create_line(*points, fill=self.colors["teal"], width=2, smooth=True)
+            canvas.create_text(16, 12, text=f"{len(closes)} local candles · {closes[-1]:,.2f} latest", fill=self.colors["text"], anchor="nw")
+        else:
+            canvas.create_text(16, 20, text="Not enough local candles to chart this symbol.", fill=self.colors["muted"], anchor="nw")
+        scan_text = (f"Scan action: {getattr(signal, 'sensible_action', 'No current scan result')}\n"
+                     f"Decision: {getattr(signal, 'decision', 'Unknown')}\n"
+                     f"Scout score: {getattr(signal, 'scout_score', '—')} · Model score: {getattr(signal, 'score', '—')}\n"
+                     f"Last close: {closes[-1]:,.2f}" if closes else "No local scan/candle context is available.")
+        if quality:
+            scan_text += f"\nData quality: {quality.label} · {quality.candle_count} bars · {quality.age_minutes:.0f} minutes old" if quality.age_minutes is not None else f"\nData quality: {quality.label}"
+            scan_text += "\n" + "; ".join(quality.details)
+        context = tk.Label(dialog, text=scan_text, bg=self.colors["panel_2"], fg=self.colors["text"], justify="left", anchor="nw", padx=12, pady=10)
+        context.grid(row=2, column=0, sticky="nsew", padx=(14, 7), pady=(0, 10))
+        note_box = tk.Frame(dialog, bg=self.colors["panel_2"])
+        note_box.grid(row=2, column=1, sticky="nsew", padx=(7, 14), pady=(0, 10))
+        tk.Label(note_box, text="PRIVATE LOCAL SYMBOL NOTE", bg=self.colors["panel_2"], fg=self.colors["muted"], anchor="w").pack(fill="x", padx=10, pady=(10, 4))
+        note_text = tk.Text(note_box, height=8, bg=self.colors["entry"], fg=self.colors["text"], wrap="word", relief="flat")
+        note_text.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        if note:
+            note_text.insert("1.0", note.text)
+        def save_note() -> None:
+            body = note_text.get("1.0", "end").strip()
+            if not body:
+                messagebox.showinfo("Symbol note", "Add a note or use the existing note editor to remove one.", parent=dialog)
+                return
+            try:
+                self.symbol_notes.save(symbol, body)
+                messagebox.showinfo("Symbol note", f"Local note saved for {symbol}.", parent=dialog)
+            except (OSError, ValueError) as exc:
+                messagebox.showerror("Symbol note", str(exc), parent=dialog)
+        self._button(note_box, "Save note", save_note, accent="teal").pack(anchor="e", padx=10, pady=(0, 10))
+        self._button(dialog, "Open in Market desk", lambda: (self._show_tab("Overview"), self._display_selected_signal(symbol), dialog.destroy())).grid(
+            row=3, column=0, sticky="w", padx=14, pady=(0, 12))
+
 
     def _open_symbol_comparison(self) -> None:
         selected = getattr(self, "selected_chart_symbol", "")
