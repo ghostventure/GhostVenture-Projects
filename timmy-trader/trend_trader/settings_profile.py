@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 from dataclasses import dataclass
@@ -130,6 +131,8 @@ def list_config_versions(home: str | Path) -> list[ConfigVersion]:
     for manifest_path in sorted(versions_dir.glob("*/manifest.json"), reverse=True):
         try:
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if str(payload.get("version_id", "")) != manifest_path.parent.name:
+                continue
             versions.append(
                 ConfigVersion(
                     version_id=str(payload["version_id"]),
@@ -146,8 +149,15 @@ def list_config_versions(home: str | Path) -> list[ConfigVersion]:
 
 def rollback_config_version(home: str | Path, version_id: str) -> ConfigVersion:
     home_path = Path(home).expanduser().resolve()
-    version_dir = home_path / ".timmy-config-versions" / version_id
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", str(version_id)):
+        raise ValueError("Invalid configuration version ID")
+    versions_dir = (home_path / ".timmy-config-versions").resolve()
+    version_dir = (versions_dir / version_id).resolve()
+    if version_dir.parent != versions_dir:
+        raise ValueError("Configuration version path escapes the version store")
     payload = json.loads((version_dir / "manifest.json").read_text(encoding="utf-8"))
+    if str(payload.get("version_id", "")) != version_id:
+        raise ValueError("Configuration version manifest does not match its directory")
     manifest = ConfigVersion(
         version_id=str(payload["version_id"]),
         label=str(payload.get("label", "")),
@@ -158,7 +168,7 @@ def rollback_config_version(home: str | Path, version_id: str) -> ConfigVersion:
     create_config_version(home_path, "before-rollback")
     for filename, expected_hash in manifest.files.items():
         if filename not in RUNTIME_CONFIG_FILES:
-            continue
+            raise ValueError(f"Unexpected file in configuration version: {filename}")
         source = version_dir / filename
         if _sha256_file(source) != expected_hash:
             raise ValueError(f"Config version file failed integrity check: {filename}")

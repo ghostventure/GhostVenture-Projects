@@ -568,3 +568,29 @@ Orders Ready duplicating Broker Desk credential verification
 Trade Log duplicating Account Readiness one-click check output
 Trading Scoreboard duplicating raw journals instead of summarizing them
 ```
+
+# Review and operations workflow
+
+Open **Review & Operations** from the left navigation to review local order
+events, generate a UTC daily activity brief, inspect a read-only Webull open
+order snapshot, and review reconciliation discrepancies. The order monitor has
+no cancel or replace action because this application has not verified a safe
+broker mutation contract. Each snapshot identifies the selected account with
+only its final four characters and shows the current paper/live mode and local
+snapshot time. A broker snapshot is time-bounded evidence; verify the current
+order at Webull before acting.
+
+The same workspace includes private, named configuration snapshots with hash
+comparison and integrity-checked restore; a first-run checklist that explains
+synthetic data, paper simulation, real account reads, and gated live trading;
+separate journal review labels and notes; event-based recovery steps; and a
+redacted diagnostics export. Configuration snapshots can contain local broker
+credentials and remain in Timmy's private runtime directory. Restoring one
+requires restarting Timmy.
+
+Alert preferences affect only the local status-bar notification. Quiet hours
+do not suppress recorded alert events and do not affect trading. Timmy does not
+currently provide email, SMS, push, or background alert delivery. Diagnostics
+exports are redacted before writing, but inspect the bundle before sharing it
+because unusual secrets embedded in free-text logs may not match redaction
+patterns.
