@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, is_dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from zoneinfo import ZoneInfo
 
 from .asset_classes import asset_profile, enabled_asset_classes
@@ -57,6 +57,8 @@ from .symbol_notes import SymbolNotesStore
 from .scanner_presets import ScannerPresetStore
 from .scanner_view_state import make_scanner_view, scanner_view_from_dict, scanner_view_to_dict
 from .settings_backups import backup_raw_ui_settings, backup_ui_settings
+from .settings_profile import create_config_version, list_config_versions, rollback_config_version
+from .operations_review import daily_activity_brief, mask_identifier, order_timeline, redact, recovery_steps, save_journal_review
 from .trader_profile_score import (
     calculate_trader_profile_score,
     recommend_trader_scorecard_next_steps,
@@ -682,6 +684,11 @@ class TimmyNativeApp:
                 self._fit_text(button, min_size=9, max_size=11, padding=22, wrap=True)
                 button.pack(fill="x", pady=1)
                 self.nav_buttons[item] = button
+        review_button = tk.Button(nav, text="Review & Operations", command=self._open_operations_review,
+                                  bg=self.colors["rail"], fg=self.colors["rail_muted"],
+                                  activebackground=self.colors["selected"], activeforeground=self.colors["selected_text"],
+                                  relief="flat", anchor="w", padx=14, pady=7, font=("Sans", 10, "bold"), cursor="hand2")
+        review_button.pack(fill="x", pady=(9, 1))
 
         rail.rowconfigure(2, weight=1)
         runtime = tk.Frame(rail, bg=self.colors["runtime"], highlightbackground=self.colors["rail_line"], highlightthickness=1)
@@ -2023,6 +2030,308 @@ class TimmyNativeApp:
         for panel in (self.decision_panel, self.order_panel, self.broker_panel, self.journal_panel):
             panel.grid_remove()
 
+    def _open_operations_review(self) -> None:
+        """Open review tools; broker data is read-only and local-only features say so."""
+        window = tk.Toplevel(self.root)
+        window.title("Review & Operations")
+        window.geometry("900x650")
+        window.minsize(680, 480)
+        window.transient(self.root)
+        window.configure(bg=self.colors["panel"])
+        window.rowconfigure(1, weight=1)
+        window.columnconfigure(0, weight=1)
+        tk.Label(window, text="REVIEW & OPERATIONS", bg=self.colors["panel"], fg=self.colors["teal"],
+                 font=("Sans", 13, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=12)
+        tabs = ttk.Notebook(window)
+        tabs.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        bg = self.colors["panel"]
+        fg = self.colors["text"]
+        muted = self.colors["muted"]
+
+        def page(title: str):
+            frame = tk.Frame(tabs, bg=bg)
+            tabs.add(frame, text=title)
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(1, weight=1)
+            return frame
+
+        def text_area(frame, initial=""):
+            box = tk.Text(frame, bg=self.colors["panel_2"], fg=fg, insertbackground=fg, wrap="word", relief="flat")
+            box.grid(row=1, column=0, sticky="nsew", padx=12, pady=8)
+            box.insert("1.0", initial)
+            box.configure(state="disabled")
+            return box
+
+        def set_text(box, value):
+            box.configure(state="normal")
+            box.delete("1.0", "end")
+            box.insert("1.0", value)
+            box.configure(state="disabled")
+
+        # 1 and 6: lifecycle timeline and an evidence-limited UTC daily brief.
+        activity = page("Activity")
+        activity.rowconfigure(1, weight=1)
+        activity_box = text_area(activity)
+        def render_activity():
+            timeline = order_timeline(self.execution_events)
+            lines = ["DAILY ACTIVITY BRIEF", *daily_activity_brief(self.execution_events), "", "ORDER LIFECYCLE TIMELINE"]
+            lines.extend(f"{row['time'] or 'time unknown'} | {row['mode']} | {row['symbol']} | {row['status']} | {row['detail']}"
+                         for row in reversed(timeline))
+            set_text(activity_box, "\n".join(lines))
+        tk.Button(activity, text="Refresh local activity", command=render_activity).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
+        render_activity()
+
+        # 2 and 3: broker open-order monitor and discrepancy inbox. Cancel/replace is intentionally absent.
+        orders = page("Open Orders & Reconcile")
+        orders.rowconfigure(1, weight=1)
+        orders_box = text_area(orders, "Broker snapshot not loaded. Refresh to request a read-only account snapshot.\n\nNo order changes are available here.")
+        def refresh_orders():
+            set_text(orders_box, "Loading read-only broker order snapshot…")
+            mode_context = self._lane_mode_label()
+            def worker():
+                try:
+                    config = self._execution_config(self.config or self._load_config_safe())
+                    snapshot = WebullOpenApiBroker(config).account_snapshot()
+                    account_context = mask_identifier(config.webull_account_id)
+                    snapshot_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+                    def done():
+                        raw = snapshot.get("open_orders")
+                        payload = raw.get("body") if isinstance(raw, dict) else raw
+                        if isinstance(payload, dict):
+                            payload = payload.get("orders") or payload.get("items") or payload.get("data") or [payload]
+                        broker_orders = payload if isinstance(payload, list) else []
+                        from .broker_reconciliation import reconcile_broker_state
+                        report = reconcile_broker_state(self.execution_events, broker_orders,
+                                                        snapshot.get("positions") if isinstance(snapshot.get("positions"), list) else ())
+                        lines = ["READ-ONLY BROKER OPEN-ORDER MONITOR",
+                                 f"Account: {account_context} · Mode: {mode_context} · Snapshot: {snapshot_time}",
+                                 f"Open orders: {report.open_order_count} · broker rows: {report.broker_order_count}",
+                                 f"Journal rows: {report.journal_count} · reconciliation: {'clear' if report.ok else 'review required'}", ""]
+                        for order in broker_orders:
+                            if isinstance(order, dict):
+                                safe = redact(order)
+                                lines.append(f"{safe.get('symbol','?')} | {safe.get('side','?')} | {safe.get('quantity', safe.get('qty','?'))} | {safe.get('status','?')} | id {safe.get('order_id', safe.get('broker_order_id','?'))}")
+                        lines.extend(["", "DISCREPANCY INBOX"])
+                        lines.extend(f"{issue.severity.upper()} · {issue.symbol} · {issue.message}" for issue in report.issues)
+                        if not report.issues:
+                            lines.append("No discrepancies in the returned snapshot.")
+                        lines.extend(["", "Snapshot is current only as of this read. Verify orders at Webull before acting."])
+                        set_text(orders_box, "\n".join(lines))
+                    self.root.after(0, done)
+                except Exception as exc:
+                    self.root.after(0, lambda: set_text(orders_box, f"Broker snapshot unavailable: {type(exc).__name__}: {exc}\nNo order state was changed."))
+            threading.Thread(target=worker, daemon=True, name="timmy-open-orders-review").start()
+        tk.Button(orders, text="Refresh broker snapshot", command=refresh_orders).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
+
+        # 4: named, integrity-checked settings versions with explicit restore.
+        profiles = page("Settings Profiles")
+        profiles.rowconfigure(1, weight=1)
+        profile_list = tk.Listbox(profiles, bg=self.colors["panel_2"], fg=fg, selectbackground=self.colors["selected"], height=8)
+        profile_list.grid(row=1, column=0, sticky="nsew", padx=12, pady=8)
+        profile_status = tk.Label(profiles, text="Config versions are local and private. Restore changes runtime env files and requires restart.", bg=bg, fg=muted, anchor="w", justify="left", wraplength=780)
+        profile_status.grid(row=2, column=0, sticky="ew", padx=12, pady=4)
+        version_cache = []
+        def reload_profiles():
+            version_cache[:] = list_config_versions(self.home)
+            profile_list.delete(0, "end")
+            for item in version_cache:
+                profile_list.insert("end", f"{item.created_at} · {item.label} · {item.version_id}")
+        def create_profile():
+            label = simpledialog.askstring("Save settings profile", "Name this local configuration snapshot:", parent=window)
+            if not label:
+                return
+            try:
+                item = create_config_version(self.home, label)
+                profile_status.configure(text=f"Saved {item.label} ({len(item.files)} files). Secrets remain in the private local snapshot.")
+                reload_profiles()
+            except Exception as exc:
+                messagebox.showerror("Profile save failed", str(exc), parent=window)
+        def compare_profile():
+            selected = profile_list.curselection()
+            if not selected:
+                return
+            item = version_cache[selected[0]]
+            changes = []
+            for name, expected in item.files.items():
+                try:
+                    actual = hashlib.sha256((self.home / name).read_bytes()).hexdigest()
+                except OSError:
+                    actual = "missing"
+                changes.append(f"{name}: {'matches' if actual == expected else 'differs'} · saved {expected[:12]} · current {actual[:12]}")
+            profile_status.configure(text=f"Comparison against current files for {item.label}: " + ("; ".join(changes) or "no config files captured"))
+        def restore_profile():
+            selected = profile_list.curselection()
+            if not selected:
+                return
+            item = version_cache[selected[0]]
+            if not messagebox.askyesno("Restore settings profile", f"Restore {item.label}? A pre-restore snapshot will be saved. Restart Timmy to load the restored values.", parent=window):
+                return
+            try:
+                rollback_config_version(self.home, item.version_id)
+                profile_status.configure(text=f"Restored {item.label}. Restart Timmy to apply it.")
+                reload_profiles()
+            except Exception as exc:
+                messagebox.showerror("Profile restore failed", str(exc), parent=window)
+        profile_actions = tk.Frame(profiles, bg=bg)
+        profile_actions.grid(row=0, column=0, sticky="w", padx=12, pady=8)
+        for title, command in (("Save named profile", create_profile), ("Compare selected", compare_profile), ("Restore selected", restore_profile)):
+            tk.Button(profile_actions, text=title, command=command).pack(side="left", padx=(0, 7))
+        reload_profiles()
+
+        # 5: first-run boundary checklist, persisted as a local completion marker.
+        setup = page("First Run")
+        setup.rowconfigure(1, weight=1)
+        marker = self.home / ".timmy-first-run-reviewed.json"
+        setup_box = text_area(setup, "FIRST-RUN SAFETY WALKTHROUGH\n\n1. Synthetic sample candles are illustrative and are never broker quotes.\n2. Paper mode uses Timmy's local paper ledger; it does not place broker orders.\n3. Real account reads require a configured Webull profile and account check.\n4. Live orders require explicit live gates, fresh account state, and required preview.\n5. Verify account, region, order IDs, and broker open orders independently before relying on a status.\n\nCompleting this checklist records only that it was reviewed; it does not enable live trading.")
+        def mark_setup_reviewed():
+            _write_private_json(marker, {"reviewed_at": datetime.now().astimezone().isoformat(), "version": 1})
+            messagebox.showinfo("Setup walkthrough", "Review recorded locally. Trading mode and live gates were not changed.", parent=window)
+        tk.Button(setup, text="Mark walkthrough reviewed", command=mark_setup_reviewed).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
+
+        # 7: independent local labels/notes attached to journal event identity.
+        journal = page("Journal Review")
+        journal.columnconfigure(0, weight=1)
+        journal.rowconfigure(1, weight=1)
+        events = list(reversed(self.execution_events[-250:]))
+        journal_list = tk.Listbox(journal, bg=self.colors["panel_2"], fg=fg, selectbackground=self.colors["selected"], height=8)
+        journal_list.grid(row=1, column=0, sticky="nsew", padx=12, pady=8)
+        journal_meta = {}
+        for index, event in enumerate(events):
+            key = str(event.get("client_order_id") or event.get("broker_order_id") or event.get("recorded_at") or f"row-{index}")
+            journal_meta[index] = (key, event)
+            journal_list.insert("end", f"{event.get('recorded_at', event.get('submitted_at','time unknown'))} · {event.get('symbol','?')} · {event.get('status','event')}")
+        label_var, note_var = tk.StringVar(), tk.StringVar()
+        def load_journal_review(_event=None):
+            selected = journal_list.curselection()
+            if not selected:
+                return
+            try:
+                notes = json.loads((self.home / "journal-review-notes.json").read_text(encoding="utf-8"))
+                current = notes.get(journal_meta[selected[0]][0], {})
+            except (OSError, ValueError, AttributeError):
+                current = {}
+            label_var.set(str(current.get("label", "")))
+            note_var.set(str(current.get("note", "")))
+        journal_list.bind("<<ListboxSelect>>", load_journal_review)
+        form = tk.Frame(journal, bg=bg)
+        form.grid(row=2, column=0, sticky="ew", padx=12)
+        tk.Entry(form, textvariable=label_var, width=22).pack(side="left", padx=(0, 8))
+        tk.Entry(form, textvariable=note_var).pack(side="left", fill="x", expand=True, padx=(0, 8))
+        def save_review():
+            selected = journal_list.curselection()
+            if not selected:
+                messagebox.showinfo("Journal review", "Select an event first.", parent=window)
+                return
+            try:
+                save_journal_review(self.home / "journal-review-notes.json", journal_meta[selected[0]][0], label_var.get(), note_var.get())
+                messagebox.showinfo("Journal review", "Local review label and note saved.", parent=window)
+            except Exception as exc:
+                messagebox.showerror("Journal review", str(exc), parent=window)
+        tk.Button(form, text="Save label / note", command=save_review).pack(side="right")
+        tk.Label(journal, text="Labels and notes are stored separately; source execution events remain unchanged.", bg=bg, fg=muted, anchor="w").grid(row=3, column=0, sticky="ew", padx=12, pady=8)
+
+        # 8: local notification controls only; the product has no email/push delivery integration.
+        alerts = page("Alert Controls")
+        alerts.rowconfigure(1, weight=1)
+        alert_box = text_area(alerts, "Alert rules and trigger history are local. No email, SMS, or push delivery is configured.")
+        alert_settings_path = self.home / "timmy-alert-preferences.json"
+        try:
+            alert_prefs = json.loads(alert_settings_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            alert_prefs = {}
+        if not isinstance(alert_prefs, dict):
+            alert_prefs = {}
+        enabled_var = tk.BooleanVar(value=alert_prefs.get("local_alerts_enabled", True) is not False)
+        quiet_var = tk.BooleanVar(value=alert_prefs.get("quiet_hours_enabled", False) is True)
+        start_var = tk.StringVar(value=str(alert_prefs.get("quiet_start", "22:00")))
+        end_var = tk.StringVar(value=str(alert_prefs.get("quiet_end", "07:00")))
+        alert_controls = tk.Frame(alerts, bg=bg)
+        alert_controls.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
+        tk.Checkbutton(alert_controls, text="Local alert history enabled", variable=enabled_var, bg=bg, fg=fg, selectcolor=bg).pack(anchor="w")
+        tk.Checkbutton(alert_controls, text="Quiet hours (local display preference)", variable=quiet_var, bg=bg, fg=fg, selectcolor=bg).pack(anchor="w")
+        tk.Label(alert_controls, text="Start / end (HH:MM)", bg=bg, fg=muted).pack(side="left")
+        tk.Entry(alert_controls, textvariable=start_var, width=7).pack(side="left", padx=4)
+        tk.Entry(alert_controls, textvariable=end_var, width=7).pack(side="left", padx=4)
+        def save_alert_prefs():
+            import re
+            if any(not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value.get()) for value in (start_var, end_var)):
+                messagebox.showerror("Alert controls", "Quiet-hour times must use 24-hour HH:MM format.", parent=window)
+                return
+            _write_private_json(alert_settings_path, {"local_alerts_enabled": enabled_var.get(), "quiet_hours_enabled": quiet_var.get(), "quiet_start": start_var.get(), "quiet_end": end_var.get()})
+            set_text(alert_box, "Saved local alert display preferences. Quiet hours suppress only the status-bar notification; triggered events continue to be recorded in local history. Timmy has no email, SMS, push, or background delivery integration.")
+        tk.Button(alert_controls, text="Save preferences", command=save_alert_prefs).pack(side="left", padx=8)
+
+        # 9: stepwise recovery guide based on a selected recent event.
+        recovery = page("Recovery")
+        recovery.rowconfigure(1, weight=1)
+        recovery_box = text_area(recovery, "Select a recent journal event below to generate a recovery walkthrough.")
+        event_choices = list(reversed(self.execution_events[-100:]))
+        recovery_var = tk.StringVar(value="Select event")
+        labels = [f"{event.get('symbol','?')} · {event.get('status', event.get('event','event'))} · {event.get('reason', event.get('message',''))}"[:120] for event in event_choices]
+        choice = ttk.Combobox(recovery, textvariable=recovery_var, values=["Select event", *labels], state="readonly")
+        choice.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
+        def render_recovery(_event=None):
+            index = choice.current() - 1
+            if index < 0 or index >= len(event_choices):
+                return
+            event = event_choices[index]
+            cause = str(event.get("reason") or event.get("message") or event.get("error") or event.get("status") or "")
+            set_text(recovery_box, "RECOVERY WALKTHROUGH\n\n" + "\n".join(f"{i}. {step}" for i, step in enumerate(recovery_steps(cause), start=1)) + "\n\nConfirm broker state before retrying any potentially submitted order.")
+        choice.bind("<<ComboboxSelected>>", render_recovery)
+
+        # 10: bounded, recursively redacted local support bundle.
+        support = page("Support Bundle")
+        support.rowconfigure(1, weight=1)
+        support_box = text_area(support, "Export includes app version, current mode/gates, bounded recent local events, and crash-log tail. Credentials and account identifiers are redacted.")
+        def export_support():
+            destination = filedialog.asksaveasfilename(parent=window, title="Export redacted diagnostics", defaultextension=".json", filetypes=(("JSON support bundle", "*.json"),))
+            if not destination:
+                return
+            from . import __version__
+            crash_tail = ""
+            try:
+                crash_tail = self.crash_log_path.read_text(encoding="utf-8", errors="replace")[-12000:]
+            except OSError:
+                pass
+            payload = redact({"app_version": __version__, "generated_at": datetime.now(timezone.utc).isoformat(),
+                              "mode": self._lane_mode_label(), "settings_path": self.settings_path.name,
+                              "events": self.execution_events[-100:], "crash_log_tail": crash_tail,
+                              "market_data_error": self._market_data_load_error, "config_error": self.config_error})
+            try:
+                serialized = json.dumps(payload, ensure_ascii=False)
+                if len(serialized.encode("utf-8")) > 2_000_000:
+                    payload["events"] = payload.get("events", [])[-25:]
+                    payload["crash_log_tail"] = str(payload.get("crash_log_tail", ""))[-3000:]
+                    serialized = json.dumps(payload, ensure_ascii=False)
+                if len(serialized.encode("utf-8")) > 2_000_000:
+                    raise ValueError("Support bundle exceeds 2 MB after truncation; reduce unusually large log fields and retry.")
+                _write_private_json(Path(destination), payload)
+                set_text(support_box, f"Redacted support bundle saved to {destination}. Inspect it before sharing; unusual secrets in free-text logs may need manual review.")
+            except Exception as exc:
+                messagebox.showerror("Support bundle", str(exc), parent=window)
+        tk.Button(support, text="Export redacted diagnostics", command=export_support).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
+
+    def _local_alert_notification_allowed(self) -> bool:
+        """Gate only the local status-bar toast; alert events remain journaled."""
+        try:
+            prefs = json.loads((self.home / "timmy-alert-preferences.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return True
+        if prefs.get("local_alerts_enabled") is False:
+            return False
+        if prefs.get("quiet_hours_enabled") is not True:
+            return True
+        try:
+            start_hour, start_minute = (int(value) for value in str(prefs["quiet_start"]).split(":"))
+            end_hour, end_minute = (int(value) for value in str(prefs["quiet_end"]).split(":"))
+            now = datetime.now().hour * 60 + datetime.now().minute
+            start, end = start_hour * 60 + start_minute, end_hour * 60 + end_minute
+        except (KeyError, TypeError, ValueError):
+            return True
+        if start == end:
+            return False
+        return not (start <= now < end if start < end else now >= start or now < end)
+
         self.body.columnconfigure(0, weight=1)
         self.body.columnconfigure(1, weight=1)
 
@@ -2393,6 +2702,9 @@ class TimmyNativeApp:
                 f"page:{tab.lower()}", f"Open {label}", lambda target=tab: self._show_tab(target),
                 category="Workspace", keywords=keywords.split(),
             )
+        self.action_registry.register("page:review-operations", "Open Review & Operations",
+                                      self._open_operations_review, category="Workspace",
+                                      keywords=("timeline", "open orders", "reconcile", "journal", "support"))
         for action_id, label, callback, shortcut, keywords in (
             ("market:refresh", "Refresh market scan", self.refresh_all, "F5", ("quotes", "update")),
             ("market:cycle", "Run decision cycle", self.run_decision_cycle, "Ctrl+R", ("evaluate", "strategy")),
@@ -3636,7 +3948,7 @@ class TimmyNativeApp:
             self._alert_storage_error = str(exc)
         else:
             self._alert_storage_error = ""
-            if new_alerts:
+            if new_alerts and self._local_alert_notification_allowed():
                 self.status_bar.configure(text=f"{len(new_alerts)} local alert(s) triggered. Review Alerts workspace.")
         self._splash_step("Reconciling paper outcomes")
         if self._reconcile_paper_outcomes(self.bars_by_symbol):
