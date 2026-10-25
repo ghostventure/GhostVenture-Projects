@@ -4311,7 +4311,8 @@ class TimmyNativeApp:
             if (
                 event.get("mode") != "live"
                 or event.get("automation_scheduled") is not True
-                or event.get("event_type") not in {"live-order-intent", "buy-order"}
+                or event.get("event_type") != "buy-order"
+                or str(event.get("status", "")).lower() == "preview-required"
             ):
                 continue
             symbol = str(event.get("symbol") or "").upper()
