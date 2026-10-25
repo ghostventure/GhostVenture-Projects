@@ -3,9 +3,11 @@
 ## Release Target: 0.1.7 (local installation)
 
 The current local source and Debian package target version 0.1.7. This release
-adds 30 research/data, risk/planning, and review/operations capabilities plus
-provider-data validation and atomic cache writes. The public Firebase download
-page has not been updated and may still offer 0.1.6.
+adds 30 research/data, risk/planning, and review/operations capabilities,
+shared Paper/Simulation/Live controls, a separate local simulation journal,
+clearer automation status and recovery, and provider-data validation with
+atomic cache writes. The public Firebase download page has not been updated and
+may still offer 0.1.6.
 
 For a downloaded Debian package, run its matching checksum command from the
 download directory, then install the 0.1.7 package:
@@ -96,6 +98,9 @@ guide](TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md), and
 views do not enable Live mode or change strategy calculations. The open-order
 monitor is read-only; no cancel/replace operation was added. The package is
 installed locally; public Hosting and GitHub release assets remain unchanged.
+See the [automation and order safety review](AUTOMATION_AND_ORDER_SAFETY_REVIEW.md)
+for the mode contract, scheduling behavior, live preview and submit limits, and
+the Simulation fill model.
 
 The first build with the updater must be installed once. After that, stable GitHub releases install automatically for that user; the root-owned system package is left intact. An optional `BASE_RELEASE` marker in the installed overlay prevents the updater from replacing that overlay with the same or an older release; locally built overlays without that marker follow the normal latest-release check. Automatic native updates currently support x86_64 Linux only. Deploying the public Firebase Hosting site alone does not update the native application. The public site is [timmy-tradesonauto.web.app](https://timmy-tradesonauto.web.app).
 

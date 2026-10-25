@@ -262,7 +262,7 @@ class TimmyNativeApp:
         self.root = tk.Tk()
         self.root.title("Timmy | Financial Terminal")
         self.root.geometry("1360x860")
-        self.root.minsize(800, 600)
+        self.root.minsize(1024, 600)
         self.colors = self._theme_palette()
         self.root.configure(bg=self.colors["bg"])
         self.min_score_var = tk.StringVar(value="72")
@@ -2117,6 +2117,87 @@ class TimmyNativeApp:
         for panel in (self.decision_panel, self.order_panel, self.broker_panel, self.journal_panel):
             panel.grid_remove()
 
+        self.body.columnconfigure(0, weight=1)
+        self.body.columnconfigure(1, weight=1)
+
+        if overview_active:
+            # Left rail is the radar; the broad right work area follows the
+            # selected symbol through chart, model read, and order plan.
+            radar_visible = self.overview_radar_visible_var.get()
+            self.body.columnconfigure(0, weight=2 if radar_visible else 1, uniform="signal-desk")
+            self.body.columnconfigure(1, weight=7 if radar_visible else 0, uniform="signal-desk")
+            self.right_panel.rowconfigure(0, weight=3)
+            self.right_panel.rowconfigure(1, weight=2)
+            self.right_panel.columnconfigure(0, weight=2, uniform="desk-workbench")
+            self.right_panel.columnconfigure(1, weight=1, uniform="desk-workbench")
+            if radar_visible:
+                self.market_watchlist_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+                self.right_panel.grid(row=0, column=1, sticky="nsew")
+            else:
+                self.right_panel.grid(row=0, column=0, columnspan=2, sticky="nsew")
+            self.market_chart_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 10), pady=(0, 10))
+            self.decision_panel.grid(row=0, column=1, sticky="nsew", pady=(0, 6))
+            self.order_panel.grid(row=1, column=1, sticky="nsew", pady=(6, 10))
+        elif tab == "Setup":
+            self.body.columnconfigure(0, weight=1)
+            self._sync_profile_form(self.config or self._load_config_safe())
+            self._render_setup_status()
+            self.setup_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Universe":
+            self.body.columnconfigure(0, weight=1)
+            self.universe_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Scanner":
+            self.body.columnconfigure(0, weight=1)
+            self.signals_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Research":
+            self.body.columnconfigure(0, weight=1)
+            self._render_scan_coverage()
+            self.research_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Portfolio":
+            self.body.columnconfigure(0, weight=1)
+            self._render_portfolio_panel()
+            self.portfolio_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Automation":
+            self.body.columnconfigure(0, weight=1)
+            self._render_automation_panel()
+            self.automation_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
+        elif tab == "Alerts":
+            self.body.columnconfigure(0, weight=1)
+            self._render_alerts_panel()
+            self.alerts_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Strategy":
+            self.body.columnconfigure(0, weight=1)
+            self._render_strategy_tab()
+            self.strategy_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Execution":
+            self.body.columnconfigure(0, weight=1)
+            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
+            self._render_execution_tab()
+            self.execution_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        elif tab == "Health":
+            self.body.columnconfigure(0, weight=1)
+            self._render_health_tab()
+            self.health_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
+        else:
+            for row in range(4):
+                self.right_panel.rowconfigure(row, weight=1 if row == 0 else 0)
+            panel_by_tab = {
+                "Broker": self.broker_panel,
+                "Audit": self.journal_panel,
+            }
+            panel = panel_by_tab.get(tab, self.decision_panel)
+            if tab == "Broker":
+                self._render_broker_summary(force=True)
+            elif tab == "Audit":
+                self._load_journal()
+            self.right_panel.grid(row=0, column=0, columnspan=2, sticky="nsew")
+            panel.grid(row=0, column=0, sticky="nsew", pady=0)
+
+        self._responsive_layout()
+        self.status_bar.configure(text=f"{'Market' if overview_active else tab} workspace active.")
+        self._save_last_workspace_state()
+
     def _open_operations_review(self) -> None:
         """Open review tools; broker data is read-only and local-only features say so."""
         window = tk.Toplevel(self.root)
@@ -2435,87 +2516,6 @@ class TimmyNativeApp:
         if start == end:
             return False
         return not (start <= now < end if start < end else now >= start or now < end)
-
-        self.body.columnconfigure(0, weight=1)
-        self.body.columnconfigure(1, weight=1)
-
-        if overview_active:
-            # Left rail is the radar; the broad right work area follows the
-            # selected symbol through chart, model read, and order plan.
-            radar_visible = self.overview_radar_visible_var.get()
-            self.body.columnconfigure(0, weight=2 if radar_visible else 1, uniform="signal-desk")
-            self.body.columnconfigure(1, weight=7 if radar_visible else 0, uniform="signal-desk")
-            self.right_panel.rowconfigure(0, weight=3)
-            self.right_panel.rowconfigure(1, weight=2)
-            self.right_panel.columnconfigure(0, weight=2, uniform="desk-workbench")
-            self.right_panel.columnconfigure(1, weight=1, uniform="desk-workbench")
-            if radar_visible:
-                self.market_watchlist_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-                self.right_panel.grid(row=0, column=1, sticky="nsew")
-            else:
-                self.right_panel.grid(row=0, column=0, columnspan=2, sticky="nsew")
-            self.market_chart_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 10), pady=(0, 10))
-            self.decision_panel.grid(row=0, column=1, sticky="nsew", pady=(0, 6))
-            self.order_panel.grid(row=1, column=1, sticky="nsew", pady=(6, 10))
-        elif tab == "Setup":
-            self.body.columnconfigure(0, weight=1)
-            self._sync_profile_form(self.config or self._load_config_safe())
-            self._render_setup_status()
-            self.setup_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        elif tab == "Universe":
-            self.body.columnconfigure(0, weight=1)
-            self.universe_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        elif tab == "Scanner":
-            self.body.columnconfigure(0, weight=1)
-            self.signals_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        elif tab == "Research":
-            self.body.columnconfigure(0, weight=1)
-            self._render_scan_coverage()
-            self.research_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        elif tab == "Portfolio":
-            self.body.columnconfigure(0, weight=1)
-            self._render_portfolio_panel()
-            self.portfolio_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        elif tab == "Automation":
-            self.body.columnconfigure(0, weight=1)
-            self._render_automation_panel()
-            self.automation_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
-        elif tab == "Alerts":
-            self.body.columnconfigure(0, weight=1)
-            self._render_alerts_panel()
-            self.alerts_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        elif tab == "Strategy":
-            self.body.columnconfigure(0, weight=1)
-            self._render_strategy_tab()
-            self.strategy_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        elif tab == "Execution":
-            self.body.columnconfigure(0, weight=1)
-            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
-            self._render_execution_tab()
-            self.execution_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        elif tab == "Health":
-            self.body.columnconfigure(0, weight=1)
-            self._render_health_tab()
-            self.health_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-        else:
-            for row in range(4):
-                self.right_panel.rowconfigure(row, weight=1 if row == 0 else 0)
-            panel_by_tab = {
-                "Broker": self.broker_panel,
-                "Audit": self.journal_panel,
-            }
-            panel = panel_by_tab.get(tab, self.decision_panel)
-            if tab == "Broker":
-                self._render_broker_summary(force=True)
-            elif tab == "Audit":
-                self._load_journal()
-            self.right_panel.grid(row=0, column=0, columnspan=2, sticky="nsew")
-            panel.grid(row=0, column=0, sticky="nsew", pady=0)
-
-        self._responsive_layout()
-        self.status_bar.configure(text=f"{'Market' if overview_active else tab} workspace active.")
-        self._save_last_workspace_state()
 
     def _apply_overview_layout(self) -> None:
         if getattr(self, "active_tab", None) in {"Overview", "Market"}:

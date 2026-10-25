@@ -33,6 +33,7 @@ install -m 0644 docs/TIMMY_MASTER_DOCUMENTATION.md "$PKG_ROOT/usr/share/doc/timm
 install -m 0644 docs/WORKFLOWS.md "$PKG_ROOT/usr/share/doc/timmy-trader/WORKFLOWS.md"
 install -m 0644 docs/RESEARCH_WORKBENCH.md "$PKG_ROOT/usr/share/doc/timmy-trader/RESEARCH_WORKBENCH.md"
 install -m 0644 docs/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md "$PKG_ROOT/usr/share/doc/timmy-trader/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md"
+install -m 0644 docs/AUTOMATION_AND_ORDER_SAFETY_REVIEW.md "$PKG_ROOT/usr/share/doc/timmy-trader/AUTOMATION_AND_ORDER_SAFETY_REVIEW.md"
 install -m 0644 knowledge/*.md "$PKG_ROOT/usr/share/doc/timmy-trader/knowledge/"
 
 cat > "$PKG_ROOT/DEBIAN/control" <<CONTROL

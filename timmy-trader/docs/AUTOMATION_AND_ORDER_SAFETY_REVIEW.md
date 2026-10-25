@@ -14,9 +14,9 @@ Pausing prevents future scheduled callbacks. It cannot undo a broker request tha
 
 ## Responsive control layout
 
-The execution control bar reflows to a full-width Run Cycle row followed by side-by-side Preview/Submit buttons below 1120 px. Below 1120 px, the Paper/Simulation/Live target radios stack vertically so the full labels fit in the six-column controls grid. The Automation workspace stacks readiness and workflow panels below 1040 px and changes its five status cards to a 3-column grid below 900 px. The native window minimum is 800 x 600; existing content-canvas scrolling carries panels taller than the viewport. Buttons and target radios use Tk keyboard focus traversal/highlight.
+The execution control bar reflows to a full-width Run Cycle row followed by side-by-side Preview/Submit buttons below 1120 px. Below 1120 px, the Paper/Simulation/Live target radios stack vertically so the full labels fit in the six-column controls grid. The Automation workspace stacks readiness and workflow panels below 1040 px and changes its five status cards to a 3-column grid below 900 px. The native window minimum is 1024 x 600 so the fixed navigation rail and six-column risk controls retain enough horizontal space. Existing content-canvas scrolling carries panels taller than the viewport. Buttons and target radios use Tk keyboard focus traversal/highlight.
 
-Layout validation in this source review covered the 800 px minimum and 1120/1040/900 px reflow branches by code inspection. An Xvfb probe was attempted, but the app's execution controls remained unmapped after tab switching, so it did not produce usable visual verification; the actual desktop layout still needs an operator glance.
+Mapped Tk windows were inspected under Xvfb at 1280, 1120, and 1024 px. At all three widths, the Execution controls fit within the content viewport and remained mapped; at 1024 px, Run Cycle spans its own row and Preview/Submit share the next row. Automation readiness and workflow panels also stack at the compact width. The probe exposed an unreachable workspace-rendering block after the alert-preference helper's return; it was restored to `_show_tab`, making workspace navigation render its panels again. The native desktop theme and monitor scaling still merit an operator glance.
 
 ## Order path review
 
