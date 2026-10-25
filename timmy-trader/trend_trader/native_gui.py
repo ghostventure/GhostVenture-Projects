@@ -60,7 +60,7 @@ from .scanner_presets import ScannerPresetStore, ScannerTablePresetStore
 from .scanner_view_state import make_scanner_view, scanner_view_from_dict, scanner_view_to_dict
 from .settings_backups import backup_raw_ui_settings, backup_ui_settings
 from .settings_profile import create_config_version, list_config_versions, rollback_config_version
-from .operations_review import daily_activity_brief, mask_identifier, order_timeline, redact, recovery_steps, save_journal_review
+from .operations_review import daily_activity_brief, mask_identifier, order_timeline, redact, recovery_steps, save_journal_review, support_event_summary
 from .trader_profile_score import (
     calculate_trader_profile_score,
     recommend_trader_scorecard_next_steps,
@@ -2190,7 +2190,8 @@ class TimmyNativeApp:
                         set_text(orders_box, "\n".join(lines))
                     self.root.after(0, done)
                 except Exception as exc:
-                    self.root.after(0, lambda: set_text(orders_box, f"Broker snapshot unavailable: {type(exc).__name__}: {exc}\nNo order state was changed."))
+                    error_text = f"Broker snapshot unavailable: {type(exc).__name__}: {exc}\nNo order state was changed."
+                    self.root.after(0, lambda message=error_text: set_text(orders_box, message))
             threading.Thread(target=worker, daemon=True, name="timmy-open-orders-review").start()
         tk.Button(orders, text="Refresh broker snapshot", command=refresh_orders).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
 
@@ -2353,31 +2354,43 @@ class TimmyNativeApp:
         # 10: bounded, recursively redacted local support bundle.
         support = page("Support Bundle")
         support.rowconfigure(1, weight=1)
-        support_box = text_area(support, "Export includes app version, current mode/gates, bounded recent local events, and crash-log tail. Credentials and account identifiers are redacted.")
+        support_box = text_area(support, "Export includes app version, allowlisted mode/data/gate states, and structured summaries of recent local events. It omits event messages, broker IDs, credentials, and raw crash logs.")
         def export_support():
             destination = filedialog.asksaveasfilename(parent=window, title="Export redacted diagnostics", defaultextension=".json", filetypes=(("JSON support bundle", "*.json"),))
             if not destination:
                 return
             from . import __version__
-            crash_tail = ""
-            try:
-                crash_tail = self.crash_log_path.read_text(encoding="utf-8", errors="replace")[-12000:]
-            except OSError:
-                pass
-            payload = redact({"app_version": __version__, "generated_at": datetime.now(timezone.utc).isoformat(),
-                              "mode": self._lane_mode_label(), "settings_path": self.settings_path.name,
-                              "events": self.execution_events[-100:], "crash_log_tail": crash_tail,
-                              "market_data_error": self._market_data_load_error, "config_error": self.config_error})
+            target = "live" if str(self.execution_target_var.get()).lower() == "live" else "paper"
+            run_mode = "auto" if str(self.execution_mode_var.get()).lower() == "auto" else "user"
+            if self._market_data_load_error:
+                data_state = "invalid"
+            elif self._sample_data_in_use:
+                data_state = "synthetic"
+            elif self.bars_by_symbol:
+                data_state = "loaded"
+            else:
+                data_state = "missing"
+            payload = {
+                "app_version": __version__,
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "execution_target": target,
+                "execution_mode": run_mode,
+                "sample_data": bool(self._sample_data_in_use),
+                "data_state": data_state,
+                "broker_profile_configured": bool(self.config and self.config.webull_app_key and self.config.webull_app_secret),
+                "live_submission_gate_enabled": bool(self.config and self.config.webull_enable_live_orders),
+                "preview_required": bool(self.config and self.config.webull_require_preview),
+                "recent_events": support_event_summary(self.execution_events, limit=100),
+            }
             try:
                 serialized = json.dumps(payload, ensure_ascii=False)
                 if len(serialized.encode("utf-8")) > 2_000_000:
-                    payload["events"] = payload.get("events", [])[-25:]
-                    payload["crash_log_tail"] = str(payload.get("crash_log_tail", ""))[-3000:]
+                    payload["recent_events"] = payload["recent_events"][-25:]
                     serialized = json.dumps(payload, ensure_ascii=False)
                 if len(serialized.encode("utf-8")) > 2_000_000:
                     raise ValueError("Support bundle exceeds 2 MB after truncation; reduce unusually large log fields and retry.")
                 _write_private_json(Path(destination), payload)
-                set_text(support_box, f"Redacted support bundle saved to {destination}. Inspect it before sharing; unusual secrets in free-text logs may need manual review.")
+                set_text(support_box, f"Structured support bundle saved to {destination}. Free-form event messages and raw crash logs were omitted.")
             except Exception as exc:
                 messagebox.showerror("Support bundle", str(exc), parent=window)
         tk.Button(support, text="Export redacted diagnostics", command=export_support).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
@@ -2387,6 +2400,8 @@ class TimmyNativeApp:
         try:
             prefs = json.loads((self.home / "timmy-alert-preferences.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            return True
+        if not isinstance(prefs, dict):
             return True
         if prefs.get("local_alerts_enabled") is False:
             return False

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections import Counter
 from datetime import datetime, timezone
@@ -32,6 +33,47 @@ def mask_identifier(value: object) -> str:
     if not identifier:
         return "not selected"
     return "•" * max(4, len(identifier) - 4) + identifier[-4:]
+
+
+def support_event_summary(events: Iterable[Mapping[str, object]], limit: int = 100) -> list[dict[str, object]]:
+    """Export only bounded, structured event fields; omit IDs and free-form text."""
+    allowed_statuses = {"submitted", "accepted", "filled", "cancelled", "canceled", "rejected", "blocked",
+                        "error", "failed", "preview", "preview-required", "preview-rejected", "working",
+                        "open", "partial", "partially_filled", "target-hit", "stopped"}
+    output = []
+    for event in list(events)[-max(1, min(limit, 100)):]:
+        if not isinstance(event, Mapping):
+            continue
+        stamp = str(event.get("recorded_at") or event.get("submitted_at") or event.get("timestamp") or "")
+        try:
+            parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            timestamp = parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
+        except (ValueError, OverflowError):
+            timestamp = None
+        symbol = str(event.get("symbol") or "").upper()
+        if not re.fullmatch(r"[A-Z0-9.\-]{1,15}", symbol):
+            symbol = None
+        mode = str(event.get("mode") or "").lower()
+        if mode not in {"paper", "live"}:
+            mode = "unknown"
+        status = str(event.get("status") or event.get("event") or "").lower().replace(" ", "-")
+        if status not in allowed_statuses:
+            status = "other"
+        row: dict[str, object] = {"timestamp_utc": timestamp, "mode": mode, "status": status}
+        if symbol:
+            row["symbol"] = symbol
+        side = str(event.get("side") or "").upper()
+        if side in {"BUY", "SELL"}:
+            row["side"] = side
+        order = event.get("order") if isinstance(event.get("order"), Mapping) else {}
+        try:
+            quantity = float(event.get("quantity") or order.get("quantity"))
+            if math.isfinite(quantity) and 0 < quantity <= 1_000_000_000:
+                row["quantity"] = quantity
+        except (TypeError, ValueError, OverflowError):
+            pass
+        output.append(row)
+    return output
 
 
 def daily_activity_brief(events: Iterable[Mapping[str, object]], now: datetime | None = None) -> list[str]:

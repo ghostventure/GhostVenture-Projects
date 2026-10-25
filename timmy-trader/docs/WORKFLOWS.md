@@ -584,13 +584,12 @@ The same workspace includes private, named configuration snapshots with hash
 comparison and integrity-checked restore; a first-run checklist that explains
 synthetic data, paper simulation, real account reads, and gated live trading;
 separate journal review labels and notes; event-based recovery steps; and a
-redacted diagnostics export. Configuration snapshots can contain local broker
+structured diagnostics export. Configuration snapshots can contain local broker
 credentials and remain in Timmy's private runtime directory. Restoring one
 requires restarting Timmy.
 
 Alert preferences affect only the local status-bar notification. Quiet hours
 do not suppress recorded alert events and do not affect trading. Timmy does not
-currently provide email, SMS, push, or background alert delivery. Diagnostics
-exports are redacted before writing, but inspect the bundle before sharing it
-because unusual secrets embedded in free-text logs may not match redaction
-patterns.
+currently provide email, SMS, push, or background alert delivery. Support
+exports include allowlisted status fields and structured event summaries only;
+they omit arbitrary event messages, broker order IDs, and raw crash logs.
