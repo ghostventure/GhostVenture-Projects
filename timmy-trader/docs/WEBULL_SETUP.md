@@ -74,11 +74,11 @@ Live placement stays disabled unless all of these are set:
 TRADER_MODE=live
 TRADER_LIVE=1
 WEBULL_ENABLE_LIVE_ORDERS=1
-WEBULL_REQUIRE_PREVIEW=0
+WEBULL_REQUIRE_PREVIEW=1
 WEBULL_ACCOUNT_ID=<approved account id>
 ```
 
-Keep `WEBULL_REQUIRE_PREVIEW=1` until account check and preview responses are clean. Use small risk limits first:
+Keep `WEBULL_REQUIRE_PREVIEW=1`. Timmy always requires a successful exact preview and a fresh matching receipt before placement; the legacy flag cannot disable that guard. Live Auto also requires the saved Live Auto opt-in in the Webull profile. Use small risk limits first:
 
 ```text
 WEBULL_MAX_ORDER_NOTIONAL_USD=25
@@ -86,6 +86,21 @@ WEBULL_MAX_ORDER_QUANTITY=1
 RISK_PER_TRADE_USD=5
 MAX_POSITIONS=1
 ```
+
+Equity/ETF Live Auto also requires explicit portfolio exposure and drawdown
+limits in `.timmy-profile.env`:
+
+```text
+AUTO_MAX_SYMBOL_EXPOSURE_PCT=<operator-selected percentage from 0 to 100, excluding 0>
+AUTO_MAX_TOTAL_EXPOSURE_PCT=<operator-selected percentage from 0 to 100, excluding 0>
+AUTO_MAX_DRAWDOWN_PCT=<operator-selected percentage from 0 to 100, excluding 0>
+```
+
+These values default to unset/0, which blocks automated Live orders and displays
+the exact keys that need configuration. Timmy does not choose exposure limits
+from strategy or account data. Drawdown tracking starts with the first verified
+account snapshot saved by Timmy; it does not represent the account's historic
+all-time peak.
 
 ## 7. Current Safety Defaults
 

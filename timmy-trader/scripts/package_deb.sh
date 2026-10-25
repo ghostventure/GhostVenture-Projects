@@ -3,15 +3,23 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION=${1:-0.1.8}
+VERSION=${1:-0.1.16}
 ARCH=amd64
 PKG_NAME=timmy-trader
-PKG_ROOT="build/deb/${PKG_NAME}_${VERSION}_${ARCH}"
-DEB_OUT="dist/${PKG_NAME}_${VERSION}_${ARCH}.deb"
+INSTALLER_NAME=Timmy-Installation-Manager
+BUILD_ID=$(date +%Y%m%d%H%M%S)
+PKG_ROOT="build/deb/${PKG_NAME}_${VERSION}_${ARCH}_${BUILD_ID}"
+DEB_OUT="dist/${INSTALLER_NAME}_${VERSION}_${ARCH}.deb"
 
-scripts/build_elf.sh
+if [[ "${TIMMY_SKIP_ELF_BUILD:-0}" == "1" ]]; then
+  ELF_DIR=${TIMMY_ELF_DIR:-dist/Timmy}
+  test -x "$ELF_DIR/Timmy" || { echo "Missing prebuilt $ELF_DIR/Timmy" >&2; exit 1; }
+  test -f "$ELF_DIR/_internal/libpython3.14.so.1.0" || { echo "Missing complete PyInstaller runtime" >&2; exit 1; }
+else
+  scripts/build_elf.sh
+  ELF_DIR=dist/Timmy
+fi
 
-rm -rf "$PKG_ROOT"
 mkdir -p "$PKG_ROOT/DEBIAN"
 mkdir -p "$PKG_ROOT/opt/timmy-trader"
 mkdir -p "$PKG_ROOT/usr/bin"
@@ -19,7 +27,7 @@ mkdir -p "$PKG_ROOT/usr/share/applications"
 mkdir -p "$PKG_ROOT/usr/share/doc/timmy-trader"
 mkdir -p "$PKG_ROOT/usr/share/doc/timmy-trader/knowledge"
 
-cp -a dist/Timmy/. "$PKG_ROOT/opt/timmy-trader/"
+cp -a "$ELF_DIR"/. "$PKG_ROOT/opt/timmy-trader/"
 install -m 0755 packaging/timmy-trader "$PKG_ROOT/usr/bin/timmy-trader"
 install -m 0644 packaging/timmy-trader.desktop "$PKG_ROOT/usr/share/applications/timmy-trader.desktop"
 install -m 0644 README.md "$PKG_ROOT/usr/share/doc/timmy-trader/README.md"
@@ -34,6 +42,9 @@ install -m 0644 docs/WORKFLOWS.md "$PKG_ROOT/usr/share/doc/timmy-trader/WORKFLOW
 install -m 0644 docs/RESEARCH_WORKBENCH.md "$PKG_ROOT/usr/share/doc/timmy-trader/RESEARCH_WORKBENCH.md"
 install -m 0644 docs/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md "$PKG_ROOT/usr/share/doc/timmy-trader/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md"
 install -m 0644 docs/AUTOMATION_AND_ORDER_SAFETY_REVIEW.md "$PKG_ROOT/usr/share/doc/timmy-trader/AUTOMATION_AND_ORDER_SAFETY_REVIEW.md"
+if [ -f docs/WEBULL_CAPABILITY_INVENTORY.md ]; then
+  install -m 0644 docs/WEBULL_CAPABILITY_INVENTORY.md "$PKG_ROOT/usr/share/doc/timmy-trader/WEBULL_CAPABILITY_INVENTORY.md"
+fi
 install -m 0644 knowledge/*.md "$PKG_ROOT/usr/share/doc/timmy-trader/knowledge/"
 
 cat > "$PKG_ROOT/DEBIAN/control" <<CONTROL
@@ -43,8 +54,8 @@ Section: office
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: Local Timmy Build <local@timmy>
-Description: Timmy native Webull trading assistant
- Timmy is a native Linux trading assistant and guarded Webull OpenAPI preview tool.
+Description: Timmy Installation Manager for Auto Trade Assistant
+ Installs the native Timmy Auto Trade Assistant and its guarded Webull OpenAPI runtime.
  Credentials are not bundled and are stored under the user's config directory.
 CONTROL
 
@@ -69,4 +80,6 @@ chmod 0755 "$PKG_ROOT/DEBIAN/postrm"
 mkdir -p dist
 dpkg-deb --root-owner-group --build "$PKG_ROOT" "$DEB_OUT"
 dpkg-deb --info "$DEB_OUT"
+sha256sum "$DEB_OUT" > "${DEB_OUT}.sha256"
 echo "$DEB_OUT"
+echo "${DEB_OUT}.sha256"

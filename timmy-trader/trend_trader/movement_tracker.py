@@ -92,12 +92,28 @@ def refresh_movement_tracker(
         direction = str(getattr(signal, "direction", "")).lower()
         change = _finite_float(getattr(signal, "change_pct", None))
         action = str(getattr(signal, "sensible_action", "watch")).lower()
+        as_of = as_of_by_symbol.get(symbol)
+        if as_of is not None and change is not None:
+            records[symbol]["discovery_signal"] = {
+                "observed_at": as_of.isoformat(),
+                "scanned_at": current_time.isoformat(),
+                "change_pct": round(change, 4),
+                "direction": direction,
+                "score": _bounded_score(getattr(signal, "score", 0)),
+                "sensible_score": _bounded_score(getattr(signal, "sensible_score", 0)),
+                "sensible_action": action,
+                "scout_score": _bounded_score(getattr(signal, "scout_score", 0)),
+                "scout_action": str(getattr(signal, "scout_action", "quiet")).lower(),
+                "decision": str(getattr(signal, "decision", "watch")).lower(),
+                "setup": str(getattr(signal, "setup", ""))[:80],
+                "close": _finite_float(getattr(signal, "close", None)),
+                "volume_ratio": _finite_float(getattr(signal, "volume_ratio", None)),
+            }
         if direction != "bullish" or action not in {"trade", "watch"} or change is None or change <= 0:
             records[symbol].pop("upside_setup", None)
             records[symbol].pop("shortlist_reference_price", None)
             records[symbol].pop("shortlist_started_at", None)
             continue
-        as_of = as_of_by_symbol.get(symbol)
         price = _finite_float(getattr(signal, "close", None))
         if as_of is None or price is None or price <= 0:
             # A signal without a timestamped candle cannot refresh recommendation
@@ -192,6 +208,67 @@ def refresh_movement_tracker(
 
 def recent_mover_symbols(payload: dict) -> list[str]:
     return sorted(str(symbol).upper() for symbol in payload.get("symbols", {}))
+
+
+def top_movement_candidates(
+    payload: dict,
+    limit: int = 50,
+    minimum_change_pct: float = 1.1,
+    trade_candidate_change_pct: float = 2.2,
+    now: datetime | None = None,
+    freshness_hours: int = WINDOW_HOURS,
+) -> list[dict]:
+    """Return fresh percentage movers and mark strategy-qualified trade candidates."""
+    current_time = _naive(now or datetime.now())
+    cutoff = current_time - timedelta(hours=max(1, int(freshness_hours)))
+    minimum_change = max(0.0, _finite_float(minimum_change_pct) or 0.0)
+    trade_change = max(minimum_change, _finite_float(trade_candidate_change_pct) or minimum_change)
+    ranked = []
+    symbols = payload.get("symbols", {}) if isinstance(payload, dict) else {}
+    if not isinstance(symbols, dict):
+        return []
+    for symbol, record in symbols.items():
+        if not isinstance(record, dict):
+            continue
+        snapshot = record.get("discovery_signal")
+        if not isinstance(snapshot, dict):
+            continue
+        observed_at = _parse_timestamp(snapshot.get("observed_at"))
+        if observed_at is None or not cutoff <= observed_at <= current_time:
+            continue
+        change = _finite_float(snapshot.get("change_pct"))
+        scout_score = _finite_float(snapshot.get("scout_score"))
+        if change is None or abs(change) < minimum_change or scout_score is None:
+            continue
+        direction = str(snapshot.get("direction", "")).lower()
+        decision = str(snapshot.get("decision", "")).lower()
+        sensible_action = str(snapshot.get("sensible_action", "")).lower()
+        trade_candidate = (
+            abs(change) >= trade_change
+            and scout_score >= 72
+            and direction == "bullish"
+            and decision == "eligible"
+            and sensible_action == "trade"
+        )
+        ranked.append({
+            "symbol": str(symbol).strip().upper(),
+            "observed_at": observed_at.isoformat(),
+            "change_pct": round(change, 2),
+            "scout_score": int(max(0, min(100, scout_score))),
+            "scout_action": str(snapshot.get("scout_action", "watch")),
+            "direction": direction,
+            "decision": decision,
+            "sensible_action": sensible_action,
+            "setup": str(snapshot.get("setup", "")),
+            "close": _finite_float(snapshot.get("close")),
+            "volume_ratio": _finite_float(snapshot.get("volume_ratio")),
+            "trade_candidate": trade_candidate,
+        })
+    return sorted(
+        ranked,
+        key=lambda item: (abs(float(item["change_pct"])), int(item["scout_score"]), item["observed_at"]),
+        reverse=True,
+    )[:max(0, int(limit))]
 
 
 def top_upside_setups(

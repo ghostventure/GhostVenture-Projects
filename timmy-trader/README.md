@@ -18,7 +18,13 @@ Operational workflows for validation, live brokerage, actual trade placement, fr
 docs/WORKFLOWS.md
 ```
 
-## 0.1.8 Release Notes
+## Historical 0.1.8 Release Notes
+
+> Historical local release notes follow. The current source target is 0.1.16;
+> see `docs/TIMMY_MASTER_DOCUMENTATION.md` and `docs/WEBULL_CAPABILITY_INVENTORY.md`
+> for the active automation, risk, and local-insights inventory. The user-level
+> overlay is installed locally; the Debian package, GitHub, and Firebase are
+> separate release surfaces.
 
 This local source release targets Timmy 0.1.8 and builds on 0.1.7's 30
 research, risk/planning, and operations capabilities. Automation now skips
@@ -31,15 +37,16 @@ See `docs/RESEARCH_WORKBENCH.md`, `docs/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.m
 `docs/WORKFLOWS.md`, and `docs/AUTOMATION_AND_ORDER_SAFETY_REVIEW.md` for
 behavior, broker limits, and data caveats.
 
-The 0.1.8 package is a local installation; the public Firebase download page
-has not been updated and may still offer 0.1.6.
+The local installer artifact is named **Timmy Installation Manager** and
+packages the 0.1.16 Auto Trade Assistant build. The system package and
+per-user desktop build are installed locally. Public Firebase and GitHub
+release assets are separate and are updated through the release workflow.
 
-For the Debian install, verify the downloaded package with the accompanying
-`SHA256SUMS.txt`, then install it:
+For the Debian install, verify the package with its SHA-256 sidecar, then install:
 
 ```bash
-sha256sum -c SHA256SUMS.txt
-sudo apt install ./timmy-trader_0.1.8_amd64.deb
+sha256sum -c dist/Timmy-Installation-Manager_0.1.16_amd64.deb.sha256
+sudo apt install ./dist/Timmy-Installation-Manager_0.1.16_amd64.deb
 ```
 
 The native updater expects the GitHub release archive
@@ -197,10 +204,10 @@ scripts/package_deb.sh
 Install it locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.8_amd64.deb
+sudo apt install ./dist/Timmy-Installation-Manager_0.1.16_amd64.deb
 ```
 
-After install, launch **Timmy** from the system menu or run:
+After install, launch **Auto Trade Assistant** from the system menu or run:
 
 ```bash
 timmy-trader
@@ -257,7 +264,7 @@ Dynamic watchlist rotation:
 ```text
 ENABLE_WATCHLIST_ROTATION=1
 WATCHLIST_UNIVERSE=all-us
-WATCHLIST_UNIVERSE_BATCH_SIZE=100
+WATCHLIST_UNIVERSE_BATCH_SIZE=200
 WATCHLIST_UNIVERSE_REFRESH_HOURS=24
 WATCHLIST_ROTATION_CANDIDATES=SPY,QQQ,IWM,DIA,AAPL,MSFT,NVDA,AMD,TSLA,META,GOOGL,AMZN,AVGO,NFLX,COST,JPM,XOM,UNH,LLY,ORCL,CRM,ADBE,INTC,MU,SMH,XLK,XLF,XLE,VTI
 ACTIVE_WATCHLIST_PATH=active-watchlist.txt
@@ -272,10 +279,12 @@ WEBULL_QUIET_WATCHLIST_NAME=Timmy Quiet Removed
 MAX_WATCHLIST_SYMBOLS=12
 MAX_MOVEMENT_WATCHLIST_SYMBOLS=50
 MIN_WATCHLIST_SCOUT_SCORE=42
+MOVEMENT_WATCHLIST_MIN_CHANGE_PCT=1.1
+TRADE_CANDIDATE_MIN_CHANGE_PCT=2.2
 QUIET_WATCHLIST_SCOUT_SCORE=30
 ```
 
-When `ENABLE_WATCHLIST_ROTATION=1`, Timmy can fetch the custom active list and candidate pool, score loaded symbols, and write a rotated active list to `ACTIVE_WATCHLIST_PATH`. This changes the strategy's active custom list; it is separate from the all-US movement scan. With the built-in `WATCHLIST_UNIVERSE=all-us`, Timmy scans a rotating batch when cached candles are stale even while automatic watchlist rotation is off. `WATCHLIST_UNIVERSE_BATCH_SIZE` controls requested symbols per scan cycle (default 100); successful coverage can be slower or incomplete because of provider limits, failed requests, and unsupported symbols. The movement scan is discovery context and does not itself make every listed symbol tradable. Any symbol that may become tradable must also be permitted by `WEBULL_SYMBOL_WHITELIST` and pass the other risk gates.
+When `ENABLE_WATCHLIST_ROTATION=1`, Timmy can fetch the custom active list and candidate pool, score loaded symbols, and write a rotated active list to `ACTIVE_WATCHLIST_PATH`. This changes the strategy's active custom list; it is separate from the all-US movement scan. With the built-in `WATCHLIST_UNIVERSE=all-us`, Timmy scans a rotating batch when cached candles are stale even while automatic watchlist rotation is off. `WATCHLIST_UNIVERSE_BATCH_SIZE` controls requested symbols per scan cycle (default 200); successful coverage can be slower or incomplete because of provider limits, failed requests, and unsupported symbols. Timmy saves daily movers to a separate discovery watchlist; Auto lanes consider an entry only after the higher percentage threshold, bullish scout alert, eligible strategy decision, and normal plan filters pass. The movement scan does not change the active watchlist. Any symbol that may become tradable must also be permitted by `WEBULL_SYMBOL_WHITELIST` and pass the other risk gates.
 
 Timmy also ships a source-controlled snapshot at `trend_trader/resources/us-listed-symbols.csv`. That file currently contains 11,466 U.S. listed symbols: 5,910 stocks/non-ETFs and 5,556 ETFs/ETPs. Timmy uses it as a warm-start fallback when `WATCHLIST_UNIVERSE=all-us` and the mutable runtime cache `timmy-watchlist-universe.txt` has not been created yet. The live Nasdaq Trader refresh remains the preferred source when reachable.
 
@@ -433,11 +442,11 @@ Live orders require all of these before the adapter will even attempt a submit p
 TRADER_MODE=live
 TRADER_LIVE=1
 WEBULL_ENABLE_LIVE_ORDERS=1
-WEBULL_REQUIRE_PREVIEW=0
+WEBULL_REQUIRE_PREVIEW=1
 WEBULL_ACCOUNT_ID=<approved account id>
 ```
 
-The current Webull adapter still returns a `preview-required` payload while `WEBULL_REQUIRE_PREVIEW=1`. When `WEBULL_REQUIRE_PREVIEW=0`, the native GUI still requires the exact current plan to be previewed before a live submit path is allowed.
+Every live placement requires a successful exact Webull preview, regardless of the legacy `WEBULL_REQUIRE_PREVIEW` flag. Keep it set to `1`; a valid fresh preview receipt allows the same payload to proceed through configured risk gates, a durable intent record, and one broker submission. Live Auto also requires the saved Live Auto opt-in in the Webull profile. Unknown broker outcomes hold automation until reconciliation.
 
 The native GUI also records a fingerprint of the last Webull previewed plan. If the plan changes after refresh, the configured account changes, or the preview is more than three minutes old, Live submit is blocked until the exact current plan is previewed again.
 
@@ -473,8 +482,8 @@ AUTO_START_LIVE_ON_MARKET_OPEN=0
 MARKET_OPEN_POLL_SECONDS=30
 MARKET_DATA_PROVIDER=yahoo
 WATCHLIST_UNIVERSE=all-us
-WATCHLIST_UNIVERSE_BATCH_SIZE=100
-MARKET_DATA_MAX_AGE_MINUTES=15
+WATCHLIST_UNIVERSE_BATCH_SIZE=200
+MARKET_DATA_MAX_AGE_MINUTES=10
 WATCHLIST_PATH=watchlist.txt
 WATCHLIST_TEMPLATE=equity
 ENABLE_CRYPTO_TRADING=0

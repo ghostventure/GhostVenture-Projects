@@ -15,6 +15,7 @@ from .brokers.paper import PaperBroker
 from .brokers.webull_openapi import WebullOpenApiBroker
 from .config import BotConfig, load_config
 from .data import load_csv_bars
+from .decision_audit import audit_signal_decision
 from .risk import create_order_plan
 from .sample_data import write_sample_bars
 from .strategy import rank_signals
@@ -52,6 +53,22 @@ def create_app() -> FastAPI:
     @app.get("/api/scan")
     def scan() -> dict:
         return _scan_payload()
+
+    @app.get("/api/decisions")
+    def decisions() -> dict:
+        """Return a read-only explanation of every scanned signal's plan gates."""
+        try:
+            config = load_config()
+            bars = _load_scan_bars()
+            signals = rank_signals(bars, config)
+            audits = [audit_signal_decision(signal, config).to_dict() for signal in signals]
+            counts = {
+                outcome: sum(audit["outcome"] == outcome for audit in audits)
+                for outcome in ("order-plan-ready", "blocked", "watch")
+            }
+            return {"decisions": audits, "counts": counts, "read_only": True}
+        except Exception as exc:
+            return _error(exc)
 
     @app.get("/api/plans")
     def plans() -> dict:
@@ -94,12 +111,16 @@ def create_app() -> FastAPI:
 
 
 def _scan_payload() -> dict:
-    if not DEFAULT_DATA.exists():
-        write_sample_bars(DEFAULT_DATA)
     config = load_config()
-    bars = load_csv_bars(DEFAULT_DATA)
+    bars = _load_scan_bars()
     signals = rank_signals(bars, config)
     return {"signals": [asdict(signal) for signal in signals]}
+
+
+def _load_scan_bars():
+    if not DEFAULT_DATA.exists():
+        write_sample_bars(DEFAULT_DATA)
+    return load_csv_bars(DEFAULT_DATA)
 
 
 def _plans(config: BotConfig) -> list:

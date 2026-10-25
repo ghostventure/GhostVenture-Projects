@@ -1,26 +1,123 @@
 # Timmy Master Documentation
 
-## Release Target: 0.1.8 (local installation)
+## Release Target: 0.1.16 (local user overlay)
 
-The current local source and Debian package target version 0.1.8. It builds on
+The current local source targets version 0.1.16. It builds on
 the 0.1.7 research/data, risk/planning, and review/operations wave with
 same-candle scheduled Paper/Simulation/Live Auto dedupe, clearer cycle
 result/wait feedback, persistent Live Auto holds after unknown outcomes, and
 removal of duplicate controls and workspace aliases. Shared Paper/Simulation/Live
 controls, the separate local simulation journal, provider-data validation, and
-atomic cache writes remain included. The public Firebase download page has not
-been updated and may still offer 0.1.6.
+atomic cache writes remain included. Version 0.1.9 adds a read-only signal-to-plan
+decision audit in the native Decision Brief and dashboard API (`/api/decisions`).
+It reports strategy, score, expense, reward/risk, volatility, whitelist,
+instrument, and price-level gates, plus whether the standard planner returned a
+plan. It never submits or changes an order. Version 0.1.10 adds a recoverable
+temporary User-mode fallback for failed Paper/Simulation automation cycles.
+After a 30-second recovery pause, Timmy restores the prior Auto request and
+retries with backoff up to five minutes unless the user explicitly selected
+User, changed the execution target, or selected Live.
+User-mode preference is persisted separately from the temporary fallback so a
+restart does not mistake a system pause for the user's choice. Live automation
+errors and unknown broker outcomes remain held for explicit review and re-arm.
+Market-open Paper and Live automation also honor a saved user-selected User
+mode.
+Version 0.1.11 adds Webull open-order cancellation and limit-order replacement
+from a fresh account snapshot, with a confirmation for each action and a signed
+intent/result journal. It adds explicit-preview, explicit-confirmation limit
+sell orders to reduce eligible long equity positions. Timmy rejects position
+reductions when instrument type or long direction is unclear. Order actions
+remain subject to the existing live execution guards and unresolved outcomes
+must be reconciled before retrying. Read-only order history, execution history,
+and Webull snapshots for equities, options, futures, crypto, and event contracts
+are also available on demand where the account and API permissions allow them.
+These market-data views do not expand Timmy's planning or live-order support for
+those instruments. Trade-event streaming is not wired into the GUI. Money
+movement, transfers, options/crypto position reductions, and broad instrument
+order controls are not included. Live account mutations were not exercised
+during implementation. The public Firebase download page has not been updated
+and may still offer 0.1.6.
 
-For a downloaded Debian package, run its matching checksum command from the
-download directory, then install the 0.1.8 package:
+Version 0.1.12 adds a manually opened guarded order-entry workflow for US
+equity/ETF limit orders, single and multi-leg option strategies, futures, and
+event contracts. The UI requests an exact Webull preview, enforces Timmy's
+product switches and configured quantity/cost limits, retains an in-memory
+fingerprint for the exact normalized payload, requires Live + User mode and a
+separate final confirmation, and writes a durable order intent before one
+submission. Crypto order submission and multi-order batch submission are
+blocked: Webull does not currently expose Preview Order for crypto, and the
+batch endpoint has different product/availability limits. Real-time streams
+remain pending as documented below. The 0.1.12 ELF was built and installed into
+the per-user overlay. The launcher selects it on the next app start; an already
+running process retains its loaded version. The system package, GitHub, and
+Firebase were not updated.
 
-```bash
-sha256sum -c SHA256SUMS.txt
-sudo apt install ./timmy-trader_0.1.8_amd64.deb
-```
+### Webull streaming integration status
 
-The local 0.1.8 Debian package is installed from this source checkout. The
-Firebase-hosted Download page and GitHub release assets have not been updated.
+Timmy does not start Webull trade-event or market-data streams. The installed
+Webull SDK 3.0.4 trade-events client prints its signed subscribe request,
+signature, and authentication metadata, then retries in an internal loop. It
+does not expose a stop method or retain the gRPC channel for cancellation. It is
+not safe to connect this directly to the GUI event log or to promise a working
+Stop control. The SDK market-data client's `connect_and_loop_async` accepts a
+logger-disabled option but does not forward it to the worker, whose default
+enables console and file logging. Its loop lifecycle also relies on MQTT client
+internals. Timmy should wait for upstream fixes or use a separately reviewed
+stream adapter that suppresses all SDK/auth logs, retains and cancels the
+connection, joins its worker off the UI thread, and sends only bounded,
+redacted payloads to the UI through `root.after`. A market-data stream can be
+considered independently from trade-status events once this lifecycle has a
+safe implementation and verification path.
+
+Version 0.1.13 repairs the equity/ETF Live Auto order path. It now requires the saved Live Auto opt-in, enabled live account/order switches, and a completed Account Check. Immediately before each order it rechecks the current signal and operational gates, requests an exact Webull preview on the same broker adapter used for submission, requires a documented estimated cost within the configured cap, writes a durable intent, and submits once using that preview receipt. A failure before the placement call is journaled as retryable; an uncertain placement result remains unresolved and holds Live Auto until reconciliation. The live lane is limited to supported US equities and ETFs. The generic Research & Discovery JSON console and its broad endpoint allowlist have been removed. Targeted contract discovery remains within the secondary manual order workflow; crypto remains available for market-data snapshots but has no order draft or submit control. Paper and Simulation behavior remains local.
+
+The 0.1.13 native executable is installed in the per-user overlay and selected by the launcher on the next app start. An already-running process keeps its loaded prior version until it is closed. No Debian package, GitHub, or Firebase release was made.
+
+Version 0.1.14 moved decision-cycle provider refresh, local data loading, and
+signal ranking into a background worker, then applies an immutable market
+snapshot on Tk. Live Auto exact preview, durable intent, submission, and result
+journaling run in a separate broker worker, with UI updates posted through
+`root.after`. The cycle guard remains held across both workers. Explicit target
+or mode changes, profile edits, risk-setting changes, and Pause All cancel
+future cycle steps while preserving an already-running broker call's outcome
+for journaling and reconciliation. Tk snapshot application/rendering and local
+Paper/Simulation journal work remain on the UI thread; no GUI responsiveness
+benchmark or live broker operation was performed for this change.
+
+Version 0.1.15 adds a read-only broker order/position preflight to each
+automated Live batch. Timmy requires recognizable successful open-order and
+position snapshots, blocks entries that overlap an active or ambiguous order
+or a nonzero position, and reports the current lifecycle check. It never
+cancels or reprices automatically. Partial fills are observed only insofar as
+they appear in the open-order snapshot; fill-quantity reconciliation, stale
+order policies, and automatic stop/target exits remain pending until an
+explicit operator policy and a safe, previewed workflow. No Webull request or
+GUI responsiveness benchmark was made during this implementation.
+
+Version 0.1.16 wires the pure automation risk evaluator into equity/ETF Live
+Auto after a fresh Webull account/order/position snapshot and before any exact
+preview. It sizes against current equity, available cash, positions, pending
+BUY orders, configured position/daily/rejection limits, data/session state,
+daily loss, exposure percentages, and a private per-account drawdown high-water
+mark. Missing or ambiguous context blocks before preview and displays actionable
+reasons. The required policy keys are `AUTO_MAX_SYMBOL_EXPOSURE_PCT`,
+`AUTO_MAX_TOTAL_EXPOSURE_PCT`, and `AUTO_MAX_DRAWDOWN_PCT`; unset/zero values
+keep Live Auto blocked until configured to a percentage in `(0, 100]`. The
+high-water mark starts at Timmy's first verified account snapshot, so measured
+drawdown is since tracking began, not the account's all-time peak. Exact broker
+preview, durable intent, one submission, and unresolved outcome holds remain
+in place. Paper and Simulation now show closed-trade performance, cohort
+summaries, and explicit fill/slippage coverage; unavailable fills, slippage,
+and Simulation return percentages are not inferred. These insights never
+change strategy or Live settings automatically.
+The 0.1.16 discovery update scans 90 daily bars per symbol in rotating
+all-US batches (200 symbols by default), saves a separate movement-ranked
+watchlist at an absolute daily move of 1.1% or more, and promotes only bullish
+movers at 2.2% or more with scout score 72+, an eligible strategy decision,
+and an executable plan. Automated lanes use the saved discovery candidate
+bars without replacing the active custom watchlist. Whitelist, account,
+exposure, drawdown, session, order preview, and other existing execution gates
+remain required; these daily-bar thresholds are filters, not return forecasts.
 The native updater expects the GitHub Release assets
 `Timmy-linux-x86_64.tar.gz` and `SHA256SUMS`; a Hosting deployment does not
 publish that archive or update a running app.
@@ -551,10 +648,12 @@ Default:
 ```text
 MARKET_DATA_PROVIDER=yahoo
 WATCHLIST_UNIVERSE=all-us
-WATCHLIST_UNIVERSE_BATCH_SIZE=100
+WATCHLIST_UNIVERSE_BATCH_SIZE=200
 WATCHLIST_PATH=watchlist.txt
 WATCHLIST_TEMPLATE=equity
-MARKET_DATA_MAX_AGE_MINUTES=15
+MARKET_DATA_MAX_AGE_MINUTES=10
+MOVEMENT_WATCHLIST_MIN_CHANGE_PCT=1.1
+TRADE_CANDIDATE_MIN_CHANGE_PCT=2.2
 ```
 
 Sample data:

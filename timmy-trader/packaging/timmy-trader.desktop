@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Timmy
+Name=Auto Trade Assistant
 GenericName=Trading Assistant
-Comment=Launch Timmy
+Comment=Automated trading assistant
 Exec=timmy-trader
 Terminal=false
 Categories=Office;Finance;

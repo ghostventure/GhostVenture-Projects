@@ -31,6 +31,8 @@ from .brokers.webull_openapi import WebullOpenApiBroker
 from .config import BotConfig, load_config
 from .data import load_csv_bars, write_csv_bars
 from .data_quality import summarize_candle_quality
+from .risk import AutomationRiskContext, AutomationRiskDecision, AutomationRiskLimits, evaluate_automation_order
+from .market_guards import PositionSnapshot
 from .market_calendar import market_session, market_session_calendar, seconds_until_next_open
 from .market_data import fetch_daily_bars
 from .market_universe import fetch_us_listed_symbols, load_bundled_us_listed_instruments, load_bundled_us_listed_symbols
@@ -40,11 +42,15 @@ from .movement_tracker import (
     movement_scan_summary,
     refresh_movement_tracker,
     recent_mover_symbols,
+    top_movement_candidates,
     top_upside_setups,
 )
-from .models import OrderPlan
+from .models import OrderPlan, Signal
 from .diagnostics import inspect_trade_ready, why_no_trade
 from .decision_insights import chart_context, compare_symbols, explain_blockers, explain_signal, paper_performance, position_what_if
+from .decision_audit import audit_signal_decision
+from .automation_insights import analyze_automation_history
+from .automation_backend import AutomationCycleSnapshot, build_automation_backend_view
 from .paper_journal_summary import summarize_paper_journal
 from .portfolio_consistency import summarize_closed_paper_events, summarize_paper_period_returns
 from .shortcut_help import ShortcutHelpRegistry
@@ -84,6 +90,7 @@ from .webull_watchlists import sync_generated_watchlists
 AUTO_REFRESH_MS = max(30, int(os.getenv("TIMMY_DASHBOARD_REFRESH_SECONDS", "60"))) * 1000
 ACCOUNT_REFRESH_MS = max(5, int(os.getenv("TIMMY_ACCOUNT_REFRESH_MINUTES", "15"))) * 60 * 1000
 AUTOMATION_RETRY_MS = 5_000
+AUTOMATION_RECOVERY_MS = 30_000
 LIVE_PREVIEW_TTL_SECONDS = 180
 TRADING_PRINCIPLE = "Make money, but never be reckless, clumsy, or wasteful."
 
@@ -96,6 +103,45 @@ class MarketRefreshOutcome:
     cached_symbols: int = 0
     issues: tuple[dict, ...] = ()
     returned_symbols: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AutomationMarketSnapshot:
+    """Immutable market inputs prepared away from the Tk event loop."""
+    config: BotConfig
+    bars_by_symbol: tuple[tuple[str, tuple], ...]
+    signals: tuple
+    synthetic_data: bool
+    data_error: str
+    refresh_outcome: MarketRefreshOutcome | None
+    refresh_error: str
+    candidate_signals: tuple = ()
+
+
+@dataclass(frozen=True)
+class LiveAutomationJob:
+    """Serialized order intent captured before any worker-side broker call."""
+    config: BotConfig
+    risk_limits: AutomationRiskLimits
+    plan_json: tuple[str, ...]
+    signal_json: tuple[str, ...]
+    data_quality_json: tuple[str, ...]
+    activity_blocks: tuple[tuple[str, ...], ...]
+    last_symbol_trade_json: tuple[str, ...]
+    candle_timestamps: tuple[str, ...]
+    cancelled: threading.Event
+
+
+@dataclass(frozen=True)
+class LiveAutomationWorkerResult:
+    result_text: str
+    results_json: str
+    hold_reason: str = ""
+    cancelled: bool = False
+    lifecycle_summary: str = ""
+    risk_decision: AutomationRiskDecision | None = None
+    broker_orders_json: str = "null"
+    broker_positions_json: str = "null"
 
 
 def _write_private_json(path: Path, payload: dict) -> None:
@@ -168,6 +214,7 @@ class TimmyNativeApp:
         self.audit_key_path = home / ".timmy-audit-key"
         self.integrity_manifest_path = home / ".timmy-integrity.json"
         self.settings_path = home / "timmy-ui-settings.json"
+        self.automation_risk_state_path = home / "automation-risk-state.json"
         self.workspace_store = WorkspaceStore(home)
         self._last_workspace_state = self.workspace_store.last_state()
         self._restoring_last_workspace = True
@@ -184,9 +231,12 @@ class TimmyNativeApp:
         self.rotation_state_path = home / "timmy-watchlist-rotation.json"
         self.movement_tracker_path = home / "timmy-movement-tracker.json"
         self.recent_movers_path = home / "recent-movers-96h.txt"
+        self.movement_scan_bars_path = home / "movement-scan-candidates.csv"
         self.movement_universe_extra_path = home / "movement-universe-extra.txt"
         self.movement_rotation_state_path = home / "timmy-movement-universe-rotation.json"
         self._movement_recommendations: list[dict] = []
+        self._movement_candidate_records: list[dict] = []
+        self.automation_movement_candidates: frozenset[str] = frozenset()
         self._movement_tracker_payload: dict = {}
         self._movement_tracker_error = ""
         self._movement_recommendation_note = ""
@@ -202,13 +252,27 @@ class TimmyNativeApp:
         self.market_open_after_id: str | None = None
         self._automation_cycle_in_progress = False
         self._automation_cycle_started_at: datetime | None = None
+        self._automation_cancel_event: threading.Event | None = None
+        self._automation_cycle_requested_target = ""
+        self._automation_cycle_requested_mode = ""
+        self._execution_journal_lock = threading.RLock()
         self._automation_next_run_at: datetime | None = None
         self._automation_last_run_at: datetime | None = None
         self._automation_last_duration_seconds: float | None = None
         self._automation_last_result = "No automation cycle has run this session."
         self._automation_wait_reason = ""
+        self._latest_automation_risk_decision: AutomationRiskDecision | None = None
+        self._latest_automation_broker_orders: tuple[dict, ...] | None = None
+        self._latest_automation_broker_positions: tuple[dict, ...] | None = None
+        self._latest_automation_lifecycle_summary = "No Live Auto account/order preflight has run this session."
         self._automation_hold_reason = ""
         self._persisted_live_automation_hold_id = ""
+        self._manual_mode_user_selected = False
+        self._automatic_fallback_active = False
+        self._automatic_fallback_reason = ""
+        self._automatic_fallback_restore_mode = "User"
+        self._automatic_fallback_attempt = 0
+        self._automatic_fallback_after_id: str | None = None
         self.local_preview_fingerprints: dict[str, dict] = {}
         self.refresh_after_id: str | None = None
         self.account_refresh_after_id: str | None = None
@@ -266,9 +330,9 @@ class TimmyNativeApp:
         self._settings_validation_notes: list[str] = []
 
         self.root = tk.Tk()
-        self.root.title("Timmy | Financial Terminal")
+        self.root.title("Timmy | Auto Trade Assistant")
         self.root.geometry("1360x860")
-        self.root.minsize(1024, 600)
+        self.root.minsize(820, 560)
         self.colors = self._theme_palette()
         self.root.configure(bg=self.colors["bg"])
         self.min_score_var = tk.StringVar(value="72")
@@ -350,6 +414,8 @@ class TimmyNativeApp:
         self._arm_market_open_automation()
         if self._automation_enabled():
             self._schedule_automation()
+        if self._automatic_fallback_active:
+            self._schedule_automatic_fallback_recovery()
         self.refresh_after_id = self.root.after(AUTO_REFRESH_MS, self._auto_refresh)
         self.account_refresh_after_id = self.root.after(ACCOUNT_REFRESH_MS, self._auto_account_refresh)
         self.update_check_after_id = self.root.after(5000, self._schedule_update_check)
@@ -625,6 +691,7 @@ class TimmyNativeApp:
             self.account_refresh_after_id,
             self.automation_after_id,
             self.market_open_after_id,
+            self._automatic_fallback_after_id,
             self.update_check_after_id,
         ):
             if after_id:
@@ -671,15 +738,15 @@ class TimmyNativeApp:
         brand = tk.Label(brand_box, text="Timmy", bg=self.colors["rail"], fg=self.colors["rail_text"],
                          justify="left", anchor="w", font=("Sans", 15, "bold"))
         brand.pack(anchor="w")
-        brand_sub = tk.Label(brand_box, text="FINANCIAL TERMINAL", bg=self.colors["rail"], fg=self.colors["rail_muted"],
+        brand_sub = tk.Label(brand_box, text="AUTO TRADE ASSISTANT", bg=self.colors["rail"], fg=self.colors["rail_muted"],
                              justify="left", anchor="w", font=("Sans", 8, "bold"))
         brand_sub.pack(anchor="w", pady=(1, 0))
 
         nav_sections = (
-            ("WORKSPACES", ("Overview", "Portfolio", "Automation", "Alerts")),
+            ("WORKSPACES", ("Automation", "Overview", "Portfolio", "Alerts")),
+            ("EXECUTION", ("Execution", "Broker", "Audit")),
             ("RESEARCH", ("Scanner", "Research", "Strategy", "Universe")),
-            ("EXECUTION", ("Execution", "Broker")),
-            ("SYSTEM", ("Setup", "Audit", "Health")),
+            ("SYSTEM", ("Setup", "Health")),
         )
         nav = tk.Frame(rail, bg=self.colors["rail"])
         nav.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(12, 0))
@@ -692,8 +759,8 @@ class TimmyNativeApp:
                     nav,
                     text=item,
                     command=lambda target=item: self._show_tab(target),
-                    bg=self.colors["selected"] if item == "Overview" else self.colors["rail"],
-                    fg=self.colors["selected_text"] if item == "Overview" else self.colors["rail_muted"],
+                    bg=self.colors["selected"] if item == "Automation" else self.colors["rail"],
+                    fg=self.colors["selected_text"] if item == "Automation" else self.colors["rail_muted"],
                     activebackground=self.colors["selected"],
                     activeforeground=self.colors["selected_text"],
                     relief="flat",
@@ -818,12 +885,8 @@ class TimmyNativeApp:
         self.refresh_button = self._button(
             action_buttons, "↻  Scan", self.refresh_all, accent="teal", tooltip="Refresh market data and rebuild the scan")
         self.refresh_button.pack(side="left", padx=(0, 7))
-        self.decision_cycle_button = self._button(
-            action_buttons, "Run cycle", self.run_decision_cycle,
-            tooltip="Refresh the strategy; enabled automation lanes will also run")
-        self.decision_cycle_button.pack(side="left")
-        self.manual_controls.append(self.decision_cycle_button)
-        self.busy_controls.append(self.decision_cycle_button)
+        # Run Cycle has one home in the shared Automation / Execution control strip.
+        self.decision_cycle_button = None
         # Broker account actions live on Broker; keep the overview focused on
         # the market scan instead of mixing account checks into its action rail.
         self.busy_controls.append(self.refresh_button)
@@ -899,14 +962,18 @@ class TimmyNativeApp:
             controls.columnconfigure(idx, weight=1, minsize=118)
         controls_title = tk.Label(controls, text="Lane & risk controls", bg=self.colors["panel"], fg=self.colors["text"],
                                   font=("Sans", 15, "bold"), anchor="w", justify="left")
+        self.controls_title = controls_title
         controls_title.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 0))
         controls_status = tk.Label(controls, text="Tune the scan, choose an account lane, and review order actions.",
                                    bg=self.colors["panel"], fg=self.colors["muted"], font=("Sans", 9),
                                    anchor="e", justify="right")
+        self.controls_status = controls_status
         controls_status.grid(row=0, column=2, columnspan=4, sticky="ew", padx=18, pady=(14, 0))
-        self._control_entry(controls, 0, "Score", self.min_score_var)
-        self._control_entry(controls, 1, "Plans", self.plan_limit_var)
-        self._control_entry(controls, 2, "Minutes", self.auto_interval_var)
+        self.control_entry_frames = [
+            self._control_entry(controls, 0, "Score", self.min_score_var),
+            self._control_entry(controls, 1, "Plans", self.plan_limit_var),
+            self._control_entry(controls, 2, "Minutes", self.auto_interval_var),
+        ]
         self.guard_label = tk.Label(controls, text="Live orders locked", bg=self.colors["panel"], fg=self.colors["gold"],
                                     font=("Sans", 10, "bold"), anchor="center", justify="center")
         self._fit_text(self.guard_label, min_size=8, max_size=10, padding=18, wrap=True)
@@ -922,6 +989,7 @@ class TimmyNativeApp:
                                     font=("Sans", 10, "bold"), justify="center")
         self._fit_text(paper_auto, min_size=8, max_size=10, padding=24, wrap=True)
         paper_auto.grid(row=1, column=5, sticky="ew", padx=10)
+        self.paper_auto_control = paper_auto
         target_box = tk.Frame(controls, bg=self.colors["panel"])
         self.target_box = target_box
         target_box.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 14))
@@ -953,6 +1021,7 @@ class TimmyNativeApp:
             target_radio.pack(side="left", padx=(0, 8))
             self.target_radio_buttons.append(target_radio)
         mode_box = tk.Frame(controls, bg=self.colors["panel"])
+        self.mode_box = mode_box
         mode_box.grid(row=2, column=1, sticky="ew", padx=10, pady=(0, 14))
         mode_label = tk.Label(mode_box, text="Mode", bg=self.colors["panel"], fg=self.colors["muted"],
                               font=("Sans", 9, "bold"), anchor="center", justify="center")
@@ -977,6 +1046,7 @@ class TimmyNativeApp:
                 command=self._on_execution_mode_selected,
             ).pack(side="left", padx=(0, 8))
         account_box = tk.Frame(controls, bg=self.colors["panel"])
+        self.account_box = account_box
         account_box.grid(row=2, column=2, sticky="ew", padx=10, pady=(0, 14))
         account_label = tk.Label(account_box, text="Account", bg=self.colors["panel"], fg=self.colors["muted"],
                                  font=("Sans", 9, "bold"), anchor="center", justify="center")
@@ -1091,6 +1161,7 @@ class TimmyNativeApp:
         ])
 
         style_box = tk.Frame(controls, bg=self.colors["panel"])
+        self.style_box = style_box
         style_box.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 14))
         style_label = tk.Label(style_box, text="Style", bg=self.colors["panel"], fg=self.colors["muted"],
                                font=("Sans", 9, "bold"), anchor="center", justify="center")
@@ -1102,6 +1173,7 @@ class TimmyNativeApp:
         style_menu.pack(side="left", fill="x", expand=True)
 
         pattern_box = tk.Frame(controls, bg=self.colors["panel"])
+        self.pattern_box = pattern_box
         pattern_box.grid(row=3, column=2, columnspan=4, sticky="ew", padx=10, pady=(0, 14))
         pattern_label = tk.Label(pattern_box, text="Patterns", bg=self.colors["panel"], fg=self.colors["muted"],
                                  font=("Sans", 9, "bold"), anchor="w", justify="left")
@@ -1361,10 +1433,10 @@ class TimmyNativeApp:
         for idx, (label, variable) in enumerate((
             ("Live account mode", self.profile_trader_live_var),
             ("Allow live orders", self.profile_live_orders_var),
-            ("Require dry run", self.profile_require_preview_var),
+            ("Exact preview always required", self.profile_require_preview_var),
             ("Auto at open", self.profile_auto_live_var),
         )):
-            tk.Checkbutton(
+            check = tk.Checkbutton(
                 switch_box,
                 text=label,
                 variable=variable,
@@ -1376,7 +1448,10 @@ class TimmyNativeApp:
                 font=("Sans", 9),
                 anchor="w",
                 justify="left",
-            ).grid(row=idx // 2, column=idx % 2, sticky="ew", padx=(0, 10), pady=2)
+            )
+            check.grid(row=idx // 2, column=idx % 2, sticky="ew", padx=(0, 10), pady=2)
+            if variable is self.profile_require_preview_var:
+                check.configure(state=tk.DISABLED)
         row += 1
 
         account_select = tk.Frame(profile_form, bg=self.colors["panel"])
@@ -1517,7 +1592,7 @@ class TimmyNativeApp:
         strategy_tab_panel.columnconfigure(0, weight=3)
         strategy_tab_panel.columnconfigure(1, weight=2)
         strategy_tab_panel.rowconfigure(2, weight=1)
-        self._section_header(strategy_tab_panel, "STRATEGY MODEL", "Decision Logic", "Run Model", self.run_decision_cycle)
+        self._section_header(strategy_tab_panel, "STRATEGY MODEL", "Decision Logic", None, None)
         strategy_summary = tk.Frame(strategy_tab_panel, bg=self.colors["panel"])
         strategy_summary.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         strategy_summary.columnconfigure((0, 1, 2, 3), weight=1)
@@ -1748,36 +1823,73 @@ class TimmyNativeApp:
         automation_panel = self._panel(body)
         self.automation_panel = automation_panel
         automation_panel.columnconfigure((0, 1), weight=1, uniform="automation-columns")
-        automation_panel.rowconfigure(2, weight=1)
-        self._section_header(automation_panel, "AUTOMATION CONTROL ROOM", "Strategy And Automation", None, None)
+        automation_panel.rowconfigure((2, 3), weight=1)
+        self._section_header(automation_panel, "AUTO TRADE ASSISTANT", "Automation Status", None, None)
         automation_stats = tk.Frame(automation_panel, bg=self.colors["panel"])
         self.automation_stats = automation_stats
         automation_stats.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
         automation_stats.columnconfigure((0, 1, 2, 3, 4), weight=1)
         self.automation_summary_labels = {}
-        for idx, title in enumerate(("Operating Mode", "Paper Lane", "Simulation", "Live Lane", "Next Cycle")):
+        for idx, title in enumerate(("Automation", "Mode", "Target", "Next Cycle", "Data / Account")):
             self.automation_summary_labels[title] = self._mini_stat(automation_stats, idx, title)
         automation_guidance = tk.Frame(automation_panel, bg=self.colors["panel_2"], highlightbackground=self.colors["line"], highlightthickness=1)
         self.automation_guidance = automation_guidance
         automation_guidance.grid(row=2, column=0, sticky="nsew", padx=(18, 9), pady=(0, 18))
         automation_guidance.columnconfigure(0, weight=1)
-        tk.Label(automation_guidance, text="AUTOMATION READINESS", bg=self.colors["panel_2"], fg=self.colors["teal"],
+        automation_guidance.rowconfigure(1, weight=1)
+        tk.Label(automation_guidance, text="NEXT ACTION & BLOCKERS", bg=self.colors["panel_2"], fg=self.colors["teal"],
                  font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=14, pady=(12, 6))
         self.automation_readiness_text = tk.Text(automation_guidance, height=16, bg=self.colors["panel_2"],
                                                  fg=self.colors["text"], insertbackground=self.colors["text"],
                                                  relief="flat", padx=14, pady=8, font=("Monospace", 10), wrap="word")
         self.automation_readiness_text.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 12))
+        self.automation_readiness_scroll = ttk.Scrollbar(
+            automation_guidance, orient="vertical", command=self.automation_readiness_text.yview,
+            style="Vertical.TScrollbar")
+        self.automation_readiness_text.configure(yscrollcommand=self.automation_readiness_scroll.set)
+        self.automation_readiness_scroll.grid(row=1, column=1, sticky="ns", padx=(0, 5), pady=(0, 12))
+        automation_review_actions = tk.Frame(automation_guidance, bg=self.colors["panel_2"])
+        automation_review_actions.grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        automation_review_actions.columnconfigure((0, 1), weight=1)
+        self._button(automation_review_actions, "Open Execution & orders",
+                     lambda: self._show_tab("Execution"), accent="teal").grid(
+                         row=0, column=0, sticky="ew", padx=(0, 5))
+        self._button(automation_review_actions, "Open Broker",
+                     lambda: self._show_tab("Broker")).grid(
+                         row=0, column=1, sticky="ew", padx=(5, 0))
         automation_workflow = tk.Frame(automation_panel, bg=self.colors["panel"], highlightbackground=self.colors["line"], highlightthickness=1)
         self.automation_workflow = automation_workflow
         automation_workflow.grid(row=2, column=1, sticky="nsew", padx=(9, 18), pady=(0, 18))
-        automation_workflow.columnconfigure(0, weight=1)
-        automation_workflow.rowconfigure(1, weight=1)
-        tk.Label(automation_workflow, text="YOUR CONTROL SEQUENCE", bg=self.colors["panel"], fg=self.colors["muted"],
-                 font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
-        self.automation_sequence_text = tk.Text(automation_workflow, height=14, bg=self.colors["panel"], fg=self.colors["text"],
-                                                insertbackground=self.colors["text"], relief="flat", padx=16, pady=10,
-                                                font=("Monospace", 10), wrap="word")
-        self.automation_sequence_text.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 8))
+        automation_workflow.columnconfigure((0, 2), weight=1, uniform="automation-lanes")
+        automation_workflow.rowconfigure((1, 2), weight=1)
+        tk.Label(automation_workflow, text="PAPER & SIMULATION FEEDBACK", bg=self.colors["panel"], fg=self.colors["muted"],
+                 font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, columnspan=3, sticky="ew", padx=16, pady=(14, 8))
+        paper_lane_frame = tk.Frame(automation_workflow, bg=self.colors["panel"])
+        self.paper_insights_frame = paper_lane_frame
+        paper_lane_frame.grid(row=1, column=0, sticky="nsew", padx=(12, 5), pady=(0, 12))
+        paper_lane_frame.columnconfigure(0, weight=1)
+        paper_lane_frame.rowconfigure(0, weight=1)
+        self.paper_insights_text = tk.Text(paper_lane_frame, height=16, bg=self.colors["panel_2"], fg=self.colors["text"],
+                                           insertbackground=self.colors["text"], relief="flat", padx=12, pady=10,
+                                           font=("Monospace", 9), wrap="word")
+        self.paper_insights_text.grid(row=0, column=0, sticky="nsew")
+        paper_lane_scroll = ttk.Scrollbar(paper_lane_frame, orient="vertical", command=self.paper_insights_text.yview,
+                                          style="Vertical.TScrollbar")
+        self.paper_insights_text.configure(yscrollcommand=paper_lane_scroll.set)
+        paper_lane_scroll.grid(row=0, column=1, sticky="ns")
+        simulation_lane_frame = tk.Frame(automation_workflow, bg=self.colors["panel"])
+        self.simulation_insights_frame = simulation_lane_frame
+        simulation_lane_frame.grid(row=1, column=2, sticky="nsew", padx=(5, 12), pady=(0, 12))
+        simulation_lane_frame.columnconfigure(0, weight=1)
+        simulation_lane_frame.rowconfigure(0, weight=1)
+        self.simulation_insights_text = tk.Text(simulation_lane_frame, height=16, bg=self.colors["panel_2"], fg=self.colors["text"],
+                                                insertbackground=self.colors["text"], relief="flat", padx=12, pady=10,
+                                                font=("Monospace", 9), wrap="word")
+        self.simulation_insights_text.grid(row=0, column=0, sticky="nsew")
+        simulation_lane_scroll = ttk.Scrollbar(simulation_lane_frame, orient="vertical", command=self.simulation_insights_text.yview,
+                                               style="Vertical.TScrollbar")
+        self.simulation_insights_text.configure(yscrollcommand=simulation_lane_scroll.set)
+        simulation_lane_scroll.grid(row=0, column=1, sticky="ns")
         alerts_panel = self._panel(body)
         self.alerts_panel = alerts_panel
         alerts_panel.columnconfigure((0, 1), weight=1, uniform="alert-columns")
@@ -2145,7 +2257,11 @@ class TimmyNativeApp:
             self.body.columnconfigure(0, weight=1)
             self._render_automation_panel()
             self.automation_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
-            self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
+            self.body.master.rowconfigure(1, weight=1)
+            self.body.master.rowconfigure(3, weight=0)
+            self.body.grid_configure(row=1, pady=(0, 10))
+            self.controls.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 14))
+            self._set_automation_controls_compact(True)
         elif tab == "Alerts":
             self.body.columnconfigure(0, weight=1)
             self._render_alerts_panel()
@@ -2157,6 +2273,7 @@ class TimmyNativeApp:
         elif tab == "Execution":
             self.body.columnconfigure(0, weight=1)
             self.controls.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
+            self._set_automation_controls_compact(False)
             self._render_execution_tab()
             self.execution_tab_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=0)
         elif tab == "Health":
@@ -2233,12 +2350,31 @@ class TimmyNativeApp:
         tk.Button(activity, text="Refresh local activity", command=render_activity).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
         render_activity()
 
-        # 2 and 3: broker open-order monitor and discrepancy inbox. Cancel/replace is intentionally absent.
+        # 2 and 3: broker order/position management with explicit per-action confirmation.
         orders = page("Open Orders & Reconcile")
         orders.rowconfigure(1, weight=1)
-        orders_box = text_area(orders, "Broker snapshot not loaded. Refresh to request a read-only account snapshot.\n\nNo order changes are available here.")
+        orders.columnconfigure(0, weight=1)
+        order_frame = ttk.LabelFrame(orders, text="Open orders")
+        order_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=6)
+        order_frame.rowconfigure(0, weight=1)
+        order_frame.columnconfigure(0, weight=1)
+        order_tree = ttk.Treeview(order_frame, columns=("symbol", "side", "quantity", "type", "price", "status", "client_id"), show="headings", height=7)
+        for key, title, width in (("symbol", "Symbol", 90), ("side", "Side", 70), ("quantity", "Qty", 70), ("type", "Type", 90), ("price", "Limit", 80), ("status", "Status", 110), ("client_id", "Client order ID", 210)):
+            order_tree.heading(key, text=title); order_tree.column(key, width=width, anchor="w")
+        order_tree.grid(row=0, column=0, sticky="nsew")
+        pos_frame = ttk.LabelFrame(orders, text="Positions")
+        pos_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=6)
+        pos_frame.rowconfigure(0, weight=1); pos_frame.columnconfigure(0, weight=1)
+        position_tree = ttk.Treeview(pos_frame, columns=("symbol", "quantity", "instrument", "side", "market_value"), show="headings", height=5)
+        for key, title, width in (("symbol", "Symbol", 100), ("quantity", "Qty", 80), ("instrument", "Instrument", 100), ("side", "Side", 80), ("market_value", "Market value", 120)):
+            position_tree.heading(key, text=title); position_tree.column(key, width=width, anchor="w")
+        position_tree.grid(row=0, column=0, sticky="nsew")
+        orders.rowconfigure(1, weight=2); orders.rowconfigure(2, weight=1)
+        order_rows = {}; position_rows = {}
+        order_status = tk.Label(orders, text="Refresh to request a read-only broker snapshot.", bg=bg, fg=muted, anchor="w", justify="left", wraplength=780)
+        order_status.grid(row=4, column=0, sticky="ew", padx=12, pady=4)
         def refresh_orders():
-            set_text(orders_box, "Loading read-only broker order snapshot…")
+            order_status.configure(text="Loading read-only broker snapshot…")
             mode_context = self._lane_mode_label()
             def worker():
                 try:
@@ -2252,29 +2388,458 @@ class TimmyNativeApp:
                         if isinstance(payload, dict):
                             payload = payload.get("orders") or payload.get("items") or payload.get("data") or [payload]
                         broker_orders = payload if isinstance(payload, list) else []
+                        for item in order_tree.get_children(): order_tree.delete(item)
+                        order_rows.clear()
+                        for index, row in enumerate(broker_orders):
+                            if not isinstance(row, dict): continue
+                            client_id = row.get("client_order_id") or row.get("clientOrderId") or ""
+                            symbol = row.get("symbol") or row.get("ticker") or "?"
+                            quantity = row.get("quantity", row.get("qty", "?"))
+                            price = row.get("limit_price", row.get("limitPrice", ""))
+                            values = (symbol, row.get("side", "?"), quantity, row.get("order_type", row.get("orderType", "?")), price,
+                                      row.get("status", "?"), client_id)
+                            iid = order_tree.insert("", "end", iid=f"open-{index}", values=values)
+                            order_rows[iid] = row
+                        positions_raw = snapshot.get("positions")
+                        positions_payload = positions_raw.get("body") if isinstance(positions_raw, dict) else positions_raw
+                        if isinstance(positions_payload, dict):
+                            positions_payload = positions_payload.get("positions") or positions_payload.get("items") or positions_payload.get("data") or [positions_payload]
+                        broker_positions = positions_payload if isinstance(positions_payload, list) else []
+                        for item in position_tree.get_children(): position_tree.delete(item)
+                        position_rows.clear()
+                        for index, row in enumerate(broker_positions):
+                            if not isinstance(row, dict): continue
+                            symbol = row.get("symbol") or row.get("ticker") or "?"
+                            quantity = row.get("quantity", row.get("qty", "?"))
+                            instrument = row.get("instrument_type", row.get("instrumentType", "EQUITY"))
+                            side = str(row.get("side") or row.get("position_side") or row.get("direction") or "").upper()
+                            market_value = row.get("market_value", row.get("marketValue", ""))
+                            iid = position_tree.insert("", "end", iid=f"position-{index}", values=(symbol, quantity, instrument, side or "unspecified", market_value))
+                            position_rows[iid] = row
                         from .broker_reconciliation import reconcile_broker_state
                         report = reconcile_broker_state(self.execution_events, broker_orders,
                                                         snapshot.get("positions") if isinstance(snapshot.get("positions"), list) else ())
-                        lines = ["READ-ONLY BROKER OPEN-ORDER MONITOR",
-                                 f"Account: {account_context} · Mode: {mode_context} · Snapshot: {snapshot_time}",
-                                 f"Open orders: {report.open_order_count} · broker rows: {report.broker_order_count}",
-                                 f"Journal rows: {report.journal_count} · reconciliation: {'clear' if report.ok else 'review required'}", ""]
-                        for order in broker_orders:
-                            if isinstance(order, dict):
-                                safe = redact(order)
-                                lines.append(f"{safe.get('symbol','?')} | {safe.get('side','?')} | {safe.get('quantity', safe.get('qty','?'))} | {safe.get('status','?')} | id {safe.get('order_id', safe.get('broker_order_id','?'))}")
-                        lines.extend(["", "DISCREPANCY INBOX"])
-                        lines.extend(f"{issue.severity.upper()} · {issue.symbol} · {issue.message}" for issue in report.issues)
-                        if not report.issues:
-                            lines.append("No discrepancies in the returned snapshot.")
-                        lines.extend(["", "Snapshot is current only as of this read. Verify orders at Webull before acting."])
-                        set_text(orders_box, "\n".join(lines))
+                        order_status.configure(text=f"Account {account_context} · {snapshot_time} · {report.open_order_count} open orders · {len(broker_positions)} positions · reconciliation {'clear' if report.ok else 'review required'}. Snapshot may lag; verify at Webull before acting.")
                     self.root.after(0, done)
                 except Exception as exc:
                     error_text = f"Broker snapshot unavailable: {type(exc).__name__}: {exc}\nNo order state was changed."
-                    self.root.after(0, lambda message=error_text: set_text(orders_box, message))
+                    self.root.after(0, lambda message=error_text: order_status.configure(text=message))
             threading.Thread(target=worker, daemon=True, name="timmy-open-orders-review").start()
-        tk.Button(orders, text="Refresh broker snapshot", command=refresh_orders).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
+        def selected_order():
+            chosen = order_tree.selection()
+            return order_rows.get(chosen[0]) if chosen else None
+        def mutate_order(action):
+            row = selected_order()
+            if not row:
+                messagebox.showinfo("Select an order", "Select a fresh open order first.", parent=window); return
+            client_id = row.get("client_order_id") or row.get("clientOrderId")
+            if not client_id:
+                messagebox.showerror("Order ID unavailable", "This row has no client order ID; refresh and verify it in Webull.", parent=window); return
+            config = self._execution_config(self._load_config_safe())
+            if action == "cancel":
+                prompt = f"Cancel {row.get('symbol', '?')} {row.get('side', '?')} order {client_id}? This sends a cancel request to Webull."
+                changes = None
+            else:
+                if str(row.get("order_type", row.get("orderType", ""))).upper() != "LIMIT":
+                    messagebox.showinfo("Unsupported order", "Timmy currently replaces limit orders only.", parent=window); return
+                old_qty = float(row.get("quantity", row.get("qty", 0)) or 0)
+                old_price = float(row.get("limit_price", row.get("limitPrice", 0)) or 0)
+                qty = simpledialog.askfloat("Replace limit order", f"New quantity (current {old_qty:g}; cannot increase):", minvalue=0.00000001, maxvalue=old_qty, parent=window)
+                if qty is None: return
+                price = simpledialog.askfloat("Replace limit order", f"New limit price (current {old_price:g}):", minvalue=0.00000001, parent=window)
+                if price is None: return
+                price = round(price, 2)
+                if str(row.get("side", "")).upper() in {"BUY", "B"} and qty * price > old_qty * old_price + 0.000001:
+                    messagebox.showerror("Exposure increase blocked", "Timmy will not increase the displayed notional of a BUY order through replacement.", parent=window); return
+                changes = {"quantity": str(qty), "limit_price": f"{price:.2f}"}
+                prompt = f"Replace {row.get('symbol', '?')} limit order {client_id} with quantity {qty:g} at ${price:.2f}?"
+            if not messagebox.askyesno("Confirm Webull order change", prompt, parent=window): return
+            try:
+                self._ensure_execution_journal_writable()
+                self._append_execution_event({"mode":"live", "event_type":"order-action-intent", "action":action, "status":"pending-action", "client_order_id":str(client_id), "symbol":row.get("symbol"), "recorded_at":datetime.now().isoformat()})
+            except Exception as exc:
+                messagebox.showerror("Journal unavailable", f"No request sent. Timmy could not record the action: {exc}", parent=window); return
+            order_status.configure(text=f"Sending confirmed {action} request… Do not repeat while the outcome is unknown.")
+            def worker():
+                try:
+                    broker = WebullOpenApiBroker(config)
+                    result = broker.cancel_order(str(client_id)) if action == "cancel" else broker.replace_order(str(client_id), changes)
+                    status = self._broker_event_status(result)
+                    event_status = "accepted" if status in {"accepted", "submitted"} else status
+                    self._append_execution_event({"mode":"live", "event_type":"order-action-result", "action":action, "status":event_status, "client_order_id":str(client_id), "symbol":row.get("symbol"), "broker_body":result.get("body"), "recorded_at":datetime.now().isoformat()})
+                    message = f"{action.title()} result: {event_status}. {json.dumps(result, sort_keys=True)}"
+                except Exception as exc:
+                    message = f"{action.title()} outcome unknown: {type(exc).__name__}: {exc}. Verify order detail at Webull before retrying."
+                    try: self._append_execution_event({"mode":"live", "event_type":"order-action-result", "action":action, "status":"unknown", "client_order_id":str(client_id), "symbol":row.get("symbol"), "recorded_at":datetime.now().isoformat()})
+                    except Exception: self._hold_live_automation("Order action outcome could not be journaled; reconcile at Webull")
+                self.root.after(0, lambda: (order_status.configure(text=message), refresh_orders()))
+            threading.Thread(target=worker, daemon=True, name="timmy-webull-order-action").start()
+        def reduce_position():
+            chosen = position_tree.selection()
+            position = position_rows.get(chosen[0]) if chosen else None
+            if not position:
+                messagebox.showinfo("Select a position", "Select a position from the latest snapshot.", parent=window); return
+            instrument = str(position.get("instrument_type", position.get("instrumentType", "EQUITY"))).upper()
+            side = str(position.get("side") or position.get("position_side") or position.get("direction") or "").upper()
+            symbol = str(position.get("symbol") or position.get("ticker") or "").upper()
+            try: held = abs(float(position.get("quantity", position.get("qty", 0))))
+            except (TypeError, ValueError): held = 0
+            if instrument != "EQUITY" or side not in {"LONG", "BUY"} or not symbol or held <= 0:
+                messagebox.showinfo("Position not eligible", "Reduce/close is enabled only for explicitly identified long equity positions. This snapshot does not establish that safely.", parent=window); return
+            qty = simpledialog.askfloat("Reduce position", f"Quantity to sell (held {held:g}; partial reductions allowed):", minvalue=0.00000001, maxvalue=held, parent=window)
+            if qty is None: return
+            price = simpledialog.askfloat("Sell limit", "Limit price per share:", minvalue=0.00000001, parent=window)
+            if price is None: return
+            from .models import OrderPlan
+            plan = OrderPlan(symbol=symbol, side="SELL", quantity=qty, order_type="LIMIT", limit_price=price, stop_price=0, target_price=0, notional=qty*price, reason="User-confirmed position reduction")
+            config = self._execution_config(self._load_config_safe())
+            client_id = __import__("uuid").uuid4().hex[:32]
+            order = WebullOpenApiBroker(config)
+            payload = order.new_order_payload(plan, client_order_id=client_id)
+            order_status.configure(text="Getting an order estimate for the requested reduction…")
+            def preview_worker():
+                try: preview = order.preview_order_payloads([payload])
+                except Exception as exc:
+                    error_message = f"Preview unavailable; no order sent: {type(exc).__name__}: {exc}"
+                    self.root.after(0, lambda message=error_message: order_status.configure(text=message)); return
+                if not preview.get("preview_ok") or not preview.get("preview_fingerprint"):
+                    self.root.after(0, lambda: order_status.configure(text="Exact preview failed; no position-reduction order was sent.")); return
+                def confirm():
+                    if not messagebox.askyesno("Confirm position reduction", f"Sell {qty:g} {symbol} shares with a limit of ${price:.2f}?\n\nWebull estimate: {json.dumps(preview.get('body'), sort_keys=True)[:1200]}\n\nThis places a live order.", parent=window):
+                        order_status.configure(text="Position reduction cancelled; no order sent."); return
+                    try:
+                        enforce_live_guards(config)
+                        self._ensure_execution_journal_writable()
+                        self._append_execution_event({"mode":"live", "event_type":"live-order-intent", "status":"pending-submit", "client_order_id":client_id, "symbol":symbol, "side":"SELL", "quantity":qty, "order_type":"LIMIT", "limit_price":price, "recorded_at":datetime.now().isoformat()})
+                    except Exception as exc:
+                        messagebox.showerror("Live order blocked", f"No request sent: {exc}", parent=window); return
+                    def submit_worker():
+                        try:
+                            result = order.submit_previewed_order_payloads([payload], preview["preview_fingerprint"])
+                        except Exception as exc:
+                            result = {"status": "unknown", "error": type(exc).__name__}
+                        result_status = self._broker_event_status(result)
+                        try: self._append_execution_event({"mode":"live", "event_type":"sell-order", "status":result_status, "client_order_id":client_id, "symbol":symbol, "quantity":qty, "sell_price":price, "broker_body":result.get("body"), "recorded_at":datetime.now().isoformat()})
+                        except Exception as exc: self._hold_live_automation(f"Position-reduction response journal failed: {exc}")
+                        self.root.after(0, lambda: (order_status.configure(text=f"Position reduction {result_status}; refresh to reconcile at Webull."), refresh_orders()))
+                    threading.Thread(target=submit_worker, daemon=True, name="timmy-webull-position-reduction").start()
+                self.root.after(0, confirm)
+            threading.Thread(target=preview_worker, daemon=True, name="timmy-webull-position-preview").start()
+        def open_guarded_order_entry():
+            dialog = tk.Toplevel(window); dialog.title("New Guarded Webull Order · Auto Trade Assistant"); dialog.transient(window)
+            dialog.geometry("820x760"); dialog.minsize(700, 620); dialog.configure(bg=bg)
+            dialog.columnconfigure(1, weight=1); dialog.rowconfigure(11, weight=1)
+            tk.Label(dialog, text="AUTO TRADE ASSISTANT · GUARDED LIVE ORDER", bg=bg, fg=self.colors["teal"], font=("Sans", 12, "bold"), anchor="w").grid(row=0, column=0, columnspan=2, sticky="ew", padx=14, pady=(12, 6))
+            tk.Label(dialog, text="Supported draft types: US equity/ETF, options strategy, futures, and event contracts. Crypto submission stays disabled because Webull's Trading API has no exact-order preview endpoint for crypto.", bg=bg, fg=muted, wraplength=760, justify="left", anchor="w").grid(row=1, column=0, columnspan=2, sticky="ew", padx=14, pady=4)
+            config_at_open = self._execution_config(self._load_config_safe())
+            tk.Label(dialog, text=f"Account: {mask_identifier(config_at_open.webull_account_id)} · Risk cap: ${config_at_open.max_order_notional_usd:,.2f} preview estimated cost · One order per confirmation", bg=bg, fg=muted, anchor="w").grid(row=2, column=0, columnspan=2, sticky="ew", padx=14, pady=4)
+            product_var = tk.StringVar(value="EQUITY")
+            side_var = tk.StringVar(value="BUY")
+            tif_var = tk.StringVar(value="DAY")
+            strategy_var = tk.StringVar(value="SINGLE")
+            symbol_var = tk.StringVar()
+            quantity_var = tk.StringVar(value="1")
+            price_var = tk.StringVar()
+            expire_var = tk.StringVar()
+            def field(row, label, widget):
+                tk.Label(dialog, text=label, bg=bg, fg=fg, anchor="w").grid(row=row, column=0, sticky="w", padx=(14, 8), pady=3)
+                widget.grid(row=row, column=1, sticky="ew", padx=(0, 14), pady=3)
+            field(3, "Product", ttk.Combobox(dialog, textvariable=product_var, values=("EQUITY", "OPTION", "FUTURES", "EVENT"), state="readonly"))
+            field(4, "Discovered symbol", ttk.Entry(dialog, textvariable=symbol_var))
+            field(5, "Side", ttk.Combobox(dialog, textvariable=side_var, values=("BUY", "SELL"), state="readonly"))
+            field(6, "Quantity / contracts", ttk.Entry(dialog, textvariable=quantity_var))
+            field(7, "Limit price", ttk.Entry(dialog, textvariable=price_var))
+            field(8, "Time in force", ttk.Combobox(dialog, textvariable=tif_var, values=("DAY", "GTC", "IOC", "GTD", "FOK"), state="readonly"))
+            expire_label = tk.Label(dialog, text="GTD expiration (YYYY-MM-DD)", bg=bg, fg=fg, anchor="w")
+            expire_entry = ttk.Entry(dialog, textvariable=expire_var)
+            expire_label.grid(row=9, column=0, sticky="w", padx=(14, 8), pady=3)
+            expire_entry.grid(row=9, column=1, sticky="ew", padx=(0, 14), pady=3)
+            expire_label.grid_remove(); expire_entry.grid_remove()
+            option_frame = ttk.LabelFrame(dialog, text="Options strategy legs (JSON)")
+            option_frame.grid(row=10, column=0, columnspan=2, sticky="ew", padx=14, pady=6); option_frame.columnconfigure(0, weight=1)
+            strategy_row = ttk.Frame(option_frame); strategy_row.grid(row=0, column=0, sticky="ew", padx=8, pady=5)
+            ttk.Label(strategy_row, text="Strategy").pack(side="left")
+            ttk.Combobox(strategy_row, textvariable=strategy_var, values=("SINGLE", "COVERED_STOCK", "VERTICAL", "STRADDLE", "STRANGLE", "CALENDAR", "BUTTERFLY", "CONDOR", "IRON_BUTTERFLY", "IRON_CONDOR", "COLLAR_WITH_STOCK", "DIAGONAL"), state="readonly", width=24).pack(side="left", padx=8)
+            option_legs = tk.Text(option_frame, height=6, wrap="word", bg=self.colors["panel_2"], fg=fg, insertbackground=fg)
+            option_legs.insert("1.0", '[{"side":"BUY","quantity":"1","symbol":"AAPL","strike_price":"200","option_expire_date":"2027-01-15","instrument_type":"OPTION","option_type":"CALL","market":"US"}]')
+            option_legs.grid(row=1, column=0, sticky="ew", padx=8, pady=5)
+            state = {"broker": None, "payload": None, "fingerprint": None, "estimate": None, "config": None, "client_order_id": None}
+            order_result = tk.Text(dialog, height=8, wrap="word", bg=self.colors["panel_2"], fg=fg, insertbackground=fg)
+            order_result.grid(row=11, column=0, columnspan=2, sticky="nsew", padx=14, pady=6)
+            tk.Label(dialog, text="Preview is non-mutating. Submit stays blocked unless the same order passes Webull preview, Timmy's product/risk guards, and a second confirmation. Crypto remains available in market data and research, but has no supported order-entry form because Webull does not provide its required exact preview.", bg=bg, fg=muted, wraplength=760, justify="left", anchor="w").grid(row=12, column=0, columnspan=2, sticky="ew", padx=14, pady=4)
+            def set_order_text(value):
+                order_result.configure(state="normal"); order_result.delete("1.0", "end"); order_result.insert("1.0", value); order_result.configure(state="disabled")
+            def update_product(*_args):
+                kind = product_var.get().upper()
+                side_choices = {"EQUITY": ("BUY", "SELL"), "OPTION": ("BUY", "SELL", "SHORT"), "FUTURES": ("BUY", "SELL"), "EVENT": ("BUY", "SELL")}[kind]
+                side_menu.configure(values=side_choices)
+                if side_var.get() not in side_choices: side_var.set(side_choices[0])
+                tif_values = ("DAY", "GTC") if kind in {"EQUITY", "OPTION", "FUTURES"} else ("DAY", "GTC", "IOC", "GTD", "FOK")
+                tif_menu.configure(values=tif_values)
+                if tif_var.get() not in tif_values: tif_var.set("DAY")
+                if kind == "OPTION": option_frame.grid()
+                else: option_frame.grid_remove()
+                if kind == "EVENT" and tif_var.get().upper() == "GTD":
+                    expire_label.grid(); expire_entry.grid()
+                else:
+                    expire_label.grid_remove(); expire_entry.grid_remove()
+                preview_button.configure(state="normal")
+                submit_button.configure(state="disabled")
+            side_menu = dialog.grid_slaves(row=5, column=1)[0]
+            tif_menu = dialog.grid_slaves(row=8, column=1)[0]
+            def build_payload(client_order_id):
+                kind = product_var.get().upper()
+                symbol = symbol_var.get().strip().upper()
+                try: quantity = float(quantity_var.get())
+                except ValueError as exc: raise ValueError("Enter a positive quantity.") from exc
+                try: limit_price = float(price_var.get())
+                except ValueError as exc: raise ValueError("Enter a positive limit price.") from exc
+                if not symbol or quantity <= 0 or limit_price <= 0:
+                    raise ValueError("A symbol, positive quantity, and positive limit price are required.")
+                order = {"client_order_id": client_order_id, "combo_type": "NORMAL", "symbol": symbol,
+                         "instrument_type": kind, "market": "US", "order_type": "LIMIT",
+                         "limit_price": f"{limit_price:.2f}", "quantity": f"{quantity:.8f}".rstrip("0").rstrip("."),
+                         "side": side_var.get().upper(), "time_in_force": tif_var.get().upper(), "entrust_type": "QTY"}
+                if kind == "EQUITY": order["support_trading_session"] = "CORE"
+                if kind == "OPTION":
+                    try: legs = json.loads(option_legs.get("1.0", "end-1c"))
+                    except json.JSONDecodeError as exc: raise ValueError(f"Option legs must be valid JSON: {exc}") from exc
+                    order["option_strategy"] = strategy_var.get().upper(); order["legs"] = legs
+                if kind == "EVENT": order["event_trade_mode"] = "TRADE_IN_CONTRACT"
+                if kind == "EVENT" and tif_var.get().upper() == "GTD": order["expire_date"] = expire_var.get().strip()
+                return order
+            def find_product_instruments():
+                kind = product_var.get().upper()
+                open_instrument_discovery(kind, symbol_var.get().strip())
+            def preview_manual_order():
+                if product_var.get().upper() == "CRYPTO": return
+                import uuid
+                client_id = uuid.uuid4().hex[:32]
+                try: payload = build_payload(client_id)
+                except Exception as exc: messagebox.showerror("Order draft invalid", str(exc), parent=dialog); return
+                config = self._execution_config(self._load_config_safe())
+                preview_button.configure(state="disabled"); submit_button.configure(state="disabled")
+                set_order_text("Requesting an exact Webull preview. No order is being placed.")
+                broker = WebullOpenApiBroker(config)
+                state.update({"broker": None, "payload": None, "fingerprint": None, "estimate": None,
+                              "config": config, "client_order_id": client_id})
+                def worker():
+                    try:
+                        response = broker.preview_order_payloads([payload])
+                        body = response.get("body")
+                        def find_cost(value):
+                            if isinstance(value, dict):
+                                for key, item in value.items():
+                                    if str(key).lower() in {"estimated_cost", "estimatedcost", "estimated_margin", "estimatedmargin"}:
+                                        try: return float(item)
+                                        except (TypeError, ValueError): pass
+                                for item in value.values():
+                                    found = find_cost(item)
+                                    if found is not None: return found
+                            if isinstance(value, list):
+                                for item in value:
+                                    found = find_cost(item)
+                                    if found is not None: return found
+                            return None
+                        estimate = find_cost(body)
+                        okay = bool(response.get("preview_ok")) and estimate is not None and estimate >= 0 and estimate <= config.max_order_notional_usd
+                        if okay:
+                            state.update({"broker": broker, "payload": payload, "fingerprint": response.get("preview_fingerprint"), "estimate": estimate})
+                        info = {"exact_order": payload, "preview_response": redact(response),
+                                "estimated_cost": estimate, "timmy_cost_cap": config.max_order_notional_usd,
+                                "submit_ready": okay}
+                        output = json.dumps(info, indent=2, sort_keys=True, default=str)
+                        if not okay: output += "\n\nSUBMISSION BLOCKED: preview failed, estimated cost is missing, or Timmy's configured risk cap was exceeded."
+                        def done():
+                            set_order_text(output)
+                            preview_button.configure(state="normal")
+                            submit_button.configure(state="normal" if okay else "disabled")
+                        self.root.after(0, done)
+                    except Exception as exc:
+                        error_message = f"Preview failed; no order placed: {type(exc).__name__}: {exc}"
+                        self.root.after(0, lambda message=error_message: (set_order_text(message), preview_button.configure(state="normal"), submit_button.configure(state="disabled")))
+                threading.Thread(target=worker, daemon=True, name="timmy-guarded-order-preview").start()
+            def submit_manual_order():
+                if not state.get("broker") or not state.get("fingerprint") or not state.get("payload"):
+                    messagebox.showerror("Preview required", "Preview this exact order successfully before submitting.", parent=dialog); return
+                if self.execution_target_var.get() != "Live" or self.execution_mode_var.get() != "User":
+                    messagebox.showerror("Manual Live mode required", "Select Live as the execution target and User as the execution mode before a manual Webull order.", parent=dialog); return
+                if self._action_in_progress or self._refresh_in_progress or self._automation_cycle_in_progress or getattr(self, "_manual_webull_order_in_progress", False):
+                    messagebox.showerror("Timmy is busy", "Wait for the current action or automation cycle to finish before submitting a manual order.", parent=dialog); return
+                live_block = self._live_auto_block_reason()
+                if live_block:
+                    messagebox.showerror("Live orders held", live_block, parent=dialog); return
+                try: current_payload = build_payload(state["client_order_id"])
+                except Exception as exc: messagebox.showerror("Order draft invalid", str(exc), parent=dialog); return
+                fingerprint = state["broker"].order_payload_fingerprint(state["config"].webull_account_id, [current_payload])
+                if current_payload != state["payload"] or fingerprint != state["fingerprint"]:
+                    state.update({"broker": None, "payload": None, "fingerprint": None})
+                    submit_button.configure(state="disabled")
+                    messagebox.showwarning("Preview expired", "The order details changed. Request a new preview; the prior preview cannot authorize this draft.", parent=dialog); return
+                estimate = state.get("estimate")
+                confirm_text = ("Submit this exact live order to Webull?\n\n"
+                                + json.dumps(current_payload, indent=2, sort_keys=True)
+                                + f"\n\nWebull preview estimated cost: ${estimate:,.2f}\nTimmy cost cap: ${state['config'].max_order_notional_usd:,.2f}\n\nThis will transmit one live order.")
+                if not messagebox.askyesno("Confirm exact live order", confirm_text, parent=dialog):
+                    set_order_text("Submission cancelled. No order was sent."); return
+                if self.execution_target_var.get() != "Live" or self.execution_mode_var.get() != "User" or self._automation_cycle_in_progress or self._action_in_progress:
+                    messagebox.showerror("Live mode changed", "Timmy's execution mode changed during confirmation. No order was sent.", parent=dialog); return
+                config = self._execution_config(self._load_config_safe())
+                if config != state["config"]:
+                    state.update({"broker": None, "payload": None, "fingerprint": None})
+                    submit_button.configure(state="disabled")
+                    messagebox.showwarning("Settings changed", "Live account or risk settings changed after preview. Get a fresh preview.", parent=dialog); return
+                try:
+                    enforce_live_guards(config)
+                    self._ensure_execution_journal_writable()
+                    self._append_execution_event({"mode":"live", "robot":"Timmy", "event_type":"live-order-intent", "status":"pending-submit",
+                                                  "client_order_id":current_payload["client_order_id"], "symbol":current_payload["symbol"],
+                                                  "side":current_payload["side"], "quantity":current_payload["quantity"],
+                                                  "order_type":"LIMIT", "limit_price":current_payload["limit_price"],
+                                                  "instrument_type":current_payload["instrument_type"], "option_strategy":current_payload.get("option_strategy"),
+                                                  "recorded_at":datetime.now().isoformat()})
+                except Exception as exc:
+                    messagebox.showerror("Live order blocked", f"No order sent: {exc}", parent=dialog); return
+                preview_button.configure(state="disabled"); submit_button.configure(state="disabled")
+                self._manual_webull_order_in_progress = True
+                set_order_text("Sending one confirmed order. Do not repeat while the broker outcome is unresolved.")
+                broker = state["broker"]; fingerprint = state["fingerprint"]
+                def submit_worker():
+                    try:
+                        result = broker.submit_previewed_order_payloads([current_payload], fingerprint)
+                        status = self._broker_event_status(result)
+                        kind = "buy-order" if current_payload["side"] == "BUY" else "sell-order"
+                        try:
+                            self._append_execution_event({"mode":"live", "robot":"Timmy", "event_type":kind, "status":status,
+                                                          "client_order_id":current_payload["client_order_id"], "symbol":current_payload["symbol"],
+                                                          "side":current_payload["side"], "quantity":current_payload["quantity"],
+                                                          "buy_price":current_payload["limit_price"] if current_payload["side"] == "BUY" else None,
+                                                          "sell_price":current_payload["limit_price"] if current_payload["side"] != "BUY" else None,
+                                                          "instrument_type":current_payload["instrument_type"], "option_strategy":current_payload.get("option_strategy"),
+                                                          "broker_body":result.get("body"), "recorded_at":datetime.now().isoformat()})
+                        except Exception as exc:
+                            self._hold_live_automation(f"Manual order result could not be journaled: {exc}")
+                        output = f"Broker status: {status}\n\n{json.dumps(redact(result), indent=2, sort_keys=True, default=str)}"
+                        if status == "unknown": output += "\n\nOUTCOME UNKNOWN: reconcile this client order ID in Webull before retrying."
+                        self.root.after(0, lambda: (set_order_text(output), refresh_orders(), setattr(self, "_manual_webull_order_in_progress", False)))
+                    except Exception as exc:
+                        try: self._append_execution_event({"mode":"live", "robot":"Timmy", "event_type":"sell-order" if current_payload["side"] != "BUY" else "buy-order", "status":"unknown", "client_order_id":current_payload["client_order_id"], "symbol":current_payload["symbol"], "recorded_at":datetime.now().isoformat()})
+                        except Exception as journal_exc: self._hold_live_automation(f"Manual order outcome and journal status unknown: {journal_exc}")
+                        error_message = f"Order outcome unknown: {type(exc).__name__}: {exc}. Reconcile at Webull before retrying."
+                        self.root.after(0, lambda message=error_message: (set_order_text(message), setattr(self, "_manual_webull_order_in_progress", False)))
+                threading.Thread(target=submit_worker, daemon=True, name="timmy-guarded-order-submit").start()
+            side_menu = dialog.grid_slaves(row=5, column=1)[0]
+            tif_menu = dialog.grid_slaves(row=8, column=1)[0]
+            product_var.trace_add("write", update_product)
+            tif_var.trace_add("write", update_product)
+            buttons = ttk.Frame(dialog); buttons.grid(row=13, column=0, columnspan=2, sticky="ew", padx=14, pady=10)
+            ttk.Button(buttons, text="Find instruments / contracts", command=find_product_instruments).pack(side="left", padx=(0, 8))
+            preview_button = ttk.Button(buttons, text="Preview exact order", command=preview_manual_order); preview_button.pack(side="left", padx=8)
+            submit_button = ttk.Button(buttons, text="Confirm & Submit Live", command=submit_manual_order, state="disabled"); submit_button.pack(side="left", padx=8)
+            ttk.Button(buttons, text="Close", command=dialog.destroy).pack(side="right", padx=8)
+            update_product()
+        def open_webull_report(kind):
+            report_window = tk.Toplevel(window); report_window.title(f"Webull {kind}"); report_window.transient(window)
+            report_box = text_area(report_window, f"Loading read-only {kind.lower()}…")
+            def worker():
+                try:
+                    config = self._execution_config(self._load_config_safe()); broker = WebullOpenApiBroker(config)
+                    if kind == "Order history": result = broker.order_history()
+                    else: result = broker.order_executions()
+                    text_value = json.dumps(result, indent=2, sort_keys=True, default=str)
+                except Exception as exc: text_value = f"Webull {kind.lower()} unavailable: {type(exc).__name__}: {exc}"
+                self.root.after(0, lambda: set_text(report_box, text_value))
+            threading.Thread(target=worker, daemon=True, name="timmy-webull-report").start()
+        def open_instrument_discovery(product, initial_query=""):
+            discovery = tk.Toplevel(window)
+            discovery.title(f"Find {product.title()} instruments")
+            discovery.transient(window)
+            discovery.configure(bg=bg)
+            discovery.columnconfigure(0, weight=1)
+            discovery.rowconfigure(2, weight=1)
+            tk.Label(
+                discovery,
+                text="Targeted read-only contract lookup for the selected guarded order workflow.",
+                bg=bg, fg=muted, anchor="w", justify="left", wraplength=680,
+            ).grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 6))
+            query_var = tk.StringVar(value=initial_query)
+            query_entry = ttk.Entry(discovery, textvariable=query_var, width=36)
+            query_entry.grid(row=1, column=0, sticky="ew", padx=12, pady=5)
+            result_box = text_area(discovery, "Enter a symbol, option underlying, futures contract code, or event series, then search.")
+            result_box.grid(row=2, column=0, sticky="nsew", padx=12, pady=6)
+            def search():
+                query = query_var.get().strip()
+                if not query:
+                    messagebox.showwarning("Lookup value required", "Enter a lookup value first.", parent=discovery)
+                    return
+                set_text(result_box, f"Looking up {product} instruments…")
+                def worker():
+                    try:
+                        config = self._execution_config(self._load_config_safe())
+                        response = WebullOpenApiBroker(config).discover_order_instruments(product, query)
+                        output = json.dumps(redact(response), indent=2, sort_keys=True, default=str)
+                        if len(output) > 30_000:
+                            output = output[:30_000] + "\n… results truncated at 30 KB"
+                    except Exception as exc:
+                        output = f"Instrument lookup unavailable ({type(exc).__name__})."
+                    self.root.after(0, lambda: set_text(result_box, output))
+                threading.Thread(target=worker, daemon=True, name="timmy-webull-instrument-lookup").start()
+            buttons = ttk.Frame(discovery)
+            buttons.grid(row=3, column=0, sticky="ew", padx=12, pady=(2, 12))
+            ttk.Button(buttons, text="Search instruments", command=search).pack(side="left")
+            ttk.Button(buttons, text="Close", command=discovery.destroy).pack(side="right")
+            query_entry.focus_set()
+            if initial_query:
+                search()
+        def inspect_selected_order():
+            row = selected_order()
+            client_id = (row or {}).get("client_order_id") or (row or {}).get("clientOrderId")
+            if not client_id:
+                messagebox.showinfo("Select an order", "Select an order with a client order ID.", parent=window); return
+            details = tk.Toplevel(window); details.title("Webull Order Detail"); details.transient(window)
+            details_box = text_area(details, "Loading read-only order detail…")
+            def worker():
+                try:
+                    config = self._execution_config(self._load_config_safe())
+                    response = WebullOpenApiBroker(config).get_order_detail(str(client_id))
+                    output = json.dumps(redact(response), indent=2, sort_keys=True, default=str)
+                except Exception as exc: output = f"Order detail unavailable: {type(exc).__name__}: {exc}"
+                self.root.after(0, lambda: set_text(details_box, output))
+            threading.Thread(target=worker, daemon=True, name="timmy-webull-order-detail").start()
+        def request_market_snapshot():
+            symbols_text = simpledialog.askstring("Webull market snapshot", "Enter up to 20 symbols, separated by commas:", parent=window)
+            if not symbols_text: return
+            symbols = [item.strip().upper() for item in symbols_text.split(",") if item.strip()]
+            if not symbols or len(symbols) > 20:
+                messagebox.showerror("Symbol limit", "Enter between one and twenty symbols.", parent=window); return
+            kind_window = tk.Toplevel(window); kind_window.title("Market snapshot type"); kind_window.transient(window); kind_window.grab_set()
+            tk.Label(kind_window, text="Instrument class", bg=bg, fg=fg).pack(padx=12, pady=(12, 4))
+            kind_var = tk.StringVar(value="EQUITY")
+            ttk.Combobox(kind_window, textvariable=kind_var, values=("EQUITY", "OPTION", "FUTURES", "CRYPTO", "EVENT"), state="readonly").pack(padx=12, pady=4)
+            def load_snapshot():
+                kind = kind_var.get(); kind_window.destroy()
+                report_window = tk.Toplevel(window); report_window.title(f"Webull {kind} market snapshot"); report_window.transient(window)
+                report_box = text_area(report_window, "Loading read-only market data…")
+                def worker():
+                    try:
+                        config = self._execution_config(self._load_config_safe())
+                        result = WebullOpenApiBroker(config).market_snapshot(symbols, kind)
+                        text_value = json.dumps(result, indent=2, sort_keys=True, default=str)
+                    except Exception as exc: text_value = f"Snapshot unavailable: {type(exc).__name__}: {exc}"
+                    self.root.after(0, lambda: set_text(report_box, text_value))
+                threading.Thread(target=worker, daemon=True, name="timmy-webull-market-snapshot").start()
+            ttk.Button(kind_window, text="Load snapshot", command=load_snapshot).pack(padx=12, pady=12)
+        controls = ttk.Frame(orders); controls.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
+        ttk.Button(controls, text="Refresh snapshot", command=refresh_orders).pack(side="left", padx=(0, 6))
+        ttk.Button(controls, text="Cancel selected order", command=lambda: mutate_order("cancel")).pack(side="left", padx=6)
+        ttk.Button(controls, text="Replace selected limit order", command=lambda: mutate_order("replace")).pack(side="left", padx=6)
+        ttk.Button(controls, text="Order detail", command=inspect_selected_order).pack(side="left", padx=6)
+        ttk.Button(controls, text="Reduce / close selected position", command=reduce_position).pack(side="left", padx=6)
+        read_controls = ttk.Frame(orders); read_controls.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 4))
+        ttk.Button(read_controls, text="Order history", command=lambda: open_webull_report("Order history")).pack(side="left", padx=(0, 6))
+        ttk.Button(read_controls, text="Executions", command=lambda: open_webull_report("Executions")).pack(side="left", padx=6)
+        ttk.Button(read_controls, text="Market data snapshots", command=request_market_snapshot).pack(side="left", padx=6)
+        ttk.Button(read_controls, text="New guarded live order", command=open_guarded_order_entry).pack(side="left", padx=6)
 
         # 4: named, integrity-checked settings versions with explicit restore.
         profiles = page("Settings Profiles")
@@ -2462,7 +3027,7 @@ class TimmyNativeApp:
                 "data_state": data_state,
                 "broker_profile_configured": bool(self.config and self.config.webull_app_key and self.config.webull_app_secret),
                 "live_submission_gate_enabled": bool(self.config and self.config.webull_enable_live_orders),
-                "preview_required": bool(self.config and self.config.webull_require_preview),
+                "preview_required": True,
                 "recent_events": support_event_summary(self.execution_events, limit=100),
             }
             try:
@@ -2509,7 +3074,7 @@ class TimmyNativeApp:
         if getattr(self, "_restoring_last_workspace", True):
             return
         state: dict[str, object] = {
-            "workspace": getattr(self, "active_tab", "Overview"),
+            "workspace": getattr(self, "active_tab", "Automation"),
             "overview_radar_visible": self.overview_radar_visible_var.get(),
         }
         group = getattr(self, "watchlist_group_var", None)
@@ -2527,14 +3092,14 @@ class TimmyNativeApp:
         if not getattr(self, "_restoring_last_workspace", False):
             return
         state = self._last_workspace_state
-        workspace = state.get("workspace", "Overview")
+        workspace = state.get("workspace", "Automation")
         # Older versions saved the Market alias for the same Overview screen.
         if workspace == "Market":
-            workspace = "Overview"
+            workspace = "Automation"
         valid_tabs = {"Overview", "Setup", "Universe", "Scanner", "Portfolio", "Automation",
                       "Research", "Alerts", "Strategy", "Execution", "Health", "Broker", "Audit"}
         if workspace not in valid_tabs:
-            workspace = "Overview"
+            workspace = "Automation"
         self.overview_radar_visible_var.set(state.get("overview_radar_visible") is not False)
         group = state.get("watchlist_group")
         valid_groups = {"All signals", "Pinned", *[item.name for item in self.watchlist_organization.groups]}
@@ -2575,6 +3140,45 @@ class TimmyNativeApp:
         self.root.clipboard_append(details)
         self.status_bar.configure(text="Health and diagnostic details copied to the clipboard.")
 
+    def _set_automation_controls_compact(self, compact: bool) -> None:
+        """Show only lane and cycle controls on Automation; keep tuning in Execution."""
+        if not hasattr(self, "control_entry_frames"):
+            return
+        if compact:
+            self.controls_title.configure(text="Automation controls")
+            self.controls_status.configure(text="Target · mode · paper lane · run or pause")
+            for frame in self.control_entry_frames:
+                frame.grid_remove()
+            self.guard_label.grid_remove()
+            self.eligible_label.grid_remove()
+            self.account_box.grid_remove()
+            self.style_box.grid_remove()
+            self.pattern_box.grid_remove()
+            self.power_cycle_button.grid_remove()
+            self.paper_auto_control.grid_configure(row=1, column=0, columnspan=2, padx=8, pady=8)
+            self.target_box.grid_configure(row=1, column=2, columnspan=2, padx=8, pady=8)
+            self.mode_box.grid_configure(row=1, column=4, columnspan=2, padx=8, pady=8)
+            self.execution_action_box.grid_configure(row=2, column=0, columnspan=6, padx=10, pady=(0, 12))
+            for column in range(6):
+                self.controls.columnconfigure(column, weight=1, minsize=0)
+        else:
+            self.controls_title.configure(text="Lane & risk controls")
+            self.controls_status.configure(text="Tune the scan, choose an account lane, and review order actions.")
+            for column, frame in enumerate(self.control_entry_frames):
+                frame.grid(row=1, column=column, sticky="ew", padx=10, pady=14)
+            self.guard_label.grid(row=1, column=3, sticky="ew", padx=10, pady=14)
+            self.eligible_label.grid(row=1, column=4, sticky="ew", padx=10, pady=14)
+            self.paper_auto_control.grid_configure(row=1, column=5, columnspan=1, padx=10, pady=0)
+            self.target_box.grid_configure(row=2, column=0, columnspan=1, padx=10, pady=(0, 14))
+            self.mode_box.grid_configure(row=2, column=1, columnspan=1, padx=10, pady=(0, 14))
+            self.account_box.grid(row=2, column=2, sticky="ew", padx=10, pady=(0, 14))
+            self.execution_action_box.grid_configure(row=2, column=3, columnspan=3, padx=10, pady=(0, 14))
+            self.style_box.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 14))
+            self.pattern_box.grid(row=3, column=2, columnspan=4, sticky="ew", padx=10, pady=(0, 14))
+            self.power_cycle_button.grid(row=1, column=2, columnspan=2, sticky="ew", padx=(7, 0), pady=(8, 0))
+            for column in range(6):
+                self.controls.columnconfigure(column, weight=1, minsize=118)
+
     def _responsive_layout(self, event=None) -> None:
         if event is not None and event.widget is not self.root:
             return
@@ -2582,6 +3186,8 @@ class TimmyNativeApp:
             return
         window_width = self.root.winfo_width()
         compact = window_width < 1120
+        for column in range(6):
+            self.controls.columnconfigure(column, weight=1, minsize=0 if compact else 118)
         if hasattr(self, "target_radio_buttons"):
             compact_target = window_width < 1120
             for button in self.target_radio_buttons:
@@ -2596,19 +3202,31 @@ class TimmyNativeApp:
                 self.execution_run_button.grid_configure(row=0, column=0, columnspan=4, padx=0, pady=(0, 4))
                 self.execution_preview_control.grid_configure(row=1, column=0, columnspan=2, padx=(0, 4))
                 self.execution_submit_button.grid_configure(row=1, column=2, columnspan=2, padx=(4, 0))
+                self.stop_button.grid_configure(row=2, column=0, columnspan=2, padx=(0, 4), pady=(4, 0))
+                if getattr(self, "active_tab", None) == "Automation":
+                    self.power_cycle_button.grid_remove()
+                else:
+                    self.power_cycle_button.grid_configure(row=2, column=2, columnspan=2, padx=(4, 0), pady=(4, 0))
             else:
                 self.execution_run_button.grid_configure(row=0, column=0, columnspan=1, padx=(0, 7), pady=0)
                 self.execution_preview_control.grid_configure(row=0, column=1, columnspan=1, padx=7)
                 self.execution_submit_button.grid_configure(row=0, column=2, columnspan=2, padx=(7, 0))
+                self.stop_button.grid_configure(row=1, column=0, columnspan=2, padx=(0, 7), pady=(8, 0))
+                if getattr(self, "active_tab", None) == "Automation":
+                    self.power_cycle_button.grid_remove()
+                else:
+                    self.power_cycle_button.grid_configure(row=1, column=2, columnspan=2, padx=(7, 0), pady=(8, 0))
         if hasattr(self, "automation_guidance") and hasattr(self, "automation_workflow"):
             if window_width < 1040:
                 self.automation_guidance.grid_configure(row=2, column=0, columnspan=2, padx=12, pady=(0, 8))
                 self.automation_workflow.grid_configure(row=3, column=0, columnspan=2, padx=12, pady=(0, 12))
-                columns = 3 if window_width < 900 else 5
+                columns = 2 if window_width < 900 else 3
                 for index, label in enumerate(self.automation_summary_labels.values()):
                     label.master.grid_configure(row=index // columns, column=index % columns)
                 for column in range(5):
                     self.automation_stats.columnconfigure(column, weight=1 if column < columns else 0)
+                self.paper_insights_frame.grid_configure(row=1, column=0, columnspan=3, padx=12, pady=(0, 6))
+                self.simulation_insights_frame.grid_configure(row=2, column=0, columnspan=3, padx=12, pady=(0, 12))
             else:
                 self.automation_guidance.grid_configure(row=2, column=0, columnspan=1, padx=(18, 9), pady=(0, 18))
                 self.automation_workflow.grid_configure(row=2, column=1, columnspan=1, padx=(9, 18), pady=(0, 18))
@@ -2616,6 +3234,8 @@ class TimmyNativeApp:
                     label.master.grid_configure(row=0, column=index)
                 for column in range(5):
                     self.automation_stats.columnconfigure(column, weight=1)
+                self.paper_insights_frame.grid_configure(row=1, column=0, columnspan=1, padx=(12, 5), pady=(0, 12))
+                self.simulation_insights_frame.grid_configure(row=1, column=2, columnspan=1, padx=(5, 12), pady=(0, 12))
         if getattr(self, "active_tab", None) != "Overview":
             return
         scan_label = getattr(self, "market_scan_status_label", None)
@@ -3056,7 +3676,7 @@ class TimmyNativeApp:
         sub.pack(fill="x", padx=8, pady=(1, 7))
         return value, sub
 
-    def _control_entry(self, parent: tk.Widget, column: int, title: str, variable: tk.StringVar) -> None:
+    def _control_entry(self, parent: tk.Widget, column: int, title: str, variable: tk.StringVar) -> tk.Frame:
         frame = tk.Frame(parent, bg=self.colors["panel_3"], highlightbackground=self.colors["line"], highlightthickness=1)
         frame.grid(row=1, column=column, sticky="ew", padx=10, pady=14)
         label = tk.Label(frame, text=title, bg=self.colors["panel"], fg=self.colors["muted"],
@@ -3067,6 +3687,7 @@ class TimmyNativeApp:
         tk.Entry(frame, textvariable=variable, bg=self.colors["entry"], fg=self.colors["text"],
                  insertbackground=self.colors["text"], relief="flat", width=8, justify="center",
                  font=("Sans", 13, "bold"), highlightbackground=self.colors["cyan"], highlightthickness=1).pack(fill="x", padx=10, pady=(5, 8), ipady=5)
+        return frame
 
     def _section_header(self, parent: tk.Widget, eyebrow: str, title: str, button_text: str | None, command, compact: bool = False) -> tk.Button | None:
         parent.columnconfigure(0, weight=1)
@@ -3340,7 +3961,7 @@ class TimmyNativeApp:
             "WEBULL_REGION": tk.StringVar(value=config.webull_region or "us"),
             "WEBULL_API_ENDPOINT": tk.StringVar(value=config.webull_api_endpoint or ""),
             "WEBULL_ENABLE_LIVE_ORDERS": tk.BooleanVar(value=config.webull_enable_live_orders),
-            "WEBULL_REQUIRE_PREVIEW": tk.BooleanVar(value=config.webull_require_preview),
+            "WEBULL_REQUIRE_PREVIEW": tk.BooleanVar(value=True),
             "TRADER_LIVE": tk.BooleanVar(value=config.trader_live),
             "AUTO_START_LIVE_ON_MARKET_OPEN": tk.BooleanVar(value=config.auto_start_live_on_market_open),
         }
@@ -3374,10 +3995,10 @@ class TimmyNativeApp:
         for key, label in (
             ("WEBULL_ENABLE_LIVE_ORDERS", "Allow live order submission"),
             ("TRADER_LIVE", "Use live trading mode"),
-            ("WEBULL_REQUIRE_PREVIEW", "Require broker preview for manual live submit"),
+            ("WEBULL_REQUIRE_PREVIEW", "Exact Webull preview required (mandatory)"),
             ("AUTO_START_LIVE_ON_MARKET_OPEN", "Auto-start live at market open"),
         ):
-            tk.Checkbutton(
+            check = tk.Checkbutton(
                 frame,
                 text=label,
                 variable=values[key],
@@ -3389,7 +4010,10 @@ class TimmyNativeApp:
                 font=("Sans", 9),
                 anchor="w",
                 justify="left",
-            ).grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
+            )
+            check.grid(row=row, column=0, columnspan=2, sticky="ew", pady=2)
+            if key == "WEBULL_REQUIRE_PREVIEW":
+                check.configure(state=tk.DISABLED)
             row += 1
 
         button_row = tk.Frame(frame, bg=self.colors["panel"])
@@ -3578,7 +4202,7 @@ class TimmyNativeApp:
             "WEBULL_REGION": values["WEBULL_REGION"].get().strip() or "us",
             "WEBULL_API_ENDPOINT": values["WEBULL_API_ENDPOINT"].get().strip(),
             "WEBULL_ENABLE_LIVE_ORDERS": "1" if values["WEBULL_ENABLE_LIVE_ORDERS"].get() else "0",
-            "WEBULL_REQUIRE_PREVIEW": "1" if values["WEBULL_REQUIRE_PREVIEW"].get() else "0",
+            "WEBULL_REQUIRE_PREVIEW": "1",
             "TRADER_MODE": "live" if values["TRADER_LIVE"].get() else "paper",
             "TRADER_LIVE": "1" if values["TRADER_LIVE"].get() else "0",
             "AUTO_START_LIVE_ON_MARKET_OPEN": "1" if values["AUTO_START_LIVE_ON_MARKET_OPEN"].get() else "0",
@@ -3594,7 +4218,7 @@ class TimmyNativeApp:
             webull_region=profile.get("WEBULL_REGION") or "us",
             webull_api_endpoint=profile.get("WEBULL_API_ENDPOINT") or None,
             webull_enable_live_orders=profile.get("WEBULL_ENABLE_LIVE_ORDERS") == "1",
-            webull_require_preview=profile.get("WEBULL_REQUIRE_PREVIEW") != "0",
+            webull_require_preview=True,
             trader_mode=profile.get("TRADER_MODE") or config.trader_mode,
             trader_live=profile.get("TRADER_LIVE") == "1",
             auto_start_live_on_market_open=profile.get("AUTO_START_LIVE_ON_MARKET_OPEN") == "1",
@@ -3634,7 +4258,7 @@ class TimmyNativeApp:
         self.profile_region_var.set(config.webull_region or "us")
         self.profile_endpoint_var.set(config.webull_api_endpoint or "")
         self.profile_live_orders_var.set(config.webull_enable_live_orders)
-        self.profile_require_preview_var.set(config.webull_require_preview)
+        self.profile_require_preview_var.set(True)
         self.profile_trader_live_var.set(config.trader_live)
         self.profile_auto_live_var.set(config.auto_start_live_on_market_open)
         self._refresh_webull_account_menu(config)
@@ -3904,6 +4528,13 @@ class TimmyNativeApp:
         return "TARGET: PAPER · LOCAL PAPER LEDGER\n" + self.paper_trade()
 
     def _on_execution_target_selected(self) -> None:
+        # A radio selection is an explicit operator choice. Let an in-flight
+        # operation return, but do not continue the automation batch under the
+        # former target.
+        if self._automation_cycle_in_progress and self._automation_cancel_event is not None:
+            self._automation_cancel_event.set()
+        if self._automatic_fallback_active:
+            self._clear_automatic_fallback(keep_manual=True)
         self.previewed_order_fingerprints.clear()
         self.local_preview_fingerprints.clear()
         if self.config is not None and self.signals:
@@ -4015,6 +4646,30 @@ class TimmyNativeApp:
             return any(word in lowered for word in error_words)
         return False
 
+    @staticmethod
+    def _preview_estimated_cost(body):
+        """Read a documented preview cost field without guessing from price."""
+        cost_keys = {"estimated_cost", "estimatedcost", "estimated_margin", "estimatedmargin"}
+        if isinstance(body, dict):
+            for key, value in body.items():
+                if str(key).lower() in cost_keys:
+                    try:
+                        parsed = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if math.isfinite(parsed):
+                        return parsed
+            for value in body.values():
+                found = TimmyNativeApp._preview_estimated_cost(value)
+                if found is not None:
+                    return found
+        elif isinstance(body, list):
+            for value in body:
+                found = TimmyNativeApp._preview_estimated_cost(value)
+                if found is not None:
+                    return found
+        return None
+
     def paper_trade(
         self,
         refresh: bool = True,
@@ -4083,21 +4738,10 @@ class TimmyNativeApp:
         plans_override: list | None = None,
         scheduled_automation: bool = False,
     ) -> str:
-        if refresh:
-            self._refresh_payload()
-        config = self._load_config_safe()
-        preview_result = self._preview_current_plans(config, plans_override=plans_override)
-        submit_result = self.live_submit(
-            refresh=False,
-            plans_override=plans_override,
-            scheduled_automation=scheduled_automation,
-        )
-        return "\n\n".join((
-            "Exact Webull preview completed:",
-            preview_result,
-            "Live submit result:",
-            submit_result,
-        ))
+        # The live lane now owns one broker adapter from exact preview through
+        # submission, so its in-memory receipt cannot be lost between clients.
+        return self.live_submit(refresh=refresh, plans_override=plans_override,
+                                scheduled_automation=scheduled_automation)
 
     def live_submit(
         self,
@@ -4112,23 +4756,56 @@ class TimmyNativeApp:
         plans = list(self.plans if plans_override is None else plans_override)
         if not plans:
             return "No executable plans at current controls. Live order was not submitted."
-        missing_previews = [plan.symbol for plan in plans[: self.plan_limit_value] if not self._has_fresh_preview(plan, config)]
-        if missing_previews:
-            raise RuntimeError(
-                "Live submit blocked. Preview the exact current plan first: "
-                + ", ".join(missing_previews)
-            )
+        if not self._live_ready(config):
+            raise RuntimeError("Live order blocked: Live account mode and Webull live order switch must both be enabled.")
+        if self._broker_check_required(config):
+            raise RuntimeError("Live order blocked: run Account Check and confirm buying power before trading.")
+        if self.execution_mode_var.get() == "Auto" and not config.auto_start_live_on_market_open:
+            raise RuntimeError("Live Auto blocked: enable and save the explicit Live Auto opt-in in the Webull profile first.")
+        if scheduled_automation and not config.auto_start_live_on_market_open:
+            raise RuntimeError("Scheduled Live Auto blocked: the saved Live Auto opt-in is off.")
+        plans = plans[: self.plan_limit_value]
+        # Recheck each signal and its current operational limits immediately
+        # before broker work. This includes data age, market hours, daily loss,
+        # trade count, cooldown, cash cap, recent rejects, and unresolved IDs.
+        signal_by_symbol = {
+            signal.symbol.upper(): signal
+            for signal in (*self.signals, *getattr(self, "movement_candidate_signals", []))
+        }
+        for plan in plans:
+            if plan.instrument_type != "EQUITY" or plan.market != "US":
+                raise RuntimeError(f"Live Auto currently supports US equities and ETFs only; {plan.symbol} was not submitted.")
+            signal = signal_by_symbol.get(plan.symbol.upper())
+            if signal is None:
+                raise RuntimeError(f"Live order blocked: no current signal is available for {plan.symbol}.")
+            blockers = self._operational_blocks(signal, config)
+            if blockers:
+                raise RuntimeError(f"Live order blocked for {plan.symbol}: " + "; ".join(blockers))
+            if plan.notional > config.max_order_notional_usd:
+                raise RuntimeError(f"Live order blocked for {plan.symbol}: plan notional exceeds the configured per-order cap.")
         self._ensure_execution_journal_writable()
         enforce_live_guards(config)
         broker = WebullOpenApiBroker(config)
         broker.connect()
         results = []
-        for plan in plans[: self.plan_limit_value]:
-            preview = self.previewed_order_fingerprints.get(
-                self._order_fingerprint(plan, self._latest_candle_timestamp(plan.symbol)), {}
-            )
-            order_request = broker.new_order_payload(plan, client_order_id=preview.get("client_order_id"))
+        for plan in plans:
+            order_request = broker.new_order_payload(plan)
             client_order_id = order_request["client_order_id"]
+            preview = broker.preview_order_payloads([order_request])
+            estimated_cost = self._preview_estimated_cost(preview.get("body"))
+            if (not preview.get("preview_ok") or estimated_cost is None or estimated_cost < 0
+                    or estimated_cost > config.max_order_notional_usd):
+                results.append({
+                    "status": "preview-blocked",
+                    "symbol": plan.symbol,
+                    "client_order_id": client_order_id,
+                    "preview_ok": bool(preview.get("preview_ok")),
+                    "estimated_cost": estimated_cost,
+                    "risk_cap": config.max_order_notional_usd,
+                    "message": "No order was submitted because an exact successful preview and an in-cap estimated cost are required.",
+                    "preview_response": redact(preview),
+                })
+                break
             # Persist intent first. A crash or lost response after the broker
             # call then leaves a durable unresolved record instead of allowing
             # a duplicate submission on the next launch.
@@ -4144,13 +4821,18 @@ class TimmyNativeApp:
                 "quantity": plan.quantity,
                 "buy_price": plan.limit_price,
                 "order_type": plan.order_type,
+                "preview_fingerprint": preview.get("preview_fingerprint"),
+                "estimated_cost": estimated_cost,
                 "recorded_at": datetime.now().isoformat(),
             })
-            result = broker.submit_order(plan, client_order_id=client_order_id)
+            result = broker.submit_previewed_order_payloads(
+                [order_request], preview.get("preview_fingerprint") or "")
+            result["order_plan"] = asdict(plan)
             try:
                 live_event = self._event_from_broker_result(result, mode="live")
                 live_event["automation_scheduled"] = bool(scheduled_automation)
                 live_event["automation_candle_timestamp"] = self._latest_candle_timestamp(plan.symbol)
+                live_event["before_submit_failure"] = bool(result.get("before_submit_failure"))
                 self._append_execution_event(live_event)
             except Exception as exc:
                 # Stop the batch immediately. The broker call has happened, so
@@ -4175,11 +4857,508 @@ class TimmyNativeApp:
                 # Do not continue submitting a batch while a broker outcome is
                 # unresolved. The operator must reconcile this client order ID.
                 break
+            if result.get("before_submit_failure"):
+                # The broker adapter failed before calling place_order. The
+                # signed failed result resolves this intent and permits a later
+                # Auto cycle to retry the current candle without duplication.
+                break
         self._update_buying_power_from_broker_results(results)
         self._render_status()
-        return "TARGET: LIVE · WEBULL\n" + json.dumps(results, indent=2, sort_keys=True)
+        return "TARGET: LIVE · WEBULL · exact preview → risk check → durable intent → one submit → journal/reconcile\n" + json.dumps(results, indent=2, sort_keys=True)
+
+    def _make_live_automation_job(
+        self,
+        prepared: AutomationMarketSnapshot,
+        plans: list[OrderPlan],
+        cancelled: threading.Event,
+    ) -> LiveAutomationJob:
+        """Validate on Tk, then serialize inputs for a broker-only worker."""
+        if cancelled.is_set() or self.execution_target_var.get() != "Live" or self.execution_mode_var.get() != "Auto":
+            raise RuntimeError("Live Auto was cancelled before a broker request started.")
+        if not plans:
+            raise RuntimeError("There are no new eligible Live Auto plans.")
+        config = self._execution_config(self.config or prepared.config)
+        risk_limits = self._configured_automation_risk_limits(config)
+        if not self._live_ready(config):
+            raise RuntimeError("Live Auto requires enabled Live account and Webull order switches.")
+        if not config.auto_start_live_on_market_open:
+            raise RuntimeError("Live Auto requires the saved Live Auto opt-in.")
+        if self._broker_check_required(config):
+            raise RuntimeError("Run Account Check before automated Live orders.")
+        block_reason = self._live_auto_block_reason()
+        if block_reason:
+            raise RuntimeError(block_reason)
+        signal_by_symbol = {
+            signal.symbol.upper(): signal
+            for signal in (*self.signals, *getattr(self, "movement_candidate_signals", []))
+        }
+        selected_plans = plans[: self.plan_limit_value]
+        selected_signals: list[Signal] = []
+        selected_quality: list[dict | None] = []
+        activity_blocks: list[tuple[str, ...]] = []
+        last_trade_timestamps: list[str] = []
+        prepared_bars = {symbol.upper(): bars for symbol, bars in prepared.bars_by_symbol}
+        for plan in selected_plans:
+            if plan.instrument_type != "EQUITY" or plan.market != "US":
+                raise RuntimeError(f"Live Auto currently supports US equities and ETFs only; {plan.symbol} was not submitted.")
+            signal = signal_by_symbol.get(plan.symbol.upper())
+            if signal is None:
+                raise RuntimeError(f"Live order blocked: no current signal is available for {plan.symbol}.")
+            selected_signals.append(signal)
+            bars = prepared_bars.get(plan.symbol.upper(), ())
+            quality = self._automation_daily_data_quality(plan.symbol, bars)
+            quality_payload = asdict(quality) if quality is not None else None
+            if quality_payload and quality_payload.get("latest_at") is not None:
+                quality_payload["latest_at"] = quality_payload["latest_at"].isoformat()
+            selected_quality.append(quality_payload)
+            today_events = self._today_execution_events()
+            blocks = []
+            if self._recent_bad_events(plan.symbol) >= config.max_recent_rejections:
+                blocks.append(f"{plan.symbol} recent rejected/failed events reached {config.max_recent_rejections}.")
+            if self._count_trade_events(today_events) >= config.max_daily_trades:
+                blocks.append(f"Daily trade cap reached ({config.max_daily_trades}).")
+            if self._count_trade_events(today_events, plan.symbol.upper()) >= config.max_symbol_daily_trades:
+                blocks.append(f"{plan.symbol} daily trade cap reached ({config.max_symbol_daily_trades}).")
+            activity_blocks.append(tuple(blocks))
+            latest_event = self._latest_symbol_event(self.execution_events, plan.symbol.upper())
+            last_trade_timestamps.append(latest_event.isoformat() if latest_event else "")
+        self._ensure_execution_journal_writable()
+        frozen_config = self._freeze_config_snapshot(config)
+        return LiveAutomationJob(
+            config=frozen_config,
+            risk_limits=risk_limits,
+            plan_json=tuple(json.dumps(asdict(plan), sort_keys=True, separators=(",", ":")) for plan in selected_plans),
+            signal_json=tuple(json.dumps(asdict(signal), sort_keys=True, separators=(",", ":")) for signal in selected_signals),
+            data_quality_json=tuple(json.dumps(item, sort_keys=True, separators=(",", ":")) if item is not None else "null"
+                                    for item in selected_quality),
+            activity_blocks=tuple(activity_blocks),
+            last_symbol_trade_json=tuple(last_trade_timestamps),
+            candle_timestamps=tuple(self._latest_candle_timestamp(plan.symbol) or "" for plan in selected_plans),
+            cancelled=cancelled,
+        )
+
+    @staticmethod
+    def _configured_automation_risk_limits(config: BotConfig) -> AutomationRiskLimits:
+        values = (
+            ("AUTO_MAX_SYMBOL_EXPOSURE_PCT", config.automation_max_symbol_exposure_pct),
+            ("AUTO_MAX_TOTAL_EXPOSURE_PCT", config.automation_max_total_exposure_pct),
+            ("AUTO_MAX_DRAWDOWN_PCT", config.automation_max_drawdown_pct),
+        )
+        missing = [name for name, value in values
+                   if not math.isfinite(float(value)) or not 0 < float(value) <= 100]
+        if missing:
+            raise RuntimeError("Live Auto risk policy is not configured. Set values from 0 to 100 (exclusive of 0) for: "
+                               + ", ".join(missing))
+        return AutomationRiskLimits(
+            max_symbol_exposure_pct=float(config.automation_max_symbol_exposure_pct),
+            max_total_exposure_pct=float(config.automation_max_total_exposure_pct),
+            max_drawdown_pct=float(config.automation_max_drawdown_pct),
+        )
+
+    @staticmethod
+    def _automation_daily_data_quality(symbol: str, bars) -> object | None:
+        """Evaluate daily bars using trading-session gaps, not weekend gaps."""
+        if not bars:
+            return None
+        report = summarize_candle_quality(bars, interval_minutes=1440, stale_after_minutes=4320)
+        item = next((quality for quality in report.symbols if quality.symbol.upper() == symbol.upper()), None)
+        if item is None:
+            return None
+        missing_sessions = 0
+        eastern = ZoneInfo("America/New_York")
+        for earlier, later in zip(sorted(bars, key=lambda bar: bar.timestamp),
+                                  sorted(bars, key=lambda bar: bar.timestamp)[1:]):
+            day = earlier.timestamp.date() + timedelta(days=1)
+            end_day = later.timestamp.date()
+            while day < end_day:
+                noon = datetime.combine(day, datetime.min.time().replace(hour=12), tzinfo=eastern)
+                if market_session(noon).is_open:
+                    missing_sessions += 1
+                day += timedelta(days=1)
+        if item.invalid_ohlc_bars or item.duplicate_timestamps or missing_sessions:
+            label = "CHECK DATA"
+        elif item.age_minutes is None or item.age_minutes >= 4320:
+            label = "STALE"
+        elif item.age_minutes >= 2160:
+            label = "AGING"
+        else:
+            label = "CURRENT"
+        return replace(item, label=label, missing_bars_estimate=missing_sessions)
+
+    def _automation_account_metric(self, sources, aliases: tuple[str, ...]) -> float | None:
+        for alias in aliases:
+            normalized_alias = "".join(character for character in alias.lower() if character.isalnum())
+            for source in sources:
+                for path, value in self._walk_items(source):
+                    normalized_path = "".join(character for character in path.lower() if character.isalnum())
+                    if normalized_path == normalized_alias or normalized_path.endswith(normalized_alias):
+                        parsed = self._numeric_money(value)
+                        if parsed is not None and math.isfinite(parsed):
+                            return parsed
+        return None
+
+    def _automation_peak_equity(self, account_id: str | None, current_equity: float) -> float:
+        """Maintain a private high-water mark per account, without storing IDs."""
+        if not account_id:
+            raise RuntimeError("Configured account ID is unavailable for the drawdown baseline.")
+        key = hashlib.sha256(str(account_id).encode("utf-8")).hexdigest()
+        path = self.automation_risk_state_path
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            state = {"schema": 1, "accounts": {}}
+        except (OSError, UnicodeError) as exc:
+            raise RuntimeError("Stored automation drawdown state is unreadable; repair it before Live Auto.") from exc
+        else:
+            try:
+                state = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("Stored automation drawdown state is malformed; repair it before Live Auto.") from exc
+            if not isinstance(state, dict) or state.get("schema") != 1 or not isinstance(state.get("accounts"), dict):
+                raise RuntimeError("Stored automation drawdown state has an unsupported shape; repair it before Live Auto.")
+        accounts = state["accounts"]
+        record = accounts.get(key)
+        if record is None:
+            peak = current_equity
+        elif isinstance(record, dict):
+            try:
+                peak = float(record.get("peak_equity"))
+            except (TypeError, ValueError):
+                raise RuntimeError("Stored account drawdown baseline is invalid; repair it before Live Auto.") from None
+            if not math.isfinite(peak) or peak <= 0:
+                raise RuntimeError("Stored account drawdown baseline is invalid; repair it before Live Auto.")
+            peak = max(peak, current_equity)
+        else:
+            raise RuntimeError("Stored account drawdown baseline is invalid; repair it before Live Auto.")
+        accounts[key] = {"peak_equity": round(peak, 2), "updated_at": datetime.now().astimezone().isoformat()}
+        _write_private_json(path, {"schema": 1, "accounts": accounts})
+        return peak
+
+    @staticmethod
+    def _automation_response_rows(value, name: str) -> list[dict]:
+        if not isinstance(value, dict) or value.get("ok") is False:
+            raise RuntimeError(f"Webull {name} snapshot is unavailable.")
+        try:
+            code = int(value.get("status_code") or 0)
+        except (TypeError, ValueError):
+            code = 0
+        if not 200 <= code < 300:
+            raise RuntimeError(f"Webull {name} snapshot returned an unverified response.")
+        payload = value.get("body")
+        if isinstance(payload, dict):
+            names = ("orders", "items", "data") if name == "open orders" else ("positions", "items", "data")
+            nested = next((payload[key] for key in names if key in payload), None)
+            if nested is not None:
+                payload = nested
+            elif any(key in payload for key in ("symbol", "ticker", "instrumentSymbol")):
+                payload = [payload]
+        if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
+            raise RuntimeError(f"Webull {name} snapshot shape is unsupported; Live Auto is held for safety.")
+        return payload
+
+    def _run_live_automation_job(self, job: LiveAutomationJob) -> LiveAutomationWorkerResult:
+        """Perform preview, placement, and durable journaling without touching Tk."""
+        results: list[dict] = []
+        risk_decision_for_view: AutomationRiskDecision | None = None
+        if job.cancelled.is_set():
+            return LiveAutomationWorkerResult("", "[]", cancelled=True)
+        broker = WebullOpenApiBroker(job.config)
+        try:
+            enforce_live_guards(job.config)
+            broker.connect()
+        except Exception as exc:
+            results.append({"status": "failed", "before_submit_failure": True,
+                            "message": f"Broker setup failed before order preview ({type(exc).__name__})."})
+            return LiveAutomationWorkerResult(
+                "TARGET: LIVE · WEBULL\n" + json.dumps(results, indent=2, sort_keys=True),
+                json.dumps(results),
+            )
+
+        # Refresh account, order, and position state before evaluating risk.
+        # No account/order mutation occurs until risk gates, exact preview,
+        # durable intent, and the existing one-submit receipt path all pass.
+        try:
+            snapshot = broker.account_snapshot()
+            broker_orders = self._automation_response_rows(snapshot.get("open_orders"), "open orders")
+            broker_positions = self._automation_response_rows(snapshot.get("positions"), "positions")
+            from .broker_reconciliation import parse_broker_orders
+            parsed_orders = parse_broker_orders(broker_orders)
+            if any(not order.symbol for order in parsed_orders):
+                raise RuntimeError("an open order has no recognizable symbol")
+            positions: list[PositionSnapshot] = []
+            for row in broker_positions:
+                symbol = str(row.get("symbol") or row.get("ticker") or row.get("instrumentSymbol") or "").strip().upper()
+                if not symbol:
+                    raise RuntimeError("a position has no recognizable symbol")
+                raw_quantity = next((row[key] for key in ("quantity", "qty", "position", "holdingQuantity")
+                                     if row.get(key) not in (None, "")), None)
+                try:
+                    quantity = float(raw_quantity)
+                except (TypeError, ValueError):
+                    raise RuntimeError("a position has no recognizable quantity") from None
+                if not math.isfinite(quantity) or quantity == 0:
+                    if quantity == 0:
+                        continue
+                    raise RuntimeError("a position has an invalid quantity")
+                value = self._automation_account_metric((row,), ("market_value", "marketValue", "marketValueInAccount"))
+                if value is None:
+                    mark = self._automation_account_metric((row,), ("market_price", "marketPrice", "lastPrice", "markPrice"))
+                    value = abs(quantity) * mark if mark is not None and mark > 0 else None
+                if value is None or not math.isfinite(value) or value < 0:
+                    raise RuntimeError(f"position market value is unavailable for {symbol}")
+                positions.append(PositionSnapshot(symbol, quantity, abs(value),
+                                                  str(row.get("sector") or "") or None,
+                                                  str(row.get("industry") or "") or None))
+            safe_broker_orders = tuple({
+                "symbol": order.symbol, "side": order.side, "quantity": order.quantity,
+                "status": order.status, "broker_order_id": order.broker_order_id,
+                "client_order_id": order.client_order_id,
+                "filled_quantity": order.filled_quantity,
+                "average_fill_price": order.average_fill_price,
+            } for order in parsed_orders)
+            safe_broker_positions = tuple({
+                "symbol": position.symbol, "quantity": position.quantity,
+                "market_value": position.market_value,
+                "side": "SHORT" if position.quantity < 0 else "LONG",
+                "sector": position.sector, "industry": position.industry,
+            } for position in positions)
+            active_or_uncertain_symbols = {
+                order.symbol.upper() for order in parsed_orders
+                if order.symbol and not order.is_terminal
+            }
+            pending_order_notionals: dict[str, float] = {}
+            for order in parsed_orders:
+                if order.is_terminal:
+                    continue
+                if order.quantity <= 0 or order.filled_quantity < 0 or order.filled_quantity > order.quantity:
+                    raise RuntimeError(f"pending quantity is unavailable or invalid for {order.symbol}")
+                if order.side in {"SELL", "S"}:
+                    continue
+                if order.side not in {"BUY", "B"}:
+                    raise RuntimeError(f"pending order side is ambiguous for {order.symbol}")
+                remaining = order.quantity - order.filled_quantity
+                if remaining <= 0:
+                    continue
+                price = self._automation_account_metric((order.raw,), ("limit_price", "limitPrice", "orderPrice", "price"))
+                if price is None or price <= 0:
+                    raise RuntimeError(f"pending order price is unavailable for {order.symbol}")
+                pending_order_notionals[order.symbol] = pending_order_notionals.get(order.symbol, 0.0) + remaining * price
+
+            body = snapshot.get("body") if isinstance(snapshot, dict) else None
+            if not isinstance(body, dict):
+                raise RuntimeError("account snapshot is missing its balance section")
+            balance = body.get("balance")
+            accounts = body.get("accounts")
+            account = self._select_account_payload({"accounts": accounts}, job.config.webull_account_id)
+            equity = self._automation_account_metric(
+                (balance, account),
+                ("net_liquidation_value", "netLiquidationValue", "total_equity", "account_equity",
+                 "equity", "net_asset", "net_assets", "total_asset", "total_assets"),
+            )
+            cash_text, _cash_source = self._extract_trade_cash(snapshot, job.config.webull_account_id)
+            cash = self._numeric_money(cash_text)
+            day_pnl = self._automation_account_metric(
+                (balance, account),
+                ("day_pnl", "today_pnl", "daily_pnl", "day_profit_loss", "today_profit_loss", "day_gain_loss"),
+            )
+            if equity is None or cash is None or cash <= 0:
+                raise RuntimeError("fresh positive account equity and available cash could not be identified in Webull's account snapshot")
+            peak_equity = self._automation_peak_equity(job.config.webull_account_id, equity)
+            lifecycle_summary = (
+                f"Fresh Webull preflight: {sum(not order.is_terminal for order in parsed_orders)} active/uncertain orders, "
+                f"{len(positions)} open positions; account risk context loaded. Existing same-symbol exposure is held; "
+                "no automatic cancel/reprice or exit policy is enabled."
+            )
+        except Exception as exc:
+            results.append({"status": "preflight-blocked",
+                            "message": f"Live Auto requires fresh, readable account/order/position risk context ({str(exc)[:180]}); no order was sent."})
+            return LiveAutomationWorkerResult(
+                "TARGET: LIVE · WEBULL\n" + json.dumps(results, indent=2, sort_keys=True),
+                json.dumps(results),
+                lifecycle_summary="Live Auto held: account equity, cash, daily P&L, positions, or open orders could not be verified. Check the account snapshot and configured risk inputs before retrying.",
+            )
+
+        hold_reason = ""
+        for index, (plan_json, signal_json, quality_json, candle) in enumerate(
+            zip(job.plan_json, job.signal_json, job.data_quality_json, job.candle_timestamps)
+        ):
+            if job.cancelled.is_set():
+                break
+            plan_values = json.loads(plan_json)
+            plan = OrderPlan(**plan_values)
+            symbol = plan.symbol.upper()
+            if job.activity_blocks[index]:
+                results.append({"status": "activity-blocked", "symbol": symbol,
+                                "risk_reasons": list(job.activity_blocks[index]),
+                                "message": "Existing daily trade/rejection limits blocked this candidate."})
+                continue
+            if symbol in active_or_uncertain_symbols or any(position.symbol.upper() == symbol for position in positions):
+                results.append({
+                    "status": "exposure-blocked", "symbol": plan.symbol.upper(),
+                    "message": "A fresh broker snapshot shows an open/uncertain order or position for this symbol. No automatic cancel, replace, or scale-in was attempted.",
+                })
+                continue
+            signal = Signal(**json.loads(signal_json))
+            quality_values = json.loads(quality_json)
+            quality = None
+            if isinstance(quality_values, dict):
+                quality_values["details"] = tuple(quality_values.get("details", ()))
+                latest_at = quality_values.get("latest_at")
+                if isinstance(latest_at, str):
+                    try:
+                        quality_values["latest_at"] = datetime.fromisoformat(latest_at)
+                    except ValueError:
+                        quality_values["latest_at"] = None
+                from .data_quality import SymbolDataQuality
+                quality = SymbolDataQuality(**quality_values)
+            last_event_text = job.last_symbol_trade_json[index]
+            last_trade = None
+            if last_event_text:
+                try:
+                    last_trade = datetime.fromisoformat(last_event_text.replace("Z", "+00:00"))
+                except ValueError:
+                    results.append({"status": "risk-blocked", "symbol": symbol,
+                                    "risk_reasons": ["Last symbol-trade timestamp is invalid; automated entry is held."]})
+                    continue
+            context = AutomationRiskContext(
+                account_equity=equity,
+                available_cash=cash,
+                positions=tuple(positions),
+                pending_order_notionals=dict(pending_order_notionals),
+                day_pnl=day_pnl,
+                peak_equity=peak_equity,
+                session_open=market_session().is_open,
+                data_quality=quality,
+                last_symbol_trade_at={symbol: last_trade} if last_trade else {},
+                now=datetime.now(tz=ZoneInfo("UTC")),
+                is_live=True,
+                live_auto_opted_in=job.config.auto_start_live_on_market_open,
+                live_safety_hold=False,
+                unresolved_live_outcomes=False,
+            )
+            decision = evaluate_automation_order(signal, job.config, context, job.risk_limits)
+            if not decision.allowed or decision.plan is None:
+                risk_decision_for_view = decision
+                results.append({"status": "risk-blocked", "symbol": symbol,
+                                "risk_reasons": list(decision.reasons),
+                                "risk_guards": [asdict(guard) for guard in decision.guards],
+                                "message": "Risk evaluation blocked this order before preview."})
+                continue
+            risk_decision_for_view = decision
+            plan = decision.plan
+            risk_guard_payloads = [asdict(guard) for guard in decision.guards]
+            prior_pending = pending_order_notionals.get(symbol, 0.0)
+            pending_order_notionals[symbol] = prior_pending + plan.notional
+
+            def restore_pending_reservation() -> None:
+                if prior_pending:
+                    pending_order_notionals[symbol] = prior_pending
+                else:
+                    pending_order_notionals.pop(symbol, None)
+
+            order_request = broker.new_order_payload(plan)
+            client_order_id = order_request["client_order_id"]
+            try:
+                preview = broker.preview_order_payloads([order_request])
+            except Exception as exc:
+                restore_pending_reservation()
+                results.append({"status": "preview-blocked", "symbol": plan.symbol,
+                                "message": f"Exact preview failed ({type(exc).__name__}); no order was submitted."})
+                break
+            estimated_cost = self._preview_estimated_cost(preview.get("body"))
+            if (not preview.get("preview_ok") or estimated_cost is None or estimated_cost < 0
+                    or estimated_cost > job.config.max_order_notional_usd):
+                results.append({
+                    "status": "preview-blocked", "symbol": plan.symbol,
+                    "client_order_id": client_order_id,
+                    "preview_ok": bool(preview.get("preview_ok")),
+                    "estimated_cost": estimated_cost,
+                    "risk_cap": job.config.max_order_notional_usd,
+                    "message": "No order was submitted because exact preview or the configured cost cap failed.",
+                    "preview_response": redact(preview),
+                })
+                restore_pending_reservation()
+                break
+            projected_total = sum(position.market_value for position in positions) + sum(pending_order_notionals.values())
+            projected_symbol = (sum(position.market_value for position in positions if position.symbol.upper() == symbol)
+                                + sum(value for pending_symbol, value in pending_order_notionals.items()
+                                      if pending_symbol.upper() == symbol))
+            if (projected_total > equity * job.risk_limits.max_total_exposure_pct / 100.0
+                    or projected_symbol > equity * job.risk_limits.max_symbol_exposure_pct / 100.0):
+                results.append({"status": "risk-blocked", "symbol": symbol,
+                                "risk_reasons": ["Exact preview estimated cost would exceed the configured symbol or total exposure limit."],
+                                "risk_guards": risk_guard_payloads,
+                                "estimated_cost": estimated_cost,
+                                "message": "Preview cost exceeded projected exposure limits; no order was sent."})
+                restore_pending_reservation()
+                continue
+            # Replace the plan estimate with the broker estimate for subsequent
+            # candidates in this same cycle's portfolio exposure calculation.
+            pending_order_notionals[symbol] = prior_pending + estimated_cost
+            # User-selected User mode, a target switch, or Stop sets this token.
+            # Check it after the slow preview and before recording an intent.
+            if job.cancelled.is_set():
+                restore_pending_reservation()
+                break
+            self._append_execution_event({
+                "mode": "live", "robot": "Timmy", "event_type": "live-order-intent",
+                "status": "pending-submit", "symbol": plan.symbol.upper(),
+                "automation_scheduled": True, "automation_candle_timestamp": candle,
+                "client_order_id": client_order_id, "quantity": plan.quantity,
+                "buy_price": plan.limit_price, "order_type": plan.order_type,
+                "preview_fingerprint": preview.get("preview_fingerprint"),
+                "estimated_cost": estimated_cost, "recorded_at": datetime.now().isoformat(),
+                "automation_risk_limits": asdict(job.risk_limits),
+                "automation_risk_guards": risk_guard_payloads,
+            })
+            if job.cancelled.is_set():
+                result = {"status": "failed", "before_submit_failure": True,
+                          "message": "Live Auto was cancelled before the placement call.",
+                          "request_payload": {"new_orders": [order_request]},
+                          "order_plan": asdict(plan)}
+            else:
+                try:
+                    result = broker.submit_previewed_order_payloads(
+                        [order_request], preview.get("preview_fingerprint") or "")
+                except Exception as exc:
+                    result = {"status": "unknown", "error": type(exc).__name__,
+                              "request_payload": {"new_orders": [order_request]}}
+                result["order_plan"] = asdict(plan)
+            try:
+                event = self._event_from_broker_result(result, mode="live")
+                event["automation_scheduled"] = True
+                event["automation_candle_timestamp"] = candle
+                event["before_submit_failure"] = bool(result.get("before_submit_failure"))
+                event["automation_risk_limits"] = asdict(job.risk_limits)
+                event["automation_risk_guards"] = risk_guard_payloads
+                self._append_execution_event(event)
+            except Exception as exc:
+                result["status"] = "unknown"
+                result["timmy_journal_error"] = type(exc).__name__
+                hold_reason = "Live order outcome could not be durably journaled; reconcile at Webull before retrying."
+                results.append(result)
+                break
+            results.append(result)
+            broker_status = self._broker_event_status(result)
+            if result.get("before_submit_failure") or broker_status in {"failed", "rejected"}:
+                restore_pending_reservation()
+            if broker_status == "unknown":
+                hold_reason = "Live order outcome is unknown. Reconcile with Webull before retrying."
+                break
+            if result.get("before_submit_failure") or job.cancelled.is_set():
+                break
+        result_text = "TARGET: LIVE · WEBULL\n" + json.dumps(results, indent=2, sort_keys=True)
+        return LiveAutomationWorkerResult(result_text, json.dumps(results), hold_reason,
+                                          cancelled=job.cancelled.is_set(),
+                                          lifecycle_summary=lifecycle_summary,
+                                          risk_decision=risk_decision_for_view,
+                                          broker_orders_json=json.dumps(safe_broker_orders),
+                                          broker_positions_json=json.dumps(safe_broker_positions))
 
     def run_decision_cycle(self) -> None:
+        if getattr(self, "_manual_webull_order_in_progress", False):
+            self.status_bar.configure(text="Automation cycle deferred while a confirmed manual Webull order is being reconciled.")
+            return
         if self._automation_cycle_in_progress:
             self.status_bar.configure(text="Decision cycle skipped: another automation cycle is already running.")
             return
@@ -4187,69 +5366,262 @@ class TimmyNativeApp:
             active = self._active_action_label if self._action_in_progress else "market refresh"
             self.status_bar.configure(text=f"Decision cycle paused while {active} is in progress.")
             return
+        try:
+            config_snapshot = self._freeze_config_snapshot(
+                self._runtime_config(self._load_config_safe()))
+        except Exception as exc:
+            self.status_bar.configure(text=f"Decision cycle setup failed: {type(exc).__name__}")
+            return
+
+        automatic_requested = self._automation_enabled()
+        requested_target = self.execution_target_var.get()
+        requested_mode = self.execution_mode_var.get()
+        self._automation_cycle_requested_target = requested_target
+        self._automation_cycle_requested_mode = requested_mode
+        cancelled = threading.Event()
+        self._automation_cancel_event = cancelled
         self._automation_cycle_in_progress = True
         self._automation_cycle_started_at = datetime.now(tz=ZoneInfo("America/New_York"))
-        self._automation_wait_reason = ""
-        cycle_result = "Cycle completed."
+        self._automation_wait_reason = "Preparing market data and signals in background."
+        self._refresh_in_progress = True
+        self.status_bar.configure(text="Decision cycle running · refreshing data and ranking signals in background…")
+        scan_status_label = getattr(self, "market_scan_status_label", None)
+        if scan_status_label is not None:
+            scan_status_label.configure(text="SCAN STARTING · preparing data and signals off the UI thread")
+        self._set_buttons_state("disabled")
+        self._sync_manual_controls()
+
+        def prepare_worker() -> None:
+            try:
+                snapshot = self._prepare_automation_market_snapshot(config_snapshot)
+                error = None
+            except Exception as exc:
+                snapshot = None
+                error = exc
+            if not self.closing:
+                try:
+                    self.root.after(0, lambda: self._finish_decision_cycle_prepare(
+                        snapshot, error, automatic_requested, requested_target,
+                        requested_mode, cancelled))
+                except tk.TclError:
+                    pass
+        threading.Thread(target=prepare_worker, daemon=True,
+                         name="timmy-automation-market-preparation").start()
+
+    def _finish_decision_cycle_prepare(
+        self,
+        snapshot: AutomationMarketSnapshot | None,
+        error: Exception | None,
+        automatic_requested: bool,
+        requested_target: str,
+        requested_mode: str,
+        cancelled: threading.Event,
+    ) -> None:
+        self._refresh_in_progress = False
+        self._set_buttons_state("normal")
+        if self.closing:
+            self._finish_automation_cycle("Cycle cancelled while the app was closing.")
+            return
+        if cancelled.is_set():
+            self.status_bar.configure(text="Decision cycle stopped · user-selected mode/target preserved; no Live order was started.")
+            self._finish_automation_cycle("Cycle cancelled after an explicit mode, target, or Pause All selection.")
+            return
+        if error is not None or snapshot is None:
+            reason = type(error).__name__ if error is not None else "market-data preparation failed"
+            self.status_bar.configure(text=f"Decision cycle failed: {reason}")
+            self._set_text(self.broker_text, f"Decision cycle failed before planning: {reason}")
+            if not cancelled.is_set():
+                self._fallback_to_manual_after_cycle_error(reason, automatic_requested)
+            self._finish_automation_cycle(f"Cycle failed: {reason}")
+            return
         try:
-            self.status_bar.configure(text="Running decision cycle...")
-            self._refresh_payload()
+            self._refresh_payload(prepared=snapshot)
+            try:
+                self._record_research_scan(snapshot.refresh_outcome,
+                                           refresh_error=(RuntimeError(snapshot.refresh_error)
+                                                          if snapshot.refresh_error else None))
+            except (OSError, ValueError, tk.TclError):
+                pass
+            if snapshot.refresh_error:
+                self.status_bar.configure(text=f"Provider refresh failed ({snapshot.refresh_error}); using saved market data.")
+            elif snapshot.data_error:
+                self.status_bar.configure(text=f"Market data unavailable ({snapshot.data_error}); Live orders remain gated.")
+
             summary = self._decision_summary()
             self._set_text(self.decision_text, summary)
             target = self.execution_target_var.get()
             mode = self.execution_mode_var.get()
             paper_enabled = self.paper_auto_var.get()
             simulation_enabled = target == "Simulation" and mode == "Auto"
+            # An explicit User/target choice during background preparation
+            # cancels Live Auto without changing that choice back afterward.
+            user_cancelled = cancelled.is_set() or target != requested_target or mode != requested_mode
             live_block = self._live_auto_block_reason() if target == "Live" and mode == "Auto" else ""
-            live_enabled = target == "Live" and mode == "Auto" and not live_block
-            if live_block:
-                self._automation_wait_reason = live_block
+            live_enabled = target == "Live" and mode == "Auto" and not live_block and not user_cancelled
+            if user_cancelled and requested_target == "Live":
+                live_block = "Live Auto was cancelled because execution mode or target changed during the cycle."
+            self._automation_wait_reason = live_block
+            lane_results: list[str] = []
             if paper_enabled or simulation_enabled or live_enabled or live_block:
+                # Local paper/simulation journal work stays on Tk because it is
+                # short and contains UI-backed mode state. Broker latency is
+                # isolated in the following immutable job.
                 lane_results = self._run_automation_lanes(
                     paper_enabled=paper_enabled,
-                    live_enabled=live_enabled,
+                    live_enabled=False,
                     simulation_enabled=simulation_enabled,
                 )
-                lane_result_text = "\n\n".join(lane_results)
-                self._set_text(self.broker_text, lane_result_text)
-                live_status = (
-                    self._live_submission_status(
-                        "Submitting live order",
-                        self._automation_live_result_text(lane_result_text),
-                    )
-                    if live_enabled else None
-                )
-                if self._live_result_requires_automation_hold(live_status):
-                    self._hold_live_automation(live_status)
-                cycle_result = live_status or self._automation_result_label(lane_result_text)
-                if live_block and not live_enabled:
-                    self.status_bar.configure(text=f"Live automation held: {live_block}")
-                    self._set_text(self.broker_text, lane_result_text + f"\n\nLive automation held: {live_block}")
-                    cycle_result = f"Live automation held: {live_block}"
-                else:
-                    self.status_bar.configure(text=cycle_result if live_enabled else "Decision cycle complete. Automation lanes checked.")
+            if live_enabled:
+                lane_plans, skipped = self._scheduled_live_lane_plans()
+                if not lane_plans:
+                    detail = "No new Live Auto entries; current symbols already have a scheduled attempt for this daily candle."
+                    self._record_automation_feedback("live", "above-expectation", detail)
+                    lane_results.append(f"Live lane skipped: {detail} {', '.join(skipped)}")
+                    text = "\n\n".join(lane_results) or detail
+                    self._set_text(self.broker_text, text)
+                    self.status_bar.configure(text="Live Auto cycle complete · no new eligible order.")
+                    self._finish_automation_cycle(text)
+                    return
+                job = self._make_live_automation_job(snapshot, lane_plans, cancelled)
+                self.status_bar.configure(text="Live Auto running · exact preview and broker work in background…")
+                self._set_text(self.broker_text, "Live Auto is checking the exact Webull preview and risk cap. No order is sent before a durable intent is recorded.")
+                def broker_worker() -> None:
+                    try:
+                        result = self._run_live_automation_job(job)
+                        worker_error = None
+                    except Exception as exc:
+                        result = None
+                        worker_error = exc
+                    if not self.closing:
+                        try:
+                            self.root.after(0, lambda: self._finish_live_automation_worker(
+                                result, worker_error, snapshot, lane_results,
+                                automatic_requested, cancelled))
+                        except tk.TclError:
+                            pass
+                threading.Thread(target=broker_worker, daemon=True,
+                                 name="timmy-live-auto-broker-worker").start()
+                self._render_automation_panel()
                 return
-            self._set_text(
-                self.broker_text,
-                f"TARGET: {target.upper()} · Decision cycle completed. Select Preview {target} and Submit {target} to continue the current plan workflow.",
-            )
-            self.status_bar.configure(text="Decision cycle complete.")
-            cycle_result = "Decision cycle complete; no automatic lane was enabled."
+
+            lane_result_text = "\n\n".join(lane_results)
+            if lane_result_text:
+                self._set_text(self.broker_text, lane_result_text)
+            if live_block and target == "Live":
+                self.status_bar.configure(text=f"Live automation held: {live_block}")
+                self._set_text(self.broker_text, (lane_result_text + "\n\n" if lane_result_text else "")
+                               + f"Live automation held: {live_block}")
+                cycle_result = f"Live automation held: {live_block}"
+            elif user_cancelled:
+                self.status_bar.configure(text="Decision cycle stopped · user-selected mode/target preserved.")
+                cycle_result = "Decision cycle stopped after an explicit mode or target change."
+            elif lane_result_text:
+                cycle_result = self._automation_result_label(lane_result_text)
+                self.status_bar.configure(text=cycle_result)
+            else:
+                self._set_text(self.broker_text,
+                               f"TARGET: {target.upper()} · Decision cycle completed. No automatic lane was enabled.")
+                self.status_bar.configure(text="Decision cycle complete.")
+                cycle_result = "Decision cycle complete; no automatic lane was enabled."
+            self._finish_automation_cycle(cycle_result)
         except Exception as exc:
-            self.status_bar.configure(text=f"Decision cycle failed: {exc}")
-            self._set_text(self.broker_text, str(exc))
-            cycle_result = f"Cycle failed: {str(exc)[:160]}"
-        finally:
-            finished_at = datetime.now(tz=ZoneInfo("America/New_York"))
-            started_at = self._automation_cycle_started_at
-            self._automation_last_run_at = finished_at
-            self._automation_last_duration_seconds = (
-                max(0.0, (finished_at - started_at).total_seconds()) if started_at else None
-            )
-            self._automation_last_result = cycle_result[:220]
-            self._automation_cycle_in_progress = False
-            self._automation_cycle_started_at = None
-            self._render_automation_panel()
+            reason = (str(exc)[:220] if str(exc).startswith("Live Auto risk policy is not configured.")
+                      else type(exc).__name__)
+            self.status_bar.configure(text=f"Decision cycle failed: {reason}")
+            self._set_text(self.broker_text, f"Decision cycle failed: {reason}")
+            if not cancelled.is_set():
+                self._fallback_to_manual_after_cycle_error(reason, automatic_requested)
+            self._finish_automation_cycle(f"Cycle failed: {reason}")
+
+    def _finish_live_automation_worker(
+        self,
+        result: LiveAutomationWorkerResult | None,
+        error: Exception | None,
+        snapshot: AutomationMarketSnapshot,
+        lane_results: list[str],
+        automatic_requested: bool,
+        cancelled: threading.Event,
+    ) -> None:
+        if error is not None or result is None:
+            reason = type(error).__name__ if error is not None else "broker worker failed"
+            live_text = f"Live lane blocked before a confirmed result ({reason})."
+            self._record_automation_feedback("live", "below-expectation", live_text)
+            output = "\n\n".join([*lane_results, live_text])
+            self._set_text(self.broker_text, output)
+            self.status_bar.configure(text=live_text)
+            self._finish_automation_cycle(live_text)
+            return
+        try:
+            rows = json.loads(result.results_json)
+        except (TypeError, ValueError):
+            rows = []
+        if isinstance(rows, list):
+            self._update_buying_power_from_broker_results(rows)
+        self._latest_automation_risk_decision = result.risk_decision
+        self._latest_automation_lifecycle_summary = result.lifecycle_summary or "Broker preflight summary unavailable."
+        try:
+            self._latest_automation_broker_orders = tuple(json.loads(result.broker_orders_json))
+            self._latest_automation_broker_positions = tuple(json.loads(result.broker_positions_json))
+        except (TypeError, ValueError):
+            self._latest_automation_broker_orders = None
+            self._latest_automation_broker_positions = None
+        try:
+            self.execution_events = self._load_execution_events()
+            self.recent_bad_event_counts = self._build_bad_event_counts(self.execution_events)
+        except (OSError, ValueError):
+            pass
+        live_status = self._live_submission_status("Submitting live order", result.result_text)
+        if result.hold_reason:
+            self._hold_live_automation(result.hold_reason)
+        expectation = self._feedback_expectation(result.result_text)
+        lifecycle_blocked = any(
+            isinstance(row, dict) and row.get("status") in {"preflight-blocked", "exposure-blocked"}
+            for row in rows
+        )
+        self._record_automation_feedback("live", expectation,
+                                         ("Live Auto stopped at the broker order/position preflight; no automatic cancel, replace, or exit was attempted."
+                                          if lifecycle_blocked else
+                                          "Live Auto used a fresh exact preview, risk gate, durable intent, and one submit per order."))
+        lane_results = [*lane_results]
+        if result.lifecycle_summary:
+            lane_results.append(result.lifecycle_summary)
+        lane_results.append("Live lane result:\n" + result.result_text)
+        output = "\n\n".join(lane_results)
+        self._set_text(self.broker_text, output)
+        if live_status:
+            self.status_bar.configure(text=live_status)
+        elif result.cancelled or cancelled.is_set():
+            self.status_bar.configure(text="Live Auto stopped · user-selected mode/target preserved; no further orders will be sent.")
+        elif any(row.get("status") == "preflight-blocked" for row in rows if isinstance(row, dict)):
+            self._automation_wait_reason = result.lifecycle_summary
+            self.status_bar.configure(text=result.lifecycle_summary or "Live Auto waiting for a readable broker snapshot.")
+        elif any(row.get("status") == "exposure-blocked" for row in rows if isinstance(row, dict)):
+            self.status_bar.configure(text="Live Auto held for existing broker exposure · review open orders and positions.")
+        else:
+            self.status_bar.configure(text="Live Auto cycle complete · review order status and reconciliation.")
+        self._render_status()
+        self._render_broker_summary()
+        self._render_setup_status()
+        self._finish_automation_cycle(live_status or self._automation_result_label(result.result_text))
+
+    def _finish_automation_cycle(self, result: str) -> None:
+        finished_at = datetime.now(tz=ZoneInfo("America/New_York"))
+        started_at = self._automation_cycle_started_at
+        self._automation_last_run_at = finished_at
+        self._automation_last_duration_seconds = (
+            max(0.0, (finished_at - started_at).total_seconds()) if started_at else None)
+        self._automation_last_result = str(result)[:220]
+        if not str(result).startswith("Cycle failed:"):
+            self._automatic_fallback_attempt = 0
+        self._automation_cycle_in_progress = False
+        self._automation_cycle_started_at = None
+        self._automation_cancel_event = None
+        self._automation_cycle_requested_target = ""
+        self._automation_cycle_requested_mode = ""
+        self._sync_manual_controls()
+        self._render_automation_panel()
+        if self._automation_enabled():
+            self._schedule_automation()
 
     @staticmethod
     def _automation_result_label(result_text: str) -> str:
@@ -4278,6 +5650,16 @@ class TimmyNativeApp:
             "blocks unresolved duplicates",
         ))
 
+    def _automation_movement_plans(self) -> list:
+        """Restrict Auto lanes to percentage-qualified, strategy-qualified movers."""
+        candidates = set(getattr(self, "automation_movement_candidates", ()))
+        config = self.config or self._load_config_safe()
+        signals = [
+            signal for signal in getattr(self, "movement_candidate_signals", [])
+            if signal.symbol.upper() in candidates
+        ]
+        return self._plans_from_signals(config, signals)[:self.plan_limit_value]
+
     def _automation_lane_plans(self, lane: str) -> tuple[list, list[str]]:
         """Return plans not already journaled for this lane and daily candle."""
         existing: set[tuple[str, str]] = set()
@@ -4295,7 +5677,7 @@ class TimmyNativeApp:
 
         selected = []
         skipped: list[str] = []
-        for plan in self.plans[: self.plan_limit_value]:
+        for plan in self._automation_movement_plans()[: self.plan_limit_value]:
             key = (plan.symbol.upper(), str(self._latest_candle_timestamp(plan.symbol) or "unknown"))
             if key in existing:
                 skipped.append(plan.symbol.upper())
@@ -4313,6 +5695,7 @@ class TimmyNativeApp:
                 or event.get("automation_scheduled") is not True
                 or event.get("event_type") != "buy-order"
                 or str(event.get("status", "")).lower() == "preview-required"
+                or (str(event.get("status", "")).lower() == "failed" and event.get("before_submit_failure") is True)
             ):
                 continue
             symbol = str(event.get("symbol") or "").upper()
@@ -4322,7 +5705,7 @@ class TimmyNativeApp:
 
         selected = []
         skipped = []
-        for plan in self.plans[: self.plan_limit_value]:
+        for plan in self._automation_movement_plans()[: self.plan_limit_value]:
             key = (plan.symbol.upper(), str(self._latest_candle_timestamp(plan.symbol) or "unknown"))
             if key in existing:
                 skipped.append(plan.symbol.upper())
@@ -4339,9 +5722,14 @@ class TimmyNativeApp:
     ) -> list[str]:
         previous_target = self.execution_target_var.get()
         results: list[str] = []
-        if not self.plans:
-            self._record_automation_feedback("combined", "below-expectation", "No executable plans at current controls.")
-            return ["Automation lanes checked: no executable plans at current controls."]
+        if not self._automation_movement_plans():
+            config = self.config or self._load_config_safe()
+            detail = (
+                "No automated entry: no fresh movement candidate passed the "
+                f"{config.trade_candidate_min_change_pct:.1f}% move, scout, bullish strategy, and execution-plan filters."
+            )
+            self._record_automation_feedback("combined", "above-expectation", detail)
+            return [detail]
         if paper_enabled:
             self.execution_target_var.set("Paper")
             try:
@@ -4402,6 +5790,109 @@ class TimmyNativeApp:
         self._render_setup_status()
         return results or ["Automation lanes checked: no enabled lane."]
 
+    def _fallback_to_manual_after_cycle_error(self, reason: str, automatic_requested: bool) -> None:
+        """Pause failed non-Live automation and schedule a guarded Auto retry."""
+        if not automatic_requested or self.execution_target_var.get() == "Live":
+            return
+        self._automatic_fallback_active = True
+        self._automatic_fallback_reason = str(reason or "Automation cycle failed")[:220]
+        self._automatic_fallback_attempt = min(self._automatic_fallback_attempt + 1, 4)
+        self._automatic_fallback_restore_mode = (
+            "Auto" if self.execution_mode_var.get() == "Auto" else "User"
+        )
+        if self._automatic_fallback_restore_mode == "Auto":
+            self._manual_mode_user_selected = False
+        self.execution_mode_var.set("User")
+        self._cancel_automation_callback("automation_after_id")
+        self._automation_next_run_at = None
+        self._schedule_automatic_fallback_recovery()
+        self._sync_manual_controls()
+        self._record_automation_mode_transition("temporary-manual-fallback", self._automatic_fallback_reason)
+
+    def _schedule_automatic_fallback_recovery(self) -> None:
+        if self.closing or not self._automatic_fallback_active:
+            return
+        self._cancel_automation_callback("_automatic_fallback_after_id")
+        retry_seconds = self._automatic_fallback_retry_seconds()
+        self._automatic_fallback_after_id = self.root.after(
+            retry_seconds * 1000, self._try_automatic_fallback_recovery
+        )
+
+    def _automatic_fallback_retry_seconds(self) -> int:
+        base_seconds = max(30, AUTOMATION_RECOVERY_MS // 1000)
+        return min(300, base_seconds * (2 ** max(0, self._automatic_fallback_attempt - 1)))
+
+    def _clear_automatic_fallback(self, *, keep_manual: bool) -> None:
+        was_active = self._automatic_fallback_active
+        reason = self._automatic_fallback_reason
+        self._cancel_automation_callback("_automatic_fallback_after_id")
+        self._automatic_fallback_active = False
+        self._automatic_fallback_reason = ""
+        self._automatic_fallback_restore_mode = "User"
+        self._automatic_fallback_attempt = 0
+        if keep_manual:
+            self._manual_mode_user_selected = True
+        self._save_runtime_settings()
+        if was_active:
+            state = "user-kept-manual" if keep_manual else "fallback-cancelled"
+            self._record_automation_mode_transition(state, reason)
+
+    def _record_automation_mode_transition(self, status: str, reason: str) -> None:
+        try:
+            self._append_execution_event({
+                "mode": "system",
+                "robot": "Timmy",
+                "event_type": "automation-mode-transition",
+                "status": str(status)[:48],
+                "target": self.execution_target_var.get(),
+                "execution_mode": self.execution_mode_var.get(),
+                "reason": str(reason or "")[:220],
+                "recorded_at": datetime.now().isoformat(),
+            })
+        except Exception as exc:
+            self._write_crash_log(f"Automation mode transition could not be journaled: {exc}")
+
+    def _try_automatic_fallback_recovery(self) -> None:
+        self._automatic_fallback_after_id = None
+        if self.closing or not self._automatic_fallback_active:
+            return
+        if self._manual_mode_user_selected or self.execution_mode_var.get() != "User":
+            self._clear_automatic_fallback(keep_manual=self._manual_mode_user_selected)
+            self._sync_manual_controls()
+            self._render_automation_panel()
+            if self._automation_enabled():
+                self._schedule_automation()
+            return
+        if self.execution_target_var.get() == "Live":
+            self._clear_automatic_fallback(keep_manual=False)
+            self.status_bar.configure(
+                text="Auto recovery paused after switching to Live; review readiness and select Auto explicitly."
+            )
+            self._sync_manual_controls()
+            self._render_automation_panel()
+            return
+        if self._action_in_progress or self._refresh_in_progress or self._automation_cycle_in_progress:
+            self._schedule_automatic_fallback_recovery()
+            return
+        restore_mode = self._automatic_fallback_restore_mode
+        reason = self._automatic_fallback_reason
+        self._automatic_fallback_active = False
+        self._automatic_fallback_reason = ""
+        self._automatic_fallback_restore_mode = "User"
+        if restore_mode == "Auto":
+            self._manual_mode_user_selected = False
+            self.execution_mode_var.set("Auto")
+        self._save_runtime_settings()
+        self._record_automation_mode_transition("automatic-recovery", reason)
+        self._sync_manual_controls()
+        self._render_automation_panel()
+        if self._automation_enabled():
+            self._schedule_automation()
+        self.status_bar.configure(
+            text=(f"Automation resumed after recovery from: {reason}" if restore_mode == "Auto"
+                  else "Paper automation resumed after its recovery pause.")
+        )
+
     def _record_automation_feedback(self, lane: str, expectation: str, detail: str) -> None:
         detail = detail[:500]
         if not self._should_record_automation_feedback(lane, expectation, detail):
@@ -4453,20 +5944,92 @@ class TimmyNativeApp:
         )
         return "below-expectation" if any(marker in lowered for marker in weak_markers) else "above-expectation"
 
-    def _refresh_payload(self, skip_market_refresh: bool = False) -> str:
+    @staticmethod
+    def _freeze_config_snapshot(config: BotConfig) -> BotConfig:
+        """Copy mutable configuration sets before passing config to a worker."""
+        return replace(
+            config,
+            symbol_whitelist=frozenset(config.symbol_whitelist),
+            enabled_trade_patterns=frozenset(config.enabled_trade_patterns),
+            watchlist_rotation_candidates=frozenset(config.watchlist_rotation_candidates),
+            crypto_symbols=frozenset(config.crypto_symbols),
+            futures_symbols=frozenset(config.futures_symbols),
+            options_symbols=frozenset(config.options_symbols),
+            event_contract_symbols=frozenset(config.event_contract_symbols),
+        )
+
+    def _prepare_automation_market_snapshot(self, config: BotConfig) -> AutomationMarketSnapshot:
+        """Fetch and rank data in a worker; return immutable values for Tk apply."""
+        config_snapshot = self._freeze_config_snapshot(self._runtime_config(config))
+        refresh_outcome = None
+        refresh_error = ""
+        try:
+            refresh_outcome = self._refresh_market_data_if_needed(config=config_snapshot)
+        except Exception as exc:
+            refresh_error = f"{type(exc).__name__}: {str(exc)[:180]}"
+        bars_by_symbol = {}
+        candidate_bars: dict = {}
+        data_error = ""
+        synthetic = False
+        try:
+            if not self.data_file.exists():
+                self.data_file.parent.mkdir(parents=True, exist_ok=True)
+                write_sample_bars(self.data_file)
+                self._mark_sample_data()
+            else:
+                synthetic = self._sample_marker_matches()
+            bars_by_symbol = load_csv_bars(self.data_file)
+            if config_snapshot.market_data_provider != "csv" and config_snapshot.watchlist_universe == "all-us":
+                if self.movement_scan_bars_path.exists():
+                    try:
+                        candidate_bars = load_csv_bars(self.movement_scan_bars_path)
+                    except (OSError, TypeError, ValueError) as exc:
+                        data_error = f"movement candidate cache unavailable: {type(exc).__name__}"
+        except Exception as exc:
+            data_error = f"{type(exc).__name__}: {str(exc)[:180]}"
+            bars_by_symbol = {}
+            synthetic = False
+        signals = tuple(rank_signals(bars_by_symbol, config_snapshot))
+        candidate_signals = tuple(rank_signals(candidate_bars, config_snapshot))
+        frozen_bars = tuple((symbol, tuple(bars)) for symbol, bars in sorted({**bars_by_symbol, **candidate_bars}.items()))
+        return AutomationMarketSnapshot(
+            config=config_snapshot,
+            bars_by_symbol=frozen_bars,
+            signals=signals,
+            synthetic_data=synthetic,
+            data_error=data_error,
+            refresh_outcome=refresh_outcome,
+            refresh_error=refresh_error,
+            candidate_signals=candidate_signals,
+        )
+
+    def _refresh_payload(
+        self,
+        skip_market_refresh: bool = False,
+        prepared: AutomationMarketSnapshot | None = None,
+    ) -> str:
         self._splash_step("Loading configuration")
-        self.config = self._runtime_config(self._load_config_safe())
+        self.config = prepared.config if prepared is not None else self._runtime_config(self._load_config_safe())
         self._splash_step("Reading execution journals")
         self.execution_events = self._load_execution_events()
         self.recent_bad_event_counts = self._build_bad_event_counts(self.execution_events)
         self._splash_step("Scanning market data")
-        self.bars_by_symbol = self._load_bars(skip_market_refresh=skip_market_refresh)
-        self.signals = rank_signals(self.bars_by_symbol, self.config)
+        if prepared is None:
+            self.bars_by_symbol = self._load_bars(skip_market_refresh=skip_market_refresh)
+            self.signals = rank_signals(self.bars_by_symbol, self.config)
+            self.movement_candidate_signals = []
+        else:
+            self.bars_by_symbol = {symbol: list(bars) for symbol, bars in prepared.bars_by_symbol}
+            self.signals = list(prepared.signals)
+            self.movement_candidate_signals = list(prepared.candidate_signals)
+            self._sample_data_in_use = prepared.synthetic_data
+            self._market_data_load_error = prepared.data_error
         self._refresh_movement_watchlist(
             self.bars_by_symbol,
             self.signals,
             synthetic=self._sample_data_in_use,
         )
+        self._persist_movement_candidates(self.config, self.bars_by_symbol)
         self.signal_by_symbol = {signal.symbol: signal for signal in self.signals}
         quiet_symbols = set(self.watchlist_organization.quiet_symbols)
         alert_signals = [signal for signal in self.signals if signal.symbol.upper() not in quiet_symbols]
@@ -4589,15 +6152,19 @@ class TimmyNativeApp:
             movement_bars = fetch_daily_bars(
                 config.market_data_provider,
                 movement_batch,
-                days=6,
+                # Signal scoring and trade plans require at least 55 daily bars.
+                # Six bars can detect movement, but could never qualify an
+                # all-universe discovery symbol for the strategy.
+                days=90,
                 timeout=config.market_data_fetch_timeout_seconds,
                 max_workers=config.market_data_fetch_workers,
                 progress_callback=self._record_movement_scan_progress,
                 diagnostic_callback=diagnostics.append,
             )
+            movement_signals = rank_signals(movement_bars, config)
             self._refresh_movement_watchlist(
                 movement_bars,
-                rank_signals(movement_bars, config),
+                movement_signals,
                 scan_metadata={
                     "source": config.market_data_provider,
                     "scope": "all-us",
@@ -4608,6 +6175,7 @@ class TimmyNativeApp:
                     **getattr(self, "_movement_batch_audit", {}),
                 },
             )
+            self._persist_movement_candidates(config, movement_bars)
         if config.enable_watchlist_rotation:
             seed_symbols = load_watchlist(watchlist_path, config.symbol_whitelist)
             active_watchlist_path = self._runtime_path(config.active_watchlist_path or self.active_watchlist_path)
@@ -4862,6 +6430,49 @@ class TimmyNativeApp:
                 "96-hour movement tracker paused; saved history was preserved. "
                 "Back up and repair the tracker before resuming."
             )
+
+    def _persist_movement_candidates(self, config: BotConfig, bars_by_symbol: dict) -> None:
+        """Save percentage-qualified discoveries separately from the active trade list."""
+        if getattr(self, "_movement_tracker_error", ""):
+            return
+        candidates = top_movement_candidates(
+            getattr(self, "_movement_tracker_payload", {}),
+            limit=max(1, config.max_movement_watchlist_symbols),
+            minimum_change_pct=config.movement_watchlist_min_change_pct,
+            trade_candidate_change_pct=config.trade_candidate_min_change_pct,
+        )
+        target = self._runtime_path(config.movement_watchlist_path or self.movement_watchlist_path)
+        symbols = [item["symbol"] for item in candidates]
+        contents = (
+            "# Auto-discovered from the rotating 96-hour percentage-movement scan.\n"
+            "# Research candidates only; this file does not change the active trade watchlist.\n"
+            + "".join(f"{symbol}\n" for symbol in symbols)
+        )
+        _write_private_text(target, contents)
+
+        previous_bars: dict[str, list] = {}
+        if self.movement_scan_bars_path.exists():
+            try:
+                previous_bars = load_csv_bars(self.movement_scan_bars_path)
+            except (OSError, TypeError, ValueError):
+                # Keep an unreadable prior cache untouched instead of erasing it.
+                previous_bars = {}
+        selected = {}
+        for symbol in symbols:
+            if symbol in bars_by_symbol:
+                selected[symbol] = bars_by_symbol[symbol]
+            elif symbol in previous_bars:
+                selected[symbol] = previous_bars[symbol]
+        write_csv_bars(self.movement_scan_bars_path, selected)
+        try:
+            self.movement_scan_bars_path.chmod(0o600)
+        except OSError:
+            pass
+        self._movement_candidate_records = candidates
+        self.automation_movement_candidates = frozenset(
+            item["symbol"] for item in candidates if item.get("trade_candidate")
+        )
+        self._refresh_integrity_manifest()
 
     def _load_market_universe(self, config: BotConfig) -> list[str]:
         stale = True
@@ -5621,9 +7232,13 @@ class TimmyNativeApp:
         config = self.config or self._load_config_safe()
         live_ready = self._live_ready(self._execution_config(config))
         interval = self._bounded_int(self.auto_interval_var, 1, 1, 60)
-        live_block = self._live_auto_block_reason() if self.execution_target_var.get() == "Live" else ""
+        live_block = (self._live_auto_block_reason()
+                      if self.execution_target_var.get() == "Live" and self.execution_mode_var.get() == "Auto"
+                      else "")
         if self._automation_cycle_in_progress:
             next_cycle = "Running"
+        elif self._automatic_fallback_active:
+            next_cycle = f"Auto retry in {self._automatic_fallback_retry_seconds()}s"
         elif live_block and self.execution_target_var.get() == "Live" and self.execution_mode_var.get() == "Auto":
             next_cycle = "Paper continues · Live held" if self.paper_auto_var.get() else "Held · review required"
         elif self._automation_next_run_at is not None:
@@ -5635,58 +7250,192 @@ class TimmyNativeApp:
             next_cycle = f"Every {interval} min"
         else:
             next_cycle = "Paused"
-        self._update_label_map(
-            self.automation_summary_labels,
-            {
-                "Operating Mode": self.execution_mode_var.get(),
-                "Paper Lane": "ARMED" if self.paper_auto_var.get() else "PAUSED",
-                "Simulation": (
-                    "AUTO · LOCAL" if self.execution_target_var.get() == "Simulation" and self.execution_mode_var.get() == "Auto"
-                    else "SELECTED · LOCAL" if self.execution_target_var.get() == "Simulation"
-                    else "NOT SELECTED"
-                ),
-                "Live Lane": "READY · GUARDED" if live_ready else "LOCKED",
-                "Next Cycle": next_cycle,
-            },
-        )
         readiness = readiness_flags(config, plans_count=len(self.plans), events_count=len(self.execution_events))
-        lines = [
-            f"Operating mode: {self.execution_mode_var.get()}",
-            f"Selected target: {self.execution_target_var.get()}",
-            f"Paper simulation: {'enabled' if self._paper_simulation_enabled(config) else 'disabled'}",
-            f"Paper auto lane: {'armed' if self.paper_auto_var.get() else 'paused'}",
-            f"Local Simulation: {'scheduled' if self.execution_target_var.get() == 'Simulation' and self.execution_mode_var.get() == 'Auto' else 'manual / not selected'}",
-            f"Live submission: {'guarded and ready' if live_ready else 'locked'}",
-            f"Fresh account check: {'yes' if not self._broker_check_required(self._execution_config(config)) else 'no'}",
-            f"Current executable plans: {len(self.plans):,}",
-            f"Market data: {self._data_freshness_line()}",
-            f"Last cycle: {self._automation_last_run_at.strftime('%I:%M:%S %p ET').lstrip('0') if self._automation_last_run_at else 'Not run this session'}",
-            f"Last result: {self._automation_last_result}",
-            (f"Last duration: {self._automation_last_duration_seconds:.1f}s"
-             if self._automation_last_duration_seconds is not None else "Last duration: -"),
-            (f"Waiting: {self._automation_wait_reason}" if self._automation_wait_reason else ""),
-            (f"Live automation hold: {live_block}" if live_block and self.execution_target_var.get() == "Live" else ""),
-            "",
-            "What Timmy will do",
-            "- Refresh the strategy at the selected interval.",
-            "- Paper lane records simulated orders only.",
-            (f"- Live lane is held: {live_block}" if live_block and self.execution_target_var.get() == "Live"
-             else "- Live lane remains behind account checks, preview, and live-order guards."),
-            "- Use Pause All Automation to return to user-controlled cycles.",
-        ]
-        if readiness.get("red_flags"):
-            lines.extend(("", "Needs attention"))
-            lines.extend(f"- {item}" for item in readiness["red_flags"][:5])
-        self._set_text(self.automation_readiness_text, "\n".join(lines))
-        self._set_text(
-            self.automation_sequence_text,
-            "1  REFRESH\n   Load the latest bars and rebuild the signal list.\n\n"
-            "2  REVIEW\n   Check score, price gates, risk, and account readiness.\n\n"
-            "3  SIMULATION\n   Select Simulation, preview locally, then submit to its separate local journal; Auto repeats this workflow locally.\n\n"
-            "4  PAPER LANE\n   The Paper Lane checkbox independently records paper-ledger activity.\n\n"
-            "5  LIVE\n   Select Live to use Webull; User mode requires confirmation and Auto still checks every live gate.\n\n"
-            f"Next cycle: {next_cycle}. Skipped work is retried after {AUTOMATION_RETRY_MS // 1000}s; unknown broker outcomes stop the current batch and require manual reconciliation.",
+        cycle_state = (
+            "running" if self._automation_cycle_in_progress else
+            "held" if (self._automation_hold_reason or live_block and self.execution_target_var.get() == "Live") else
+            "waiting" if self._automation_wait_reason else
+            "healthy" if self._automation_enabled() else "paused"
         )
+        enabled_lanes = []
+        if self.paper_auto_var.get():
+            enabled_lanes.append("Paper")
+        if self.execution_target_var.get() == "Simulation" and self.execution_mode_var.get() == "Auto":
+            enabled_lanes.append("Simulation")
+        if self.execution_target_var.get() == "Live" and self.execution_mode_var.get() == "Auto":
+            enabled_lanes.append("Live")
+        cycle_snapshot = AutomationCycleSnapshot(
+            state=cycle_state,
+            target=self.execution_target_var.get(),
+            mode=self.execution_mode_var.get(),
+            enabled_lanes=tuple(enabled_lanes),
+            next_run_at=self._automation_next_run_at,
+            last_run_at=self._automation_last_run_at,
+            last_duration_seconds=self._automation_last_duration_seconds,
+            last_result=self._automation_last_result,
+            wait_reason=self._automation_wait_reason,
+            hold_reason=live_block or self._automation_hold_reason,
+            data_status=self._data_freshness_line(),
+        )
+        raw_starting_balance = self._paper_starting_balance()
+        paper_starting_balance = (raw_starting_balance if math.isfinite(raw_starting_balance)
+                                  and raw_starting_balance > 0 else None)
+        insight_events = tuple(self.execution_events[-5000:])
+        backend_view = build_automation_backend_view(
+            cycle_snapshot,
+            self._latest_automation_risk_decision,
+            # The periodic preflight fetches open orders and positions only;
+            # it does not fetch terminal order history, so a full journal
+            # reconciliation would overstate completeness.
+            live_journal_events=None,
+            broker_orders=self._latest_automation_broker_orders,
+            broker_positions=self._latest_automation_broker_positions,
+            paper_events=insight_events,
+            simulation_events=insight_events,
+            paper_starting_balance=paper_starting_balance,
+            # No separate Simulation starting-balance setting exists; keep
+            # return and percentage drawdown unavailable instead of borrowing Paper's.
+            simulation_starting_balance=None,
+        )
+        risk_view = backend_view.risk
+        reconciliation = backend_view.live_reconciliation
+        mode = self.execution_mode_var.get()
+        target = self.execution_target_var.get()
+        current_state = backend_view.cycle.state
+        if current_state == "running":
+            next_action = "Cycle running · market data and signals are updating."
+        elif current_state == "held":
+            next_action = f"Review the Live hold, then reconcile before resuming: {backend_view.cycle.hold_reason or live_block}"
+        elif current_state == "waiting":
+            next_action = f"Waiting for a safe cycle: {backend_view.cycle.wait_reason or 'current work to finish.'}"
+        elif mode == "User":
+            next_action = "User mode · review the plan, then use Run Cycle or Preview / Submit below."
+        elif live_block and target == "Live":
+            next_action = f"Live Auto is held: {live_block}"
+        elif self._automatic_fallback_active:
+            next_action = f"Auto will retry in {self._automatic_fallback_retry_seconds()}s · {self._automatic_fallback_reason}"
+        elif self._automation_enabled():
+            next_action = f"Auto is scheduled · next cycle {next_cycle.lower()}."
+        else:
+            next_action = "Choose User or Auto and select a target to begin."
+
+        account_ok = not self._broker_check_required(self._execution_config(config))
+        data_line = self._data_freshness_line()
+        if "fresh" in data_line.lower():
+            health_value = "Data current"
+        elif "synthetic" in data_line.lower():
+            health_value = "Synthetic data"
+        elif "stale" in data_line.lower():
+            health_value = "Stale data"
+        else:
+            health_value = "Check data"
+        if target == "Live" and not account_ok:
+            health_value = "Account check needed"
+        self._update_label_map(self.automation_summary_labels, {
+            "Automation": "PAUSED" if current_state == "idle" else current_state.upper(),
+            "Mode": mode,
+            "Target": target,
+            "Next Cycle": next_cycle,
+            "Data / Account": health_value,
+        })
+
+        blockers: list[str] = []
+        if backend_view.cycle.hold_reason:
+            blockers.append(f"Live hold · {backend_view.cycle.hold_reason}")
+        if backend_view.cycle.wait_reason and backend_view.cycle.wait_reason not in blockers:
+            blockers.append(f"Cycle wait · {backend_view.cycle.wait_reason}")
+        if live_block:
+            blockers.append(f"Live readiness · {live_block}")
+        if target == "Live" and not account_ok:
+            blockers.append("Account · run Check Webull account in Broker and confirm the selected account.")
+        if "unavailable" in self._data_freshness_line().lower() or "stale" in self._data_freshness_line().lower():
+            blockers.append(f"Market data · {self._data_freshness_line()}")
+        if risk_view.state == "blocked":
+            blockers.extend(f"Risk · {reason}" for reason in risk_view.reasons[:4])
+        elif risk_view.state == "unavailable" and target == "Live" and mode == "Auto":
+            blockers.append("Risk · no Live Auto risk decision has been recorded this session.")
+        if readiness.get("red_flags"):
+            blockers.extend(f"Readiness · {item}" for item in readiness["red_flags"][:3])
+
+        lines = [next_action, "", f"Selected workflow · {target} / {mode}",
+                 f"Paper lane · {'armed' if self.paper_auto_var.get() else 'paused'} (local ledger)",
+                 f"Live submission · {'guarded and ready' if live_ready else 'locked'} · Live Auto opt-in {'on' if config.auto_start_live_on_market_open else 'off'}",
+                 (f"Movement discovery · {len(getattr(self, '_movement_candidate_records', []))} saved · "
+                  f"{len(getattr(self, 'automation_movement_candidates', ()))} potential trade candidate(s) · "
+                  f"daily move thresholds {config.movement_watchlist_min_change_pct:.1f}% / "
+                  f"{config.trade_candidate_min_change_pct:.1f}%"),
+                 f"Market data · {self._data_freshness_line()}",
+                 f"Live account snapshot · {'checked' if account_ok else 'check required'} · "
+                 f"manual plans {len(self.plans):,} · auto candidate plans {len(self._automation_movement_plans()):,}",
+                 f"Latest Live risk evaluation · {risk_view.state.upper()}"
+                 + (f" · {risk_view.symbol} {risk_view.quantity:g} shares / {money(risk_view.notional)}"
+                    if risk_view.quantity is not None and risk_view.notional is not None else "")]
+        if risk_view.guards:
+            lines.extend(f"  {name} · {status} · {reason}" for name, status, reason in risk_view.guards[:4])
+        if blockers:
+            lines.extend(("", "ACTIONABLE BLOCKERS"))
+            lines.extend(f"• {item}" for item in blockers[:8])
+        elif current_state in {"healthy", "idle"}:
+            lines.extend(("", "No current risk or readiness blockers are reported."))
+        lines.extend(("", "LIVE ORDER LIFECYCLE", self._latest_automation_lifecycle_summary))
+        if self._latest_automation_broker_orders is None or self._latest_automation_broker_positions is None:
+            lines.append("Broker snapshot · unavailable this session; no order/position state is inferred.")
+        else:
+            lines.append(f"Broker snapshot · {len(self._latest_automation_broker_orders)} open-order rows · "
+                         f"{len(self._latest_automation_broker_positions)} position rows")
+        if reconciliation.state == "unavailable":
+            lines.append("Full journal reconciliation is unavailable until a matching Live journal snapshot is supplied.")
+        else:
+            lines.append(f"Journal reconciliation · {reconciliation.state.upper()} · {reconciliation.message}")
+            lines.extend(f"  {issue.severity.upper()} {issue.symbol}: {issue.message}" for issue in reconciliation.issues[:3])
+        lines.extend(("", f"Last cycle · {backend_view.cycle.last_result or 'not run this session'}"))
+        if backend_view.cycle.last_duration_seconds is not None:
+            lines.append(f"Duration · {backend_view.cycle.last_duration_seconds:.1f}s")
+        self._set_text(self.automation_readiness_text, "\n".join(lines))
+
+        for lane, lane_view, widget, start_balance in (
+            ("PAPER", backend_view.paper, self.paper_insights_text, paper_starting_balance),
+            ("SIMULATION", backend_view.simulation, self.simulation_insights_text, None),
+        ):
+            insights = analyze_automation_history(
+                insight_events,
+                lane=lane.lower(),
+                starting_balance=start_balance,
+            )
+            win_rate = f"{lane_view.win_rate * 100:.1f}%" if lane_view.win_rate is not None else "unavailable"
+            realized = money(lane_view.realized_pnl) if lane_view.realized_pnl is not None else "incomplete"
+            ret = f"{lane_view.return_pct:+.2f}%" if lane_view.return_pct is not None else "unavailable"
+            drawdown = (f"{money(lane_view.max_drawdown_usd)} / {lane_view.max_drawdown_pct:.2f}%"
+                        if lane_view.max_drawdown_usd is not None and lane_view.max_drawdown_pct is not None
+                        else "incomplete / unavailable")
+            expectancy = money(lane_view.expectancy) if lane_view.expectancy is not None else "unavailable"
+            lane_lines = [
+                f"{lane} · {lane_view.state.upper()}",
+                f"Closed outcomes · {lane_view.closed_trades} · W/L/BE {lane_view.wins}/{lane_view.losses}/{lane_view.breakeven}",
+                f"Win rate · {win_rate}", f"Expectancy · {expectancy}", f"Net realized · {realized}",
+                f"Return · {ret}", f"Max drawdown · {drawdown}",
+                f"Fill rate · {insights.fill_rate_status} ({insights.fill_observation_count} explicit observations)",
+                f"Slippage · {insights.slippage_status} ({insights.slippage_observation_count} explicit observations)",
+                "Local candle outcomes do not establish broker fills or slippage.",
+            ]
+            if insights.cohort_outcomes:
+                cohort_text = "; ".join(
+                    f"{cohort.dimension}={cohort.cohort} · {cohort.closed_trades} closes · "
+                    f"win {cohort.win_rate_pct:.1f}%" if cohort.win_rate_pct is not None else
+                    f"{cohort.dimension}={cohort.cohort} · {cohort.closed_trades} closes · incomplete P&L"
+                    for cohort in insights.cohort_outcomes[:3]
+                )
+                lane_lines.append(f"Signal cohorts · {cohort_text}")
+            else:
+                lane_lines.append("Signal cohorts · unavailable until closed outcomes have stored signal snapshots.")
+            if insights.recommendations:
+                lane_lines.append(f"Review prompt · {insights.recommendations[0].message}")
+            if lane_view.incomplete_reasons:
+                lane_lines.extend(f"Data gap · {reason}" for reason in lane_view.incomplete_reasons[:2])
+            lane_lines.append("Recommendations are descriptive review prompts; they do not change strategy or Live settings.")
+            if len(self.execution_events) > len(insight_events):
+                lane_lines.append(f"Showing latest {len(insight_events):,} of {len(self.execution_events):,} local events.")
+            self._set_text(widget, "\n".join(lane_lines))
 
     def _render_alerts_panel(self) -> None:
         if not hasattr(self, "alert_rules_tree"):
@@ -6019,6 +7768,12 @@ class TimmyNativeApp:
                if not recommendations and not self._movement_recommendation_note else () ),
             "Since-shortlist change is an observed close-to-close price comparison, not realized trade performance.",
         ]
+        candidate_lines = [
+            f"{index:>2}. {item['symbol']:<8} {item['change_pct']:+.2f}% · scout {item['scout_score']:>2}/100 · "
+            + ("POTENTIAL TRADE · strategy-qualified; execution gates remain" if item.get("trade_candidate") else
+               f"watch · {item.get('direction', 'unknown')} · strategy {item.get('decision', 'unknown')}")
+            for index, item in enumerate(getattr(self, "_movement_candidate_records", [])[:12], start=1)
+        ]
         lines = [
             "Universe source",
             f"- Mode: {config.watchlist_universe}",
@@ -6035,6 +7790,12 @@ class TimmyNativeApp:
             f"- Extra provider symbols: {len(self._read_watchlist_symbols(self.movement_universe_extra_path)):,} "
             f"in {self.movement_universe_extra_path.name}",
             *([f"- Tracker warning: {self._movement_tracker_error}"] if self._movement_tracker_error else []),
+            "",
+            (f"Auto-discovery watchlist · at least {config.movement_watchlist_min_change_pct:.1f}% daily move · "
+             f"saved at {self._runtime_path(config.movement_watchlist_path or self.movement_watchlist_path).name}"),
+            (f"Potential trade promotion · at least {config.trade_candidate_min_change_pct:.1f}% daily move, "
+             "scout alert, bullish strategy eligibility, and normal order/risk checks."),
+            *(candidate_lines or ["No fresh percentage-qualified candidates in the saved scan window."]),
             *recommendation_lines,
             "",
             "Generated watchlists",
@@ -6726,7 +8487,8 @@ class TimmyNativeApp:
             f"- Paper account: {paper_cash_value} ({paper_cash_detail})",
             f"- Live switches: {'enabled' if self._live_ready(execution_config) else 'locked'}",
             f"- Account check: {'needed' if self._broker_check_required(execution_config) else 'fresh'}",
-            f"- Dry run required: {'yes' if config.webull_require_preview else 'no'}",
+            f"- Saved Live Auto opt-in: {'on' if execution_config.auto_start_live_on_market_open else 'off'}",
+            "- Exact broker preview: always required before every live placement",
             "",
             "Risk controls",
             f"- Max notional: {money(config.max_order_notional_usd)}",
@@ -6755,7 +8517,7 @@ class TimmyNativeApp:
         execution_config = self._execution_config(config)
         account_value = self._webull_account_card_value(execution_config)
         live_value = "On" if self._live_ready(execution_config) else "Locked"
-        preview_value = "Req" if config.webull_require_preview else "Off"
+        preview_value = "Req"
         self._update_label_map(
             getattr(self, "broker_summary_labels", {}),
             {
@@ -6774,7 +8536,7 @@ class TimmyNativeApp:
             f"- API region: {config.webull_region}",
             f"- Credential profile: {'configured' if config.webull_app_key and config.webull_app_secret else 'incomplete'}",
             f"- Live submission gate: {'enabled' if live_value == 'On' else 'locked'}",
-            f"- Preview gate: {'required' if config.webull_require_preview else 'optional'}",
+            "- Preview gate: required for every live placement",
             f"- OpenAPI submit switch: {'on' if config.webull_enable_live_orders else 'off'}",
             f"- Watchlist sync: {'on' if config.webull_sync_watchlists else 'off'}",
             f"- Last account check: {self.trade_cash_snapshot[1]}",
@@ -7262,6 +9024,14 @@ class TimmyNativeApp:
             return "Webull accepted the order request. Confirm its current state in Webull; acceptance is not a fill."
         if "failed" in statuses:
             return "Live order failed. Review Broker Details before retrying."
+        if "preflight-blocked" in statuses:
+            return "Live Auto held because the current Webull order/position snapshot could not be verified; no order was sent."
+        if "exposure-blocked" in statuses:
+            return "Live Auto found an existing or ambiguous order/position for a planned symbol; no duplicate entry was sent."
+        if "risk-blocked" in statuses:
+            return "Live Auto risk evaluation blocked this candidate before preview. Review Broker Details for the exact reasons."
+        if "activity-blocked" in statuses:
+            return "Live Auto skipped a candidate because a daily trade or rejection limit was reached."
         return None
 
     def _handle_tk_exception(self, exc_type, exc_value, exc_traceback) -> None:
@@ -7310,7 +9080,7 @@ class TimmyNativeApp:
                 pass
 
     def _sync_manual_controls(self) -> None:
-        locked = self.execution_mode_var.get() == "Auto"
+        locked = self.execution_mode_var.get() == "Auto" or self._automatic_fallback_active
         config = self._execution_config(self.config or self._load_config_safe())
         target = self.execution_target_var.get()
         live_target = target == "Live"
@@ -7711,6 +9481,7 @@ class TimmyNativeApp:
 
     def _market_decision_brief(self, signal) -> str:
         config = self.config or self._load_config_safe()
+        decision_audit = audit_signal_decision(signal, config)
         blockers = self._operational_blocks(signal, config)
         status = "READY FOR REVIEW" if not blockers else "GATED · REVIEW REQUIRED"
         explanation = explain_signal(signal)
@@ -7735,6 +9506,12 @@ class TimmyNativeApp:
             lines.extend(("", "GATE · NEXT STEP", f"{guidance[0].message}: {guidance[0].next_step}"))
         else:
             lines.extend(("", "GATE", "No operational blocks"))
+        decision_blocks = [gate for gate in decision_audit.gates if gate.status == "block"]
+        lines.extend(("", "PLAN DECISION", decision_audit.summary))
+        if decision_blocks:
+            lines.extend(f"BLOCK · {gate.name}: {gate.detail}" for gate in decision_blocks[:3])
+        else:
+            lines.append("All signal-to-plan gates pass; execution still requires the normal preview and controls.")
         return (
             "\n".join(lines)
         )
@@ -8748,6 +10525,9 @@ class TimmyNativeApp:
                 max_positions=3,
                 max_daily_loss_usd=100.0,
                 risk_per_trade_usd=25.0,
+                automation_max_symbol_exposure_pct=0.0,
+                automation_max_total_exposure_pct=0.0,
+                automation_max_drawdown_pct=0.0,
                 symbol_whitelist={"AAPL", "AMD", "DIA", "IWM", "MSFT", "NVDA", "QQQ", "SPY", "TSLA"},
                 max_order_notional_usd=250.0,
                 max_order_quantity=10.0,
@@ -8885,6 +10665,28 @@ class TimmyNativeApp:
         execution_mode = settings.get("execution_mode")
         if isinstance(execution_mode, str) and execution_mode in {"User", "Auto"}:
             self.execution_mode_var.set(execution_mode)
+        selected_manual = settings.get("manual_mode_user_selected")
+        if execution_mode == "Auto":
+            self._manual_mode_user_selected = False
+        elif isinstance(selected_manual, bool):
+            self._manual_mode_user_selected = selected_manual
+        elif execution_mode == "User":
+            # Existing settings did not record the source of Manual mode.
+            # Treat it as a deliberate choice rather than overriding it later.
+            self._manual_mode_user_selected = True
+        self._automatic_fallback_restore_mode = (
+            settings.get("automatic_fallback_restore_mode")
+            if settings.get("automatic_fallback_restore_mode") in {"User", "Auto"}
+            else "User"
+        )
+        fallback_reason = settings.get("automatic_fallback_reason")
+        self._automatic_fallback_reason = str(fallback_reason)[:220] if isinstance(fallback_reason, str) else ""
+        self._automatic_fallback_attempt = self._coerce_int(settings.get("automatic_fallback_attempt"), 0, 0, 4)
+        self._automatic_fallback_active = (
+            settings.get("automatic_fallback_active") is True
+            and not self._manual_mode_user_selected
+            and self.execution_mode_var.get() == "User"
+        )
         execution_target = settings.get("execution_target")
         if isinstance(execution_target, str) and execution_target in {"Paper", "Simulation", "Live"}:
             self.execution_target_var.set(execution_target)
@@ -8939,6 +10741,8 @@ class TimmyNativeApp:
             var.trace_add("write", lambda *_args: self._profile_form_changed())
 
     def _profile_form_changed(self) -> None:
+        if self._automation_cycle_in_progress and self._automation_cancel_event is not None:
+            self._automation_cancel_event.set()
         current_fingerprint = self._profile_fingerprint(self._current_profile_payload())
         if self.verified_profile_fingerprint and current_fingerprint != self.verified_profile_fingerprint:
             self.verified_profile_fingerprint = None
@@ -8960,6 +10764,11 @@ class TimmyNativeApp:
             pass
 
     def _settings_changed(self) -> None:
+        # Risk and automation settings are captured for each cycle. If they
+        # change mid-flight, finish the in-flight provider call but prevent
+        # the cycle from advancing to a broker request.
+        if self._automation_cycle_in_progress and self._automation_cancel_event is not None:
+            self._automation_cancel_event.set()
         self._save_runtime_settings()
         if getattr(self, "config", None) is not None:
             self._render_status()
@@ -8993,6 +10802,11 @@ class TimmyNativeApp:
             "auto_interval_minutes": bounded_values[2],
             "paper_auto": bool(self.paper_auto_var.get()),
             "execution_mode": self.execution_mode_var.get(),
+            "manual_mode_user_selected": bool(self._manual_mode_user_selected),
+            "automatic_fallback_active": bool(self._automatic_fallback_active),
+            "automatic_fallback_restore_mode": self._automatic_fallback_restore_mode,
+            "automatic_fallback_reason": self._automatic_fallback_reason[:220],
+            "automatic_fallback_attempt": self._automatic_fallback_attempt,
             "execution_target": self.execution_target_var.get(),
             "account_lane": self.account_lane_var.get(),
             "selected_webull_account_id": self._selected_webull_account_override() or "",
@@ -9102,6 +10916,8 @@ class TimmyNativeApp:
         return max(minimum, min(maximum, parsed))
 
     def _sync_automation(self) -> None:
+        if self._automatic_fallback_active:
+            self._clear_automatic_fallback(keep_manual=True)
         if self._automation_enabled():
             self._automation_wait_reason = ""
             self.status_bar.configure(text=f"{self.execution_target_var.get()} automation armed.")
@@ -9113,6 +10929,8 @@ class TimmyNativeApp:
             self._render_automation_panel()
 
     def _automation_enabled(self) -> bool:
+        if self._automatic_fallback_active:
+            return False
         if self.paper_auto_var.get():
             return True
         if self.execution_mode_var.get() != "Auto":
@@ -9135,6 +10953,17 @@ class TimmyNativeApp:
         return ""
 
     def _live_auto_block_reason(self) -> str:
+        config = self._execution_config(self.config or self._load_config_safe())
+        try:
+            self._configured_automation_risk_limits(config)
+        except RuntimeError as exc:
+            return str(exc)
+        if not config.auto_start_live_on_market_open:
+            return "Saved Live Auto opt-in is off; enable it in the Webull profile before automated Live orders."
+        if not self._live_ready(config):
+            return "Live account mode or the Webull live-order switch is off."
+        if self._broker_check_required(config):
+            return "Run Account Check before automated Live orders."
         unresolved_reason = self._unresolved_live_auto_reason()
         if self._automation_hold_reason:
             return self._automation_hold_reason
@@ -9208,6 +11037,12 @@ class TimmyNativeApp:
         return True
 
     def _on_execution_mode_selected(self) -> None:
+        if (self._automation_cycle_in_progress
+                and self.execution_mode_var.get() != self._automation_cycle_requested_mode
+                and self._automation_cancel_event is not None):
+            self._automation_cancel_event.set()
+        self._manual_mode_user_selected = self.execution_mode_var.get() == "User"
+        self._clear_automatic_fallback(keep_manual=False)
         if self.execution_mode_var.get() == "Auto" and self.execution_target_var.get() == "Live":
             unresolved_reason = self._unresolved_live_auto_reason()
             if unresolved_reason:
@@ -9241,10 +11076,18 @@ class TimmyNativeApp:
         self._render_automation_panel()
 
     def _arm_market_open_automation(self) -> None:
+        if self._automatic_fallback_active:
+            return
         config = self.config or self._load_config_safe()
-        paper_enabled = config.auto_start_paper_on_market_open and config.trader_mode == "paper"
+        paper_enabled = (
+            config.auto_start_paper_on_market_open and config.trader_mode == "paper"
+            and not self._manual_mode_user_selected
+        )
         live_block = self._live_auto_block_reason()
-        live_enabled = config.auto_start_live_on_market_open and self._live_ready(config) and not live_block
+        live_enabled = (
+            config.auto_start_live_on_market_open and self._live_ready(config)
+            and not live_block and not self._manual_mode_user_selected
+        )
         if config.auto_start_live_on_market_open and live_block:
             self._persist_live_automation_hold(live_block)
             self._automation_wait_reason = live_block
@@ -9288,12 +11131,18 @@ class TimmyNativeApp:
 
     def _market_open_tick(self) -> None:
         self.market_open_after_id = None
-        if self.closing:
+        if self.closing or self._automatic_fallback_active:
             return
         config = self.config or self._load_config_safe()
-        paper_enabled = config.auto_start_paper_on_market_open and config.trader_mode == "paper"
+        paper_enabled = (
+            config.auto_start_paper_on_market_open and config.trader_mode == "paper"
+            and not self._manual_mode_user_selected
+        )
         live_block = self._live_auto_block_reason()
-        live_enabled = config.auto_start_live_on_market_open and self._live_ready(config) and not live_block
+        live_enabled = (
+            config.auto_start_live_on_market_open and self._live_ready(config)
+            and not live_block and not self._manual_mode_user_selected
+        )
         if config.auto_start_live_on_market_open and live_block:
             self._persist_live_automation_hold(live_block)
             self._automation_wait_reason = live_block
@@ -9326,53 +11175,13 @@ class TimmyNativeApp:
         if self._automation_cycle_in_progress or self._action_in_progress or self._refresh_in_progress:
             self.status_bar.configure(text="Market-open cycle skipped while another operation is active.")
             return
-        self._automation_cycle_in_progress = True
-        self._automation_cycle_started_at = datetime.now(tz=ZoneInfo("America/New_York"))
-        self._automation_wait_reason = ""
-        cycle_result = "Market-open automation cycle complete."
-        live_status = None
-        previous_target = self.execution_target_var.get()
-        try:
-            if paper_enabled or live_enabled:
-                if live_enabled:
-                    self.execution_target_var.set("Live")
-                    self.execution_mode_var.set("Auto")
-                elif paper_enabled:
-                    self.execution_target_var.set("Paper")
-                self._refresh_payload()
-                lane_result_text = "\n\n".join(self._run_automation_lanes(paper_enabled=paper_enabled, live_enabled=live_enabled))
-                self._set_text(self.broker_text, lane_result_text)
-                live_status = (
-                    self._live_submission_status(
-                        "Submitting live order",
-                        self._automation_live_result_text(lane_result_text),
-                    )
-                    if live_enabled else None
-                )
-                if self._live_result_requires_automation_hold(live_status):
-                    self._hold_live_automation(live_status)
-                cycle_result = live_status or self._automation_result_label(lane_result_text)
-                if live_status:
-                    self.status_bar.configure(text=live_status)
-            self.execution_target_var.set(previous_target if not live_enabled else "Live")
-            if not live_enabled or not live_status:
-                self.status_bar.configure(text=cycle_result)
-        except Exception as exc:
-            self.status_bar.configure(text=f"Market-open automation cycle failed: {exc}")
-            self._set_text(self.broker_text, f"Market-open automation cycle failed:\n{exc}")
-            cycle_result = f"Market-open cycle failed: {str(exc)[:160]}"
-        finally:
-            finished_at = datetime.now(tz=ZoneInfo("America/New_York"))
-            started_at = self._automation_cycle_started_at
-            self._automation_last_run_at = finished_at
-            self._automation_last_duration_seconds = (
-                max(0.0, (finished_at - started_at).total_seconds()) if started_at else None
-            )
-            self._automation_last_result = cycle_result[:220]
-            self.execution_target_var.set(previous_target if not live_enabled else "Live")
-            self._automation_cycle_in_progress = False
-            self._automation_cycle_started_at = None
-            self._render_automation_panel()
+        if paper_enabled:
+            self.paper_auto_var.set(True)
+        if live_enabled and not self._manual_mode_user_selected:
+            self.execution_target_var.set("Live")
+            self.execution_mode_var.set("Auto")
+        self._automation_wait_reason = "Market-open cycle uses the standard asynchronous decision pipeline."
+        self.run_decision_cycle()
 
     def _schedule_automation(self) -> None:
         if self.closing or not self._automation_enabled():
@@ -9409,14 +11218,19 @@ class TimmyNativeApp:
         self._schedule_automation()
 
     def stop_automation(self) -> None:
+        self._clear_automatic_fallback(keep_manual=True)
+        if self._automation_cancel_event is not None:
+            self._automation_cancel_event.set()
         self.paper_auto_var.set(False)
         self.execution_mode_var.set("User")
+        self._manual_mode_user_selected = True
         self._automation_hold_reason = ""
         self._automation_wait_reason = ""
         self._cancel_automation_callback("automation_after_id")
         self._cancel_automation_callback("market_open_after_id")
         self._automation_next_run_at = None
         self._sync_manual_controls()
+        self._record_automation_mode_transition("user-stopped-automation", "Pause All Automation selected by user.")
         self.status_bar.configure(text="Automation stopped.")
         self._render_automation_panel()
 
@@ -9444,6 +11258,10 @@ class TimmyNativeApp:
             os.close(descriptor)
 
     def _append_execution_event(self, event: dict) -> None:
+        with self._execution_journal_lock:
+            self._append_execution_event_locked(event)
+
+    def _append_execution_event_locked(self, event: dict) -> None:
         payload = dict(event)
         payload.setdefault("recorded_at", datetime.now().isoformat())
         payload["prev_hash"] = self._last_audit_hash()
@@ -9612,6 +11430,7 @@ class TimmyNativeApp:
                 saw_records = False
                 resolution_candidates: set[str] = set()
                 order_result_candidates: set[str] = set()
+                order_action_result_candidates: set[str] = set()
                 active_automation_hold_id = ""
                 self.audit_status = "Audit chain ok"
                 for line in event_log:
@@ -9651,13 +11470,24 @@ class TimmyNativeApp:
                             trusted_unknown_events.append(event)
                         elif event_type == "buy-order" and event_status == "unknown":
                             trusted_unknown_events.append(event)
+                        elif event_type == "order-action-intent" and event_status == "pending-action":
+                            trusted_unknown_events.append(event)
+                        elif event_type == "order-action-result" and event_status == "unknown":
+                            trusted_unknown_events.append(event)
                         elif (
                             event_hash
-                            and event_type == "buy-order"
+                            and event_type in {"buy-order", "sell-order"}
                             and event_status in {"accepted", "rejected", "failed", "submitted", "cancelled", "canceled", "expired", "preview-required"}
                             and event.get("client_order_id")
                         ):
                             order_result_candidates.add(str(event["client_order_id"]))
+                        elif (
+                            event_hash
+                            and event_type == "order-action-result"
+                            and event_status in {"accepted", "rejected", "failed", "submitted", "cancelled", "canceled", "expired"}
+                            and event.get("client_order_id")
+                        ):
+                            order_action_result_candidates.add(str(event["client_order_id"]))
                     if (
                         event_hash
                         and event.get("event_type") == "order-resolution"
@@ -9670,7 +11500,7 @@ class TimmyNativeApp:
                     chain_valid = False
                 if chain_valid:
                     trusted_resolution_ids = resolution_candidates
-                    trusted_order_result_ids = order_result_candidates
+                    trusted_order_result_ids = order_result_candidates | order_action_result_candidates
                     self._persisted_live_automation_hold_id = active_automation_hold_id
 
             events.extend(trusted_unknown_events)
@@ -9685,8 +11515,10 @@ class TimmyNativeApp:
             event_type = str(event.get("event_type", "")).lower()
             event_status = str(event.get("status", "")).lower()
             if not (
-                (event_type == "buy-order" and event_status == "unknown")
+                (event_type in {"buy-order", "sell-order"} and event_status == "unknown")
                 or (event_type == "live-order-intent" and event_status == "pending-submit")
+                or (event_type == "order-action-intent" and event_status == "pending-action")
+                or (event_type == "order-action-result" and event_status == "unknown")
             ):
                 continue
             client_order_id = str(event.get("client_order_id") or "").strip()
@@ -9850,7 +11682,8 @@ class TimmyNativeApp:
     @staticmethod
     def _broker_event_status(result: dict) -> str:
         raw_status = str(result.get("status") or "").lower()
-        if raw_status in {"preview-required", "rejected", "failed", "accepted", "unknown"}:
+        if raw_status in {"preview-required", "rejected", "failed", "accepted", "unknown",
+                          "preflight-blocked", "exposure-blocked", "risk-blocked", "activity-blocked"}:
             return raw_status
         status_code = result.get("status_code")
         try:
@@ -9917,6 +11750,7 @@ class TimmyNativeApp:
             "rotation_state": getattr(self, "rotation_state_path", home / "timmy-watchlist-rotation.json"),
             "movement_rotation_state": getattr(self, "movement_rotation_state_path", home / "timmy-movement-universe-rotation.json"),
             "movement_tracker": getattr(self, "movement_tracker_path", home / "timmy-movement-tracker.json"),
+            "movement_scan_candidates": getattr(self, "movement_scan_bars_path", home / "movement-scan-candidates.csv"),
             "recent_movers": getattr(self, "recent_movers_path", home / "recent-movers-96h.txt"),
             "movement_universe_extra": getattr(self, "movement_universe_extra_path", home / "movement-universe-extra.txt"),
             "paper_journal": getattr(self, "journal_path", home / "trade-journal.jsonl"),

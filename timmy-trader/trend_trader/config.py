@@ -56,6 +56,11 @@ def _risk_limit_int_env(name: str, default: int) -> int:
     return value if value >= 0 else 0
 
 
+def _movement_threshold_env(name: str, default: float) -> float:
+    value = _float_env(name, default)
+    return value if value > 0 and value <= 100 else default
+
+
 def _json_map(value: str | None) -> dict[str, object]:
     if not value:
         return {}
@@ -81,6 +86,9 @@ class BotConfig:
     max_positions: int
     max_daily_loss_usd: float
     risk_per_trade_usd: float
+    automation_max_symbol_exposure_pct: float
+    automation_max_total_exposure_pct: float
+    automation_max_drawdown_pct: float
     symbol_whitelist: set[str]
     max_order_notional_usd: float
     max_order_quantity: float
@@ -129,6 +137,8 @@ class BotConfig:
     max_watchlist_symbols: int
     max_movement_watchlist_symbols: int
     min_watchlist_scout_score: int
+    movement_watchlist_min_change_pct: float
+    trade_candidate_min_change_pct: float
     quiet_watchlist_scout_score: int
     enable_crypto_trading: bool
     enable_futures_trading: bool
@@ -175,6 +185,9 @@ def load_config() -> BotConfig:
         max_positions=_risk_limit_int_env("MAX_POSITIONS", 3),
         max_daily_loss_usd=_risk_limit_float_env("MAX_DAILY_LOSS_USD", 100.0),
         risk_per_trade_usd=_risk_limit_float_env("RISK_PER_TRADE_USD", 25.0),
+        automation_max_symbol_exposure_pct=_risk_limit_float_env("AUTO_MAX_SYMBOL_EXPOSURE_PCT", 0.0),
+        automation_max_total_exposure_pct=_risk_limit_float_env("AUTO_MAX_TOTAL_EXPOSURE_PCT", 0.0),
+        automation_max_drawdown_pct=_risk_limit_float_env("AUTO_MAX_DRAWDOWN_PCT", 0.0),
         symbol_whitelist=_csv_set(os.getenv("WEBULL_SYMBOL_WHITELIST")),
         max_order_notional_usd=_risk_limit_float_env("WEBULL_MAX_ORDER_NOTIONAL_USD", 250.0),
         max_order_quantity=_risk_limit_float_env("WEBULL_MAX_ORDER_QUANTITY", 10.0),
@@ -201,7 +214,7 @@ def load_config() -> BotConfig:
         paper_simulation_ignore_market_hours=os.getenv("PAPER_SIMULATION_IGNORE_MARKET_HOURS", "1") != "0",
         paper_simulation_min_scout_score=_int_env("PAPER_SIMULATION_MIN_SCOUT_SCORE", 40),
         market_data_provider=os.getenv("MARKET_DATA_PROVIDER", "yahoo").lower(),
-        market_data_max_age_minutes=_int_env("MARKET_DATA_MAX_AGE_MINUTES", 15),
+        market_data_max_age_minutes=_int_env("MARKET_DATA_MAX_AGE_MINUTES", 10),
         market_data_fetch_timeout_seconds=_int_env("MARKET_DATA_FETCH_TIMEOUT_SECONDS", 4),
         market_data_fetch_workers=max(1, min(24, _int_env("MARKET_DATA_FETCH_WORKERS", 12))),
         watchlist_path=os.getenv("WATCHLIST_PATH") or None,
@@ -217,12 +230,14 @@ def load_config() -> BotConfig:
         watchlist_template=os.getenv("WATCHLIST_TEMPLATE", "equity"),
         enable_watchlist_rotation=os.getenv("ENABLE_WATCHLIST_ROTATION", "0") == "1",
         watchlist_universe=os.getenv("WATCHLIST_UNIVERSE", "all-us").strip().lower(),
-        watchlist_universe_batch_size=_int_env("WATCHLIST_UNIVERSE_BATCH_SIZE", 100),
+        watchlist_universe_batch_size=_int_env("WATCHLIST_UNIVERSE_BATCH_SIZE", 200),
         watchlist_universe_refresh_hours=_int_env("WATCHLIST_UNIVERSE_REFRESH_HOURS", 24),
         watchlist_rotation_candidates=_csv_set(os.getenv("WATCHLIST_ROTATION_CANDIDATES")),
         max_watchlist_symbols=_int_env("MAX_WATCHLIST_SYMBOLS", 12),
         max_movement_watchlist_symbols=_int_env("MAX_MOVEMENT_WATCHLIST_SYMBOLS", 50),
         min_watchlist_scout_score=_int_env("MIN_WATCHLIST_SCOUT_SCORE", 42),
+        movement_watchlist_min_change_pct=_movement_threshold_env("MOVEMENT_WATCHLIST_MIN_CHANGE_PCT", 1.1),
+        trade_candidate_min_change_pct=_movement_threshold_env("TRADE_CANDIDATE_MIN_CHANGE_PCT", 2.2),
         quiet_watchlist_scout_score=_int_env("QUIET_WATCHLIST_SCOUT_SCORE", 30),
         enable_crypto_trading=os.getenv("ENABLE_CRYPTO_TRADING", "0") == "1",
         enable_futures_trading=os.getenv("ENABLE_FUTURES_TRADING", "0") == "1",

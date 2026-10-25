@@ -175,7 +175,7 @@ timmy webull-preview --data examples/sample_bars.csv
 - In the native GUI, live submit requires the exact current preview to be less than three minutes old and tied to the same configured account.
 - In `Live / Auto`, that exact preview is performed inside the automation cycle before the submit gate runs.
 - For current equities/ETFs, expect US equity-style payloads and regular-session behavior unless intentionally changed.
-- Keep `WEBULL_REQUIRE_PREVIEW=1` until the final approved-account order preview/place method is tested.
+- Keep `WEBULL_REQUIRE_PREVIEW=1`. Timmy always requires an exact successful preview and will submit only the same payload with its fresh receipt; the legacy flag cannot turn preview off. Live Auto also requires the saved Live Auto opt-in.
 - Red flag: if preview fails, is unavailable, uses the wrong instrument type, or cannot confirm quantity/price constraints, do not submit live.
 - Red flag: never send crypto, futures, options, event contracts, direct indexes, forex, CFDs, or unsupported instruments through an equity payload.
 

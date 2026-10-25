@@ -284,7 +284,7 @@ quiet-watchlist.txt
 decision cycle -> exact Webull preview -> live submit -> execution event -> account/buying-power refresh
 ```
 
-5. The live submit path uses `WebullOpenApiBroker.submit_order()`, which calls the Webull OpenAPI order placement endpoint after the configured live guards pass.
+5. The Live Auto path is currently limited to US equities/ETFs. It uses an exact Webull preview receipt on the same adapter and normalized payload before the one placement call; the raw `submit_order()` adapter method fails closed.
 
 6. The live guards that must remain intentional are:
 
@@ -292,11 +292,12 @@ decision cycle -> exact Webull preview -> live submit -> execution event -> acco
 TRADER_MODE=live
 TRADER_LIVE=1
 WEBULL_ENABLE_LIVE_ORDERS=1
-WEBULL_REQUIRE_PREVIEW=0
+WEBULL_REQUIRE_PREVIEW=1
 WEBULL_ACCOUNT_ID configured locally
+AUTO_START_LIVE_ON_MARKET_OPEN=1 (saved Live Auto opt-in)
 ```
 
-7. The native app still performs the exact-current-plan preview immediately before submit in `Live / Auto`. This is part of the unattended workflow and does not require a Webull Desktop click.
+7. The native app performs the exact-current-plan preview immediately before submit in `Live / Auto`; it requires a saved Live Auto opt-in and Account Check. The preview is always required even if a legacy setting was previously changed to `0`.
 
 8. Timmy can run separate paper and live automation lanes. `Paper lane`
    journals simulated trades for learning while `Live / Auto` uses the guarded
@@ -380,10 +381,12 @@ Use this to keep Timmy looking across the U.S. listed universe instead of a fixe
 
 ```text
 WATCHLIST_UNIVERSE=all-us
-WATCHLIST_UNIVERSE_BATCH_SIZE=100
+WATCHLIST_UNIVERSE_BATCH_SIZE=200
+MOVEMENT_WATCHLIST_MIN_CHANGE_PCT=1.1
+TRADE_CANDIDATE_MIN_CHANGE_PCT=2.2
 ```
 
-2. When cached candles are stale, Timmy scans a rotating batch from the configured universe (100 symbols by default). It can scan even when `ENABLE_WATCHLIST_ROTATION=0`. The scan uses daily bars and is partial; provider limits and errors can delay or leave coverage incomplete. This scan alone does not change the active strategy watchlist or make every symbol tradable.
+2. When cached candles are stale, Timmy scans a rotating batch from the configured universe (200 symbols by default). It can scan even when `ENABLE_WATCHLIST_ROTATION=0`. The scan uses 90 daily bars and is partial; provider limits and errors can delay or leave coverage incomplete. This scan alone does not change the active strategy watchlist or make every symbol tradable.
 
 3. To separately rotate the active custom watchlist based on the candidate pool, set `ENABLE_WATCHLIST_ROTATION=1`. Review its active-list and broker whitelist settings before use.
 
@@ -393,13 +396,13 @@ WATCHLIST_UNIVERSE_BATCH_SIZE=100
 
 6. `active-watchlist.txt` is the custom list Timmy trades from.
 
-7. `movement-watchlist.txt` tracks symbols with enough activity to monitor.
+7. `movement-watchlist.txt` is a separately saved, move-ranked discovery list. It includes symbols whose absolute daily close-to-close change meets `MOVEMENT_WATCHLIST_MIN_CHANGE_PCT` (1.1% by default), up to `MAX_MOVEMENT_WATCHLIST_SYMBOLS` entries.
 
-8. `trade-ready-watchlist.txt` tracks active symbols whose strategy signal is eligible before broker/risk submission checks.
+8. An automated entry candidate additionally needs an absolute move at least `TRADE_CANDIDATE_MIN_CHANGE_PCT` (2.2% by default), a bullish direction, scout score of at least 72, an eligible strategy result, and an executable plan. Auto lanes use the saved discovery candidate bars; the candidate cache is separate from the active custom watchlist.
 
-9. `quiet-watchlist.txt` tracks symbols removed because activity fell below the quiet threshold.
+9. `trade-ready-watchlist.txt` tracks symbols on the active custom list whose strategy signal is eligible before broker/risk submission checks. `quiet-watchlist.txt` tracks symbols removed because activity fell below the quiet threshold.
 
-10. If Timmy scans but does not trade, check `trade-ready-watchlist.txt`, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
+10. Movement thresholds do not bypass the symbol whitelist, account checks, buying power, risk limits, cooldowns, exact order preview, or other broker controls. If Timmy scans but does not trade, check the discovery candidate gate, strategy scores, broker risk gates, buying power, cooldowns, and rejection history.
 
 ## 11. Webull Watchlist Sync Workflow
 
