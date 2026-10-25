@@ -3,6 +3,6 @@
   "short_name": "Timmy",
   "start_url": "index.html",
   "display": "browser",
-  "background_color": "#f5f0e8",
-  "theme_color": "#111111"
+  "background_color": "#090d0b",
+  "theme_color": "#090d0b"
 }
