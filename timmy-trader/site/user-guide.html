@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="A practical guide to Timmy's market desk, scanner, paper workflow, alerts, account setup, and live safety gates.">
+    <meta name="description" content="Complete Timmy 0.1.16 guide to installation, market discovery, percentage-based trade candidates, Paper, Simulation, guarded Live automation, Webull setup, and recovery.">
     <meta name="theme-color" content="#f5f0e8">
-    <title>Timmy User Guide | Market Desk, Paper, and Live Workflows</title>
+    <title>Timmy 0.1.16 User Guide | Auto Trade Assistant</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="css/styles.css">
     <style>
@@ -44,8 +44,14 @@
       .guide-download p { margin: 4px 0 0; }
       .guide-small { color: var(--muted); font-size: .9rem; }
       .guide-content :target { outline: 0; }
-      @media (max-width: 850px) { .guide-layout { grid-template-columns: 1fr; gap: 22px; } .guide-toc { position: static; } .guide-toc ol { columns: 2; column-gap: 28px; } .guide-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-      @media (max-width: 520px) { .guide-hero { padding-top: 38px; } .guide-layout { padding-inline: 18px; } .guide-toc ol { columns: 1; } .guide-flow { grid-template-columns: 1fr; } }
+      .guide-toc .toc ul { margin: 0; padding-left: 20px; }
+      .guide-content table { width: 100%; border-collapse: collapse; }
+      .guide-content th, .guide-content td { padding: 11px 14px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+      .guide-content thead th { background: #ece3d7; }
+      .guide-content pre { overflow-x: auto; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+      .guide-content code { overflow-wrap: anywhere; }
+      @media (max-width: 850px) { .guide-layout { grid-template-columns: 1fr; gap: 22px; } .guide-toc { position: static; } .guide-toc ol, .guide-toc .toc > ul { columns: 2; column-gap: 28px; } .guide-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 520px) { .guide-hero { padding-top: 38px; } .guide-layout { padding-inline: 18px; } .guide-toc ol, .guide-toc .toc > ul { columns: 1; } .guide-flow { grid-template-columns: 1fr; } }
       @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     </style>
   </head>
@@ -69,16 +75,16 @@
     <main id="main-content" tabindex="-1">
       <section class="guide-hero" aria-labelledby="guide-title">
         <div class="guide-hero-inner">
-          <p class="eyebrow">Timmy desktop · operator guide</p>
+          <p class="eyebrow">Timmy 0.1.16 · operator guide</p>
           <h1 id="guide-title">A clear path from market scan to guarded action.</h1>
-          <p class="lead">Learn the desk, understand what a signal means, and keep paper activity separate from orders that can reach your broker.</p>
+          <p class="lead">Install the current build, follow market movers into qualified candidates, and understand every safety gate before enabling automation or broker orders.</p>
           <div class="pill-row" aria-label="Guide topics">
-            <span class="pill">Paper-first workflow</span>
-            <span class="pill">Local data and alerts</span>
-            <span class="pill">Explicit live gates</span>
+            <span class="pill">Movement thresholds</span>
+            <span class="pill">Paper · Simulation · Live</span>
+            <span class="pill">Guarded automation</span>
           </div>
           <div class="actions">
-            <a class="button" href="#start">Start with the safe workflow</a>
+            <a class="button" href="#start-safely">Start with the safe workflow</a>
             <a class="button secondary" href="/downloads/timmy-brochure.pdf" aria-label="Download the Timmy product brochure as a PDF">Brochure PDF</a>
           </div>
           <p class="guide-small">The three-page product brochure is available as a printable PDF.</p>
@@ -86,101 +92,437 @@
       </section>
 
       <div class="guide-layout">
-        <nav class="guide-toc" aria-label="On this page">
-          <h2>Guide contents</h2>
-          <ol>
-            <li><a href="#start">Start safely</a></li>
-            <li><a href="#desk">Navigate the desk</a></li>
-            <li><a href="#scan">Read a scan</a></li>
-            <li><a href="#organization">Groups and pins</a></li>
-            <li><a href="#paper-live">Paper and Live</a></li>
-            <li><a href="#setup">Set up Webull</a></li>
-            <li><a href="#alerts-auto">Alerts and automation</a></li>
-            <li><a href="#troubleshooting">Troubleshooting</a></li>
-            <li><a href="#limits">Current limits</a></li>
-          </ol>
-        </nav>
+        <nav class="guide-toc" aria-label="On this page"><h2>Guide contents</h2><div class="toc">
+<ul>
+<li><a href="#start-safely">Start safely</a></li>
+<li><a href="#the-desk-at-a-glance">The desk at a glance</a></li>
+<li><a href="#read-a-scan-and-a-plan">Read a scan and a plan</a><ul>
+<li><a href="#personal-groups-and-pins">Personal groups and pins</a></li>
+<li><a href="#research-workbench">Research workbench</a></li>
+<li><a href="#data-freshness-and-quality">Data freshness and quality</a></li>
+<li><a href="#rolling-96-hour-movers-and-upside-shortlist">Rolling 96-hour movers and upside shortlist</a></li>
+</ul>
+</li>
+<li><a href="#paper-and-live-are-separate">Paper and Live are separate</a><ul>
+<li><a href="#paper">Paper</a></li>
+<li><a href="#simulation">Simulation</a></li>
+<li><a href="#live">Live</a></li>
+</ul>
+</li>
+<li><a href="#configure-webull-locally">Configure Webull locally</a></li>
+<li><a href="#alerts-and-automation">Alerts and automation</a></li>
+<li><a href="#local-data-and-troubleshooting">Local data and troubleshooting</a></li>
+<li><a href="#more-help">More help</a></li>
+</ul>
+</div>
+</nav>
 
-        <article class="guide-content">
-          <section id="start" aria-labelledby="start-title">
-            <h2 id="start-title">Start safely</h2>
-            <div class="guide-callout" role="note">
-              <strong>Check your installed version.</strong>
-              <p>This guide documents Timmy 0.1.6, built October 21, 2026. If you are using an older installed build, some controls may differ. Use the controls present in your installed version and do not assume a website guide means a feature is available in an older build.</p>
-            </div>
-            <ol>
-              <li>Install the Linux package from the <a href="download.html">Download page</a>. Verify its SHA-256 checksum before installation.</li>
-              <li>Launch Timmy from your application menu or the installed desktop launcher.</li>
-              <li>Keep the execution target on <strong>Paper</strong> and mode on <strong>User</strong>. Check the Paper lane indicator: depending on profile settings, paper activity may arm at market open.</li>
-              <li>Select <strong>Scan</strong> on the Market workspace and confirm the candle timestamp and source before using the results.</li>
-              <li>Select a symbol to connect its chart, Decision Brief, and order plan.</li>
-            </ol>
-            <div class="guide-callout" role="note">
-              <strong>First-run data can be synthetic.</strong>
-              <p>If Timmy has no local candle file, it may create sample bars for the demo. Sample bars are not market data. Check the source and timestamps before relying on any price or signal.</p>
-            </div>
-          </section>
-
-          <section id="desk" aria-labelledby="desk-title">
-            <h2 id="desk-title">Navigate the desk</h2>
-            <div class="guide-table-wrap" role="region" aria-label="Workspace descriptions" tabindex="0">
-              <table class="guide-table">
-                <caption>Timmy workspaces and their main purpose</caption>
-                <thead><tr><th scope="col">Workspace</th><th scope="col">Use it for</th></tr></thead>
-                <tbody>
-                  <tr><th scope="row">Market</th><td>Ranked radar, selected-symbol chart, Decision Brief, and order-plan context.</td></tr>
-                  <tr><th scope="row">Scanner</th><td>Search, filter, sort, and inspect signal rows; save scanner filter presets.</td></tr>
-                  <tr><th scope="row">Strategy</th><td>Inspect styles, enabled patterns, score gates, readiness, and blocker reasons.</td></tr>
-                  <tr><th scope="row">Universe</th><td>Review the scanned universe and generated watchlist status.</td></tr>
-                  <tr><th scope="row">Portfolio</th><td>Review the local paper ledger, paper positions/results, and separately checked broker cash.</td></tr>
-                  <tr><th scope="row">Automation</th><td>Review lane readiness and cycle interval; enable paper automation or pause all automation.</td></tr>
-                  <tr><th scope="row">Alerts</th><td>Create local signal rules, pause/remove them, and acknowledge one or all new events.</td></tr>
-                  <tr><th scope="row">Execution</th><td>Review target, mode, order queue, risk controls, previews, and order actions.</td></tr>
-                  <tr><th scope="row">Broker</th><td>Check the Webull account, buying-power snapshot, and connection response.</td></tr>
-                  <tr><th scope="row">Setup</th><td>Verify and save the local broker profile and inspect configuration status.</td></tr>
-                  <tr><th scope="row">Audit / Health</th><td>Review execution history, integrity, readiness, and diagnostic blockers.</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <p><kbd>Ctrl</kbd> + <kbd>K</kbd> opens Quick Jump. <kbd>F5</kbd> refreshes the data and scan state. <kbd>Ctrl</kbd> + <kbd>R</kbd> runs a decision cycle. A cycle can journal paper orders if the Paper lane is enabled; Live/Auto can submit only when every live gate is open.</p>
-          </section>
-
-          <section id="scan" aria-labelledby="scan-title">
-            <h2 id="scan-title">Read a scan, not just a score</h2>
-            <ol class="guide-flow" aria-label="Signal review sequence">
-              <li><strong>Radar</strong>See which symbols are moving and choose a ticker.</li>
-              <li><strong>Read</strong>Check signal score, scout urgency, action, price gates, reasons, and data quality.</li>
-              <li><strong>Risk</strong>Review entry, stop, target, reward/risk, size, and operational blockers.</li>
-              <li><strong>Act</strong>Choose a separate paper action or a fully gated live workflow.</li>
-            </ol>
-            <p>The default data source is Yahoo delayed daily bars; choose CSV to use a local file instead. Remote providers do not provide streaming quotes. Timmy refreshes data according to the selected provider and cache age; a failed refresh can leave older local candles in place.</p>
-            <p>Scanner text and category filters, sortable columns, and saved filters help narrow the visible rows. A saved filter stores its query, category, and minimum score. Applying one restores the shared minimum-score setting, which can affect plan eligibility. Applying a filter does not itself submit an order or enable broker access.</p>
-            <p>The selected-symbol chart can show the loaded candles, moving averages, volume, and planned entry/stop/target levels. Remote providers currently supply delayed daily bars. These levels are estimates from Timmy's model and do not ensure execution at those prices.</p>
-            <p>A signal marked “trade” or a high score is not an order approval. Timmy may block a plan for score, overextension, volatility, reward/risk, stale data, market session, cash, order size, cooldown, daily limits, broker response, or asset-class support.</p>
-            <div class="guide-callout" role="note">
-              <strong>Quality estimates need context.</strong>
-              <p>The selected-symbol panel reports candle freshness, estimated gaps, duplicate timestamps, and invalid OHLC bars. Gap estimates use a fixed interval and do not know exchange calendars, weekends, or holidays. Inspect timestamps and the configured provider when flags appear.</p>
-            </div>
-            <h3>Rolling 96-hour movers and upside shortlist</h3>
-            <p>Yahoo data and the all-US universe are the built-in defaults, so a market-data refresh checks a rotating batch when the cached candles need refreshing. Timmy tracks daily bars with price movement and drops symbols after their latest observed movement is older than 96 hours. The scan uses a separate cursor and does not change the active trade watchlist; automatic watchlist rotation stays off by default. The Universe panel shows the latest provider check, last response with data, batch size versus configured list, returned-bar ratio, and partial or unavailable results. A batch is only the requested slice; this is not a claim that every listed instrument was checked. Provider limits or failed requests can delay coverage. Add provider-supported symbols one per line to <code>movement-universe-extra.txt</code>.</p>
-            <p>The tracked universe includes US exchange-listed stocks and ETFs plus a small set of index benchmarks, Treasury-yield symbols, bond ETF proxies, crypto pairs, and futures. It does not enumerate individual bonds, every global listing, every option contract, or every instrument. Daily bars provide movement observations rather than continuous intraday coverage. The local files <code>timmy-movement-tracker.json</code> and <code>recent-movers-96h.txt</code> hold history and the current list.</p>
-            <p>The Universe workspace's <strong>Fresh Bullish Shortlist · Top 10</strong> ranks bullish signals among 96-hour movers using Timmy's existing technical, sensible, and scout scores. Choose <strong>All fresh</strong>, <strong>Pinned only</strong>, or <strong>Frequent movers (3+)</strong> to filter the shortlist; ranking within the filter stays score-based. A setup must have a timestamped observation within the rolling 96 hours; old or undated setups are hidden. The list shows the number of moving daily bars, whether a symbol is pinned, how many dated shortlist observations were retained, and observed price change since the symbol first entered the current shortlist run. That comparison is a close-to-close market observation, not a simulated fill, realized trade return, or probability forecast. Review current prices and risk controls yourself; this shortlist does not submit orders.</p>
-          </section>
-
-          <section id="organization" aria-labelledby="organization-title">
-            <h2 id="organization-title">Keep personal groups separate from trading scope</h2>
-            <p>Select a symbol, create a personal group, then add the selected symbol to that group. Pin a symbol to filter the radar to pinned tickers. In the broad mover scan, in-scope pins are also scheduled first and receive up to half of each batch; one-symbol batches use a persisted two-pin-to-one-rotating-symbol cadence. The remaining slots keep moving through non-pinned symbols, so pins do not freeze universe coverage. Pins outside the configured universe cannot be scanned until that symbol is added to the configured list. Provider-unavailable results are only reported in aggregate: a missing response does not establish that a ticker is unsupported.</p>
-            <p>Use the radar's <strong>Quiet</strong> / <strong>Unquiet</strong> control to hide an individual ticker from the radar and the default research/scanner lists, and to silence new local alert evaluations for it. Choose <strong>Locally quieted</strong> in the scanner's Show filter to find and unquiet it again. This is a personal UI preference stored with groups and pins; it never changes generated watchlists, execution scope, open positions, or broker state. It is distinct from the generated <strong>Quiet Removed</strong> list, which records symbols removed from the active rotation after their scout scores fall below the configured threshold.</p>
-          </section>
-
-          <section id="paper-live" aria-labelledby="paper-live-title">
-            <h2 id="paper-live-title">Paper and Live are different lanes</h2>
-            <div class="grid two">
-              <article class="card">
-                <h3>Paper: simulated and local</h3>
-                <p><strong>Paper Trade</strong> records simulated orders in Timmy's local journal and does not send orders to Webull. Portfolio positions, cash, and results are derived from this paper ledger and loaded candle prices. Simulated fills can differ from real execution.</p>
-                <p>The Paper lane can run on a schedule. Use Automation to check whether it is armed, and use <strong>Pause All Automation</strong> to stop scheduled cycles.</p>
-              </article>
+        <article class="guide-content"><p>Timmy is a native Linux desktop tool for scanning market candles, reviewing
+strategy signals, building risk-capped order plans, and recording paper-trade
+activity. It can connect to Webull OpenAPI for account checks, order previews,
+and a guarded live-order path. It does not predict the future or guarantee a
+profit.</p>
+<p>This guide covers the Timmy 0.1.16 desktop release, including movement
+discovery, candidate promotion, and Paper, Simulation, and Live automation.
+The same release is installed as the Debian package and offered on the public
+download page. For live trading, read the <a href="#paper-and-live-are-separate">Paper and Live safety section</a>
+and <a href="#configure-webull-locally">Webull Setup guide</a> first. Public product page:
+<a href="https://timmy-tradesonauto.web.app/user-guide.html">Timmy User Guide</a>.</p>
+<p>Check an installed package version with
+<code>dpkg-query -W -f='${Version}\n' timmy-trader</code>. The current package is 0.1.16.
+If you use an older build, some controls may differ; upgrade from the
+<a href="https://timmy-tradesonauto.web.app/download.html">Download page</a> before
+following a workflow that is not present in your version.</p>
+<h2 id="start-safely">Start safely</h2>
+<ol>
+<li>Download <strong>Timmy Installation Manager 0.1.16</strong> from the <a href="https://timmy-tradesonauto.web.app/download.html">Download page</a>.
+   Keep the <code>.deb</code> and matching <code>.sha256</code> file together, then verify them with
+   <code>sha256sum -c Timmy-Installation-Manager_0.1.16_amd64.deb.sha256</code>.
+   Install or upgrade with
+   <code>sudo apt install ./Timmy-Installation-Manager_0.1.16_amd64.deb</code>.</li>
+<li>Launch Timmy from your desktop application menu, or run <code>timmy-trader</code> from
+   a terminal after installation.</li>
+<li>Leave the execution target on <strong>Paper</strong> and the operating mode on <strong>User</strong>.
+   This keeps live order routing off. Check the <strong>Paper lane</strong> indicator too:
+   the default profile can arm paper activity at market open, and paper runs
+   write simulated events to a local journal.</li>
+<li>Review <strong>Automation</strong> first for current mode, target, next cycle, data and
+   account health, risk blockers, and any Live order lifecycle hold. Keep <strong>User</strong>
+   mode and <strong>Paper</strong> selected while learning the workflow.</li>
+<li>Select <strong>Scan</strong> on Overview. Review the data timestamp and source before
+   interpreting any signal.</li>
+<li>Select a row in the radar or Scanner to link its chart, Decision Brief, and
+   order-plan context.</li>
+</ol>
+<p>On a new profile, the desktop app can create sample candles when no local data
+file exists. Sample candles are synthetic demo data. They are not market quotes
+and must not be used as evidence for a real order. Confirm the data source and
+timestamps shown by Timmy before relying on a scan.</p>
+<h2 id="the-desk-at-a-glance">The desk at a glance</h2>
+<div class="guide-table-wrap" role="region" aria-label="Guide reference table" tabindex="0"><table class="guide-table">
+<thead>
+<tr>
+<th>Workspace</th>
+<th>What it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Automation</strong></td>
+<td>First stop for cycle state, next action, data/account health, risk blockers, Live lifecycle status, and separate Paper and Simulation feedback. Its compact controls select Target, User/Auto, and the Paper lane.</td>
+</tr>
+<tr>
+<td><strong>Overview</strong></td>
+<td>Ranked radar, selected-symbol chart, Decision Brief, and current order plan.</td>
+</tr>
+<tr>
+<td><strong>Scanner</strong></td>
+<td>Search, filter, sort, and inspect the full signal list. Saved scanner filters only affect the displayed scan view.</td>
+</tr>
+<tr>
+<td><strong>Research</strong></td>
+<td>Inspect scan coverage, compare local evidence, preview CSV imports, plan market sessions, compare symbol groups, and export a redacted snapshot.</td>
+</tr>
+<tr>
+<td><strong>Strategy</strong></td>
+<td>Review style, enabled patterns, score thresholds, readiness gates, and why a candidate is blocked.</td>
+</tr>
+<tr>
+<td><strong>Universe</strong></td>
+<td>Inspect the symbol universe and generated watchlist status.</td>
+</tr>
+<tr>
+<td><strong>Portfolio</strong></td>
+<td>Review the local paper ledger and a separately checked broker-cash snapshot. Portfolio positions and P&amp;L are paper-ledger data.</td>
+</tr>
+<tr>
+<td><strong>Alerts</strong></td>
+<td>Create local signal rules, pause or remove them, and acknowledge one or all new events. Alerts never place orders.</td>
+</tr>
+<tr>
+<td><strong>Execution</strong></td>
+<td>Review the plan queue, strategy thresholds, account lane, order previews/submission, and unknown-order recovery controls.</td>
+</tr>
+<tr>
+<td><strong>Broker</strong></td>
+<td>Verify the configured Webull account, refresh account/buying-power information, and inspect connection results.</td>
+</tr>
+<tr>
+<td><strong>Setup</strong></td>
+<td>Configure market-data and trading preferences, and verify/save a local Webull profile.</td>
+</tr>
+<tr>
+<td><strong>Audit</strong></td>
+<td>Review execution-event history and integrity status.</td>
+</tr>
+<tr>
+<td><strong>Health</strong></td>
+<td>Review readiness, data freshness, account blockers, and diagnostic explanations.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Use <strong>Ctrl+K</strong> for Quick Jump to a workspace, action, or symbol. <strong>F5</strong> refreshes
+market data; <strong>Ctrl+R</strong> runs a decision cycle. A decision cycle refreshes and
+rebuilds the signal and plan state. If a paper lane is enabled, it can also
+journal paper orders; if Live/Auto and all live gates are open, it may follow
+the live path. Review the target and mode before using it.</p>
+<h2 id="read-a-scan-and-a-plan">Read a scan and a plan</h2>
+<ol>
+<li><strong>Scan</strong> refreshes market data when the configured provider and cache rules
+   call for it, then recalculates signals. The default provider is Yahoo delayed
+   daily bars; choose CSV to use a local file instead. Remote providers do not
+   provide a streaming quote feed.</li>
+<li>The <strong>radar</strong> summarizes ranked symbols. Personal <strong>Pinned</strong> and named
+   watchlist groups change which signals are shown in this view; they do not
+   replace Timmy's active trading watchlist or change generated trade-ready
+   lists.</li>
+<li>In <strong>Scanner</strong>, use the text filter, category selector, column headings, and
+   column controls to focus the list. Save a named filter to preserve its query,
+   category, and minimum score. Applying a saved filter changes the visible
+   view and restores its minimum-score setting; that shared threshold can also
+   affect which plans are eligible. It does not directly submit an order.</li>
+<li>Select a symbol to inspect its loaded-candle chart and model read. Remote
+   market providers supply delayed daily bars. The chart can display moving
+   averages, volume, and the current plan's entry, stop, and
+   target levels. These are analysis aids, not promises that an order will fill
+   at those prices.</li>
+<li>Review the <strong>Decision Brief</strong> and <strong>Strategy</strong> gates. A high score or
+   movement alert does not mean a trade is approved. A candidate can still be
+   blocked by price extension, volatility, reward/risk, session, cash, cooldown,
+   daily limits, symbol limits, asset-class support, or other controls.</li>
+<li>Treat an <strong>Order Plan</strong> as a proposal. It becomes a broker order only after
+   a separate paper or live action. “No executable plans” means scanning
+   completed without producing a plan that passed the configured gates.</li>
+</ol>
+<p>Select <strong>Open risk &amp; plan review</strong> below the Order Plan to inspect the review-only
+Risk &amp; Trade Planning Lab. It compares the active queue, shows a hypothetical
+field-by-field plan diff, charts entry/stop/target and risk-to-reward, compares
+0.5×/1.0×/1.5× portfolio scenarios, and estimates the selected plan's impact on
+the local paper ledger. The sizing explorer applies configured quantity
+precision and asset notional/quantity limits; it does not model account buying
+power or derivative multipliers. Exposure and correlation views use loaded
+paper positions and aligned loaded daily candles. Sector exposure stays
+unavailable unless sector metadata is present. The stepwise checklist is
+informational and never approves, changes, or submits an order.</p>
+<h3 id="personal-groups-and-pins">Personal groups and pins</h3>
+<p>Select a ticker, create a personal group, then use <strong>+ Group</strong> to add the
+selected ticker. Pinning lets you filter the radar to pinned symbols. These
+groups are stored in the local profile as organizational aids. They do not
+change the active watchlist, scan universe, broker watchlists, or trading scope.</p>
+<h3 id="research-workbench">Research workbench</h3>
+<p>Open <strong>Research</strong> for a bounded history of the last 60 scan-coverage records,
+including per-symbol returned/missing state and safe provider failure details.
+The multi-chart board and group comparison use only currently loaded local
+candles. Provider Evidence compares recorded scans; it never makes a second
+request to a provider, and runs from different symbols or dates are not a
+controlled benchmark. The Data Issue Inbox combines missing coverage and
+candle-quality warnings, then opens a unified symbol view with its local chart,
+scan result, quality detail, and private local note.</p>
+<p>Use <strong>Import CSV</strong> to map symbol, timestamp, and OHLCV fields, review row-level
+validation, and preview sample rows before confirming a merge. An invalid row
+blocks the whole import. Confirmation merges by symbol and timestamp and writes
+the local candle file atomically; imported values replace matching timestamps.
+The import is local, makes no provider request, and cannot place orders.</p>
+<p>The session planner shows a 35-day US-equities planning horizon in Eastern
+Time. Holiday/early-close confidence is only maintained for 2026; future-year
+weekdays are labeled for verification. Named scanner table layouts round-trip
+column order, visibility, and sorting separately from scanner filters. Research
+snapshots export a small whitelisted set of symbols, scan scores, and issue
+details; account, broker, credential, and profile fields are excluded.</p>
+<h3 id="data-freshness-and-quality">Data freshness and quality</h3>
+<p>Timmy uses daily candles. The Market chart shows a quality label and details
+for the selected symbol, including freshness, estimated gaps, repeated
+timestamps, and invalid OHLC ranges. Gap counts are estimates based on a fixed
+bar interval and do not account for exchange sessions, weekends, or holidays.
+Check the raw timestamps and provider if a warning appears. The dashboard's
+latest-candle timestamp is not proof of a live quote.</p>
+<p>The terminal strip shows a compact, color-coded <code>FRESH</code>, <code>STALE</code>, <code>MISSING</code>,
+<code>INVALID</code>, or <code>SAMPLE</code> data state. Hover over that state for help; the Runtime
+panel shows the provider, latest candle timestamp, and approximate candle age.
+Use <strong>Scan</strong> or <strong>F5</strong> for a manual refresh. Automatic refresh runs at the
+interval set by <code>TIMMY_DASHBOARD_REFRESH_SECONDS</code>; provider requests are skipped while
+the saved market-data cache is younger than <code>MARKET_DATA_MAX_AGE_MINUTES</code>.
+The Signal Desk status line reports live batch progress and the most recent
+scan coverage, returned symbols, provider failures, and an approximate full
+universe pass time. A full pass estimate assumes each configured batch refresh
+succeeds at the current cache cadence; rate limits, outages, and unsupported
+symbols can make actual coverage slower or incomplete.</p>
+<p>If a provider returns no usable bars, Timmy keeps the existing cache and reports
+that it is showing previously saved symbols. A refresh is reported as complete
+only when new bars were actually written or the existing cache was still fresh.</p>
+<h3 id="rolling-96-hour-movers-and-upside-shortlist">Rolling 96-hour movers and upside shortlist</h3>
+<p>The Universe workspace reports Timmy's rolling 96-hour mover list. Yahoo data
+and the all-US universe are the built-in defaults, so the normal dashboard
+refresh checks a rotating batch automatically. Broad discovery requests up to
+90 daily bars per symbol and defaults to a 200-symbol batch. Timmy records
+tickers whose daily OHLC bars show price movement and drops entries after their
+latest observed movement ages beyond 96 hours. The scan has a separate cursor
+and does not change the active trade watchlist; automatic watchlist rotation
+stays off by default. Provider rate limits or failed requests can delay
+coverage. To include provider-supported symbols outside the exchange
+directory, add one symbol per line to <code>movement-universe-extra.txt</code>.</p>
+<p>Adjust <code>WATCHLIST_UNIVERSE_BATCH_SIZE</code> to change requests per scan. Larger
+batches cover the configured universe in fewer successful refreshes, while
+raising the number of provider requests in each cycle. Timmy retries selected
+temporary network and server failures with bounded delays; permanent provider
+errors are reported as unavailable symbols and are not counted as returned
+market data.</p>
+<p>Timmy saves a ranked <code>movement-watchlist.txt</code> after successful broad scans.
+The discovery list requires an absolute daily close-to-close change of at least
+<code>MOVEMENT_WATCHLIST_MIN_CHANGE_PCT</code> (default 1.1%) and keeps up to
+<code>MAX_MOVEMENT_WATCHLIST_SYMBOLS</code> entries, ranked by move size. A symbol can be
+promoted to an automated trade candidate at <code>TRADE_CANDIDATE_MIN_CHANGE_PCT</code>
+(default 2.2%) only when its move is bullish, scout score is at least 72, the
+strategy marks it eligible to trade, and normal plan filters pass. Auto lanes
+use only those promoted candidates. The saved candidate bars remain separate
+from the active trade watchlist.</p>
+<p>Promotion does not bypass the configured symbol whitelist, broker permissions,
+fresh account and order checks, risk limits, daily caps, or exact order preview.
+Live Auto remains held unless its existing explicit opt-in and risk settings
+are valid. A promoted candidate is based on daily data, not a prediction or
+guarantee.</p>
+<p>The discovery list is separate from the active manual watchlist.
+<code>movement-watchlist.txt</code> is ranked by absolute percentage movement;
+<code>movement-scan-candidates.csv</code> stores recent candidate bars used by the
+automation signal path. The discovery and trade-candidate thresholds are
+configurable with <code>MOVEMENT_WATCHLIST_MIN_CHANGE_PCT</code> and
+<code>TRADE_CANDIDATE_MIN_CHANGE_PCT</code>. Changing either threshold changes candidate
+eligibility, but does not remove the strategy, account, order, or risk gates.</p>
+<p>The source universe includes US exchange-listed stocks and ETFs, plus a small
+set of index benchmarks, Treasury-yield symbols, bond ETF proxies, crypto
+pairs, and futures. It does not enumerate individual bonds, every global
+listing, every option contract, or every instrument in the market. Daily bars
+also mean the 96-hour check and thresholds are based on daily movement
+observations, not a continuous intraday feed. The files
+<code>timmy-movement-tracker.json</code>, <code>recent-movers-96h.txt</code>, and
+<code>movement-scan-candidates.csv</code> hold local discovery history, the current mover
+list, and candidate candles.</p>
+<p>The Universe workspace's <strong>Fresh Bullish Shortlist · Top 10</strong> section ranks bullish signals
+only among current 96-hour movers. Its relative score combines Timmy's existing
+technical, sensible, and scout scores. It is not a calibrated probability or
+forecast of return. Automated trading uses a separate, stricter candidate gate
+and all normal broker/risk controls; the bullish shortlist itself does not
+submit orders.</p>
+<h2 id="paper-and-live-are-separate">Paper and Live are separate</h2>
+<h3 id="paper">Paper</h3>
+<p>Paper is the recommended starting target. <strong>Submit Paper</strong> writes simulated
+orders to the local journal; it does not send an order to Webull. Paper
+positions, cash, and realized results are computed from Timmy's paper ledger
+and loaded candle prices. They are not broker-confirmed holdings, and simulated
+fills may differ from real execution.</p>
+<p>The <strong>Paper lane</strong> checkbox is the single control for scheduled paper activity.
+Automation shows Paper and Simulation outcomes separately. It labels fill rate
+and slippage unavailable when the local journals lack explicit execution
+observations. Candle-model outcomes do not prove broker fills. Use <strong>Pause All
+Automation</strong> in Automation or Execution to stop scheduled activity.
+Paper simulation settings can permit simulations
+outside regular market hours; this does not make the data current or the
+simulation equivalent to market execution.</p>
+<h3 id="simulation">Simulation</h3>
+<p>Choose <strong>Simulation</strong> in the shared Target selector to exercise the current
+strategy plan through the same <strong>Preview</strong> and <strong>Submit</strong> controls without
+constructing a Webull client. Simulation writes to
+<code>simulation-trade-journal.jsonl</code>, separate from the Paper ledger, and its rows
+are labeled <strong>Simulation</strong> in Journal Review. Preview is a local snapshot of
+the already loaded plan and candle data; it expires after three minutes or
+when the target/plan changes. User mode requires that preview before submit;
+Auto mode repeats the local preview and submit workflow on the configured
+interval. It does not change strategy or risk settings.</p>
+<p>Simulation outcome tracking uses later daily OHLC candles to record a target or
+stop threshold, with stop-first when both thresholds appear in the same candle.
+It assumes the entry price and does not model intraday order priority, fills,
+slippage, spread, fees, or broker behavior. Daily data may be delayed. These
+results are local scenario records, not broker-equivalent fills or performance.
+Simulation events are excluded from Paper performance and the recent-failure,
+cooldown, daily-trade, and loss guards used by Live.</p>
+<h3 id="live">Live</h3>
+<p>Live can place real broker orders. Do not switch to Live until you intend to use
+the selected Webull account and have verified account state, current buying
+power, supported instruments, risk limits, and preview behavior.</p>
+<p>The live path depends on all applicable controls, including the selected Live
+target, live mode switches, configured account, successful account check,
+market/session and strategy gates, order-size limits, and broker support. Every
+placement requires a successful exact Webull preview for the same order payload,
+a preview estimated cost within Timmy's configured cap, a durable intent record,
+and a single submission. <code>WEBULL_REQUIRE_PREVIEW=1</code> is the safe setting and does
+not block placement after that exact preview succeeds; Timmy always enforces
+the preview regardless of this legacy setting. Live Auto additionally requires
+the saved Live Auto opt-in in the Webull profile. An uncertain broker outcome
+holds automation until the order is reconciled.</p>
+<p>Live Auto also requires positive configured limits for
+<code>AUTO_MAX_SYMBOL_EXPOSURE_PCT</code>, <code>AUTO_MAX_TOTAL_EXPOSURE_PCT</code>, and
+<code>AUTO_MAX_DRAWDOWN_PCT</code>; unset or zero limits keep automated Live blocked.
+Before previewing an automated order, Timmy evaluates the fresh account
+snapshot, open positions, pending priced buy orders, session state, candle
+quality, cooldowns, and exposure/drawdown limits. These checks can reduce the
+planned quantity or block the order. Do not weaken or remove a blocker just to
+make an automation lane run.</p>
+<p>In <strong>User</strong> mode, Timmy asks for confirmation before a manual live submission.
+In <strong>Auto</strong> mode, manual execution controls are locked. The Automation panel's
+Next Cycle status shows whether the cycle is running, its next Eastern-time due
+time, armed for market open, or paused. <strong>Pause All Automation</strong> cancels both
+the interval and pending market-open callbacks for the current app session; a
+later app launch still follows the saved market-open preferences. Live
+automation can preview and submit a current eligible plan automatically only
+when every live switch and runtime gate is open. Keep live auto-start disabled
+unless you have specifically prepared and tested unattended operation. A
+market-open callback waits for active refresh/action work and rechecks the
+regular session before it runs. Pausing cannot cancel an order already sent to
+the broker.</p>
+<p>If a live response is marked <strong>unknown</strong>, the broker may have received the
+request even if Timmy did not receive a final response. Timmy stops the current
+submission batch, blocks later plans for that symbol, and requires you to check
+Webull and record a terminal resolution before that symbol can pass the local
+guard again. Live Auto pauses, including a pending market-open Live callback;
+a signed automation hold keeps it paused after restart. After you record a
+terminal resolution, switch to User and then back to Auto to re-arm Live. An
+independent Paper lane can continue on its schedule. Do not assume
+“unknown” means rejected or retry it. See
+<a href="#paper-and-live-are-separate">Automation and Order Safety Review</a> for
+the preview/submit ID contract and documented Webull limitations.</p>
+<h2 id="configure-webull-locally">Configure Webull locally</h2>
+<ol>
+<li>Open <strong>Setup</strong> and enter the Webull OpenAPI App Key, App Secret, account ID,
+   region, and endpoint on your own computer.</li>
+<li>Select <strong>Verify Profile</strong>. Timmy only allows saving after the current values
+   pass verification. Editing a field requires verification again.</li>
+<li>Save the verified profile. Timmy stores it locally under the active runtime
+   home; the public website does not receive those credentials.</li>
+<li>Open <strong>Broker</strong> and run <strong>Check Webull account</strong>. After a profile save or
+   account change, Timmy returns the target to Paper and requires a fresh
+   account check before Live can be enabled.</li>
+<li>Confirm the account and buying-power snapshot before any live preview.</li>
+</ol>
+<p>Never paste keys, tokens, account identifiers, passwords, or MFA codes into
+support requests, screenshots, source files, or public repositories. For exact
+Webull setup and authorization details, use <a href="#configure-webull-locally">Webull Setup</a>.</p>
+<h2 id="alerts-and-automation">Alerts and automation</h2>
+<p>Alerts are local informational rules evaluated after a scan, using the loaded
+signal's price, scout score, or action (<code>trade</code>, <code>watch</code>, or <code>avoid</code>). Create a
+rule in <strong>Alerts</strong>, select a rule to pause/resume or remove it, and select a
+triggered event to acknowledge it. Use <strong>Acknowledge all new</strong> to clear the
+current unacknowledged event backlog in one action; the new-event count appears
+above Trigger History. Trigger history is local. Alerts do not send desktop
+notifications, contact a broker, or create orders.</p>
+<p>If the saved alert file cannot be read, Timmy leaves it untouched, warns that
+rules and history could not be loaded, and blocks alert writes until the file is
+backed up and repaired. This protects the previous rules from being replaced by
+an empty alert store.</p>
+<p>Automation controls schedule refresh/decision cycles. The <strong>Enable Paper
+Automation</strong> action enables only the paper lane. A Live/Auto combination is a
+separate, more consequential path and remains subject to the full live gates.
+Review the Automation readiness panel and execution target before enabling
+either lane.</p>
+<h2 id="local-data-and-troubleshooting">Local data and troubleshooting</h2>
+<p>Timmy keeps UI preferences, watchlist and scanner organization, profiles,
+journals, and audit state under its runtime home (<code>TIMMY_HOME</code>). If no custom
+runtime home is configured, the launcher uses its configured default. Timmy
+allows one active native app process per Linux user across all runtime homes.
+A second launch exits with a message; it does not stop the active process. The
+OS lock is held at <code>${XDG_CONFIG_HOME:-~/.config}/timmy-trader/timmy-instance.lock</code>
+and released when the process exits. The small lock file may remain afterward;
+do not delete it while Timmy is running.</p>
+<ul>
+<li><strong>No data or synthetic-looking prices:</strong> verify the configured provider and
+  CSV file in the runtime home/environment. A new profile may be using
+  generated sample candles.</li>
+<li><strong>Stale data:</strong> check the last candle timestamp and provider status. Remote
+  refresh depends on network access and the provider; failed fetches can leave
+  older local data in place.</li>
+<li><strong>CSV will not load:</strong> inspect the row number and required OHLCV values in
+  the diagnostic. Timmy preserves an invalid file and does not silently replace
+  it with demo bars. Correct the source or deliberately choose another provider.</li>
+<li><strong>No order plan:</strong> review Scanner and Strategy blockers, score threshold,
+  market hours, cash, cooldowns, and risk caps. A scan result alone is not an
+  executable order.</li>
+<li><strong>Live is locked:</strong> run profile verification and Broker Account Check, confirm
+  the selected account, and review Setup/Health readiness. Do not bypass a gate
+  just to make a button available.</li>
+<li><strong>Order outcome unknown:</strong> timeouts and server errors may not prove whether
+  the broker received an order. Reconcile the client order ID in Webull and
+  check order/position state before retrying; Timmy blocks unresolved symbols.
+  Timmy records a signed order intent before each broker call, so a shutdown in
+  the middle of submission remains visible for review after restart.</li>
+<li><strong>Timmy refuses a second launch:</strong> close the active instance for this Linux
+  user, even if it uses a different runtime home. Do not delete the lock file
+  while Timmy is running.</li>
+</ul>
+<p>Timmy currently focuses on equities, ETFs, and index proxies. Crypto and
+futures remain disabled or scouting-only unless asset-specific support and
+permissions have been validated. Options, event contracts, direct indexes,
+forex, CFDs, and unsupported instruments do not have a complete live execution
+path. The software does not provide streaming quotes, news/earnings analysis,
+guaranteed fills, or investment advice.</p>
+<h2 id="more-help">More help</h2>
+<ul>
+<li><a href="#paper-and-live-are-separate">Paper and Live safety section</a></li>
+<li><a href="#configure-webull-locally">Webull Setup</a></li>
+<li><a href="#read-a-scan-and-a-plan">Workflow reference</a></li>
+<li><a href="legal.html#risk">Risk and legal notes</a></li>
+<li><a href="/downloads/timmy-brochure.pdf">Download the Timmy brochure (PDF)</a></li>
+</ul>
+<p>Timmy is software, not a guarantee of performance. You remain responsible for
+reviewing orders, broker permissions, market conditions, and the risk of loss.</p></article>
               <article class="card">
                 <h3>Live: real broker orders</h3>
                 <p>Live requires a configured and checked Webull account, enabled live switches, supported instrument, fresh market/session state, a current eligible plan, risk limits, and broker approval. In User mode, Timmy asks before a manual submit. Auto mode locks manual execution controls.</p>

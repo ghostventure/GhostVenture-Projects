@@ -6,21 +6,26 @@ activity. It can connect to Webull OpenAPI for account checks, order previews,
 and a guarded live-order path. It does not predict the future or guarantee a
 profit.
 
-This guide follows the current desktop workflow. Exact controls can differ by
-installed release. For live trading, read the [Operator Checklist](OPERATOR_CHECKLIST.md)
+This guide covers the Timmy 0.1.16 desktop release, including movement
+discovery, candidate promotion, and Paper, Simulation, and Live automation.
+The same release is installed as the Debian package and offered on the public
+download page. For live trading, read the [Operator Checklist](OPERATOR_CHECKLIST.md)
 and [Webull Setup guide](WEBULL_SETUP.md) first. Public product page:
 [Timmy User Guide](https://timmy-tradesonauto.web.app/user-guide.html).
 
-**Version compatibility:** this guide describes the 0.1.16 source GUI. The
-installed package and public download can lag behind source changes. If you use
-an older installed build, some controls may differ; check its version before
-following a workflow described here.
+Check an installed package version with
+`dpkg-query -W -f='${Version}\n' timmy-trader`. The current package is 0.1.16.
+If you use an older build, some controls may differ; upgrade from the
+[Download page](https://timmy-tradesonauto.web.app/download.html) before
+following a workflow that is not present in your version.
 
 ## Start safely
 
-1. Install Timmy from the [Download page](https://timmy-tradesonauto.web.app/download.html).
-   Verify the downloaded Debian package using the matching checksum file before
-   installing it.
+1. Download **Timmy Installation Manager 0.1.16** from the [Download page](https://timmy-tradesonauto.web.app/download.html).
+   Keep the `.deb` and matching `.sha256` file together, then verify them with
+   `sha256sum -c Timmy-Installation-Manager_0.1.16_amd64.deb.sha256`.
+   Install or upgrade with
+   `sudo apt install ./Timmy-Installation-Manager_0.1.16_amd64.deb`.
 2. Launch Timmy from your desktop application menu, or run `timmy-trader` from
    a terminal after installation.
 3. Leave the execution target on **Paper** and the operating mode on **User**.
@@ -162,15 +167,15 @@ only when new bars were actually written or the existing cache was still fresh.
 ### Rolling 96-hour movers and upside shortlist
 
 The Universe workspace reports Timmy's rolling 96-hour mover list. Yahoo data
-and the all-US universe are now the built-in defaults, so the normal dashboard
-refresh checks a rotating batch automatically. Timmy records tickers whose
-daily OHLC bars show price movement and drops entries after their latest
-observed movement ages beyond 96 hours. The scan has a separate cursor and
-does not change the active trade watchlist; automatic watchlist rotation stays
-off by default. The default batch is 200 symbols; provider rate limits or
-failed requests can delay coverage. To include provider-supported symbols
-outside the exchange directory, add one symbol per line to
-`movement-universe-extra.txt`.
+and the all-US universe are the built-in defaults, so the normal dashboard
+refresh checks a rotating batch automatically. Broad discovery requests up to
+90 daily bars per symbol and defaults to a 200-symbol batch. Timmy records
+tickers whose daily OHLC bars show price movement and drops entries after their
+latest observed movement ages beyond 96 hours. The scan has a separate cursor
+and does not change the active trade watchlist; automatic watchlist rotation
+stays off by default. Provider rate limits or failed requests can delay
+coverage. To include provider-supported symbols outside the exchange
+directory, add one symbol per line to `movement-universe-extra.txt`.
 
 Adjust `WATCHLIST_UNIVERSE_BATCH_SIZE` to change requests per scan. Larger
 batches cover the configured universe in fewer successful refreshes, while
@@ -194,6 +199,14 @@ fresh account and order checks, risk limits, daily caps, or exact order preview.
 Live Auto remains held unless its existing explicit opt-in and risk settings
 are valid. A promoted candidate is based on daily data, not a prediction or
 guarantee.
+
+The discovery list is separate from the active manual watchlist.
+`movement-watchlist.txt` is ranked by absolute percentage movement;
+`movement-scan-candidates.csv` stores recent candidate bars used by the
+automation signal path. The discovery and trade-candidate thresholds are
+configurable with `MOVEMENT_WATCHLIST_MIN_CHANGE_PCT` and
+`TRADE_CANDIDATE_MIN_CHANGE_PCT`. Changing either threshold changes candidate
+eligibility, but does not remove the strategy, account, order, or risk gates.
 
 The source universe includes US exchange-listed stocks and ETFs, plus a small
 set of index benchmarks, Treasury-yield symbols, bond ETF proxies, crypto
@@ -267,6 +280,15 @@ not block placement after that exact preview succeeds; Timmy always enforces
 the preview regardless of this legacy setting. Live Auto additionally requires
 the saved Live Auto opt-in in the Webull profile. An uncertain broker outcome
 holds automation until the order is reconciled.
+
+Live Auto also requires positive configured limits for
+`AUTO_MAX_SYMBOL_EXPOSURE_PCT`, `AUTO_MAX_TOTAL_EXPOSURE_PCT`, and
+`AUTO_MAX_DRAWDOWN_PCT`; unset or zero limits keep automated Live blocked.
+Before previewing an automated order, Timmy evaluates the fresh account
+snapshot, open positions, pending priced buy orders, session state, candle
+quality, cooldowns, and exposure/drawdown limits. These checks can reduce the
+planned quantity or block the order. Do not weaken or remove a blocker just to
+make an automation lane run.
 
 In **User** mode, Timmy asks for confirmation before a manual live submission.
 In **Auto** mode, manual execution controls are locked. The Automation panel's
