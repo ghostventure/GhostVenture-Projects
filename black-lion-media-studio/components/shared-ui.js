@@ -508,9 +508,9 @@ export function SupportNotice({ title, copy, className = "" }) {
   );
 }
 
-export function FormSectionCard({ title, copy, children, className = "" }) {
+export function FormSectionCard({ title, copy, children, className = "", id }) {
   return (
-    <div className={`ui-form-section-card ${className}`.trim()}>
+    <div id={id} className={`ui-form-section-card ${className}`.trim()}>
       <div className="ui-form-section-head">
         <strong>{title}</strong>
         {copy ? <p>{copy}</p> : null}

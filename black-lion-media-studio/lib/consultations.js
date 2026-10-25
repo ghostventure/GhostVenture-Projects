@@ -26,7 +26,13 @@ export function getConsultationAvailability() {
       continue;
     }
 
-    const isoDate = cursor.toISOString().slice(0, 10);
+    // Build a local calendar date. ISO conversion can shift midnight to the
+    // previous day for users west of UTC.
+    const isoDate = [
+      cursor.getFullYear(),
+      String(cursor.getMonth() + 1).padStart(2, "0"),
+      String(cursor.getDate()).padStart(2, "0")
+    ].join("-");
     dates.push({
       value: isoDate,
       label: `${formatDateLabel(cursor)} (${isoDate})`,

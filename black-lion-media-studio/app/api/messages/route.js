@@ -5,10 +5,10 @@ import {
   parseJsonWithSchema,
   requireAuthenticatedUser
 } from "../../../lib/api-helpers";
-import { countMessages, createMessage, listMessagesPage } from "../../../lib/db";
+import { countMessages, countUnreadStudioMessages, createMessage, listMessagesPage, setMessageConversationReadState, userOwnsRequest } from "../../../lib/db";
 import { notifyNewClientMessage } from "../../../lib/email-notifications";
 import { enforceWriteRateLimit } from "../../../lib/rate-limit";
-import { messageSchema, parseWithSchema } from "../../../lib/validation";
+import { messageReadStateSchema, messageSchema, parseWithSchema } from "../../../lib/validation";
 
 export const runtime = "nodejs";
 
@@ -23,6 +23,9 @@ export async function GET(request) {
   if (summary === "count") {
     return jsonOk({ totalCount: await countMessages(auth.session.user.id) });
   }
+  if (summary === "unread") {
+    return jsonOk({ unreadCount: await countUnreadStudioMessages(auth.session.user.id) });
+  }
 
   try {
     return jsonOk(await listMessagesPage(auth.session.user.id, {
@@ -35,6 +38,29 @@ export async function GET(request) {
     }
     throw error;
   }
+}
+
+export async function PATCH(request) {
+  const mutation = await enforceMutationRequest(request, (req) =>
+    enforceWriteRateLimit(req, "message-read-state")
+  );
+  if (mutation.error) return mutation.error;
+
+  const auth = await requireAuthenticatedUser(request);
+  if (auth.error) return auth.error;
+
+  const parsed = await parseJsonWithSchema(request, messageReadStateSchema, parseWithSchema);
+  if (parsed.error) return parsed.error;
+  if (parsed.data.requestId && !(await userOwnsRequest(auth.session.user.id, parsed.data.requestId))) {
+    return jsonError("That request is not available in this account.", 404);
+  }
+
+  const unreadCount = await setMessageConversationReadState(
+    auth.session.user.id,
+    parsed.data.requestId,
+    parsed.data.isRead
+  );
+  return jsonOk({ ok: true, unreadCount });
 }
 
 export async function POST(request) {
@@ -55,11 +81,16 @@ export async function POST(request) {
     return parsed.error;
   }
 
+  if (parsed.data.requestId && !(await userOwnsRequest(auth.session.user.id, parsed.data.requestId))) {
+    return jsonError("That request is not available in this account.", 404);
+  }
+
   const message = await createMessage({
     userId: auth.session.user.id,
     senderRole: "client",
     subject: parsed.data.subject,
-    body: parsed.data.body
+    body: parsed.data.body,
+    requestId: parsed.data.requestId
   });
 
   try {

@@ -1,0 +1,78 @@
+/* Dexterity-friendly interaction defaults. Keep existing page layouts intact. */
+button,
+[role="button"],
+summary,
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  min-block-size: 44px;
+}
+
+button,
+[role="button"] {
+  min-inline-size: 44px;
+  padding-inline: max(12px, 0.75em);
+  touch-action: manipulation;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  inline-size: 24px;
+  block-size: 24px;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+summary,
+a.button,
+.site-nav a,
+.site-nav summary,
+.site-mobile-menu summary {
+  min-block-size: 44px;
+  touch-action: manipulation;
+}
+
+/* Keep hover feedback from moving the target while someone is aiming at it. */
+button:hover,
+[role="button"]:hover,
+a.button:hover {
+  transform: none;
+}
+
+/* Make focus a stable, high-visibility target cue for keyboard and switch users. */
+:where(a, button, summary, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 3px solid var(--accent-strong, var(--accent));
+  outline-offset: 3px;
+  scroll-margin-block: 5rem;
+}
+
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  summary,
+  a.button,
+  .site-nav a,
+  .site-nav summary,
+  .site-mobile-menu summary {
+    min-block-size: 48px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    inline-size: 28px;
+    block-size: 28px;
+    min-inline-size: 28px;
+    min-block-size: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  [role="button"],
+  a.button {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+  }
+}

@@ -5,6 +5,7 @@ export default function sitemap() {
     "",
     "/ad-expansion",
     "/book",
+    "/plan",
     "/about",
     "/services",
     "/contact",

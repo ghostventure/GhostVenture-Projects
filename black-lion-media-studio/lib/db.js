@@ -50,8 +50,18 @@ const MANAGER_REQUEST_FIELDS = [
 const CLIENT_REQUEST_FIELDS = [
   "budget", "timeline", "details", "status", "source", "project_type",
   "consultation_date", "consultation_time", "created_at", "created_at_ms",
-  "invoice_status", "invoice_amount_cents", "square_invoice_url"
+  "invoice_status", "invoice_amount_cents", "square_invoice_url", "client_activity",
+  "square_booking_id", "square_booking_status", "square_booking_url"
 ];
+
+function appendClientActivity(existing = [], additions = []) {
+  const previous = Array.isArray(existing) ? existing : [];
+  return [...previous, ...additions].slice(-50);
+}
+
+function clientActivityEvent(label, createdAt = isoNow()) {
+  return { label: String(label || "Update").slice(0, 180), created_at: createdAt };
+}
 
 export class ModelApplicationConflictError extends Error {
   constructor(message) {
@@ -295,8 +305,15 @@ function normalizeRequestDocument(id, data) {
 export async function attachInvoiceToRequest(requestId, invoiceData) {
   const db = getDb();
   const updatedAt = isoNow();
-  await db.collection(REQUESTS).doc(requestId).set(
-    {
+  const requestRef = db.collection(REQUESTS).doc(requestId);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists) return;
+    const existing = snapshot.data();
+    const activity = existing.invoice_status === "Sent"
+      ? (Array.isArray(existing.client_activity) ? existing.client_activity : [])
+      : appendClientActivity(existing.client_activity, [clientActivityEvent("Square invoice sent", updatedAt)]);
+    transaction.set(requestRef, {
       square_customer_id: invoiceData.squareCustomerId || "",
       square_order_id: invoiceData.squareOrderId || "",
       square_invoice_id: invoiceData.squareInvoiceId || "",
@@ -311,10 +328,419 @@ export async function attachInvoiceToRequest(requestId, invoiceData) {
       status: "Awaiting Payment",
       updated_at: updatedAt,
       updated_at_ms: timestampNow(),
-      last_manager_update_at: updatedAt
-    },
-    { merge: true }
-  );
+      last_manager_update_at: updatedAt,
+      client_activity: activity
+    }, { merge: true });
+  });
+}
+
+export async function recordSquarePaymentEvent({ eventId, payment }) {
+  const db = getDb();
+  const eventKey = crypto.createHash("sha256").update(String(eventId || "")).digest("hex");
+  const paymentId = asText(payment?.id);
+  const orderId = asText(payment?.order_id);
+  if (!eventId || !paymentId || !orderId) return { recorded: false, reason: "missing_reference" };
+
+  const requestQuery = await db.collection(REQUESTS).where("square_order_id", "==", orderId).limit(1).get();
+  if (requestQuery.empty) return { recorded: false, reason: "request_not_found" };
+  const requestDoc = requestQuery.docs[0];
+  const requestRef = requestDoc.ref;
+  const eventRef = db.collection("square_payment_events").doc(eventKey);
+  const paymentStatus = asText(payment.status, "UNKNOWN").toUpperCase();
+  const amount = Number(payment.amount_money?.amount || 0);
+  const paymentUpdatedAt = asText(payment.updated_at || payment.created_at, isoNow());
+  const receiptUrl = asText(payment.receipt_url);
+
+  return db.runTransaction(async (transaction) => {
+    const [eventSnapshot, requestSnapshot] = await Promise.all([
+      transaction.get(eventRef),
+      transaction.get(requestRef)
+    ]);
+    if (eventSnapshot.exists) return { recorded: false, duplicate: true };
+    if (!requestSnapshot.exists) return { recorded: false, reason: "request_not_found" };
+
+    const request = requestSnapshot.data();
+    const paymentEvent = {
+      kind: "payment",
+      event_id: eventKey,
+      payment_id: paymentId,
+      order_id: orderId,
+      status: paymentStatus,
+      amount_cents: Number.isInteger(amount) && amount >= 0 ? amount : 0,
+      refunded_amount_cents: Math.max(0, Number(payment.refunded_money?.amount || 0)),
+      currency: asText(payment.amount_money?.currency, "USD"),
+      receipt_url: receiptUrl,
+      created_at: paymentUpdatedAt
+    };
+    const history = Array.isArray(request.square_payment_events) ? request.square_payment_events : [];
+    const paymentStatusLabel = paymentStatus === "COMPLETED" ? "Paid" : paymentStatus === "FAILED" ? "Failed" : paymentStatus;
+    const latestPayments = request.square_payments && typeof request.square_payments === "object" ? request.square_payments : {};
+    const previousPayment = latestPayments[paymentId];
+    const previousUpdatedMs = Date.parse(previousPayment?.updated_at || "") || 0;
+    const incomingUpdatedMs = Date.parse(paymentUpdatedAt) || 0;
+    const paymentIsLatest = !previousPayment || incomingUpdatedMs >= previousUpdatedMs;
+    const nextPayments = paymentIsLatest
+      ? { ...latestPayments, [paymentId]: { status: paymentStatus, amount_cents: paymentEvent.amount_cents, refunded_amount_cents: paymentEvent.refunded_amount_cents, currency: paymentEvent.currency, receipt_url: receiptUrl, updated_at: paymentUpdatedAt } }
+      : latestPayments;
+    const allPayments = Object.entries(nextPayments);
+    const refunds = request.square_refunds && typeof request.square_refunds === "object" ? request.square_refunds : {};
+    const completedGrossAmount = allPayments
+      .filter(([, item]) => item.status === "COMPLETED")
+      .reduce((sum, [, item]) => sum + Math.max(0, Number(item.amount_cents || 0)), 0);
+    const completedAmount = allPayments
+      .filter(([, item]) => item.status === "COMPLETED")
+      .reduce((sum, [id, item]) => {
+        const eventRefundedAmount = Object.values(refunds)
+          .filter((refund) => refund.payment_id === id && refund.status === "COMPLETED")
+          .reduce((refundSum, refund) => refundSum + Math.max(0, Number(refund.amount_cents || 0)), 0);
+        const refundedAmount = Math.max(eventRefundedAmount, Number(item.refunded_amount_cents || 0));
+        return sum + Math.max(0, Number(item.amount_cents || 0) - refundedAmount);
+      }, 0);
+    const invoiceAmount = Math.max(0, Number(request.invoice_amount_cents || 0));
+    const hasPendingPayment = allPayments.some(([, item]) => ["APPROVED", "PENDING"].includes(item.status));
+    const hasFailedPayment = allPayments.some(([, item]) => item.status === "FAILED");
+    const completedRefundAmount = allPayments
+      .filter(([, item]) => item.status === "COMPLETED")
+      .reduce((sum, [id, item]) => {
+        const eventRefundedAmount = Object.values(refunds)
+          .filter((refund) => refund.payment_id === id && refund.status === "COMPLETED")
+          .reduce((refundSum, refund) => refundSum + Math.max(0, Number(refund.amount_cents || 0)), 0);
+        return sum + Math.max(eventRefundedAmount, Number(item.refunded_amount_cents || 0));
+      }, 0);
+    const nextStatus = completedAmount > 0
+      ? (invoiceAmount === 0 || completedAmount >= invoiceAmount ? "Paid" : "Partially Paid")
+      : hasPendingPayment
+        ? "Pending"
+        : completedGrossAmount > 0 && completedRefundAmount >= completedGrossAmount
+          ? "Refunded"
+          : hasFailedPayment
+          ? "Failed"
+          : "Pending";
+    const receivedAt = isoNow();
+    const activity = paymentIsLatest
+      ? appendClientActivity(request.client_activity, [clientActivityEvent(
+        `Square payment ${paymentStatusLabel.toLowerCase()}${amount ? `: $${(amount / 100).toFixed(2)}` : ""}.`, paymentUpdatedAt
+      )])
+      : (Array.isArray(request.client_activity) ? request.client_activity : []);
+    const nextHistory = [...history, paymentEvent]
+      .sort((a, b) => (Date.parse(a.created_at || "") || 0) - (Date.parse(b.created_at || "") || 0))
+      .slice(-50);
+    transaction.create(eventRef, { ...paymentEvent, request_id: requestDoc.id });
+    transaction.set(db.collection("square_payment_links").doc(crypto.createHash("sha256").update(paymentId).digest("hex")), {
+      payment_id: paymentId,
+      order_id: orderId,
+      request_id: requestDoc.id,
+      updated_at: paymentUpdatedAt
+    }, { merge: true });
+    transaction.set(requestRef, {
+      square_payment_events: nextHistory,
+      square_payments: nextPayments,
+      square_net_paid_amount_cents: completedAmount,
+      payment_status: nextStatus,
+      updated_at: receivedAt,
+      updated_at_ms: timestampNow(),
+      client_activity: activity
+    }, { merge: true });
+    return { recorded: true, requestId: requestDoc.id };
+  });
+}
+
+export async function recordSquareRefundEvent({ eventId, refund, eventCreatedAt = "" }) {
+  const db = getDb();
+  const refundId = asText(refund?.id);
+  const paymentId = asText(refund?.payment_id);
+  const orderId = asText(refund?.order_id);
+  if (!eventId || !refundId || !paymentId) return { recorded: false, reason: "missing_reference" };
+
+  let requestDoc = null;
+  if (orderId) {
+    const matches = await db.collection(REQUESTS).where("square_order_id", "==", orderId).limit(1).get();
+    requestDoc = matches.docs[0] || null;
+  }
+  if (!requestDoc) {
+    const linkId = crypto.createHash("sha256").update(paymentId).digest("hex");
+    const paymentLink = await db.collection("square_payment_links").doc(linkId).get();
+    const linkedRequestId = paymentLink.exists ? asText(paymentLink.data()?.request_id) : "";
+    if (linkedRequestId) {
+      const linkedRequest = await db.collection(REQUESTS).doc(linkedRequestId).get();
+      if (linkedRequest.exists) requestDoc = linkedRequest;
+    }
+  }
+  if (!requestDoc) return { recorded: false, reason: "request_not_found" };
+
+  const requestRef = requestDoc.ref;
+  const eventKey = crypto.createHash("sha256").update(String(eventId)).digest("hex");
+  const eventRef = db.collection("square_payment_events").doc(eventKey);
+  const refundStatus = asText(refund.status, "UNKNOWN").toUpperCase();
+  const amount = Number(refund.amount_money?.amount || 0);
+  const refundUpdatedAt = asText(refund.updated_at || refund.created_at || eventCreatedAt, isoNow());
+  return db.runTransaction(async (transaction) => {
+    const [eventSnapshot, requestSnapshot] = await Promise.all([
+      transaction.get(eventRef), transaction.get(requestRef)
+    ]);
+    if (eventSnapshot.exists) return { recorded: false, duplicate: true };
+    if (!requestSnapshot.exists) return { recorded: false, reason: "request_not_found" };
+
+    const request = requestSnapshot.data();
+    const refundEvent = {
+      kind: "refund",
+      event_id: eventKey,
+      refund_id: refundId,
+      payment_id: paymentId,
+      order_id: orderId || asText(request.square_order_id),
+      status: refundStatus,
+      amount_cents: Number.isInteger(amount) && amount >= 0 ? amount : 0,
+      currency: asText(refund.amount_money?.currency, "USD"),
+      receipt_url: "",
+      created_at: refundUpdatedAt
+    };
+    const refunds = request.square_refunds && typeof request.square_refunds === "object" ? request.square_refunds : {};
+    const previous = refunds[refundId];
+    const previousUpdatedMs = Date.parse(previous?.updated_at || "") || 0;
+    const incomingUpdatedMs = Date.parse(refundUpdatedAt) || 0;
+    const refundIsLatest = !previous || incomingUpdatedMs >= previousUpdatedMs;
+    const nextRefunds = refundIsLatest
+      ? { ...refunds, [refundId]: {
+        status: refundStatus,
+        amount_cents: refundEvent.amount_cents,
+        currency: refundEvent.currency,
+        payment_id: paymentId,
+        order_id: refundEvent.order_id,
+        updated_at: refundUpdatedAt
+      } }
+      : refunds;
+    const payments = request.square_payments && typeof request.square_payments === "object" ? request.square_payments : {};
+    const allPayments = Object.entries(payments);
+    const completedGrossAmount = allPayments
+      .filter(([, item]) => item.status === "COMPLETED")
+      .reduce((sum, [, item]) => sum + Math.max(0, Number(item.amount_cents || 0)), 0);
+    const completedAmount = allPayments
+      .filter(([, item]) => item.status === "COMPLETED")
+      .reduce((sum, [id, item]) => {
+        const refundAmount = Object.values(nextRefunds)
+          .filter((entry) => entry.payment_id === id && entry.status === "COMPLETED")
+          .reduce((refundSum, entry) => refundSum + Math.max(0, Number(entry.amount_cents || 0)), 0);
+        return sum + Math.max(0, Number(item.amount_cents || 0) - Math.max(refundAmount, Number(item.refunded_amount_cents || 0)));
+      }, 0);
+    const invoiceAmount = Math.max(0, Number(request.invoice_amount_cents || 0));
+    const completedRefundAmount = allPayments
+      .filter(([, item]) => item.status === "COMPLETED")
+      .reduce((sum, [id, item]) => {
+        const eventRefundedAmount = Object.values(nextRefunds)
+          .filter((refund) => refund.payment_id === id && refund.status === "COMPLETED")
+          .reduce((refundSum, refund) => refundSum + Math.max(0, Number(refund.amount_cents || 0)), 0);
+        return sum + Math.max(eventRefundedAmount, Number(item.refunded_amount_cents || 0));
+      }, 0);
+    const hasPendingPayment = allPayments.some(([, item]) => ["APPROVED", "PENDING"].includes(item.status));
+    const hasFailedPayment = allPayments.some(([, item]) => item.status === "FAILED");
+    const nextStatus = completedAmount > 0
+      ? (invoiceAmount === 0 || completedAmount >= invoiceAmount ? "Paid" : "Partially Paid")
+      : hasPendingPayment
+        ? "Pending"
+        : completedGrossAmount > 0 && completedRefundAmount >= completedGrossAmount
+          ? "Refunded"
+          : hasFailedPayment ? "Failed" : "Pending";
+    const history = Array.isArray(request.square_payment_events) ? request.square_payment_events : [];
+    const nextHistory = [...history, refundEvent]
+      .sort((a, b) => (Date.parse(a.created_at || "") || 0) - (Date.parse(b.created_at || "") || 0))
+      .slice(-50);
+    transaction.create(eventRef, { ...refundEvent, request_id: requestDoc.id });
+    transaction.set(requestRef, {
+      square_refunds: nextRefunds,
+      square_payment_events: nextHistory,
+      square_net_paid_amount_cents: completedAmount,
+      payment_status: nextStatus,
+      updated_at: isoNow(),
+      updated_at_ms: timestampNow(),
+      client_activity: refundIsLatest
+        ? appendClientActivity(request.client_activity, [clientActivityEvent(
+          `Square refund ${refundStatus.toLowerCase()}${amount ? `: $${(amount / 100).toFixed(2)}` : ""}.`, refundUpdatedAt
+        )])
+        : (Array.isArray(request.client_activity) ? request.client_activity : [])
+    }, { merge: true });
+    return { recorded: true, requestId: requestDoc.id };
+  });
+}
+
+export async function listSquarePaymentEventsForRequest(userId, requestId) {
+  const db = getDb();
+  const requestRef = db.collection(REQUESTS).doc(requestId);
+  const requestDoc = await requestRef.get();
+  if (!requestDoc.exists || requestDoc.data()?.user_id !== userId) return null;
+  const events = Array.isArray(requestDoc.data()?.square_payment_events) ? requestDoc.data().square_payment_events : [];
+  return {
+    payments: events.map((event) => ({
+    kind: asText(event.kind, "payment"),
+    status: asText(event.status),
+    amountCents: Number(event.amount_cents || 0),
+    currency: asText(event.currency, "USD"),
+    receiptUrl: asText(event.receipt_url),
+    createdAt: asText(event.created_at),
+    paymentId: asText(event.payment_id),
+    refundId: asText(event.refund_id)
+    })),
+    netPaidAmountCents: Number(requestDoc.data()?.square_net_paid_amount_cents || 0),
+    paymentStatus: asText(requestDoc.data()?.payment_status, "Pending")
+  };
+}
+
+export async function saveRequestAttachment({ userId, requestId, attachment }) {
+  const db = getDb();
+  const ref = db.collection("request_attachments").doc(attachment.id);
+  const requestRef = db.collection(REQUESTS).doc(requestId);
+  return db.runTransaction(async (transaction) => {
+    const requestDoc = await transaction.get(requestRef);
+    if (!requestDoc.exists || requestDoc.data()?.user_id !== userId) return false;
+    transaction.create(ref, {
+      user_id: userId,
+      request_id: requestId,
+      ...attachment,
+      created_at: isoNow()
+    });
+    return true;
+  });
+}
+
+export async function findRequestAttachment(userId, attachmentId) {
+  const db = getDb();
+  const attachmentDoc = await db.collection("request_attachments").doc(attachmentId).get();
+  if (!attachmentDoc.exists || attachmentDoc.data()?.user_id !== userId) return null;
+  const data = attachmentDoc.data();
+  const requestDoc = await db.collection(REQUESTS).doc(data.request_id).get();
+  if (!requestDoc.exists || requestDoc.data()?.user_id !== userId) return null;
+  return { id: attachmentDoc.id, ...data };
+}
+
+export async function listRequestAttachments(userId, requestId) {
+  const db = getDb();
+  const requestDoc = await db.collection(REQUESTS).doc(requestId).get();
+  if (!requestDoc.exists || requestDoc.data()?.user_id !== userId) return null;
+  const snapshot = await db.collection("request_attachments").where("request_id", "==", requestId).orderBy("created_at", "desc").limit(50).get();
+  return snapshot.docs
+    .filter((doc) => doc.data()?.user_id === userId)
+    .map((doc) => ({ id: doc.id, name: asText(doc.data().name), contentType: asText(doc.data().content_type), size: Number(doc.data().size || 0), createdAt: asText(doc.data().created_at) }));
+}
+
+export async function ownsClientMessage(userId, messageId) {
+  if (!userId || !messageId) return false;
+  const messageDoc = await getDb().collection(MESSAGES).doc(messageId).get();
+  return messageDoc.exists && messageDoc.data()?.user_id === userId && messageDoc.data()?.sender_role === "client";
+}
+
+export async function saveMessageAttachment({ userId, messageId, attachment }) {
+  const db = getDb();
+  const messageRef = db.collection(MESSAGES).doc(messageId);
+  const attachmentRef = db.collection("message_attachments").doc(attachment.id);
+  return db.runTransaction(async (transaction) => {
+    const messageDoc = await transaction.get(messageRef);
+    if (!messageDoc.exists || messageDoc.data()?.user_id !== userId || messageDoc.data()?.sender_role !== "client") return false;
+    const existing = Number(messageDoc.data()?.client_attachment_count || 0);
+    if (existing >= 10) {
+      const error = new Error("A message can have no more than 10 attachments.");
+      error.code = "MESSAGE_ATTACHMENT_LIMIT";
+      throw error;
+    }
+    transaction.create(attachmentRef, {
+      user_id: userId,
+      message_id: messageId,
+      ...(messageDoc.data()?.request_id ? { request_id: messageDoc.data().request_id } : {}),
+      ...attachment,
+      created_at: isoNow()
+    });
+    transaction.update(messageRef, { client_attachment_count: existing + 1 });
+    return true;
+  });
+}
+
+export async function listMessageAttachments(userId, messageId) {
+  if (!(await ownsClientMessage(userId, messageId))) return null;
+  const snapshot = await getDb().collection("message_attachments")
+    .where("message_id", "==", messageId)
+    .limit(10)
+    .get();
+  return snapshot.docs
+    .filter((doc) => doc.data()?.user_id === userId)
+    .sort((a, b) => String(b.data()?.created_at || "").localeCompare(String(a.data()?.created_at || "")))
+    .map((doc) => ({
+      id: doc.id,
+      name: asText(doc.data().name),
+      contentType: asText(doc.data().content_type),
+      size: Number(doc.data().size || 0),
+      createdAt: asText(doc.data().created_at)
+    }));
+}
+
+export async function findMessageAttachment(userId, messageId, attachmentId) {
+  const attachmentDoc = await getDb().collection("message_attachments").doc(attachmentId).get();
+  if (!attachmentDoc.exists) return null;
+  const data = attachmentDoc.data();
+  if (data.user_id !== userId || data.message_id !== messageId || !(await ownsClientMessage(userId, messageId))) return null;
+  return { id: attachmentDoc.id, ...data };
+}
+
+export async function listManagerRequestAttachments(requestId) {
+  const db = getDb();
+  const requestDoc = await db.collection(REQUESTS).doc(requestId).get();
+  if (!requestDoc.exists) return null;
+  const [requestFiles, messageFiles] = await Promise.all([
+    db.collection("request_attachments").where("request_id", "==", requestId).limit(100).get(),
+    db.collection("message_attachments").where("request_id", "==", requestId).limit(100).get()
+  ]);
+  const mapFile = (doc, source) => ({
+    id: doc.id,
+    source,
+    messageId: asText(doc.data().message_id),
+    name: asText(doc.data().name),
+    contentType: asText(doc.data().content_type),
+    size: Number(doc.data().size || 0),
+    createdAt: asText(doc.data().created_at)
+  });
+  return [
+    ...requestFiles.docs.map((doc) => mapFile(doc, "request")),
+    ...messageFiles.docs.map((doc) => mapFile(doc, "message"))
+  ].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+export async function findManagerRequestAttachment(requestId, attachmentId) {
+  const db = getDb();
+  const requestRef = db.collection(REQUESTS).doc(requestId);
+  const requestDoc = await requestRef.get();
+  if (!requestDoc.exists) return null;
+  for (const collectionName of ["request_attachments", "message_attachments"]) {
+    const attachmentDoc = await db.collection(collectionName).doc(attachmentId).get();
+    if (!attachmentDoc.exists) continue;
+    const data = attachmentDoc.data();
+    if (data.request_id !== requestId) continue;
+    if (collectionName === "message_attachments") {
+      const messageDoc = await db.collection(MESSAGES).doc(asText(data.message_id)).get();
+      if (!messageDoc.exists || messageDoc.data()?.request_id !== requestId || messageDoc.data()?.sender_role !== "client") return null;
+    }
+    return { id: attachmentDoc.id, ...data };
+  }
+  return null;
+}
+
+export async function listManagerMessageAttachments(messageId) {
+  const db = getDb();
+  const messageDoc = await db.collection(MESSAGES).doc(messageId).get();
+  if (!messageDoc.exists || messageDoc.data()?.sender_role !== "client") return null;
+  const snapshot = await db.collection("message_attachments").where("message_id", "==", messageId).limit(10).get();
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    name: asText(doc.data().name),
+    contentType: asText(doc.data().content_type),
+    size: Number(doc.data().size || 0),
+    createdAt: asText(doc.data().created_at)
+  }));
+}
+
+export async function findManagerMessageAttachment(messageId, attachmentId) {
+  const db = getDb();
+  const messageDoc = await db.collection(MESSAGES).doc(messageId).get();
+  if (!messageDoc.exists || messageDoc.data()?.sender_role !== "client") return null;
+  const attachmentDoc = await db.collection("message_attachments").doc(attachmentId).get();
+  if (!attachmentDoc.exists || attachmentDoc.data()?.message_id !== messageId) return null;
+  return { id: attachmentDoc.id, ...attachmentDoc.data() };
 }
 
 async function getUsersById(userIds) {
@@ -485,6 +911,122 @@ export async function findUserById(userId) {
   return mapUserDocument(userDoc.id, userDoc.data());
 }
 
+export async function updateUserPassword(userId, password) {
+  const db = getDb();
+  const passwordHash = await hashPassword(password);
+  const passwordChangedAt = new Date().toISOString();
+  const userRef = db.collection(USERS).doc(userId);
+  const updated = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(userRef);
+    if (!snapshot.exists) return false;
+    const authVersion = Number(snapshot.data()?.auth_version || 0) + 1;
+    transaction.set(userRef, {
+      password_hash: passwordHash,
+      password_changed_at: passwordChangedAt,
+      auth_version: authVersion
+    }, { merge: true });
+    return true;
+  });
+  if (!updated) return null;
+  return findUserById(userId);
+}
+
+export async function createPasswordRecoveryToken(userId, tokenHash, expiresAt) {
+  const db = getDb();
+  const tokenRef = db.collection("password_recovery_tokens").doc(tokenHash);
+  const collection = db.collection("password_recovery_tokens");
+  await db.runTransaction(async (transaction) => {
+    const previous = await transaction.get(collection.where("user_id", "==", userId));
+    previous.docs.forEach((doc) => transaction.delete(doc.ref));
+    transaction.set(tokenRef, {
+      user_id: userId,
+      created_at: isoNow(),
+      expires_at_ms: Number(expiresAt),
+      consumed_at: ""
+    });
+  });
+}
+
+export async function completePasswordRecovery(tokenHash, password) {
+  const db = getDb();
+  const tokenRef = db.collection("password_recovery_tokens").doc(tokenHash);
+  const passwordHash = await hashPassword(password);
+  const now = timestampNow();
+  return db.runTransaction(async (transaction) => {
+    const tokenSnapshot = await transaction.get(tokenRef);
+    if (!tokenSnapshot.exists) return false;
+    const token = tokenSnapshot.data();
+    if (token.consumed_at || Number(token.expires_at_ms) <= now || !token.user_id) return false;
+    const userRef = db.collection(USERS).doc(token.user_id);
+    const userSnapshot = await transaction.get(userRef);
+    if (!userSnapshot.exists) return false;
+    const current = userSnapshot.data();
+    transaction.set(userRef, {
+      password_hash: passwordHash,
+      password_changed_at: isoNow(),
+      auth_version: Number(current.auth_version || 0) + 1
+    }, { merge: true });
+    transaction.set(tokenRef, { consumed_at: isoNow() }, { merge: true });
+    return true;
+  });
+}
+
+export async function createAccountDeletionRequest(user, reason = "") {
+  const db = getDb();
+  const userId = asText(user?.id);
+  if (!userId) throw new Error("A user id is required for account deletion requests.");
+  const userRequestRef = db.collection("account_deletion_by_user").doc(userId);
+  const requestId = crypto.randomUUID();
+  return db.runTransaction(async (transaction) => {
+    const pointerSnapshot = await transaction.get(userRequestRef);
+    const existingRef = pointerSnapshot.exists && pointerSnapshot.data()?.request_id
+      ? db.collection("account_deletion_requests").doc(pointerSnapshot.data().request_id)
+      : null;
+    const snapshot = existingRef ? await transaction.get(existingRef) : null;
+    const existing = snapshot?.exists ? snapshot.data() : null;
+    if (existing?.status === "received" || existing?.status === "under_review" || existing?.status === "awaiting_client" || existing?.status === "policy_review") {
+      return { requestId: existing.request_id, status: existing.status, existing: true };
+    }
+    const requestRef = db.collection("account_deletion_requests").doc(requestId);
+    transaction.set(requestRef, {
+      request_id: requestId,
+      user_id: userId,
+      email: normalizeEmail(user.email),
+      status: "received",
+      reason: asText(reason).slice(0, 1000),
+      created_at: isoNow(),
+      updated_at: isoNow(),
+      manager_note: "",
+      retention_review_required: true
+    });
+    transaction.set(userRequestRef, { request_id: requestId, updated_at: isoNow() });
+    return { requestId, status: "received", existing: false };
+  });
+}
+
+export async function listAccountDeletionRequests(limit = 100) {
+  const db = getDb();
+  const snapshot = await db.collection("account_deletion_requests").orderBy("created_at", "desc").limit(Math.min(200, Math.max(1, limit))).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+export async function updateAccountDeletionRequest(requestId, status, managerNote = "") {
+  const db = getDb();
+  const matches = await db.collection("account_deletion_requests").where("request_id", "==", asText(requestId)).limit(1).get();
+  if (matches.empty) return false;
+  const requestRef = matches.docs[0].ref;
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists) return false;
+    transaction.set(requestRef, {
+      status,
+      manager_note: asText(managerNote).slice(0, 1200),
+      updated_at: isoNow()
+    }, { merge: true });
+    return true;
+  });
+}
+
 export async function findUserBySession(token) {
   const db = getDb();
   const sessionDoc = await db.collection(SESSIONS).doc(token).get();
@@ -631,20 +1173,31 @@ export async function createRequest({
   consultationTime,
   estimateAmountCents = 0,
   depositAmountCents = 0,
-  details
+  details,
+  squareBooking = null
 }) {
   const db = getDb();
-  await db.collection(REQUESTS).add({
+  const requestData = {
     user_id: userId,
     project_type: projectType,
     budget,
     timeline,
-    consultation_date: consultationDate,
-    consultation_time: consultationTime,
+    consultation_date: squareBooking?.consultationDate || consultationDate || "",
+    consultation_time: squareBooking?.consultationTime || consultationTime || "",
+    ...(squareBooking ? {
+      source: "Website booking",
+      square_booking_id: squareBooking.squareBookingId,
+      square_customer_id: squareBooking.squareCustomerId,
+      square_location_id: squareBooking.squareLocationId,
+      square_booking_status: squareBooking.squareBookingStatus,
+      square_booking_version: squareBooking.squareBookingVersion,
+      square_booking_url: squareBooking.squareBookingUrl
+    } : {}),
     estimate_amount_cents: Number(estimateAmountCents || 0),
     deposit_amount_cents: Number(depositAmountCents || 0),
     details,
     status: "New",
+    client_activity: [clientActivityEvent("Request submitted"), ...(squareBooking ? [clientActivityEvent("Square appointment booked")] : [])],
     manager_notes: "",
     invoice_status: "Pending",
     payment_status: "Pending",
@@ -655,10 +1208,119 @@ export async function createRequest({
     updated_at: isoNow(),
     updated_at_ms: timestampNow(),
     last_manager_update_at: ""
+  };
+  if (squareBooking?.squareBookingId) {
+    const safeBookingId = asText(squareBooking.squareBookingId).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
+    const requestRef = db.collection(REQUESTS).doc(`square_booking_${safeBookingId}`);
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(requestRef);
+      const existing = snapshot.exists ? snapshot.data() : {};
+      if (existing.user_id && existing.user_id !== userId) {
+        const error = new Error("This Square booking is linked to another account.");
+        error.code = "SQUARE_BOOKING_OWNER_CONFLICT";
+        throw error;
+      }
+      if (existing.user_id === userId && existing.square_booking_id === squareBooking.squareBookingId) {
+        return;
+      }
+      if (existing.square_booking_id && existing.square_booking_id !== squareBooking.squareBookingId) {
+        const error = new Error("This request document is linked to another Square appointment.");
+        error.code = "SQUARE_BOOKING_OWNER_CONFLICT";
+        throw error;
+      }
+      transaction.set(requestRef, {
+        ...requestData,
+        client_activity: appendClientActivity(existing.client_activity, requestData.client_activity),
+        created_at: existing.created_at || requestData.created_at,
+        created_at_ms: existing.created_at_ms || requestData.created_at_ms
+      }, { merge: true });
+    });
+    return requestRef.id;
+  }
+  const created = await db.collection(REQUESTS).add(requestData);
+  return created.id;
+}
+
+function bookingAttemptDocumentId(userId, attemptId) {
+  return crypto.createHash("sha256")
+    .update(`${asText(userId)}:${asText(attemptId)}`)
+    .digest("hex");
+}
+
+export async function getSquareBookingAttempt({ userId, attemptId, startAt }) {
+  const ref = getDb().collection("square_booking_attempts").doc(bookingAttemptDocumentId(userId, attemptId));
+  const snapshot = await ref.get();
+  if (!snapshot.exists) return null;
+  const current = snapshot.data();
+  if (current.user_id !== userId || current.attempt_id !== attemptId || current.start_at !== startAt) {
+    const error = new Error("This booking attempt was already used for a different appointment time.");
+    error.code = "SQUARE_BOOKING_ATTEMPT_CONFLICT";
+    throw error;
+  }
+  return { ...current, attemptDocumentId: ref.id, existing: true };
+}
+
+export async function getOrCreateSquareBookingAttempt({ userId, attemptId, startAt, booking, requestData, idempotencyKey }) {
+  const db = getDb();
+  const ref = db.collection("square_booking_attempts").doc(bookingAttemptDocumentId(userId, attemptId));
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists) {
+      const current = snapshot.data();
+      if (current.user_id !== userId || current.attempt_id !== attemptId || current.start_at !== startAt) {
+        const error = new Error("This booking attempt was already used for a different appointment time.");
+        error.code = "SQUARE_BOOKING_ATTEMPT_CONFLICT";
+        throw error;
+      }
+      return { ...current, attemptDocumentId: ref.id, existing: true };
+    }
+    const savedRequestData = Object.fromEntries(Object.entries(requestData || {}).filter(([, value]) => value !== undefined));
+    const record = {
+      user_id: userId,
+      attempt_id: attemptId,
+      start_at: startAt,
+      booking,
+      request_data: savedRequestData,
+      idempotency_key: idempotencyKey,
+      booking_id: "",
+      request_id: "",
+      created_at: isoNow(),
+      updated_at: isoNow()
+    };
+    transaction.create(ref, record);
+    return { ...record, attemptDocumentId: ref.id, existing: false };
   });
 }
 
-export async function upsertSquareAppointmentRequest(appointment) {
+export async function markSquareBookingAttemptCreated({ userId, attemptDocumentId, bookingId }) {
+  const db = getDb();
+  const ref = db.collection("square_booking_attempts").doc(attemptDocumentId);
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.data()?.user_id !== userId) return false;
+    transaction.set(ref, { booking_id: asText(bookingId), updated_at: isoNow() }, { merge: true });
+    return true;
+  });
+}
+
+export async function markSquareBookingAttemptRequest({ userId, attemptDocumentId, requestId }) {
+  const db = getDb();
+  const ref = db.collection("square_booking_attempts").doc(attemptDocumentId);
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.data()?.user_id !== userId) return false;
+    const currentRequestId = asText(snapshot.data()?.request_id);
+    if (currentRequestId && currentRequestId !== requestId) {
+      const error = new Error("The booking attempt is already linked to another request.");
+      error.code = "SQUARE_BOOKING_REQUEST_CONFLICT";
+      throw error;
+    }
+    transaction.set(ref, { request_id: asText(requestId), updated_at: isoNow() }, { merge: true });
+    return true;
+  });
+}
+
+export async function upsertSquareAppointmentRequest(appointment, ownerUserId = "") {
   const db = getDb();
   const now = isoNow();
   const safeBookingId = asText(appointment.squareBookingId)
@@ -669,6 +1331,11 @@ export async function upsertSquareAppointmentRequest(appointment) {
   return db.runTransaction(async (transaction) => {
     const existingDoc = await transaction.get(docRef);
     const existingData = existingDoc.exists ? existingDoc.data() : {};
+    if (existingData.user_id && ownerUserId && existingData.user_id !== ownerUserId) {
+      const error = new Error("This Square booking is already linked to another account.");
+      error.code = "SQUARE_BOOKING_OWNER_CONFLICT";
+      throw error;
+    }
     const existingVersion = Number(existingData.square_booking_version || -1);
     const incomingVersion = Number(appointment.squareBookingVersion || 0);
 
@@ -677,24 +1344,35 @@ export async function upsertSquareAppointmentRequest(appointment) {
     }
 
     const createdAt = existingData.created_at || appointment.createdAt || now;
+    const appointmentChanged = !existingDoc.exists ||
+      existingData.consultation_date !== appointment.consultationDate ||
+      existingData.consultation_time !== appointment.consultationTime ||
+      existingData.status !== appointment.status;
+    const eventLabel = existingDoc.exists
+      ? `Appointment updated: ${appointment.consultationDate || "date pending"}${appointment.consultationTime ? ` at ${appointment.consultationTime}` : ""} (${appointment.status}).`
+      : `Appointment booked: ${appointment.consultationDate || "date pending"}${appointment.consultationTime ? ` at ${appointment.consultationTime}` : ""}.`;
+    const clientActivity = appointmentChanged
+      ? appendClientActivity(existingData.client_activity, [clientActivityEvent(eventLabel, appointment.updatedAt || now)])
+      : (Array.isArray(existingData.client_activity) ? existingData.client_activity : []);
     transaction.set(
       docRef,
       {
-        user_id: existingData.user_id || "",
-        source: appointment.source,
+        user_id: existingData.user_id || ownerUserId || "",
+        source: existingData.source || appointment.source,
         square_booking_id: appointment.squareBookingId,
         square_customer_id: appointment.squareCustomerId,
         square_location_id: appointment.squareLocationId,
         square_booking_status: appointment.squareBookingStatus,
         square_booking_version: incomingVersion,
         square_booking_url: appointment.squareBookingUrl,
-        project_type: appointment.projectType,
-        budget: appointment.budget,
-        timeline: appointment.timeline,
+        project_type: existingData.project_type || appointment.projectType,
+        budget: existingData.budget || appointment.budget,
+        timeline: existingData.timeline || appointment.timeline,
         consultation_date: appointment.consultationDate,
         consultation_time: appointment.consultationTime,
-        details: appointment.details,
-        status: appointment.status,
+        details: existingData.details || appointment.details,
+        status: existingData.user_id ? (existingData.status || "New") : appointment.status,
+        client_activity: clientActivity,
         manager_notes: existingData.manager_notes || "",
         invoice_status: existingData.invoice_status || "Appointment-only",
         payment_status: existingData.payment_status || "Not Required",
@@ -711,6 +1389,22 @@ export async function upsertSquareAppointmentRequest(appointment) {
 
     return docRef.id;
   });
+}
+
+export async function getOwnedSquareBookingRequest(requestId, userId) {
+  if (!requestId || !userId) return null;
+  const snapshot = await getDb().collection(REQUESTS).doc(requestId).get();
+  if (!snapshot.exists) return null;
+  const data = snapshot.data();
+  if (data.user_id !== userId || !data.square_booking_id) return null;
+  return {
+    id: snapshot.id,
+    userId: data.user_id,
+    squareBookingId: data.square_booking_id,
+    squareBookingStatus: data.square_booking_status || "",
+    consultationDate: data.consultation_date || "",
+    consultationTime: data.consultation_time || ""
+  };
 }
 
 export async function listRequests(userId) {
@@ -736,7 +1430,14 @@ export async function listRequests(userId) {
         created_at_ms: timestampToMs(data.created_at_ms || data.created_at),
         invoice_status: asText(data.invoice_status, "Pending"),
         invoice_amount_cents: Number(data.invoice_amount_cents || 0),
-        square_invoice_url: asText(data.square_invoice_url)
+        square_invoice_url: asText(data.square_invoice_url),
+        square_booking_id: asText(data.square_booking_id),
+        square_booking_status: asText(data.square_booking_status),
+        square_booking_url: asText(data.square_booking_url),
+        client_activity: (Array.isArray(data.client_activity) ? data.client_activity : []).slice(-50).map((event) => ({
+          label: asText(event?.label, "Request update").slice(0, 180),
+          created_at: asText(event?.created_at)
+        }))
       };
     })
   ).map(({ created_at_ms, ...rest }) => rest);
@@ -861,6 +1562,12 @@ export async function findRequestWithUserById(requestId, { includeBillingDetails
   return attachUserContextToRequests([request], usersById, { includeBillingDetails })[0] || null;
 }
 
+export async function userOwnsRequest(userId, requestId) {
+  const db = getDb();
+  const requestDoc = await db.collection(REQUESTS).doc(requestId).get();
+  return requestDoc.exists && requestDoc.data()?.user_id === userId;
+}
+
 export async function updateManagerRequest(requestId, updates, { decisionMessageBuilder = null } = {}) {
   const db = getDb();
   const requestRef = db.collection(REQUESTS).doc(requestId);
@@ -881,11 +1588,16 @@ export async function updateManagerRequest(requestId, updates, { decisionMessage
       ? decisionMessageBuilder(existing)
       : null;
     let decisionMessageCreated = false;
+    const activityEvents = [];
+    if (updates.status && existing.status !== updates.status) activityEvents.push(clientActivityEvent(`Request status updated: ${updates.status}.`, updatedAt));
+    if (updates.invoice_status && existing.invoice_status !== updates.invoice_status) activityEvents.push(clientActivityEvent(`Invoice status updated: ${updates.invoice_status}.`, updatedAt));
+    if (updates.payment_status && existing.payment_status !== updates.payment_status) activityEvents.push(clientActivityEvent(`Payment status updated: ${updates.payment_status}.`, updatedAt));
     transaction.set(requestRef, {
       ...updates,
       updated_at: updatedAt,
       updated_at_ms: timestampNow(),
-      last_manager_update_at: updatedAt
+      last_manager_update_at: updatedAt,
+      ...(activityEvents.length ? { client_activity: appendClientActivity(existing.client_activity, activityEvents) } : {})
     }, { merge: true });
 
     if (
@@ -895,7 +1607,9 @@ export async function updateManagerRequest(requestId, updates, { decisionMessage
     ) {
       transaction.set(messageRef, {
         user_id: existing.user_id,
+        request_id: requestId,
         sender_role: "studio",
+        client_read_at: "",
         subject: decisionMessage.subject,
         body: decisionMessage.body,
         created_at: updatedAt,
@@ -908,11 +1622,13 @@ export async function updateManagerRequest(requestId, updates, { decisionMessage
   });
 }
 
-export async function createMessage({ userId, senderRole, subject, body }) {
+export async function createMessage({ userId, senderRole, subject, body, requestId = "" }) {
   const db = getDb();
   const message = {
     user_id: userId,
+    ...(requestId ? { request_id: requestId } : {}),
     sender_role: senderRole,
+    ...(senderRole === "studio" ? { client_read_at: "" } : {}),
     subject,
     body,
     created_at: isoNow(),
@@ -966,6 +1682,34 @@ export async function countMessages(userId) {
   const db = getDb();
   const result = await db.collection(MESSAGES).where("user_id", "==", userId).count().get();
   return result.data().count;
+}
+
+export async function countUnreadStudioMessages(userId) {
+  const db = getDb();
+  const snapshot = await db.collection(MESSAGES)
+    .where("user_id", "==", userId)
+    .where("sender_role", "==", "studio")
+    .select("client_read_at")
+    .get();
+  return snapshot.docs.filter((document) => !document.get("client_read_at")).length;
+}
+
+export async function setMessageConversationReadState(userId, requestId, isRead) {
+  const db = getDb();
+  const snapshot = await db.collection(MESSAGES)
+    .where("user_id", "==", userId)
+    .where("sender_role", "==", "studio")
+    .get();
+  const matchingDocs = snapshot.docs.filter((document) => String(document.get("request_id") || "") === requestId);
+  const updatedAt = isRead ? isoNow() : "";
+  for (let offset = 0; offset < matchingDocs.length; offset += 400) {
+    const batch = db.batch();
+    matchingDocs.slice(offset, offset + 400).forEach((document) => {
+      batch.update(document.ref, { client_read_at: updatedAt });
+    });
+    await batch.commit();
+  }
+  return countUnreadStudioMessages(userId);
 }
 
 async function countMessagesByRole(userId, senderRole) {

@@ -6,6 +6,7 @@ import {
   sessionConfigurationResponse
 } from "../../../lib/api-helpers";
 import { createSignedSessionToken, withSessionCookie } from "../../../lib/auth";
+import { isBookingManagerEmail } from "../../../lib/booking-manager";
 import {
   createModelApplication,
   findUserById,
@@ -35,6 +36,10 @@ export async function POST(request) {
     return parsed.error;
   }
 
+  if (isBookingManagerEmail(parsed.data.email)) {
+    return jsonError("This email address is reserved for studio manager access and cannot be used for a public model application.", 409);
+  }
+
   let saved;
   try {
     saved = await createModelApplication(parsed.data);
@@ -58,7 +63,6 @@ export async function POST(request) {
   const token = createSignedSessionToken(saved.userId, request);
   const response = jsonOk(
     {
-      sessionToken: token,
       user: sanitizeUser(user),
       requests: await listRequests(saved.userId),
       applicationId: saved.applicationId,

@@ -7,6 +7,7 @@ import {
 } from "../../../lib/api-helpers";
 import { createUser, findUserByEmail, findUserByUsername, listRequests, sanitizeUser } from "../../../lib/db";
 import { createSignedSessionToken, withSessionCookie } from "../../../lib/auth";
+import { isBookingManagerEmail } from "../../../lib/booking-manager";
 import { enforceAuthRateLimit } from "../../../lib/rate-limit";
 import { parseWithSchema, signupSchema } from "../../../lib/validation";
 
@@ -46,6 +47,10 @@ export async function POST(request) {
     return jsonError("An account already exists for that email.", 409);
   }
 
+  if (isBookingManagerEmail(email)) {
+    return jsonError("This email address is reserved for studio manager access and requires administrator provisioning.", 409);
+  }
+
   if (username && (await findUserByUsername(username))) {
     return jsonError("That username is already taken. Choose another username.", 409);
   }
@@ -66,10 +71,9 @@ export async function POST(request) {
     password
   });
   const user = await findUserByEmail(email);
-  const token = createSignedSessionToken(userId, request);
+  const token = createSignedSessionToken(userId, request, user?.auth_version);
   const response = jsonOk(
     {
-      sessionToken: token,
       user: sanitizeUser(user),
       requests: await listRequests(userId)
     },

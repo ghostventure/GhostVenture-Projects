@@ -1,5 +1,7 @@
 import { RateLimiterMemory } from "rate-limiter-flexible";
 import { NextResponse } from "next/server";
+import crypto from "node:crypto";
+import { getDb } from "./firebase-admin";
 
 const authLimiter = new RateLimiterMemory({
   points: 10,
@@ -10,6 +12,7 @@ const writeLimiter = new RateLimiterMemory({
   points: 20,
   duration: 60
 });
+
 
 function getClientKey(request) {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -46,6 +49,23 @@ export async function enforceAuthRateLimit(request) {
   } catch (error) {
     return rateLimitedResponse(error, "Too many authentication attempts. Please wait a minute and try again.");
   }
+}
+
+export async function enforceRecoveryEmailRateLimit(email) {
+  const key = crypto.createHash("sha256").update(String(email || "").trim().toLowerCase()).digest("hex");
+  const db = getDb();
+  const ref = db.collection("account_recovery_rate_limits").doc(key);
+  const now = Date.now();
+  const limited = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const previous = snapshot.exists ? snapshot.data() : {};
+    const windowStart = Number(previous.window_start_ms || 0);
+    const count = windowStart > now - 60 * 60 * 1000 ? Number(previous.count || 0) : 0;
+    if (count >= 3) return true;
+    transaction.set(ref, { window_start_ms: count ? windowStart : now, count: count + 1 });
+    return false;
+  });
+  return limited;
 }
 
 export async function enforceWriteRateLimit(request, suffix = "write") {

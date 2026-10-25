@@ -3,6 +3,9 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "storage": {
+    "rules": "storage.rules"
+  },
   "hosting": {
     "site": "black-lion-media-studio",
     "source": ".",
@@ -67,7 +70,12 @@
     "frameworksBackend": {
       "region": "us-central1",
       "secrets": [
-        "SESSION_SECRET"
+        "SESSION_SECRET",
+        "SQUARE_ACCESS_TOKEN",
+        "SQUARE_WEBHOOK_SIGNATURE_KEY",
+        "SQUARE_PAYMENTS_WEBHOOK_SIGNATURE_KEY",
+        "SMTP_USER",
+        "SMTP_PASS"
       ]
     }
   }

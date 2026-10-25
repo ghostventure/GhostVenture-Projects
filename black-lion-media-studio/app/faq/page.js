@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FaqSearchList } from "../../components/faq-search-list";
 import { faqItems, lastUpdated } from "../../lib/legal-content";
 
 export const metadata = {
@@ -25,14 +26,7 @@ export default function FAQPage() {
         </section>
 
         <section className="panel">
-          <div className="legal-faq-list">
-            {faqItems.map((item) => (
-              <details key={item.question}>
-                <summary>{item.question}</summary>
-                <p>{item.answer}</p>
-              </details>
-            ))}
-          </div>
+          <FaqSearchList items={faqItems} />
         </section>
       </main>
     </div>

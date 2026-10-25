@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 const defaultBookingUrl = "https://app.squareup.com/appointments/book/op8hxs606oapok/5JEHPWFCRNH2S/start";
 const defaultWebhookPath = "/api/square/bookings/webhook";
+const defaultPaymentsWebhookPath = "/api/square/payments/webhook";
 
 function asText(value, fallback = "") {
   if (value === null || value === undefined) {
@@ -50,12 +51,15 @@ function formatSquareTime(date, timeZone) {
 }
 
 function buildSignatureUrl(request) {
-  const configuredUrl = asText(process.env.SQUARE_BOOKINGS_WEBHOOK_URL);
+  const isPaymentWebhook = new URL(request.url).pathname.endsWith(defaultPaymentsWebhookPath);
+  const configuredUrl = asText(isPaymentWebhook
+    ? process.env.SQUARE_PAYMENTS_WEBHOOK_URL
+    : process.env.SQUARE_BOOKINGS_WEBHOOK_URL);
   if (configuredUrl) {
     return configuredUrl;
   }
 
-  return `${getSiteBaseUrl()}${defaultWebhookPath}`;
+  return `${getSiteBaseUrl()}${isPaymentWebhook ? defaultPaymentsWebhookPath : defaultWebhookPath}`;
 }
 
 export function getSquareAppointmentBookingUrl() {
@@ -63,7 +67,10 @@ export function getSquareAppointmentBookingUrl() {
 }
 
 export function verifySquareWebhookSignature({ request, rawBody }) {
-  const signatureKey = asText(process.env.SQUARE_WEBHOOK_SIGNATURE_KEY);
+  const isPaymentWebhook = new URL(request.url).pathname.endsWith(defaultPaymentsWebhookPath);
+  const signatureKey = asText(isPaymentWebhook
+    ? process.env.SQUARE_PAYMENTS_WEBHOOK_SIGNATURE_KEY
+    : process.env.SQUARE_WEBHOOK_SIGNATURE_KEY);
   if (!signatureKey) {
     return { ok: process.env.NODE_ENV !== "production", skipped: true };
   }
@@ -102,7 +109,7 @@ export function parseSquareBookingWebhook(payload = {}) {
     : null;
   const durationMinutes = Number(firstSegment?.duration_minutes || 0);
   const status = asText(booking.status, "ACCEPTED").toUpperCase();
-  const isCancelled = ["CANCELLED", "CANCELED", "DECLINED"].includes(status);
+  const isCancelled = ["CANCELLED", "CANCELED", "DECLINED", "CANCELLED_BY_CUSTOMER", "CANCELLED_BY_SELLER", "DECLINED_BY_SELLER"].includes(status);
   const serviceVariationId = asText(firstSegment?.service_variation_id);
   const teamMemberId = asText(firstSegment?.team_member_id);
   const customerNote = asText(booking.customer_note);

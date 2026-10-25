@@ -126,6 +126,9 @@ async function squareRequest(path, body, signal) {
 }
 
 async function createSquareCustomer(requestRecord, signal) {
+  if (requestRecord.square_customer_id) {
+    return { id: String(requestRecord.square_customer_id) };
+  }
   const { givenName, familyName } = splitName(
     requestRecord.billing_name || requestRecord.client_name
   );

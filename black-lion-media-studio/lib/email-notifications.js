@@ -112,6 +112,54 @@ export async function notifyNewClientMessage({ user, subject, body }) {
   return { sent: true, to: alertTo };
 }
 
+export async function sendPasswordRecoveryEmail({ email, token }) {
+  const smtpConfig = getSmtpConfig();
+  if (!smtpConfig) {
+    console.warn("Password recovery email skipped: SMTP_HOST, SMTP_USER, or SMTP_PASS is not configured.");
+    return { sent: false, reason: "smtp-not-configured" };
+  }
+  const from = asText(process.env.SMTP_FROM, smtpConfig.auth.user);
+  const siteUrl = asText(process.env.SITE_BASE_URL, defaultSiteUrl).replace(/\/+$/, "");
+  const recoveryUrl = `${siteUrl}/reset-password#token=${encodeURIComponent(token)}`;
+  await nodemailer.createTransport(smtpConfig).sendMail({
+    to: email,
+    from,
+    subject: "Reset your Black Lion Studios password",
+    text: [
+      "A password reset was requested for your Black Lion Studios account.",
+      "",
+      `Use this one-time link within 30 minutes: ${recoveryUrl}`,
+      "If you did not request this, you can ignore this message."
+    ].join("\n"),
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#122017"><h2>Password reset</h2><p>A password reset was requested for your Black Lion Studios account.</p><p><a href="${escapeHtml(recoveryUrl)}">Reset your password</a></p><p>This one-time link expires in 30 minutes. If you did not request this, ignore this message.</p></div>`
+  });
+  return { sent: true };
+}
+
+export async function notifyAccountDeletionRequest({ email, requestId }) {
+  const smtpConfig = getSmtpConfig();
+  if (!smtpConfig) {
+    console.warn("Account deletion notification skipped: SMTP_HOST, SMTP_USER, or SMTP_PASS is not configured.");
+    return { sent: false, reason: "smtp-not-configured" };
+  }
+  const to = asText(process.env.ACCOUNT_DELETION_ALERT_TO, defaultMessageAlertTo);
+  const from = asText(process.env.SMTP_FROM, smtpConfig.auth.user);
+  const managerUrl = `${asText(process.env.SITE_BASE_URL, defaultSiteUrl).replace(/\/+$/, "")}/booking-manager`;
+  await nodemailer.createTransport(smtpConfig).sendMail({
+    to,
+    from,
+    subject: "Account deletion request needs review",
+    text: [
+      "A client submitted an account deletion request.",
+      `Request ID: ${asText(requestId)}`,
+      `Account email: ${asText(email)}`,
+      "Review the request, confirm the applicable retention obligations, and follow up with the client.",
+      `Manager dashboard: ${managerUrl}`
+    ].join("\n")
+  });
+  return { sent: true };
+}
+
 export async function notifyNewModelApplication(application) {
   const smtpConfig = getSmtpConfig();
   if (!smtpConfig) {

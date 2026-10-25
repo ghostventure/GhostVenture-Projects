@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { isValidConsultationSlot } from "./consultations";
 import { serviceOptions } from "./services";
 
 const requiredText = (label, min = 1) =>
@@ -60,6 +59,34 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required.")
 });
 
+export const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1, "Enter your current password."),
+  newPassword: z.string().min(12, "Use at least 12 characters for the new password.").max(128, "New password is too long.")
+}).superRefine((value, context) => {
+  if (value.currentPassword === value.newPassword) {
+    context.addIssue({ code: "custom", path: ["newPassword"], message: "Choose a new password different from your current one." });
+  }
+});
+
+export const passwordRecoveryRequestSchema = z.object({
+  email: z.email("A valid email address is required.").transform((value) => value.trim().toLowerCase())
+});
+
+export const passwordRecoveryCompleteSchema = z.object({
+  token: z.string().min(32).max(256),
+  newPassword: z.string().min(12, "Use at least 12 characters for the new password.").max(128, "New password is too long.")
+});
+
+export const accountDeletionRequestSchema = z.object({
+  reason: z.string().trim().max(1000, "Please keep the note under 1,000 characters.").optional().default("")
+});
+
+export const accountDeletionReviewSchema = z.object({
+  requestId: z.string().min(1).max(80),
+  status: z.enum(["under_review", "awaiting_client", "policy_review", "declined", "resolved"]),
+  managerNote: z.string().trim().max(1200).optional().default("")
+});
+
 export const profileSchema = z.object({
   fullName: requiredText("Full name"),
   username: optionalText("Username", 40).refine(
@@ -116,8 +143,12 @@ export const requestSchema = z.object({
   }),
   budget: requiredText("Budget"),
   timeline: requiredText("Timeline"),
-  consultationDate: requiredText("Consultation date"),
-  consultationTime: requiredText("Consultation time"),
+  consultationDate: optionalText("Consultation date", 40),
+  consultationTime: optionalText("Consultation time", 40),
+  startAt: z.string().optional().refine((value) => !value || (
+    value.length <= 40 && Number.isFinite(Date.parse(value)) && /(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+  ), "Choose a valid appointment time."),
+  bookingAttemptId: z.string().uuid().optional(),
   estimateAmountCents: z.coerce.number().int().min(0).max(100000000).optional(),
   depositAmountCents: z.coerce.number().int().min(0).max(100000000).optional(),
   details: z
@@ -126,12 +157,8 @@ export const requestSchema = z.object({
     .min(20, "Please provide at least 20 characters of order detail.")
     .max(2000, "Order details are too long.")
 }).superRefine((value, context) => {
-  if (!isValidConsultationSlot(value.consultationDate, value.consultationTime)) {
-    context.addIssue({
-      code: "custom",
-      path: ["consultationTime"],
-      message: "Please choose an available consultation day and time."
-    });
+  if (value.startAt && !value.bookingAttemptId) {
+    context.addIssue({ code: "custom", path: ["bookingAttemptId"], message: "Please refresh the page and try booking again." });
   }
 });
 
@@ -217,11 +244,17 @@ export const modelApplicationSchema = z.object({
 
 export const messageSchema = z.object({
   subject: requiredText("Subject").max(120, "Subject is too long."),
+  requestId: z.string().max(128, "Choose a valid request.").regex(/^[A-Za-z0-9_-]*$/, "Choose a valid request.").optional().default(""),
   body: z
     .string()
     .trim()
     .min(10, "Please provide at least 10 characters in your message.")
     .max(4000, "Message is too long.")
+});
+
+export const messageReadStateSchema = z.object({
+  requestId: z.string().max(128, "Choose a valid conversation.").regex(/^[A-Za-z0-9_-]*$/, "Choose a valid conversation.").optional().default(""),
+  isRead: z.boolean()
 });
 
 export const managerRequestUpdateSchema = z.object({

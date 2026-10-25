@@ -28,6 +28,34 @@ export function ClientNav({ userName, isBookingManager = false, workspace = "cli
   const [idleWarning, setIdleWarning] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(Math.ceil(AUTH_IDLE_WARNING_MS / 1000));
   const [logoutNotice, setLogoutNotice] = useState("");
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    async function refreshUnreadCount() {
+      try {
+        const response = await authenticatedFetch("/api/messages?summary=unread", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (active) setUnreadMessageCount(Number(data.unreadCount || 0));
+      } catch {
+        // The inbox remains available when its optional count cannot refresh.
+      }
+    }
+    function handleReadStateChange(event) {
+      const count = Number(event.detail?.unreadCount);
+      if (Number.isFinite(count)) setUnreadMessageCount(Math.max(0, count));
+      else refreshUnreadCount();
+    }
+    refreshUnreadCount();
+    window.addEventListener("focus", refreshUnreadCount);
+    window.addEventListener("bls-message-read-state-change", handleReadStateChange);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshUnreadCount);
+      window.removeEventListener("bls-message-read-state-change", handleReadStateChange);
+    };
+  }, []);
 
   const navItems =
     workspace === "manager"
@@ -185,8 +213,14 @@ export function ClientNav({ userName, isBookingManager = false, workspace = "cli
         <div className="topbar-links">
           <ThemeToggle />
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href} className={pathname === item.href ? "current-link" : ""}>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={pathname === item.href ? "current-link" : ""}
+              aria-label={item.href === "/messages" && unreadMessageCount > 0 ? `Messages, ${unreadMessageCount} unread` : undefined}
+            >
               {item.label}
+              {item.href === "/messages" && unreadMessageCount > 0 ? <span className="unread-message-count" aria-hidden="true">{unreadMessageCount > 99 ? "99+" : unreadMessageCount}</span> : null}
             </Link>
           ))}
           <button type="button" className="button button-secondary" onClick={() => handleLogout("manual")}>

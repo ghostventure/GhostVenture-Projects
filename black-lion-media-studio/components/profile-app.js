@@ -96,6 +96,38 @@ function countFilled(values) {
   }).length;
 }
 
+function readProfileSectionStatus(form) {
+  const sectionIds = ["profile-contact", "profile-service", "profile-model", "profile-billing", "profile-delivery", "profile-links"];
+  return sectionIds.flatMap((id) => {
+    const section = form?.querySelector(`#${id}`);
+    if (!section) return [];
+    const fields = [...section.querySelectorAll("input, select, textarea")].filter((field) => field.willValidate);
+    const filledCount = fields.filter((field) => field.type === "checkbox" ? field.checked : Boolean(field.value.trim())).length;
+    const invalidFields = fields.filter((field) => !field.checkValidity()).map((field) => {
+      const label = field.labels?.[0]?.textContent?.trim();
+      return label || field.name;
+    });
+    const valid = invalidFields.length === 0;
+    const title = section.querySelector(".ui-form-section-head strong")?.textContent || id.replace("profile-", "");
+    return [{ id, title, fieldCount: fields.length, filledCount, valid, invalidFields }];
+  });
+}
+
+function downloadProfileCopy(user) {
+  const { id, isBookingManager, ...profile } = user || {};
+  const file = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), profile }, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "black-lion-profile-copy.json";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function buildProfileInsights(user, requests = [], messageCount = 0) {
   const profileFields = [
     user?.fullName,
@@ -144,6 +176,30 @@ export function ProfileApp({ initialState = null }) {
   const [state, setState] = useState(initialState || emptyState);
   const [loading, setLoading] = useState(!initialState);
   const [profileMessage, setProfileMessage] = useState("");
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileSectionStatus, setProfileSectionStatus] = useState([]);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFormVersion, setProfileFormVersion] = useState(0);
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [deletionMessage, setDeletionMessage] = useState("");
+  const [requestingDeletion, setRequestingDeletion] = useState(false);
+
+  useEffect(() => {
+    if (!profileDirty) return undefined;
+    function warnBeforeLeaving(event) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [profileDirty]);
+
+  useEffect(() => {
+    if (!state.user) return;
+    const form = document.getElementById("profile-editor-form");
+    if (form) setProfileSectionStatus(readProfileSectionStatus(form));
+  }, [state.user]);
 
   useEffect(() => {
     if (initialState) {
@@ -177,9 +233,17 @@ export function ProfileApp({ initialState = null }) {
   async function handleProfileUpdate(event) {
     event.preventDefault();
     setProfileMessage("");
+    const form = event.currentTarget;
+    if (!form.reportValidity()) {
+      setProfileMessage("Some fields need attention. Review the highlighted sections before saving.");
+      form.querySelector(":invalid")?.focus();
+      return;
+    }
+    if (profileSaving) return;
+    setProfileSaving(true);
 
     try {
-      const formData = new FormData(event.currentTarget);
+      const formData = new FormData(form);
       const payload = Object.fromEntries(formData.entries());
       payload.notificationOptIn = formData.get("notificationOptIn") ? "true" : "false";
       payload.marketingOptIn = formData.get("marketingOptIn") ? "true" : "false";
@@ -192,12 +256,64 @@ export function ProfileApp({ initialState = null }) {
       });
       const data = await postJson("/api/profile", payload);
       setState((current) => ({ ...current, user: data.user }));
+      setProfileDirty(false);
+      setProfileFormVersion((version) => version + 1);
       setProfileMessage("Profile updated.");
       trackEvent("profile_updated", { service: payload.serviceInterest });
       toast.success("Profile updated");
     } catch (error) {
       setProfileMessage(error.message);
       toast.error(error.message);
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function handlePasswordChange(event) {
+    event.preventDefault();
+    setPasswordMessage("");
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const newPassword = String(formData.get("newPassword") || "");
+    if (newPassword !== String(formData.get("confirmPassword") || "")) {
+      setPasswordMessage("The new password and confirmation do not match.");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await postJson("/api/account/password", {
+        currentPassword: formData.get("currentPassword"),
+        newPassword
+      });
+      form.reset();
+      setPasswordMessage("Password changed. Earlier signed-in sessions have been invalidated; this session remains active.");
+    } catch (error) {
+      setPasswordMessage(error.message || "Could not change the password. Please try again.");
+    } finally {
+      setChangingPassword(false);
+    }
+  }
+
+  async function handleDeletionRequest(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    if (formData.get("confirmDeletionRequest") !== "on") {
+      setDeletionMessage("Confirm that you want the studio to review an account deletion request.");
+      return;
+    }
+    setRequestingDeletion(true);
+    setDeletionMessage("");
+    try {
+      const result = await postJson("/api/account/deletion", {
+        reason: String(formData.get("reason") || "").trim()
+      });
+      setDeletionMessage(result.message || "Your request was received. The studio will follow up to confirm scope and applicable retention before deletion.");
+      form.reset();
+    } catch (error) {
+      setDeletionMessage(error.message || "The request could not be sent. Please try again.");
+    } finally {
+      setRequestingDeletion(false);
     }
   }
 
@@ -315,8 +431,39 @@ export function ProfileApp({ initialState = null }) {
             title={isModelProfile ? "Comprehensive model profile" : "Consolidated profile"}
             copy={isModelProfile ? "Model identity, PII, portfolio links, availability, contract terms, speed, quality, and reliability details stay separate from client profiles." : "Contact, service preferences, billing, shipping, links, and extra details are grouped by how the studio uses them."}
           />
-          <form className="form active" onSubmit={handleProfileUpdate}>
-            <FormSectionCard title="Contact and account" copy="The basics for identity, replies, and scheduling.">
+          <div className="profile-export-actions">
+            <button type="button" className="button button-secondary" onClick={() => downloadProfileCopy(state.user)}>
+              Download profile copy
+            </button>
+            <p className="muted">The file is saved to your device and includes the profile details currently shown in this account.</p>
+          </div>
+          <nav className="profile-section-nav" aria-label="Profile sections">
+            {profileSectionStatus.map((section) => (
+              <a href={`#${section.id}`} key={section.id}>{section.title}</a>
+            ))}
+          </nav>
+          <div className="profile-section-status" aria-live="polite">
+            <h3>Profile section status</h3>
+            <div className="profile-section-status-grid">
+              {profileSectionStatus.map((section) => (
+                <a className="select-card" href={`#${section.id}`} key={section.id}>
+                  <strong>{section.title}</strong>
+                  <span>{section.filledCount} of {section.fieldCount} fields filled</span>
+                  <span className={section.valid ? "muted" : "notice"}>
+                    {section.valid
+                      ? section.filledCount === section.fieldCount ? "Valid and complete" : "Valid so far · optional details may be incomplete"
+                      : `Needs attention: ${section.invalidFields.join(", ")}`}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+          <form key={profileFormVersion} id="profile-editor-form" className="form active" noValidate onSubmit={handleProfileUpdate} onChange={(event) => {
+            setProfileDirty(true);
+            setProfileSectionStatus(readProfileSectionStatus(event.currentTarget));
+            setProfileMessage("");
+          }}>
+            <FormSectionCard id="profile-contact" title="Contact and account" copy="The basics for identity, replies, and scheduling.">
               <label>
                 Full name
                 <input name="fullName" type="text" defaultValue={state.user?.fullName || ""} required />
@@ -365,7 +512,7 @@ export function ProfileApp({ initialState = null }) {
                 <input name="timezone" type="text" defaultValue={state.user?.timezone || "America/New_York"} />
               </label>
             </FormSectionCard>
-            <FormSectionCard title="Service and follow-up" copy="Tell the studio what work matters next and how to keep the account useful.">
+            <FormSectionCard id="profile-service" title="Service and follow-up" copy="Tell the studio what work matters next and how to keep the account useful.">
               <label>
                 Primary service interest
                 <select name="serviceInterest" defaultValue={state.user?.serviceInterest || serviceOptions[0] || ""} required>
@@ -415,6 +562,7 @@ export function ProfileApp({ initialState = null }) {
             </FormSectionCard>
             {isModelProfile ? (
               <FormSectionCard
+                id="profile-model"
                 title="Model profile"
                 copy="These model-only fields keep casting, production readiness, and PII review separate from client profile categories."
               >
@@ -447,7 +595,7 @@ export function ProfileApp({ initialState = null }) {
                 <FormHint>Attendance status, queue position, and no-show counts are tracked by the studio, not edited by applicants.</FormHint>
               </FormSectionCard>
             ) : null}
-            <FormSectionCard title="Billing and invoices" copy="Used for Square invoices, quotes, deposits, and payment follow-up.">
+            <FormSectionCard id="profile-billing" title="Billing and invoices" copy="Used for Square invoices, quotes, deposits, and payment follow-up.">
               <label>
                 Billing name
                 <input name="billingName" type="text" defaultValue={state.user?.billingName || ""} />
@@ -473,7 +621,7 @@ export function ProfileApp({ initialState = null }) {
                 <input name="taxId" type="text" defaultValue={state.user?.taxId || ""} />
               </label>
             </FormSectionCard>
-            <FormSectionCard title="Shipping and delivery" copy="Useful when merch, physical items, or shipped deliverables are involved.">
+            <FormSectionCard id="profile-delivery" title="Shipping and delivery" copy="Useful when merch, physical items, or shipped deliverables are involved.">
               <label>
                 Shipping name
                 <input name="shippingName" type="text" defaultValue={state.user?.shippingName || ""} />
@@ -499,7 +647,7 @@ export function ProfileApp({ initialState = null }) {
                 <input name="shippingCountry" type="text" defaultValue={state.user?.shippingCountry || "United States"} />
               </label>
             </FormSectionCard>
-            <FormSectionCard title="Links and extra details" copy="Optional web links and custom profile details that help the studio understand the client.">
+            <FormSectionCard id="profile-links" title="Links and extra details" copy="Optional web links and custom profile details that help the studio understand the client.">
               <label>
                 Website
                 <input name="website" type="text" inputMode="url" defaultValue={state.user?.website || ""} />
@@ -527,11 +675,69 @@ export function ProfileApp({ initialState = null }) {
               </label>
               <FormHint>Use one detail per line in the format `Label: value`. Up to 25 extra details can be saved.</FormHint>
             </FormSectionCard>
-            <button type="submit" className="button">
-              Save profile
+            <button type="submit" className="button" disabled={profileSaving}>
+              {profileSaving ? "Saving profile…" : profileDirty ? "Save profile changes" : "Save profile"}
             </button>
+            {profileDirty ? (
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => {
+                  const form = document.getElementById("profile-editor-form");
+                  form?.reset();
+                  setProfileDirty(false);
+                  if (form) requestAnimationFrame(() => setProfileSectionStatus(readProfileSectionStatus(form)));
+                  setProfileMessage("Unsaved changes discarded. The form has returned to its last loaded values.");
+                }}
+              >
+                Discard changes
+              </button>
+            ) : null}
+            {profileDirty ? <span className="muted" role="status" aria-live="polite">Unsaved changes. Save before leaving this page.</span> : null}
           </form>
-          <p className={`message ${profileMessage ? "is-visible" : ""}`}>{profileMessage}</p>
+          <section className="panel profile-password-panel" aria-labelledby="profile-password-title">
+            <p className="label">Account security</p>
+            <h3 id="profile-password-title">Change password</h3>
+            <p className="muted">Confirm your current password. The new password must be at least 12 characters. Changing it signs out earlier sessions.</p>
+            <form className="form active" onSubmit={handlePasswordChange}>
+              <label>
+                Current password
+                <input name="currentPassword" type="password" autoComplete="current-password" required />
+              </label>
+              <label>
+                New password
+                <input name="newPassword" type="password" autoComplete="new-password" minLength={12} maxLength={128} required />
+              </label>
+              <label>
+                Confirm new password
+                <input name="confirmPassword" type="password" autoComplete="new-password" minLength={12} maxLength={128} required />
+              </label>
+              <button type="submit" className="button" disabled={changingPassword}>
+                {changingPassword ? "Changing password…" : "Change password"}
+              </button>
+            </form>
+            <p className={`message ${passwordMessage ? "is-visible" : ""}`} role="status" aria-live="polite">{passwordMessage}</p>
+          </section>
+          <section className="panel" aria-labelledby="profile-deletion-title">
+            <p className="label">Account controls</p>
+            <h3 id="profile-deletion-title">Request account deletion</h3>
+            <p className="muted">This sends a request to the studio; it does not immediately delete your account. The studio will follow up to confirm the scope and applicable retention before taking action.</p>
+            <form className="form active" onSubmit={handleDeletionRequest}>
+              <label>
+                Optional details
+                <textarea name="reason" rows={3} maxLength={1000} placeholder="Tell us what you would like removed or any questions you have." />
+              </label>
+              <label className="checkbox-row">
+                <input name="confirmDeletionRequest" type="checkbox" required />
+                I understand this submits a request for follow-up and does not delete my account immediately.
+              </label>
+              <button type="submit" className="button button-secondary" disabled={requestingDeletion}>
+                {requestingDeletion ? "Sending request…" : "Send deletion request"}
+              </button>
+            </form>
+            <p className={`message ${deletionMessage ? "is-visible" : ""}`} role="status" aria-live="polite">{deletionMessage}</p>
+          </section>
+          <p className={`message ${profileMessage ? "is-visible" : ""}`} role="status" aria-live="polite">{profileMessage}</p>
           <ShortcutRail
             items={profileActions}
             className="ui-shortcut-tight"

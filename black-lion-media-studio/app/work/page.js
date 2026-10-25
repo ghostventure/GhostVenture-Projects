@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LandingMediaPair, LandingOfferMatrix, ShortcutRail } from "../../components/shared-ui";
 import { businessLines } from "../../lib/business-lines";
+import WorkPortfolioGallery from "../../components/work-portfolio-gallery";
 
 export const metadata = {
   title: "Work",
@@ -43,6 +44,7 @@ export default function WorkPage() {
             <Link href="/services" className="button button-secondary">View services</Link>
           </div>
         </section>
+        <WorkPortfolioGallery />
       </main>
     </div>
   );

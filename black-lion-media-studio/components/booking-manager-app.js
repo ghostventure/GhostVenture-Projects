@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClientNav } from "./client-nav";
 import { fetchJson, patchJson, postJson } from "../lib/client-api";
+import { ManagerRequestAttachments } from "./manager-request-attachments";
 import {
   DetailPairGrid,
   FormHint,
@@ -60,6 +61,12 @@ export function BookingManagerApp({ initialState = null }) {
   const [billingRequestId, setBillingRequestId] = useState("");
   const [summaryStale, setSummaryStale] = useState(false);
   const [refreshingSummary, setRefreshingSummary] = useState(false);
+  const [deletionRequests, setDeletionRequests] = useState([]);
+  const [deletionQueueError, setDeletionQueueError] = useState("");
+  const [deletionQueueNotice, setDeletionQueueNotice] = useState("");
+  const [deletionQueueLoading, setDeletionQueueLoading] = useState(false);
+  const [reviewingDeletionId, setReviewingDeletionId] = useState("");
+  const [deletionQueueRetry, setDeletionQueueRetry] = useState(0);
 
   async function loadManagerState() {
     const [sessionResult, managerResult] = await Promise.all([
@@ -148,6 +155,21 @@ export function BookingManagerApp({ initialState = null }) {
     load();
   }, [initialState, router]);
 
+  useEffect(() => {
+    if (!state.user?.isBookingManager) return undefined;
+    let active = true;
+    setDeletionQueueLoading(true);
+    setDeletionQueueError("");
+    fetchJson("/api/manager/account-deletions", { cache: "no-store" })
+      .then(({ response, data }) => {
+        if (!response.ok) throw new Error(data.error || "Account deletion requests could not be loaded.");
+        if (active) setDeletionRequests(Array.isArray(data.requests) ? data.requests : []);
+      })
+      .catch((error) => { if (active) setDeletionQueueError(error.message || "Account deletion requests could not be loaded."); })
+      .finally(() => { if (active) setDeletionQueueLoading(false); });
+    return () => { active = false; };
+  }, [state.user?.isBookingManager, deletionQueueRetry]);
+
   async function handleManagerUpdate(requestId, event) {
     event.preventDefault();
     setManagerNotice("");
@@ -219,6 +241,29 @@ export function BookingManagerApp({ initialState = null }) {
       setManagerNotice(error.message);
     } finally {
       setBillingRequestId("");
+    }
+  }
+
+  async function handleDeletionReview(event, deletionRequest) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    setReviewingDeletionId(deletionRequest.request_id);
+    setDeletionQueueError("");
+    setDeletionQueueNotice("");
+    try {
+      const result = await patchJson("/api/manager/account-deletions", {
+        requestId: deletionRequest.request_id,
+        status: formData.get("status"),
+        managerNote: formData.get("managerNote")
+      });
+      setDeletionRequests((current) => current.map((item) => item.request_id === result.requestId
+        ? { ...item, status: result.status, manager_note: String(formData.get("managerNote") || ""), updated_at: new Date().toISOString() }
+        : item));
+      setDeletionQueueNotice("Deletion request review saved. Account data was not deleted.");
+    } catch (error) {
+      setDeletionQueueError(error.message || "The deletion request could not be updated.");
+    } finally {
+      setReviewingDeletionId("");
     }
   }
 
@@ -662,6 +707,8 @@ export function BookingManagerApp({ initialState = null }) {
                   />
                 </SpotlightCard>
 
+                <ManagerRequestAttachments key={selectedRequest.id} requestId={selectedRequest.id} />
+
                 <SpotlightCard
                   className="subpanel"
                   eyebrow="Manager decision"
@@ -777,6 +824,57 @@ export function BookingManagerApp({ initialState = null }) {
             )}
             <p className={`message ${managerNotice ? "is-visible" : ""}`}>{managerNotice}</p>
           </div>
+        </section>
+
+        <section className="panel manager-deletion-queue" aria-labelledby="manager-deletion-queue-title">
+          <p className="label">Account operations</p>
+          <h2 className="editorial-heading" id="manager-deletion-queue-title">Account deletion requests</h2>
+          <p className="muted">Review and document each request. No status automatically deletes account data. Confirm applicable retention and follow-up requirements before resolving a request.</p>
+          {deletionQueueError ? (
+            <div className="notice" role="alert">
+              <p>{deletionQueueError}</p>
+              <button type="button" className="button button-secondary" onClick={() => setDeletionQueueRetry((value) => value + 1)} disabled={deletionQueueLoading}>
+                {deletionQueueLoading ? "Retrying…" : "Retry loading requests"}
+              </button>
+            </div>
+          ) : null}
+          {deletionQueueNotice ? <p className="message is-visible" role="status" aria-live="polite">{deletionQueueNotice}</p> : null}
+          {deletionQueueLoading ? <p className="muted" role="status">Loading deletion requests…</p> : deletionRequests.length ? (
+            <div className="stack-small">
+              {deletionRequests.map((deletionRequest) => (
+                <article className="panel" key={deletionRequest.request_id}>
+                  <div className="manager-deletion-request-head">
+                    <div>
+                      <h3>{deletionRequest.email || "Account holder"}</h3>
+                      <p className="muted">Request {deletionRequest.request_id} · Submitted {new Date(deletionRequest.created_at).toLocaleString()}</p>
+                    </div>
+                    <span className="ui-status-chip">{String(deletionRequest.status || "received").replaceAll("_", " ")}</span>
+                  </div>
+                  <p><strong>Client note:</strong> {deletionRequest.reason || "No note provided."}</p>
+                  <p className="notice">Retention review required. Resolving this queue item records the review outcome; it does not erase the account.</p>
+                  <form key={`${deletionRequest.request_id}:${deletionRequest.updated_at || ""}`} className="form active" onSubmit={(event) => handleDeletionReview(event, deletionRequest)}>
+                    <label>
+                      Review status
+                      <select name="status" defaultValue={deletionRequest.status === "received" ? "under_review" : deletionRequest.status}>
+                        <option value="under_review">Under review</option>
+                        <option value="awaiting_client">Awaiting client</option>
+                        <option value="policy_review">Policy review required</option>
+                        <option value="declined">Declined with explanation</option>
+                        <option value="resolved">Resolved after follow-up</option>
+                      </select>
+                    </label>
+                    <label>
+                      Internal review note
+                      <textarea name="managerNote" rows={3} maxLength={1200} defaultValue={deletionRequest.manager_note || ""} placeholder="Record follow-up, scope, and retention review." />
+                    </label>
+                    <button type="submit" className="button button-secondary" disabled={reviewingDeletionId === deletionRequest.request_id}>
+                      {reviewingDeletionId === deletionRequest.request_id ? "Saving review…" : "Save review status"}
+                    </button>
+                  </form>
+                </article>
+              ))}
+            </div>
+          ) : deletionQueueError ? null : <p className="muted">No account deletion requests are waiting for review.</p>}
         </section>
       </main>
     </div>

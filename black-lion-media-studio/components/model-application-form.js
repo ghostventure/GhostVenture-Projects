@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { notifyAuthStateChange } from "../lib/auth-events";
-import { storeClientSessionToken } from "../lib/client-session";
 
 const projectTypeOptions = [
   "Photography",
@@ -354,10 +353,7 @@ export function ModelApplicationForm() {
         throw new Error(result.error || "Application could not be submitted.");
       }
 
-      if (result.sessionToken) {
-        storeClientSessionToken(result.sessionToken);
-        notifyAuthStateChange("signed-in");
-      }
+      notifyAuthStateChange("signed-in");
 
       window.localStorage.removeItem(draftStorageKey);
       setDraft(initialDraft);

@@ -1,6 +1,7 @@
 import { enforceTrustedOrigin, getAuthenticatedUser } from "../../../lib/auth";
 import { jsonError, jsonOk, sessionConfigurationResponse } from "../../../lib/api-helpers";
 import { recordAnalyticsEvent } from "../../../lib/analytics";
+import { enforceWriteRateLimit } from "../../../lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,9 @@ export async function POST(request) {
   if (untrusted) {
     return untrusted;
   }
+
+  const rateLimit = await enforceWriteRateLimit(request, "analytics-events");
+  if (rateLimit) return rateLimit;
 
   const parsed = await readEventPayload(request);
   if (parsed.error) return parsed.error;

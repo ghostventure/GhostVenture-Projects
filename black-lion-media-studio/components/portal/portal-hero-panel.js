@@ -11,7 +11,7 @@ export function PortalHeroPanel() {
           copy="Create an account, choose the right branch, send your request, check updates, and talk with Black Lion Studios."
           actions={[
             { href: "/portal", label: "Create access" },
-            { href: "/#services", label: "Review branches", variant: "secondary" }
+            { href: "/services", label: "Review branches", variant: "secondary" }
           ]}
         />
         <PortalModeSummary items={modeItems} />

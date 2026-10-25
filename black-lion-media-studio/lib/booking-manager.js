@@ -32,6 +32,11 @@ export function getBookingManagerEmails() {
   return [...new Set([...defaultManagerEmails, ...parseEnvEmails(), ...parseConfigEmails()])];
 }
 
+export function isBookingManagerEmail(email) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  return Boolean(normalizedEmail && getBookingManagerEmails().includes(normalizedEmail));
+}
+
 export function isBookingManager(user) {
   if (!user) {
     return false;
@@ -41,10 +46,5 @@ export function isBookingManager(user) {
     return true;
   }
 
-  const email = String(user.email || "").trim().toLowerCase();
-  if (!email) {
-    return false;
-  }
-
-  return getBookingManagerEmails().includes(email);
+  return isBookingManagerEmail(user.email);
 }

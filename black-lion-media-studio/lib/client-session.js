@@ -1,31 +1,20 @@
 "use client";
 
-const sessionStorageKey = "bls-session-token";
+const legacySessionStorageKey = "bls-session-token";
 const readRequestTimeoutMs = 30_000;
 
-export function getClientSessionToken() {
+function removeLegacySessionToken() {
   if (typeof window === "undefined") {
-    return null;
+    return true;
   }
 
   try {
-    return window.localStorage.getItem(sessionStorageKey);
-  } catch {
-    // The HttpOnly same-origin cookie remains the primary session mechanism.
-    return null;
-  }
-}
-
-export function storeClientSessionToken(token) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(sessionStorageKey, token);
+    // Remove tokens persisted by older clients. Authentication uses the
+    // server-set HttpOnly cookie, never a JavaScript-readable bearer token.
+    window.localStorage.removeItem(legacySessionStorageKey);
     return true;
   } catch {
-    // Login can still complete through the HttpOnly cookie set by the server.
+    // A storage restriction does not affect the HttpOnly cookie.
     return false;
   }
 }
@@ -36,7 +25,7 @@ export function clearClientSessionToken() {
   }
 
   try {
-    window.localStorage.removeItem(sessionStorageKey);
+    window.localStorage.removeItem(legacySessionStorageKey);
     return true;
   } catch {
     return false;
@@ -45,14 +34,10 @@ export function clearClientSessionToken() {
 
 export async function authenticatedFetch(url, options = {}) {
   const headers = new Headers(options.headers || {});
-  const token = getClientSessionToken();
+  removeLegacySessionToken();
   const method = String(options.method || "GET").toUpperCase();
   const useReadTimeout = !options.signal && ["GET", "HEAD"].includes(method);
   const signal = options.signal || (useReadTimeout ? AbortSignal.timeout(readRequestTimeoutMs) : undefined);
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
 
   try {
     return await fetch(url, {

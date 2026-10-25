@@ -6,6 +6,7 @@ import { findUserById, findUserBySession } from "./db";
 const cookieName = "__session";
 const legacyCookieName = "bls_session";
 const signedTokenSeparator = ".";
+const maxSessionTokenLength = 4096;
 const sessionLifetimeMs = 1000 * 60 * 60 * 24 * 7;
 let developmentSessionSecret;
 
@@ -56,9 +57,10 @@ function signValue(value) {
   return crypto.createHmac("sha256", getSessionSecret()).update(value).digest("base64url");
 }
 
-export function createSignedSessionToken(userId, request) {
+export function createSignedSessionToken(userId, request, authVersion = 0) {
   const payload = {
     userId,
+    authVersion: Number(authVersion || 0),
     issuedAt: Date.now(),
     expiresAt: Date.now() + sessionLifetimeMs
   };
@@ -66,8 +68,8 @@ export function createSignedSessionToken(userId, request) {
   return `${encodedPayload}${signedTokenSeparator}${signValue(encodedPayload)}`;
 }
 
-function verifySignedSessionToken(token, request) {
-  if (!token || !token.includes(signedTokenSeparator)) {
+function verifySignedSessionToken(token) {
+  if (!token || token.length > maxSessionTokenLength || !token.includes(signedTokenSeparator)) {
     return null;
   }
 
@@ -88,15 +90,16 @@ function verifySignedSessionToken(token, request) {
 
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
-    if (!payload?.userId || !payload?.expiresAt) {
+    if (!payload?.userId || !Number.isFinite(payload?.expiresAt)) {
       return null;
     }
 
-    if (payload.expiresAt < Date.now()) {
+    if (payload.expiresAt <= Date.now() || payload.issuedAt > Date.now() + 60_000) {
       return null;
     }
 
-    return payload.userId;
+    if (!Number.isFinite(payload.issuedAt)) return null;
+    return payload;
   } catch {
     return null;
   }
@@ -128,7 +131,11 @@ export async function getSessionToken(request) {
   }
 
   const separatorIndex = sessionCookie.indexOf("=");
-  return decodeURIComponent(sessionCookie.slice(separatorIndex + 1));
+  try {
+    return decodeURIComponent(sessionCookie.slice(separatorIndex + 1));
+  } catch {
+    return null;
+  }
 }
 
 export async function getAuthenticatedUser(request) {
@@ -139,14 +146,17 @@ export async function getAuthenticatedUser(request) {
   const authorizationHeader = request.headers?.get?.("authorization") || "";
   const bearerMatch = authorizationHeader.match(/^Bearer\s+(.+)$/i);
   const token = bearerMatch?.[1] || (await getSessionToken(request));
-  if (!token) {
+  if (!token || token.length > maxSessionTokenLength || token.includes("/")) {
     return null;
   }
 
-  const signedUserId = verifySignedSessionToken(token, request);
-  if (signedUserId) {
-    const user = await findUserById(signedUserId);
+  const signedPayload = verifySignedSessionToken(token);
+  if (signedPayload) {
+    const user = await findUserById(signedPayload.userId);
     if (!user) {
+      return null;
+    }
+    if (Number(signedPayload.authVersion || 0) !== Number(user.auth_version || 0)) {
       return null;
     }
 
@@ -154,7 +164,7 @@ export async function getAuthenticatedUser(request) {
   }
 
   const user = await findUserBySession(token);
-  if (!user) {
+  if (!user || Number(user.auth_version || 0) > 0) {
     return null;
   }
 

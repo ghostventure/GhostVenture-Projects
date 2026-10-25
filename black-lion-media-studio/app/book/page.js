@@ -3,7 +3,6 @@ import { BookingServicePicker } from "../../components/booking-service-picker";
 import {
   LandingAvailabilityPanel,
   LandingBookingFlow,
-  LandingConversionFooter,
   LandingProjectBriefPanel,
   LandingTrustChecklist,
   ShortcutRail
@@ -40,7 +39,7 @@ export default function BookPage() {
                 details, messages, billing context, and follow-up in one place.
               </p>
               <div className="hero-actions">
-                <Link href="/portal" className="button">Start request</Link>
+                <Link href="/plan" className="button">Build a project brief</Link>
                 <a
                   href={squareBookingUrl}
                   className="button button-secondary"
@@ -50,9 +49,6 @@ export default function BookPage() {
                 >
                   Book appointment
                 </a>
-                <Link href="/portal" className="button button-secondary" data-analytics-event="book_portal_click">
-                  Open portal
-                </Link>
               </div>
             </div>
             <LandingProjectBriefPanel
@@ -109,13 +105,6 @@ export default function BookPage() {
           </div>
         </section>
 
-        <LandingConversionFooter
-          eyebrow="Ready"
-          title="Start with your service and project details."
-          copy="Use the same request flow for photography, video, music, AI development, and support."
-          href="/portal"
-          actionLabel="Start request"
-        />
       </main>
     </div>
   );

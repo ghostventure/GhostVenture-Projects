@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { storeClientSessionToken } from "../lib/client-session";
 import { trackEvent } from "../lib/client-analytics";
 import { postJson } from "../lib/client-api";
 import { notifyAuthStateChange } from "../lib/auth-events";
@@ -9,8 +8,10 @@ import { findServiceBySlug, serviceOptions } from "../lib/services";
 import { FormHint, FormSectionCard, SupportNotice } from "./shared-ui";
 
 function getWorkspacePath(user) {
-  const service = findServiceBySlug(new URLSearchParams(window.location.search).get("service"));
-  return service ? `/dashboard?service=${service.slug}#service-request` : "/dashboard";
+  const params = new URLSearchParams(window.location.search);
+  const service = findServiceBySlug(params.get("service"));
+  const planner = params.get("planner") === "1" ? "&planner=1" : "";
+  return service ? `/dashboard?service=${service.slug}${planner}#service-request` : "/dashboard";
 }
 
 async function waitForCookieSession() {
@@ -56,9 +57,6 @@ export function AuthFormCard({ requiresAuth = false, idleReason = false }) {
     try {
       const formData = new FormData(event.currentTarget);
       const data = await postJson("/api/signup", Object.fromEntries(formData.entries()));
-      if (data.sessionToken) {
-        storeClientSessionToken(data.sessionToken);
-      }
       notifyAuthStateChange("signed-in");
       trackEvent("signup_success", { service: formData.get("serviceInterest") });
       if (!(await waitForCookieSession())) {
@@ -78,9 +76,6 @@ export function AuthFormCard({ requiresAuth = false, idleReason = false }) {
     try {
       const formData = new FormData(event.currentTarget);
       const data = await postJson("/api/login", Object.fromEntries(formData.entries()));
-      if (data.sessionToken) {
-        storeClientSessionToken(data.sessionToken);
-      }
       notifyAuthStateChange("signed-in");
       trackEvent("login_success");
       if (!(await waitForCookieSession())) {
@@ -222,6 +217,7 @@ export function AuthFormCard({ requiresAuth = false, idleReason = false }) {
           <button type="submit" className="button">
             Sign in
           </button>
+          <p className="muted"><a href="/reset-password">Forgot your password?</a></p>
         </form>
       ))}
 

@@ -11,21 +11,20 @@ import { managerRequestUpdateSchema, parseWithSchema } from "../../../../../lib/
 
 export const runtime = "nodejs";
 
-function buildDecisionMessage(status, requestRecord, managerNotes = "") {
+function buildDecisionMessage(status, requestRecord) {
   const projectType = requestRecord.project_type || "service";
-  const note = managerNotes ? ` Manager note: ${managerNotes}` : "";
 
   if (status === "Approved") {
     return {
       subject: "Service request approved",
-      body: `Your ${projectType} request has been approved for processing. The studio manager will continue the Square workflow for the required deposit, payment, and scheduling follow-up.${note}`
+      body: `Your ${projectType} request has been approved for processing. The studio manager will continue the Square workflow for the required deposit, payment, and scheduling follow-up.`
     };
   }
 
   if (status === "Declined") {
     return {
       subject: "Service request not approved",
-      body: `Your ${projectType} request was not approved as submitted. Review any manager notes and message the studio if you want to revise the request or ask about next steps.${note}`
+      body: `Your ${projectType} request was not approved as submitted. Message the studio if you want to revise the request or ask about next steps.`
     };
   }
 
@@ -69,8 +68,7 @@ export async function PATCH(request, context) {
   const decisionMessageBuilder = ["Approved", "Declined"].includes(parsed.data.status)
     ? (currentRequest) => buildDecisionMessage(
         parsed.data.status,
-        currentRequest,
-        parsed.data.managerNotes
+      currentRequest
       )
     : null;
   const updateResult = await updateManagerRequest(params.requestId, {

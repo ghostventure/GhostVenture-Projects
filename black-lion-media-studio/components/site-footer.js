@@ -1,60 +1,39 @@
 import Link from "next/link";
 import { plugzSiteLinks } from "../lib/merch";
 import { ThemeToggle } from "./theme-toggle";
+import { AppearanceControls } from "./appearance-controls";
 
 const footerGroups = [
   {
-    title: "Branches",
-    links: [
-      { href: "/multimedia", label: "Black Lion Multimedia" },
-      { href: "/tech-development", label: "Black Lion Tech Development" },
-      { href: "/fashion", label: "Black Lion Fashion" },
-      { href: "/models", label: "Model sub-site" }
-    ]
-  },
-  {
-    title: "Service Routes",
-    links: [
-      { href: "/photography", label: "Photography" },
-      { href: "/videography", label: "Videography" },
-      { href: "/dj-services", label: "DJ services" },
-      { href: "/beat-sessions", label: "Beat sessions" },
-      { href: "/ai-services", label: "AI services & software development" },
-      { href: "/pc-tech-support", label: "PC tech support" },
-      { href: "/membership-sites", label: "Membership sites" }
-    ]
-  },
-  {
-    title: "Client",
-    links: [
-      { href: "/book", label: "Book service" },
-      { href: "/services#service-estimation", label: "Service Estimation" },
-      { href: "/portal", label: "Create account" },
-      { href: "/dashboard", label: "Dashboard" },
-      { href: "/messages", label: "Messages" },
-      { href: "/profile", label: "Profile" }
-    ]
-  },
-  {
     title: "Studio",
     links: [
-      { href: "/store", label: "Merch store" },
-      { href: plugzSiteLinks.home, label: "Plugz UNTD", external: true },
-      { href: "/models/faq", label: "Model FAQ" },
-      { href: "/booking-manager", label: "Manager access" },
-      { href: "/support", label: "Support" },
-      { href: "/ad-expansion", label: "Ad expansion" },
-      { href: "/portal?auth=required", label: "Sign in" },
-      { href: "/faq", label: "FAQ" }
+      { href: "/services", label: "All services" },
+      { href: "/multimedia", label: "Multimedia" },
+      { href: "/tech-development", label: "Tech development" },
+      { href: "/fashion", label: "Fashion" }
     ]
   },
   {
-    title: "Legal",
+    title: "Get started",
     links: [
-      { href: "/legal", label: "Legal & compliance" },
-      { href: "/privacy", label: "Privacy Policy" },
-      { href: "/terms", label: "Terms of Use" },
-      { href: "/dmca", label: "Copyright Claims" }
+      { href: "/plan", label: "Project planner" },
+      { href: "/book", label: "Appointments" },
+      { href: "/portal", label: "Client portal" }
+    ]
+  },
+  {
+    title: "Help",
+    links: [
+      { href: "/support", label: "Support" },
+      { href: "/faq", label: "FAQ" },
+      { href: "/legal", label: "Legal & policies" }
+    ]
+  },
+  {
+    title: "Shop",
+    links: [
+      { href: "/store", label: "Merch store" },
+      { href: plugzSiteLinks.home, label: "Plugz storefront", external: true }
     ]
   }
 ];
@@ -72,9 +51,7 @@ export function SiteFooter() {
           </p>
           <div className="footer-actions">
             <ThemeToggle />
-            <Link href="/portal" className="button">
-              Start request
-            </Link>
+            <AppearanceControls />
           </div>
         </div>
 

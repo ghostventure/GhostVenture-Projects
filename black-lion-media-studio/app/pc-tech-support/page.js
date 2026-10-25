@@ -5,7 +5,7 @@ const page = findServiceAdPage("/pc-tech-support");
 
 export const metadata = {
   title: "PC Tech Support | Black Lion Tech Development",
-  description: "Book Black Lion Tech Development PC support for setup, troubleshooting, tune-ups, upgrades, and practical help.",
+  description: "Consider Black Lion Tech Development PC support for setup, troubleshooting, tune-ups, upgrades, and service.",
   alternates: { canonical: "/pc-tech-support" }
 };
 

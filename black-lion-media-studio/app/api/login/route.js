@@ -39,13 +39,12 @@ export async function POST(request) {
     return jsonError("Invalid email or password.", 401);
   }
 
-  const token = createSignedSessionToken(user.id, request);
+  const token = createSignedSessionToken(user.id, request, user.auth_version);
   await updateUserLifecycle(user.id, {
     last_sign_in_at: new Date().toISOString(),
     last_portal_activity_at: new Date().toISOString()
   });
   const response = jsonOk({
-    sessionToken: token,
     user: sanitizeUser(user),
     requests: await listRequests(user.id)
   });

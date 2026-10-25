@@ -5,7 +5,7 @@ const page = findServiceAdPage("/photography");
 
 export const metadata = {
   title: "Photography | Black Lion Multimedia",
-  description: "Book Black Lion Multimedia photography for portraits, products, events, and branded visual content.",
+  description: "Consider Black Lion Multimedia photography for portraits, products, events, and branded visual marketing.",
   alternates: { canonical: "/photography" }
 };
 

@@ -1,7 +1,21 @@
 import Link from "next/link";
+import { ServiceEvaluation } from "../../components/service-evaluation";
 import { ServiceQuoteBuilder } from "../../components/service-quote-builder";
-import { ProcessSteps, ShortcutRail, SpotlightCard, SurfaceGrid } from "../../components/shared-ui";
+import { ProcessSteps, ShortcutRail } from "../../components/shared-ui";
 import { businessLines } from "../../lib/business-lines";
+import { serviceCatalog } from "../../lib/services";
+
+const servicesForEvaluation = serviceCatalog.map((service) => {
+  const branchEntries = businessLines.flatMap((line) => line.services
+    .filter((entry) => entry.slug === service.slug)
+    .map((entry) => ({ name: line.name, href: entry.href })));
+  return {
+    ...service,
+    branches: branchEntries.map((entry) => entry.name),
+    branchHrefs: Object.fromEntries(branchEntries.map((entry) => [entry.name, businessLines.find((line) => line.name === entry.name)?.href || entry.href])),
+    href: branchEntries.find((entry) => entry.href)?.href || "/services"
+  };
+});
 
 export const metadata = {
   title: "Services",
@@ -21,7 +35,7 @@ export default function ServicesPage() {
             service routes still available for specific ad or booking paths.
           </p>
           <div className="hero-actions">
-            <Link href="/portal" className="button">Start a request</Link>
+            <Link href="/plan" className="button">Plan a project</Link>
             <Link href="#service-estimation" className="button button-secondary">Service Estimation</Link>
           </div>
           <ShortcutRail
@@ -40,22 +54,9 @@ export default function ServicesPage() {
             <h2 className="editorial-heading">{line.name}</h2>
             <p className="muted">{line.summary}</p>
             <ShortcutRail items={line.paths} className="ui-shortcut-tight" />
-            <SurfaceGrid className="service-grid">
-              {line.services.map((service) => (
-                <SpotlightCard
-                  className="service-card"
-                  key={`${line.slug}-${service.slug}`}
-                  eyebrow={service.priceLabel}
-                  title={service.name}
-                  copy={service.description}
-                >
-                  <p className="muted">{service.coverage}</p>
-                  <p>{service.turnaround}</p>
-                </SpotlightCard>
-              ))}
-            </SurfaceGrid>
           </section>
         ))}
+        <ServiceEvaluation services={servicesForEvaluation} />
         <section className="panel">
           <p className="label">AI project pricing</p>
           <h2>Start with a conversation about your idea.</h2>

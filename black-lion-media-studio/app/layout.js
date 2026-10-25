@@ -1,6 +1,8 @@
 import localFont from "next/font/local";
 import { Toaster } from "sonner";
 import "./globals.css";
+import "./dexterity.css";
+import "./solarpunk.css";
 import { AdSourceDiagnostics } from "../components/ad-source-diagnostics";
 import { AnalyticsTracker } from "../components/analytics-tracker";
 import { AuthSync } from "../components/auth-sync";
@@ -17,7 +19,7 @@ const themeBootstrapScript = `
 (() => {
   const storageKey = "bls-theme";
   const validThemes = new Set(["light", "dark", "system"]);
-  const themeColors = { light: "#dffbff", dark: "#071b24" };
+  const themeColors = { light: "#f4f0df", dark: "#101c19" };
   const root = document.documentElement;
   const savedTheme = window.localStorage.getItem(storageKey) || "system";
   const themeChoice = validThemes.has(savedTheme) ? savedTheme : "system";
@@ -79,8 +81,8 @@ export const metadata = {
 
 export const viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#dffbff" },
-    { media: "(prefers-color-scheme: dark)", color: "#071b24" }
+    { media: "(prefers-color-scheme: light)", color: "#f4f0df" },
+    { media: "(prefers-color-scheme: dark)", color: "#101c19" }
   ],
   colorScheme: "light dark"
 };
