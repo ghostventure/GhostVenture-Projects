@@ -6,6 +6,7 @@
 - A market-open callback waits briefly when a refresh/action is active and rechecks that the regular session is still open before starting.
 - **Pause All Automation** cancels both the interval callback and any pending market-open callback for this app session. Starting the app again still follows the existing saved market-open preferences.
 - The Automation panel reports a running cycle, the next local Eastern-time due time, market-open arming, or paused state instead of only saying “Every N min.”
+- Paper automation has one enable control: the shared Paper Lane checkbox. One shared Pause All Automation action appears with the execution controls in both Execution and Automation; duplicate enable/pause buttons were removed from the Automation detail panel.
 - Paper, Simulation, and Live use one visible target selector and one target-aware Preview/Submit pair. Paper behavior remains on its original journal. Simulation uses local-only preview/submission and a separate journal; Live alone constructs the Webull adapter.
 - Previewed and submitted orders carry the same `client_order_id`; the ID uses the UUID hex form shown in Webull's current Python example. A broker result classified as unknown stops the rest of that submission batch.
 - Simulation uses the current strategy plans. Later daily OHLC observations record target/stop threshold results, with stop-first when both appear in the same candle. Simulation events stay out of Paper performance and Live's daily loss/rejection/cooldown counters.

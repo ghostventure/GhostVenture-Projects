@@ -27,7 +27,7 @@ available in an older build because it appears in this guide.
    This keeps live order routing off. Check the **Paper lane** indicator too:
    the default profile can arm paper activity at market open, and paper runs
    write simulated events to a local journal.
-4. Select **Scan** on the Market workspace. Review the data timestamp and
+4. Select **Scan** on the Overview workspace. Review the data timestamp and
    source before interpreting any signal.
 5. Select a row in the radar or Scanner to link its chart, Decision Brief, and
    order-plan context.
@@ -41,13 +41,13 @@ timestamps shown by Timmy before relying on a scan.
 
 | Workspace | What it is for |
 | --- | --- |
-| **Market** | Ranked radar, selected-symbol chart, Decision Brief, and current order plan. |
+| **Overview** | Ranked radar, selected-symbol chart, Decision Brief, and current order plan. |
 | **Scanner** | Search, filter, sort, and inspect the full signal list. Saved scanner filters only affect the displayed scan view. |
 | **Research** | Inspect scan coverage, compare local evidence, preview CSV imports, plan market sessions, compare symbol groups, and export a redacted snapshot. |
 | **Strategy** | Review style, enabled patterns, score thresholds, readiness gates, and why a candidate is blocked. |
 | **Universe** | Inspect the symbol universe and generated watchlist status. |
 | **Portfolio** | Review the local paper ledger and a separately checked broker-cash snapshot. Portfolio positions and P&L are paper-ledger data. |
-| **Automation** | Review lane readiness, cycle interval, and pause or enable the paper automation lane. |
+| **Automation** | Review lane readiness, cycle timing, and recovery status; use the shared controls to select lanes and pause scheduled automation. |
 | **Alerts** | Create local signal rules, pause or remove them, and acknowledge one or all new events. Alerts never place orders. |
 | **Execution** | Review the plan queue, target, User/Auto mode, risk controls, previews, and order actions. |
 | **Broker** | Verify the configured Webull account, refresh account/buying-power information, and inspect connection results. |
@@ -194,15 +194,16 @@ before acting. Timmy does not submit orders from this shortlist.
 
 ### Paper
 
-Paper is the recommended starting target. **Paper Trade** writes simulated
+Paper is the recommended starting target. **Submit Paper** writes simulated
 orders to the local journal; it does not send an order to Webull. Paper
 positions, cash, and realized results are computed from Timmy's paper ledger
 and loaded candle prices. They are not broker-confirmed holdings, and simulated
 fills may differ from real execution.
 
-The **Paper lane** checkbox enables scheduled paper activity. Use the
-Automation workspace to inspect its state and use **Pause All Automation** to
-stop scheduled activity. Paper simulation settings can permit simulations
+The **Paper lane** checkbox is the single control for scheduled paper activity.
+The Automation workspace shows its state. Use the shared **Pause All Automation**
+control in the Execution or Automation workspace to stop scheduled activity.
+Paper simulation settings can permit simulations
 outside regular market hours; this does not make the data current or the
 simulation equivalent to market execution.
 

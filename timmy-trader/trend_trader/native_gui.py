@@ -684,7 +684,7 @@ class TimmyNativeApp:
             for item in items:
                 button = tk.Button(
                     nav,
-                    text="Market" if item == "Overview" else item,
+                    text=item,
                     command=lambda target=item: self._show_tab(target),
                     bg=self.colors["selected"] if item == "Overview" else self.colors["rail"],
                     fg=self.colors["selected_text"] if item == "Overview" else self.colors["rail_muted"],
@@ -994,24 +994,6 @@ class TimmyNativeApp:
                 justify="center",
                 command=self._sync_account_lane,
             ).pack(side="left", padx=(0, 6))
-        self.profile_button = tk.Button(
-            lane_radios,
-            text="Profile",
-            command=lambda: self._show_tab("Setup"),
-            bg=self.colors["button"],
-            fg=self.colors["button_text"],
-            activebackground=self.colors["panel_2"],
-            activeforeground=self.colors["text"],
-            disabledforeground=self.colors["disabled"],
-            relief="flat",
-            font=("Sans", 8, "bold"),
-            padx=6,
-            pady=1,
-            cursor="hand2",
-        )
-        self.profile_button.pack(side="left")
-        self._add_tooltip(self.profile_button, "Edit Webull profile")
-        self.busy_controls.append(self.profile_button)
         self.webull_account_menu = tk.OptionMenu(account_box, self.webull_account_choice_var, "Configured account")
         self.webull_account_menu.configure(
             bg=self.colors["button"],
@@ -1084,7 +1066,13 @@ class TimmyNativeApp:
         self.execution_preview_control = self.execution_preview_button
         self.execution_paper_button = self.execution_submit_button
         self.live_button = self.execution_submit_button
-        self.stop_button = self._button(button_box, "Stop automation", self.stop_automation, tooltip="Stop automation")
+        self.stop_button = self._button(
+            button_box,
+            "Pause All Automation",
+            self.stop_automation,
+            accent="gold",
+            tooltip="Pause scheduled and market-open automation; it cannot cancel an order already sent to Webull",
+        )
         self.stop_button.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 7), pady=(8, 0))
         self.power_cycle_button = self._button(button_box, "Power cycle", self.power_cycle, tooltip="Save settings and restart Timmy")
         self.power_cycle_button.grid(row=1, column=2, columnspan=2, sticky="ew", padx=(7, 0), pady=(8, 0))
@@ -1777,23 +1765,13 @@ class TimmyNativeApp:
         self.automation_workflow = automation_workflow
         automation_workflow.grid(row=2, column=1, sticky="nsew", padx=(9, 18), pady=(0, 18))
         automation_workflow.columnconfigure(0, weight=1)
+        automation_workflow.rowconfigure(1, weight=1)
         tk.Label(automation_workflow, text="YOUR CONTROL SEQUENCE", bg=self.colors["panel"], fg=self.colors["muted"],
                  font=("Sans", 9, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
         self.automation_sequence_text = tk.Text(automation_workflow, height=14, bg=self.colors["panel"], fg=self.colors["text"],
                                                 insertbackground=self.colors["text"], relief="flat", padx=16, pady=10,
                                                 font=("Monospace", 10), wrap="word")
         self.automation_sequence_text.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 8))
-        automation_actions = tk.Frame(automation_workflow, bg=self.colors["panel"])
-        self.automation_actions = automation_actions
-        automation_actions.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 14))
-        self.automation_enable_button = self._button(
-            automation_actions, "Enable Paper Automation", self._enable_paper_automation, accent="teal")
-        self.automation_enable_button.pack(side="left", padx=(0, 8))
-        self.automation_pause_button = self._button(
-            automation_actions, "Pause All Automation", self.stop_automation, accent="gold")
-        self.automation_pause_button.pack(side="left")
-        self.busy_controls.extend([self.automation_enable_button, self.automation_pause_button])
-
         alerts_panel = self._panel(body)
         self.alerts_panel = alerts_panel
         alerts_panel.columnconfigure((0, 1), weight=1, uniform="alert-columns")
@@ -2084,7 +2062,7 @@ class TimmyNativeApp:
         self.active_tab = tab
         self.content_canvas.yview_moveto(0)
         self._set_nav_active(tab)
-        overview_active = tab in {"Overview", "Market"}
+        overview_active = tab == "Overview"
         if overview_active:
             self.body.master.rowconfigure(1, weight=1)
             self.body.master.rowconfigure(3, weight=0)
@@ -2195,7 +2173,7 @@ class TimmyNativeApp:
             panel.grid(row=0, column=0, sticky="nsew", pady=0)
 
         self._responsive_layout()
-        self.status_bar.configure(text=f"{'Market' if overview_active else tab} workspace active.")
+        self.status_bar.configure(text=f"{tab} workspace active.")
         self._save_last_workspace_state()
 
     def _open_operations_review(self) -> None:
@@ -2518,7 +2496,7 @@ class TimmyNativeApp:
         return not (start <= now < end if start < end else now >= start or now < end)
 
     def _apply_overview_layout(self) -> None:
-        if getattr(self, "active_tab", None) in {"Overview", "Market"}:
+        if getattr(self, "active_tab", None) == "Overview":
             self._show_tab(self.active_tab)
 
     def _save_last_workspace_state(self) -> None:
@@ -2544,7 +2522,10 @@ class TimmyNativeApp:
             return
         state = self._last_workspace_state
         workspace = state.get("workspace", "Overview")
-        valid_tabs = {"Overview", "Market", "Setup", "Universe", "Scanner", "Portfolio", "Automation",
+        # Older versions saved the Market alias for the same Overview screen.
+        if workspace == "Market":
+            workspace = "Overview"
+        valid_tabs = {"Overview", "Setup", "Universe", "Scanner", "Portfolio", "Automation",
                       "Research", "Alerts", "Strategy", "Execution", "Health", "Broker", "Audit"}
         if workspace not in valid_tabs:
             workspace = "Overview"
@@ -2834,7 +2815,7 @@ class TimmyNativeApp:
 
     def _register_command_actions(self) -> None:
         pages = (
-            ("Overview", "Market", "quotes symbols chart"), ("Scanner", "Signal Scanner", "scan filter"),
+            ("Overview", "Overview", "quotes symbols chart"), ("Scanner", "Signal Scanner", "scan filter"),
             ("Portfolio", "Portfolio", "holdings paper pnl"), ("Automation", "Automation", "paper pause"),
             ("Alerts", "Alerts", "rules notifications"), ("Execution", "Execution Desk", "orders preview"),
             ("Strategy", "Strategy Settings", "risk patterns"), ("Universe", "Universe", "watchlist symbols"),
@@ -5535,11 +5516,6 @@ class TimmyNativeApp:
             "5  LIVE\n   Select Live to use Webull; User mode requires confirmation and Auto still checks every live gate.\n\n"
             f"Next cycle: {next_cycle}. Skipped work is retried after {AUTOMATION_RETRY_MS // 1000}s; unknown broker outcomes stop the current batch and require manual reconciliation.",
         )
-
-    def _enable_paper_automation(self) -> None:
-        self.paper_auto_var.set(True)
-        self._sync_automation()
-        self._render_automation_panel()
 
     def _render_alerts_panel(self) -> None:
         if not hasattr(self, "alert_rules_tree"):
