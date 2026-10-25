@@ -1,10 +1,10 @@
 # Timmy User Guide
 
-Timmy is a native Linux desktop tool for scanning market candles, reviewing
-strategy signals, building risk-capped order plans, and recording paper-trade
-activity. It can connect to Webull OpenAPI for account checks, order previews,
-and a guarded live-order path. It does not predict the future or guarantee a
-profit.
+Timmy is a native Linux desktop platform for analyzing market data, evaluating
+strategy signals, preparing risk-capped order plans, and reviewing Paper and
+Simulation activity. Optional Webull OpenAPI integration supports account
+checks, order previews, and guarded live execution. Timmy does not forecast
+returns or eliminate trading risk.
 
 This guide covers the Timmy 0.1.16 desktop release, including movement
 discovery, candidate promotion, and Paper, Simulation, and Live automation.
@@ -164,7 +164,7 @@ If a provider returns no usable bars, Timmy keeps the existing cache and reports
 that it is showing previously saved symbols. A refresh is reported as complete
 only when new bars were actually written or the existing cache was still fresh.
 
-### Rolling 96-hour movers and upside shortlist
+### Rolling 96-hour movers and candidate screening
 
 The Universe workspace reports Timmy's rolling 96-hour mover list. Yahoo data
 and the all-US universe are the built-in defaults, so the normal dashboard
@@ -225,7 +225,7 @@ forecast of return. Automated trading uses a separate, stricter candidate gate
 and all normal broker/risk controls; the bullish shortlist itself does not
 submit orders.
 
-## Paper and Live are separate
+## Paper, Simulation, and Live are distinct
 
 ### Paper
 
@@ -328,9 +328,10 @@ the preview/submit ID contract and documented Webull limitations.
    account check before Live can be enabled.
 5. Confirm the account and buying-power snapshot before any live preview.
 
-Never paste keys, tokens, account identifiers, passwords, or MFA codes into
-support requests, screenshots, source files, or public repositories. For exact
-Webull setup and authorization details, use [Webull Setup](WEBULL_SETUP.md).
+Do not include keys, tokens, account identifiers, passwords, or MFA codes in
+support requests, screenshots, source files, or public repositories. For
+Webull setup and authorization details, use
+[Webull Setup](WEBULL_SETUP.md).
 
 ## Alerts and automation
 
@@ -364,7 +365,7 @@ OS lock is held at `${XDG_CONFIG_HOME:-~/.config}/timmy-trader/timmy-instance.lo
 and released when the process exits. The small lock file may remain afterward;
 do not delete it while Timmy is running.
 
-- **No data or synthetic-looking prices:** verify the configured provider and
+- **Unexpected or synthetic-looking prices:** verify the configured provider and
   CSV file in the runtime home/environment. A new profile may be using
   generated sample candles.
 - **Stale data:** check the last candle timestamp and provider status. Remote
@@ -403,5 +404,5 @@ guaranteed fills, or investment advice.
 - [Risk and legal notes](../site/legal.html#risk)
 - [Download the Timmy brochure (PDF)](/downloads/timmy-brochure.pdf)
 
-Timmy is software, not a guarantee of performance. You remain responsible for
-reviewing orders, broker permissions, market conditions, and the risk of loss.
+Timmy is software, not a guarantee of performance. Review each order, broker
+permission, market condition, and potential loss before proceeding.

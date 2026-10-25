@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Timmy product brochure: a guarded Linux desktop trading assistant with market scanning, risk-capped plans, paper workflow, and optional guarded broker execution.">
-  <title>Timmy | Product Brochure</title>
+  <meta name="description" content="Timmy product overview: Linux market discovery, strategy evaluation, separate Paper and Simulation workflows, and guarded Live order controls.">
+  <title>Timmy | Product Overview</title>
   <style>
     :root { --navy:#101d2c; --navy2:#172b3e; --ink:#182433; --muted:#526477; --teal:#30c3b0; --lime:#a7e58c; --gold:#e8bd6e; --paper:#f6f8fa; --line:#dbe3e9; --white:#fff; }
     * { box-sizing:border-box; }
@@ -43,12 +43,14 @@
     .feature-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
     .feature { min-height:105px; padding:13px; border-radius:11px; background:#eef4f6; }
     .feature .icon { margin-bottom:7px; color:#07877f; font-size:17px; font-weight:800; }
-    .split { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:21px 0; }
+    .split { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:21px 0; }
     .lane { padding:16px; border:1px solid var(--line); border-radius:13px; }
     .lane.paper { background:#eff9f5; border-color:#cde7db; }
     .lane.live { background:#fff8ed; border-color:#efdfbd; }
     .lane .label { margin-bottom:6px; font-size:10px; font-weight:800; letter-spacing:.13em; text-transform:uppercase; }
     .lane.paper .label { color:#14785c; }
+    .lane.simulation { background:#f4f8e9; border-color:#dbe6bd; }
+    .lane.simulation .label { color:#627d20; }
     .lane.live .label { color:#98631d; }
     .lane p { margin:0; color:var(--muted); font-size:12px; }
     .callout { margin:16px 0; padding:14px 16px; border-left:4px solid var(--teal); border-radius:0 10px 10px 0; background:#edf8f7; color:#26414a; font-size:12px; }
@@ -73,10 +75,10 @@
 </head>
 <body>
   <div class="toolbar" aria-label="Brochure actions">
-    <a href="index.html">Timmy website</a>
-    <a href="user-guide.html">User guide</a>
-    <a class="primary" href="downloads/timmy-brochure.pdf" download>Download brochure PDF</a>
-    <button class="primary" type="button" onclick="window.print()">Print / Save as PDF</button>
+    <a href="index.html">Timmy overview</a>
+    <a href="user-guide.html">Operator guide</a>
+    <a class="primary" href="downloads/timmy-brochure.pdf" download>Download product overview</a>
+    <button class="primary" type="button" onclick="window.print()">Print or save as PDF</button>
   </div>
   <main>
     <section class="sheet cover" aria-labelledby="cover-title">
@@ -94,15 +96,15 @@
       <div class="cover-inner">
         <div class="brand"><span class="brand-mark">T</span><span>TIMMY <span style="color:#8fa4b6;font-weight:500">BY BLACK LION STUDIOS</span></span></div>
         <div>
-          <p class="kicker">A guarded trading desk for Linux</p>
-          <h1 id="cover-title">Watch the market.<br>Keep your rules.</h1>
-          <p class="lead">Timmy brings scanning, trade planning, paper practice, and guarded execution controls into one native desktop workflow.</p>
+          <p class="kicker">Market research and guarded execution for Linux</p>
+          <h1 id="cover-title">Observe activity.<br>Execute by rule.</h1>
+          <p class="lead">Timmy combines market scanning, trade planning, paper practice, and broker-connected order controls in one native desktop workflow.</p>
         </div>
         <div>
           <div class="cover-facts">
-            <div><strong>01 / Discover</strong><span>Scan a focused market universe for movement and setups.</span></div>
-            <div><strong>02 / Review</strong><span>Inspect plans, sizing, cash checks, and risk gates.</span></div>
-            <div><strong>03 / Record</strong><span>Keep a local event journal for review and follow-through.</span></div>
+            <div><strong>01 / Discover</strong><span>Monitor a configured market universe for daily movement and strategy context.</span></div>
+            <div><strong>02 / Evaluate</strong><span>Review proposed orders, sizing, account status, and risk controls.</span></div>
+            <div><strong>03 / Review</strong><span>Retain local records of simulation, execution, and broker outcomes.</span></div>
           </div>
           <div class="cover-foot" style="margin-top:22px"><span>DESKTOP PRODUCT OVERVIEW</span><span>Stocks & ETFs first · Optional Webull connection</span></div>
         </div>
@@ -111,32 +113,33 @@
     </section>
 
     <section class="sheet" aria-labelledby="workflow-title">
-      <div class="section-title"><div><p class="eyebrow">A clear operating rhythm</p><h2 id="workflow-title">From watchlist to review.</h2></div><span class="ref">02 / WORKFLOW</span></div>
-      <p class="intro">Timmy is built to make each step visible. It can scan and prepare plans, but users stay in control of account setup, lane selection, and whether an order is ever submitted.</p>
+      <div class="section-title"><div><p class="eyebrow">Operating framework</p><h2 id="workflow-title">From discovery to reviewable action.</h2></div><span class="ref">02 / WORKFLOW</span></div>
+      <p class="intro">Timmy makes each stage of its workflow inspectable. It can scan markets and prepare plans; the operator configures accounts, selects an execution lane, and controls whether an order is submitted.</p>
       <div class="steps">
-        <article class="step"><span class="num">1</span><div><h3>Set up locally</h3><p>Configure market preferences in the desktop app. Webull credentials, if used, are entered locally and are not sent to this website.</p></div></article>
-        <article class="step"><span class="num">2</span><div><h3>Scan and inspect</h3><p>Review active symbols, setup context, data quality, and the reasons a plan may be ready, watch-only, or blocked.</p></div></article>
-        <article class="step"><span class="num">3</span><div><h3>Check the plan</h3><p>Inspect the proposed entry, stop, target, quantity, and configured exposure limits before proceeding.</p></div></article>
-        <article class="step"><span class="num">4</span><div><h3>Choose a lane</h3><p>Use Paper to record simulated outcomes. Live remains gated by account checks, broker permissions, market rules, and explicit settings.</p></div></article>
+        <article class="step"><span class="num">1</span><div><h3>Configure locally</h3><p>Set market and execution preferences in the desktop application. Broker credentials remain in the local profile.</p></div></article>
+        <article class="step"><span class="num">2</span><div><h3>Screen and review</h3><p>Examine candidate symbols, data quality, strategy context, and the reasons a plan is ready or blocked.</p></div></article>
+        <article class="step"><span class="num">3</span><div><h3>Assess the proposed order</h3><p>Review entry, stop, target, quantity, account state, and configured exposure limits before proceeding.</p></div></article>
+        <article class="step"><span class="num">4</span><div><h3>Select an execution lane</h3><p>Paper and Simulation record local outcomes. Live requires account verification, broker permissions, market eligibility, and explicit safety settings.</p></div></article>
       </div>
       <div class="feature-grid">
-        <article class="feature"><div class="icon">◌</div><h3>Market scanning</h3><p>Focuses attention on symbols with notable movement and strategy context.</p></article>
-        <article class="feature"><div class="icon">⌁</div><h3>Risk-aware plans</h3><p>Applies configured quantity, notional, per-trade, and account-cash limits.</p></article>
-        <article class="feature"><div class="icon">▤</div><h3>Local journal</h3><p>Records paper and execution events so users can review outcomes and data quality.</p></article>
-        <article class="feature"><div class="icon">⌖</div><h3>Broker checks</h3><p>Supports guarded Webull account verification and order preview workflows.</p></article>
-        <article class="feature"><div class="icon">⌘</div><h3>Operator controls</h3><p>Shows readiness, safety gates, and reasons an action is unavailable.</p></article>
-        <article class="feature"><div class="icon">◷</div><h3>Reviewable activity</h3><p>Provides a record of submissions, outcomes, and guardrail events for follow-up.</p></article>
+        <article class="feature"><div class="icon">◌</div><h3>Market discovery</h3><p>Surfaces configured symbols with notable daily movement and strategy context.</p></article>
+        <article class="feature"><div class="icon">⌁</div><h3>Risk-aware planning</h3><p>Applies configured quantity, notional, per-trade, and account-cash limits.</p></article>
+        <article class="feature"><div class="icon">▤</div><h3>Local records</h3><p>Separates paper, simulation, and execution events for later review.</p></article>
+        <article class="feature"><div class="icon">⌖</div><h3>Broker verification</h3><p>Supports Webull account checks and exact order-preview workflows.</p></article>
+        <article class="feature"><div class="icon">⌘</div><h3>Operational controls</h3><p>Shows account readiness, safety gates, and reasons an action is unavailable.</p></article>
+        <article class="feature"><div class="icon">◷</div><h3>Auditable activity</h3><p>Retains submission outcomes and safety events for operator follow-up.</p></article>
       </div>
       <div class="footer"><span>TIMMY · PRODUCT BROCHURE</span><span>02 / 03</span></div>
     </section>
 
     <section class="sheet" aria-labelledby="lanes-title">
-      <div class="section-title"><div><p class="eyebrow">Control stays with the user</p><h2 id="lanes-title">Two lanes. Separate records.</h2></div><span class="ref">03 / SAFETY & FIT</span></div>
+      <div class="section-title"><div><p class="eyebrow">Operator authority</p><h2 id="lanes-title">Three lanes. Distinct records.</h2></div><span class="ref">03 / SAFETY & FIT</span></div>
       <div class="split">
-        <article class="lane paper"><div class="label">Paper · Simulated</div><p>Practice the workflow and review simulated results in Timmy's local journal. Simulated outcomes may differ from real execution and do not establish what a live account would have earned.</p></article>
-        <article class="lane live"><div class="label">Live · Broker guarded</div><p>Live order placement is disabled by default. It requires explicit settings, a verified supported account path, buying power, market eligibility, and the relevant Timmy and broker gates.</p></article>
+        <article class="lane paper"><div class="label">Paper · local ledger</div><p>Record simulated orders and outcomes in the local paper ledger. These records are not broker-confirmed positions or returns.</p></article>
+        <article class="lane simulation"><div class="label">Simulation · scenario record</div><p>Evaluate proposed plans through local preview and submission controls. Outcomes use daily candles and do not model broker fills or market microstructure.</p></article>
+        <article class="lane live"><div class="label">Live · broker orders</div><p>Submit real orders only after account verification, exact order preview, configured exposure and drawdown limits, and all applicable Timmy and broker checks.</p></article>
       </div>
-      <div class="callout"><strong>Designed for review, not blind trust.</strong> Timmy can organize market information and apply configured checks. It does not know your complete financial circumstances and cannot guarantee a result.</div>
+      <div class="callout"><strong>Automation remains inspectable.</strong> Timmy organizes market information and applies configured checks. It cannot assess every aspect of an operator's financial circumstances or guarantee an outcome.</div>
       <div class="spec-grid">
         <div class="spec"><strong>Platform</strong><span>Native Linux desktop application</span></div>
         <div class="spec"><strong>Primary coverage</strong><span>U.S. stocks, ETFs, and index proxies by default</span></div>
@@ -144,10 +147,10 @@
         <div class="spec"><strong>Data and records</strong><span>Local application configuration and execution journal</span></div>
       </div>
       <div class="closing">
-        <div><p class="eyebrow" style="color:var(--lime)">Explore Timmy</p><h3>Start with the guide.<br>Keep live locked until ready.</h3><p>Read setup instructions, understand the lane controls, and review the operating limits before connecting an account.</p></div>
-        <div><p class="url">timmy-tradesonauto.web.app</p><p style="margin-top:9px">Download the app · Read the user guide · Review the risk notes</p></div>
+        <div><p class="eyebrow" style="color:var(--lime)">Further information</p><h3>Understand the workflow.<br>Review live prerequisites.</h3><p>Consult the setup guide, execution-lane descriptions, and operating limits before connecting an account.</p></div>
+        <div><p class="url">timmy-tradesonauto.web.app</p><p style="margin-top:9px">Download Timmy · Read the user guide · Review risk disclosures</p></div>
       </div>
-      <p class="fine">Important: Timmy is software, not an investment adviser, broker, or guarantee of performance. This brochure is product information, not individualized investment, tax, or legal advice. Trading can result in loss, including loss of principal. Margin and other leverage can magnify losses. Confirm instrument support, market-data freshness, broker permissions, fees, order handling, and account restrictions independently. Features depend on the installed version, configuration, data source, and broker availability.</p>
+      <p class="fine">Important: Timmy is software, not an investment adviser or broker, and it does not guarantee performance. This brochure provides product information, not individualized investment, tax, or legal advice. Trading can result in the loss of principal; margin and other leverage can magnify losses. Independently confirm instrument support, market-data freshness, broker permissions, fees, order handling, and account restrictions. Available features depend on the installed version, configuration, data source, and broker.</p>
       <div class="footer"><span>TIMMY BY BLACK LION STUDIOS · PRODUCT OVERVIEW</span><span>03 / 03</span></div>
     </section>
   </main>

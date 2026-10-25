@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Timmy setup boilerplates for paper, guarded live, and runtime reliability profiles.">
-    <title>Timmy Boilerplates</title>
+    <title>Timmy | Configuration templates</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="css/styles.css">
   </head>
@@ -12,35 +12,35 @@
     <header class="site-header">
       <a class="brand" href="index.html"><span class="brand-mark">T</span><span>Timmy</span></a>
       <button class="icon-button" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-      <nav class="nav" id="site-nav" data-nav><a href="download.html">Download</a><a href="boilerplates.html">Boilerplates</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="legal.html">Legal</a></nav>
+      <nav class="nav" id="site-nav" data-nav><a href="download.html">Download</a><a href="boilerplates.html">Templates</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="legal.html">Legal</a></nav>
     </header>
     <main class="section">
       <div class="section-inner">
         <div class="section-head">
           <div>
-            <p class="eyebrow">Ready profiles</p>
-            <h1>Boilerplates.</h1>
+            <p class="eyebrow">Configuration templates</p>
+            <h1>Timmy templates</h1>
           </div>
-          <p>Use these as clean starting points. Real broker keys and account IDs belong in Timmy's Setup tab after verification.</p>
+          <p>Use these example environment files as configuration references. Review each setting for your account and operating environment; enter credentials only in Timmy's local Setup workspace.</p>
         </div>
         <div class="grid three">
           <article class="card">
-            <h3>Paper desk</h3>
-            <p>A learning lane for scanning, paper orders, and feedback without live submission.</p>
-            <div class="actions"><a class="button secondary" href="boilerplates/paper-desk.env.example" download>Download</a></div>
+            <h3>Paper workflow</h3>
+            <p>Example settings for market scanning, local paper activity, and review without broker order submission.</p>
+            <div class="actions"><a class="button secondary" href="boilerplates/paper-desk.env.example" download>Download template</a></div>
           </article>
           <article class="card">
-            <h3>Live guarded</h3>
-            <p>A conservative live shape that keeps preview, sizing, daily loss, and rejection controls visible.</p>
-            <div class="actions"><a class="button secondary" href="boilerplates/live-guarded.env.example" download>Download</a></div>
+            <h3>Guarded Live workflow</h3>
+            <p>Example settings for exact order previews, position sizing, exposure limits, drawdown controls, and broker rejection handling. Account-specific review is required.</p>
+            <div class="actions"><a class="button secondary" href="boilerplates/live-guarded.env.example" download>Download template</a></div>
           </article>
           <article class="card">
             <h3>Runtime reliability</h3>
-            <p>Health checks, watchdog style settings, and market-open polling defaults for an always-on desk.</p>
-            <div class="actions"><a class="button secondary" href="boilerplates/runtime-reliability.env.example" download>Download</a></div>
+            <p>Example health checks, watchdog behavior, and market-open polling settings for supervised long-running sessions.</p>
+            <div class="actions"><a class="button secondary" href="boilerplates/runtime-reliability.env.example" download>Download template</a></div>
           </article>
         </div>
-        <p class="fineprint">Never publish filled-in profiles. Keep secrets local, verify broker access inside Timmy, and test paper behavior before live trading.</p>
+        <p class="fineprint">Templates are examples, not account-specific recommendations. Do not publish completed profiles or place credentials in environment files committed to source control. Verify broker access and review Paper and Simulation behavior before enabling Live.</p>
       </div>
     </main>
     <footer class="site-footer"><div class="footer-inner"><strong>Timmy by Black Lion Studios</strong><div class="footer-links"><a href="contact.html">Contact</a><a href="support.html">Support</a><a href="legal.html#privacy">Privacy</a><a href="legal.html#terms">Terms</a></div></div></footer>

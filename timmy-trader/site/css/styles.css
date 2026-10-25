@@ -183,7 +183,16 @@ h3 {
 
 h1 {
   font-size: 3rem;
-  max-width: 11ch;
+  max-width: none;
+}
+
+.hero h1 {
+  max-width: 17ch;
+}
+
+.section-head h1 {
+  max-width: 20ch;
+  font-size: clamp(2.1rem, 4vw, 3rem);
 }
 
 h2 {

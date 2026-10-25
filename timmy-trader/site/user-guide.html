@@ -65,7 +65,7 @@
       <nav class="nav" id="site-nav" data-nav aria-label="Main navigation">
         <a href="download.html">Download</a>
         <a href="user-guide.html" aria-current="page">User Guide</a>
-        <a href="boilerplates.html">Boilerplates</a>
+        <a href="boilerplates.html">Templates</a>
         <a href="faq.html">FAQ</a>
         <a href="support.html">Support</a>
         <a href="legal.html">Legal</a>
@@ -75,16 +75,16 @@
     <main id="main-content" tabindex="-1">
       <section class="guide-hero" aria-labelledby="guide-title">
         <div class="guide-hero-inner">
-          <p class="eyebrow">Timmy 0.1.16 · operator guide</p>
-          <h1 id="guide-title">A clear path from market scan to guarded action.</h1>
-          <p class="lead">Install the current build, follow market movers into qualified candidates, and understand every safety gate before enabling automation or broker orders.</p>
+          <p class="eyebrow">Timmy 0.1.16 · operator documentation</p>
+          <h1 id="guide-title">A disciplined workflow from market data to execution.</h1>
+          <p class="lead">A comprehensive reference for market discovery, plan review, simulation, account verification, and guarded order handling.</p>
           <div class="pill-row" aria-label="Guide topics">
-            <span class="pill">Movement thresholds</span>
+            <span class="pill">Movement-based screening</span>
             <span class="pill">Paper · Simulation · Live</span>
-            <span class="pill">Guarded automation</span>
+            <span class="pill">Explicit broker safeguards</span>
           </div>
           <div class="actions">
-            <a class="button" href="#start-safely">Start with the safe workflow</a>
+            <a class="button" href="#start-safely">Begin with safe configuration</a>
             <a class="button secondary" href="/downloads/timmy-brochure.pdf" aria-label="Download the Timmy product brochure as a PDF">Brochure PDF</a>
           </div>
           <p class="guide-small">The three-page product brochure is available as a printable PDF.</p>
@@ -100,10 +100,10 @@
 <li><a href="#personal-groups-and-pins">Personal groups and pins</a></li>
 <li><a href="#research-workbench">Research workbench</a></li>
 <li><a href="#data-freshness-and-quality">Data freshness and quality</a></li>
-<li><a href="#rolling-96-hour-movers-and-upside-shortlist">Rolling 96-hour movers and upside shortlist</a></li>
+<li><a href="#rolling-96-hour-movers-and-candidate-screening">Rolling 96-hour movers and candidate screening</a></li>
 </ul>
 </li>
-<li><a href="#paper-and-live-are-separate">Paper and Live are separate</a><ul>
+<li><a href="#paper-simulation-and-live-are-distinct">Paper, Simulation, and Live are distinct</a><ul>
 <li><a href="#paper">Paper</a></li>
 <li><a href="#simulation">Simulation</a></li>
 <li><a href="#live">Live</a></li>
@@ -117,15 +117,15 @@
 </div>
 </nav>
 
-        <article class="guide-content"><p>Timmy is a native Linux desktop tool for scanning market candles, reviewing
-strategy signals, building risk-capped order plans, and recording paper-trade
-activity. It can connect to Webull OpenAPI for account checks, order previews,
-and a guarded live-order path. It does not predict the future or guarantee a
-profit.</p>
+        <article class="guide-content"><p>Timmy is a native Linux desktop platform for analyzing market data, evaluating
+strategy signals, preparing risk-capped order plans, and reviewing Paper and
+Simulation activity. Optional Webull OpenAPI integration supports account
+checks, order previews, and guarded live execution. Timmy does not forecast
+returns or eliminate trading risk.</p>
 <p>This guide covers the Timmy 0.1.16 desktop release, including movement
 discovery, candidate promotion, and Paper, Simulation, and Live automation.
 The same release is installed as the Debian package and offered on the public
-download page. For live trading, read the <a href="#paper-and-live-are-separate">Paper and Live safety section</a>
+download page. For live trading, read the <a href="#paper-simulation-and-live-are-distinct">Paper and Live safety section</a>
 and <a href="#configure-webull-locally">Webull Setup guide</a> first. Public product page:
 <a href="https://timmy-tradesonauto.web.app/user-guide.html">Timmy User Guide</a>.</p>
 <p>Check an installed package version with
@@ -310,7 +310,7 @@ symbols can make actual coverage slower or incomplete.</p>
 <p>If a provider returns no usable bars, Timmy keeps the existing cache and reports
 that it is showing previously saved symbols. A refresh is reported as complete
 only when new bars were actually written or the existing cache was still fresh.</p>
-<h3 id="rolling-96-hour-movers-and-upside-shortlist">Rolling 96-hour movers and upside shortlist</h3>
+<h3 id="rolling-96-hour-movers-and-candidate-screening">Rolling 96-hour movers and candidate screening</h3>
 <p>The Universe workspace reports Timmy's rolling 96-hour mover list. Yahoo data
 and the all-US universe are the built-in defaults, so the normal dashboard
 refresh checks a rotating batch automatically. Broad discovery requests up to
@@ -363,7 +363,7 @@ technical, sensible, and scout scores. It is not a calibrated probability or
 forecast of return. Automated trading uses a separate, stricter candidate gate
 and all normal broker/risk controls; the bullish shortlist itself does not
 submit orders.</p>
-<h2 id="paper-and-live-are-separate">Paper and Live are separate</h2>
+<h2 id="paper-simulation-and-live-are-distinct">Paper, Simulation, and Live are distinct</h2>
 <h3 id="paper">Paper</h3>
 <p>Paper is the recommended starting target. <strong>Submit Paper</strong> writes simulated
 orders to the local journal; it does not send an order to Webull. Paper
@@ -438,7 +438,7 @@ a signed automation hold keeps it paused after restart. After you record a
 terminal resolution, switch to User and then back to Auto to re-arm Live. An
 independent Paper lane can continue on its schedule. Do not assume
 “unknown” means rejected or retry it. See
-<a href="#paper-and-live-are-separate">Automation and Order Safety Review</a> for
+<a href="#paper-simulation-and-live-are-distinct">Live safety controls</a> for
 the preview/submit ID contract and documented Webull limitations.</p>
 <h2 id="configure-webull-locally">Configure Webull locally</h2>
 <ol>
@@ -453,9 +453,10 @@ the preview/submit ID contract and documented Webull limitations.</p>
    account check before Live can be enabled.</li>
 <li>Confirm the account and buying-power snapshot before any live preview.</li>
 </ol>
-<p>Never paste keys, tokens, account identifiers, passwords, or MFA codes into
-support requests, screenshots, source files, or public repositories. For exact
-Webull setup and authorization details, use <a href="#configure-webull-locally">Webull Setup</a>.</p>
+<p>Do not include keys, tokens, account identifiers, passwords, or MFA codes in
+support requests, screenshots, source files, or public repositories. For
+Webull setup and authorization details, use
+<a href="#configure-webull-locally">Webull Setup</a>.</p>
 <h2 id="alerts-and-automation">Alerts and automation</h2>
 <p>Alerts are local informational rules evaluated after a scan, using the loaded
 signal's price, scout score, or action (<code>trade</code>, <code>watch</code>, or <code>avoid</code>). Create a
@@ -483,7 +484,7 @@ OS lock is held at <code>${XDG_CONFIG_HOME:-~/.config}/timmy-trader/timmy-instan
 and released when the process exits. The small lock file may remain afterward;
 do not delete it while Timmy is running.</p>
 <ul>
-<li><strong>No data or synthetic-looking prices:</strong> verify the configured provider and
+<li><strong>Unexpected or synthetic-looking prices:</strong> verify the configured provider and
   CSV file in the runtime home/environment. A new profile may be using
   generated sample candles.</li>
 <li><strong>Stale data:</strong> check the last candle timestamp and provider status. Remote
@@ -515,14 +516,14 @@ path. The software does not provide streaming quotes, news/earnings analysis,
 guaranteed fills, or investment advice.</p>
 <h2 id="more-help">More help</h2>
 <ul>
-<li><a href="#paper-and-live-are-separate">Paper and Live safety section</a></li>
+<li><a href="#paper-simulation-and-live-are-distinct">Paper and Live safety section</a></li>
 <li><a href="#configure-webull-locally">Webull Setup</a></li>
 <li><a href="#read-a-scan-and-a-plan">Workflow reference</a></li>
 <li><a href="legal.html#risk">Risk and legal notes</a></li>
 <li><a href="/downloads/timmy-brochure.pdf">Download the Timmy brochure (PDF)</a></li>
 </ul>
-<p>Timmy is software, not a guarantee of performance. You remain responsible for
-reviewing orders, broker permissions, market conditions, and the risk of loss.</p></article>
+<p>Timmy is software, not a guarantee of performance. Review each order, broker
+permission, market condition, and potential loss before proceeding.</p></article>
               <article class="card">
                 <h3>Live: real broker orders</h3>
                 <p>Live requires a configured and checked Webull account, enabled live switches, supported instrument, fresh market/session state, a current eligible plan, risk limits, and broker approval. In User mode, Timmy asks before a manual submit. Auto mode locks manual execution controls.</p>
