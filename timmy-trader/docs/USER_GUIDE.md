@@ -88,6 +88,17 @@ the live path. Review the target and mode before using it.
    a separate paper or live action. “No executable plans” means scanning
    completed without producing a plan that passed the configured gates.
 
+Select **Open risk & plan review** below the Order Plan to inspect the review-only
+Risk & Trade Planning Lab. It compares the active queue, shows a hypothetical
+field-by-field plan diff, charts entry/stop/target and risk-to-reward, compares
+0.5×/1.0×/1.5× portfolio scenarios, and estimates the selected plan's impact on
+the local paper ledger. The sizing explorer applies configured quantity
+precision and asset notional/quantity limits; it does not model account buying
+power or derivative multipliers. Exposure and correlation views use loaded
+paper positions and aligned loaded daily candles. Sector exposure stays
+unavailable unless sector metadata is present. The stepwise checklist is
+informational and never approves, changes, or submits an order.
+
 ### Personal groups and pins
 
 Select a ticker, create a personal group, then use **+ Group** to add the
