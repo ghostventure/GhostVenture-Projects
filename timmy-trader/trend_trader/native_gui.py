@@ -203,6 +203,12 @@ class TimmyNativeApp:
         self._automation_cycle_in_progress = False
         self._automation_cycle_started_at: datetime | None = None
         self._automation_next_run_at: datetime | None = None
+        self._automation_last_run_at: datetime | None = None
+        self._automation_last_duration_seconds: float | None = None
+        self._automation_last_result = "No automation cycle has run this session."
+        self._automation_wait_reason = ""
+        self._automation_hold_reason = ""
+        self._persisted_live_automation_hold_id = ""
         self.local_preview_fingerprints: dict[str, dict] = {}
         self.refresh_after_id: str | None = None
         self.account_refresh_after_id: str | None = None
@@ -3802,16 +3808,17 @@ class TimmyNativeApp:
             return f"TARGET: LIVE · WEBULL PREVIEW\n{result}"
         return self._preview_local_plans(target)
 
-    def _preview_local_plans(self, target: str | None = None) -> str:
+    def _preview_local_plans(self, target: str | None = None, plans_override: list | None = None) -> str:
         target = target or self.execution_target_var.get()
         if target not in {"Paper", "Simulation"}:
             raise ValueError("Local preview is available only for Paper or Simulation targets.")
-        if not self.plans:
+        plans = list(self.plans[: self.plan_limit_value] if plans_override is None else plans_override)
+        if not plans:
             return f"TARGET: {target.upper()} · No executable plans are loaded. Run a cycle first."
         now = datetime.now()
         self.local_preview_fingerprints = {}
         rows = []
-        for plan in self.plans[: self.plan_limit_value]:
+        for plan in plans:
             fingerprint = self._order_fingerprint(plan, self._latest_candle_timestamp(plan.symbol))
             preview_id = uuid4().hex
             self.local_preview_fingerprints[fingerprint] = {
@@ -3828,10 +3835,10 @@ class TimmyNativeApp:
             "orders": rows,
         }, indent=2, sort_keys=True)
 
-    def simulate_current_plans(self) -> str:
+    def simulate_current_plans(self, plans_override: list | None = None) -> str:
         if self.execution_target_var.get() != "Simulation":
             raise RuntimeError("Select Simulation target before submitting a local simulation.")
-        plans = list(self.plans[: self.plan_limit_value])
+        plans = list(self.plans[: self.plan_limit_value] if plans_override is None else plans_override)
         if not plans:
             return "TARGET: SIMULATION · No executable plans are loaded. No event was written."
         now = datetime.now()
@@ -4008,10 +4015,15 @@ class TimmyNativeApp:
             return any(word in lowered for word in error_words)
         return False
 
-    def paper_trade(self, refresh: bool = True, refresh_after: bool = True) -> str:
+    def paper_trade(
+        self,
+        refresh: bool = True,
+        refresh_after: bool = True,
+        plans_override: list | None = None,
+    ) -> str:
         if refresh:
             self._refresh_payload()
-        plans = list(self.plans)
+        plans = list(self.plans if plans_override is None else plans_override)
         if not plans:
             return "No executable plans at current controls. Nothing was journaled."
         broker = PaperBroker(str(self.journal_path))
@@ -4158,6 +4170,8 @@ class TimmyNativeApp:
             return
         self._automation_cycle_in_progress = True
         self._automation_cycle_started_at = datetime.now(tz=ZoneInfo("America/New_York"))
+        self._automation_wait_reason = ""
+        cycle_result = "Cycle completed."
         try:
             self.status_bar.configure(text="Running decision cycle...")
             self._refresh_payload()
@@ -4167,8 +4181,11 @@ class TimmyNativeApp:
             mode = self.execution_mode_var.get()
             paper_enabled = self.paper_auto_var.get()
             simulation_enabled = target == "Simulation" and mode == "Auto"
-            live_enabled = target == "Live" and mode == "Auto"
-            if paper_enabled or simulation_enabled or live_enabled:
+            live_block = self._live_auto_block_reason() if target == "Live" and mode == "Auto" else ""
+            live_enabled = target == "Live" and mode == "Auto" and not live_block
+            if live_block:
+                self._automation_wait_reason = live_block
+            if paper_enabled or simulation_enabled or live_enabled or live_block:
                 lane_results = self._run_automation_lanes(
                     paper_enabled=paper_enabled,
                     live_enabled=live_enabled,
@@ -4177,23 +4194,96 @@ class TimmyNativeApp:
                 lane_result_text = "\n\n".join(lane_results)
                 self._set_text(self.broker_text, lane_result_text)
                 live_status = (
-                    self._live_submission_status("Previewing and submitting live order", lane_result_text)
+                    self._live_submission_status(
+                        "Submitting live order",
+                        self._automation_live_result_text(lane_result_text),
+                    )
                     if live_enabled else None
                 )
-                self.status_bar.configure(text=live_status or "Decision cycle complete. Automation lanes checked.")
+                if self._live_result_requires_automation_hold(live_status):
+                    self._hold_live_automation(live_status)
+                cycle_result = live_status or self._automation_result_label(lane_result_text)
+                if live_block and not live_enabled:
+                    self.status_bar.configure(text=f"Live automation held: {live_block}")
+                    self._set_text(self.broker_text, lane_result_text + f"\n\nLive automation held: {live_block}")
+                    cycle_result = f"Live automation held: {live_block}"
+                else:
+                    self.status_bar.configure(text=cycle_result if live_enabled else "Decision cycle complete. Automation lanes checked.")
                 return
             self._set_text(
                 self.broker_text,
                 f"TARGET: {target.upper()} · Decision cycle completed. Select Preview {target} and Submit {target} to continue the current plan workflow.",
             )
             self.status_bar.configure(text="Decision cycle complete.")
+            cycle_result = "Decision cycle complete; no automatic lane was enabled."
         except Exception as exc:
             self.status_bar.configure(text=f"Decision cycle failed: {exc}")
             self._set_text(self.broker_text, str(exc))
+            cycle_result = f"Cycle failed: {str(exc)[:160]}"
         finally:
+            finished_at = datetime.now(tz=ZoneInfo("America/New_York"))
+            started_at = self._automation_cycle_started_at
+            self._automation_last_run_at = finished_at
+            self._automation_last_duration_seconds = (
+                max(0.0, (finished_at - started_at).total_seconds()) if started_at else None
+            )
+            self._automation_last_result = cycle_result[:220]
             self._automation_cycle_in_progress = False
             self._automation_cycle_started_at = None
             self._render_automation_panel()
+
+    @staticmethod
+    def _automation_result_label(result_text: str) -> str:
+        lowered = str(result_text).lower()
+        if "unknown" in lowered or "pending-submit" in lowered:
+            return "Unknown broker outcome; review required."
+        if any(marker in lowered for marker in ("blocked", "rejected", "failed", "error", "preview-required")):
+            return "Cycle finished with blocked work; review details."
+        if "no executable plans" in lowered or "no new " in lowered:
+            return "Cycle finished with no new eligible plans."
+        if "accepted" in lowered:
+            return "Broker accepted a request; confirm its live status at Webull."
+        return "Automation cycle completed."
+
+    @staticmethod
+    def _automation_live_result_text(result_text: str) -> str:
+        marker = "Live lane result:\n"
+        return result_text.split(marker, 1)[1] if marker in result_text else result_text
+
+    @staticmethod
+    def _live_result_requires_automation_hold(status: str | None) -> bool:
+        lowered = str(status or "").lower()
+        return any(marker in lowered for marker in (
+            "outcome is unknown",
+            "could not journal a broker response",
+            "blocks unresolved duplicates",
+        ))
+
+    def _automation_lane_plans(self, lane: str) -> tuple[list, list[str]]:
+        """Return plans not already journaled for this lane and daily candle."""
+        existing: set[tuple[str, str]] = set()
+        for event in getattr(self, "execution_events", []):
+            if event.get("mode") != lane or event.get("event_type") != "buy-order":
+                continue
+            context = event.get("paper_context")
+            if not isinstance(context, dict):
+                continue
+            order = event.get("order")
+            symbol = event.get("symbol") or (order.get("symbol") if isinstance(order, dict) else "")
+            candle = context.get("latest_candle_timestamp")
+            if symbol:
+                existing.add((str(symbol).upper(), str(candle or "unknown")))
+
+        selected = []
+        skipped: list[str] = []
+        for plan in self.plans[: self.plan_limit_value]:
+            key = (plan.symbol.upper(), str(self._latest_candle_timestamp(plan.symbol) or "unknown"))
+            if key in existing:
+                skipped.append(plan.symbol.upper())
+                continue
+            existing.add(key)
+            selected.append(plan)
+        return selected, skipped
 
     def _run_automation_lanes(
         self,
@@ -4209,22 +4299,34 @@ class TimmyNativeApp:
         if paper_enabled:
             self.execution_target_var.set("Paper")
             try:
-                paper_result = self.paper_trade(refresh=False, refresh_after=False)
-                self._load_journal()
-                self.paper_cash_snapshot = self._paper_account_snapshot()
-                paper_expectation = self._feedback_expectation(paper_result)
-                self._record_automation_feedback("paper", paper_expectation, f"Paper lane journaled up to {self.plan_limit_value} plan(s).")
-                results.append("Paper lane result:\n" + paper_result)
+                lane_plans, skipped = self._automation_lane_plans("paper")
+                if lane_plans:
+                    paper_result = self.paper_trade(refresh=False, refresh_after=False, plans_override=lane_plans)
+                    self._load_journal()
+                    self.paper_cash_snapshot = self._paper_account_snapshot()
+                    paper_expectation = self._feedback_expectation(paper_result)
+                    self._record_automation_feedback("paper", paper_expectation, f"Paper lane journaled {len(lane_plans)} new plan(s).")
+                    results.append("Paper lane result:\n" + paper_result)
+                else:
+                    detail = "No new paper entries; the current symbols were already journaled for this daily candle."
+                    self._record_automation_feedback("paper", "above-expectation", detail)
+                    results.append(f"Paper lane skipped: {detail} {', '.join(skipped)}")
             except Exception as exc:
                 self._record_automation_feedback("paper", "below-expectation", str(exc))
                 results.append(f"Paper lane blocked:\n{exc}")
         if simulation_enabled:
             self.execution_target_var.set("Simulation")
             try:
-                self._preview_local_plans("Simulation")
-                simulation_result = self.simulate_current_plans()
-                self._record_automation_feedback("simulation", self._feedback_expectation(simulation_result), "Local simulation journaled current plans.")
-                results.append("Simulation lane result (local only):\n" + simulation_result)
+                lane_plans, skipped = self._automation_lane_plans("simulation")
+                if lane_plans:
+                    self._preview_local_plans("Simulation", plans_override=lane_plans)
+                    simulation_result = self.simulate_current_plans(plans_override=lane_plans)
+                    self._record_automation_feedback("simulation", self._feedback_expectation(simulation_result), f"Local Simulation journaled {len(lane_plans)} new plan(s).")
+                    results.append("Simulation lane result (local only):\n" + simulation_result)
+                else:
+                    detail = "No new Simulation entries; the current symbols were already journaled for this daily candle."
+                    self._record_automation_feedback("simulation", "above-expectation", detail)
+                    results.append(f"Simulation lane skipped: {detail} {', '.join(skipped)}")
             except Exception as exc:
                 self._record_automation_feedback("simulation", "below-expectation", str(exc))
                 results.append(f"Simulation lane blocked:\n{exc}")
@@ -4285,6 +4387,9 @@ class TimmyNativeApp:
             "rejected",
             "failed",
             "error",
+            "unknown",
+            "pending-submit",
+            "unresolved",
             "insufficient",
             "preview-required",
             "no executable",
@@ -5460,8 +5565,11 @@ class TimmyNativeApp:
         config = self.config or self._load_config_safe()
         live_ready = self._live_ready(self._execution_config(config))
         interval = self._bounded_int(self.auto_interval_var, 1, 1, 60)
+        live_block = self._live_auto_block_reason() if self.execution_target_var.get() == "Live" else ""
         if self._automation_cycle_in_progress:
             next_cycle = "Running"
+        elif live_block and self.execution_target_var.get() == "Live" and self.execution_mode_var.get() == "Auto":
+            next_cycle = "Paper continues · Live held" if self.paper_auto_var.get() else "Held · review required"
         elif self._automation_next_run_at is not None:
             due = self._automation_next_run_at.astimezone(ZoneInfo("America/New_York"))
             next_cycle = f"Due {due.strftime('%I:%M %p ET').lstrip('0')}"
@@ -5496,11 +5604,18 @@ class TimmyNativeApp:
             f"Fresh account check: {'yes' if not self._broker_check_required(self._execution_config(config)) else 'no'}",
             f"Current executable plans: {len(self.plans):,}",
             f"Market data: {self._data_freshness_line()}",
+            f"Last cycle: {self._automation_last_run_at.strftime('%I:%M:%S %p ET').lstrip('0') if self._automation_last_run_at else 'Not run this session'}",
+            f"Last result: {self._automation_last_result}",
+            (f"Last duration: {self._automation_last_duration_seconds:.1f}s"
+             if self._automation_last_duration_seconds is not None else "Last duration: -"),
+            (f"Waiting: {self._automation_wait_reason}" if self._automation_wait_reason else ""),
+            (f"Live automation hold: {live_block}" if live_block and self.execution_target_var.get() == "Live" else ""),
             "",
             "What Timmy will do",
             "- Refresh the strategy at the selected interval.",
             "- Paper lane records simulated orders only.",
-            "- Live lane remains behind account checks, preview, and live-order guards.",
+            (f"- Live lane is held: {live_block}" if live_block and self.execution_target_var.get() == "Live"
+             else "- Live lane remains behind account checks, preview, and live-order guards."),
             "- Use Pause All Automation to return to user-controlled cycles.",
         ]
         if readiness.get("red_flags"):
@@ -8932,34 +9047,139 @@ class TimmyNativeApp:
 
     def _sync_automation(self) -> None:
         if self._automation_enabled():
+            self._automation_wait_reason = ""
             self.status_bar.configure(text=f"{self.execution_target_var.get()} automation armed.")
             self._schedule_automation()
         else:
-            if self.automation_after_id:
-                try:
-                    self.root.after_cancel(self.automation_after_id)
-                except tk.TclError:
-                    pass
-                self.automation_after_id = None
+            self._cancel_automation_callback("automation_after_id")
             self._automation_next_run_at = None
             self._sync_manual_controls()
             self._render_automation_panel()
 
     def _automation_enabled(self) -> bool:
-        return bool(self.paper_auto_var.get() or self.execution_mode_var.get() == "Auto")
+        if self.paper_auto_var.get():
+            return True
+        if self.execution_mode_var.get() != "Auto":
+            return False
+        return not (self.execution_target_var.get() == "Live" and self._live_auto_block_reason())
+
+    def _unresolved_live_auto_reason(self) -> str:
+        if getattr(self, "_execution_log_unreadable_for_order_safety", False):
+            return "Execution history is unreadable; Live automation remains held."
+        if str(getattr(self, "audit_status", "")).startswith("Audit warning"):
+            return "Execution history has an integrity warning; Live automation remains held."
+        try:
+            unresolved = self._unresolved_unknown_live_orders()
+        except Exception:
+            return "Live order history could not be checked; Live automation remains held."
+        if unresolved:
+            return f"{len(unresolved)} unresolved Live order outcome(s); review unknown orders before resuming."
+        if str(getattr(self, "audit_status", "")).startswith("Audit warning"):
+            return "Execution history has an integrity warning; Live automation remains held."
+        return ""
+
+    def _live_auto_block_reason(self) -> str:
+        unresolved_reason = self._unresolved_live_auto_reason()
+        if self._automation_hold_reason:
+            return self._automation_hold_reason
+        if unresolved_reason:
+            return unresolved_reason
+        if self._persisted_live_automation_hold_id:
+            return "Live automation remains paused; select Auto again to explicitly re-arm after review."
+        return ""
+
+    def _cancel_automation_callback(self, attribute: str) -> None:
+        callback_id = getattr(self, attribute, None)
+        if callback_id:
+            try:
+                self.root.after_cancel(callback_id)
+            except tk.TclError:
+                pass
+        setattr(self, attribute, None)
+
+    def _hold_live_automation(self, reason: str) -> None:
+        detail = str(reason or "Unknown Live order outcome.").strip()[:180]
+        self._automation_hold_reason = (
+            f"{detail} Review unknown orders and confirm Webull state before re-arming."
+        )
+        self._persist_live_automation_hold(detail)
+        self._automation_wait_reason = self._automation_hold_reason
+        if not self.paper_auto_var.get():
+            self._cancel_automation_callback("automation_after_id")
+        self._cancel_automation_callback("market_open_after_id")
+        self._automation_next_run_at = None
+        self.status_bar.configure(text=self._automation_hold_reason)
+
+    def _persist_live_automation_hold(self, detail: str) -> None:
+        if self._persisted_live_automation_hold_id:
+            return
+        if getattr(self, "_execution_log_unreadable_for_order_safety", False):
+            return
+        if str(getattr(self, "audit_status", "")).startswith("Audit warning"):
+            return
+        hold_id = uuid4().hex
+        try:
+            self._append_execution_event({
+                "mode": "live",
+                "robot": "Timmy",
+                "event_type": "live-automation-hold",
+                "status": "held",
+                "hold_id": hold_id,
+                "reason": str(detail)[:180],
+                "recorded_at": datetime.now().isoformat(),
+            })
+        except Exception:
+            return
+        self._persisted_live_automation_hold_id = hold_id
+
+    def _record_live_automation_rearm(self) -> bool:
+        hold_id = self._persisted_live_automation_hold_id
+        if not hold_id:
+            return True
+        try:
+            self._append_execution_event({
+                "mode": "live",
+                "robot": "Timmy",
+                "event_type": "live-automation-rearm",
+                "status": "rearmed",
+                "hold_id": hold_id,
+                "recorded_at": datetime.now().isoformat(),
+            })
+        except Exception as exc:
+            self.status_bar.configure(text=f"Live automation remains held; re-arm could not be journaled: {str(exc)[:120]}")
+            return False
+        self._persisted_live_automation_hold_id = ""
+        return True
 
     def _on_execution_mode_selected(self) -> None:
+        if self.execution_mode_var.get() == "Auto" and self.execution_target_var.get() == "Live":
+            unresolved_reason = self._unresolved_live_auto_reason()
+            if unresolved_reason:
+                self._automation_hold_reason = unresolved_reason
+                self._persist_live_automation_hold(unresolved_reason)
+                if self.paper_auto_var.get():
+                    self._schedule_automation()
+                else:
+                    self._cancel_automation_callback("automation_after_id")
+                self._cancel_automation_callback("market_open_after_id")
+                self._automation_next_run_at = None
+                self.status_bar.configure(text=f"Live automation held: {unresolved_reason}")
+                self._sync_manual_controls()
+                self._render_automation_panel()
+                return
+            # Choosing Auto again is the explicit re-arm after a prior safety hold.
+            if not self._record_live_automation_rearm():
+                self._sync_manual_controls()
+                self._render_automation_panel()
+                return
+            self._automation_hold_reason = ""
+            self._automation_wait_reason = ""
         self._sync_manual_controls()
         if self._automation_enabled():
             self._schedule_automation()
             self.status_bar.configure(text=f"{self.execution_target_var.get()} automation armed on the configured interval.")
         else:
-            if self.automation_after_id:
-                try:
-                    self.root.after_cancel(self.automation_after_id)
-                except tk.TclError:
-                    pass
-                self.automation_after_id = None
+            self._cancel_automation_callback("automation_after_id")
             self._automation_next_run_at = None
             self.status_bar.configure(text="Automation is paused. Run Cycle remains available in User mode.")
         self._render_automation_panel()
@@ -8967,7 +9187,14 @@ class TimmyNativeApp:
     def _arm_market_open_automation(self) -> None:
         config = self.config or self._load_config_safe()
         paper_enabled = config.auto_start_paper_on_market_open and config.trader_mode == "paper"
-        live_enabled = config.auto_start_live_on_market_open and self._live_ready(config)
+        live_block = self._live_auto_block_reason()
+        live_enabled = config.auto_start_live_on_market_open and self._live_ready(config) and not live_block
+        if config.auto_start_live_on_market_open and live_block:
+            self._persist_live_automation_hold(live_block)
+            self._automation_wait_reason = live_block
+            if self.execution_target_var.get() == "Live":
+                self.status_bar.configure(text=f"Live market-open automation held: {live_block}")
+            self._render_automation_panel()
         if not paper_enabled and not live_enabled:
             return
         if paper_enabled:
@@ -9009,7 +9236,14 @@ class TimmyNativeApp:
             return
         config = self.config or self._load_config_safe()
         paper_enabled = config.auto_start_paper_on_market_open and config.trader_mode == "paper"
-        live_enabled = config.auto_start_live_on_market_open and self._live_ready(config)
+        live_block = self._live_auto_block_reason()
+        live_enabled = config.auto_start_live_on_market_open and self._live_ready(config) and not live_block
+        if config.auto_start_live_on_market_open and live_block:
+            self._persist_live_automation_hold(live_block)
+            self._automation_wait_reason = live_block
+            if self.execution_target_var.get() == "Live":
+                self.status_bar.configure(text=f"Live market-open automation held: {live_block}")
+            self._render_automation_panel()
         if not paper_enabled and not live_enabled:
             return
         if not self._regular_market_open_now():
@@ -9017,8 +9251,11 @@ class TimmyNativeApp:
             self._schedule_market_open_check(config)
             return
         if self._action_in_progress or self._refresh_in_progress or self._automation_cycle_in_progress:
+            self._automation_wait_reason = "Market-open cycle is waiting for current work to finish."
             self.status_bar.configure(text="Market-open cycle waiting for current work to finish.")
             self.market_open_after_id = self.root.after(AUTOMATION_RETRY_MS, self._market_open_tick)
+            self._automation_next_run_at = datetime.now(tz=ZoneInfo("America/New_York")) + timedelta(milliseconds=AUTOMATION_RETRY_MS)
+            self._render_automation_panel()
             return
         if paper_enabled:
             self.paper_auto_var.set(True)
@@ -9035,6 +9272,9 @@ class TimmyNativeApp:
             return
         self._automation_cycle_in_progress = True
         self._automation_cycle_started_at = datetime.now(tz=ZoneInfo("America/New_York"))
+        self._automation_wait_reason = ""
+        cycle_result = "Market-open automation cycle complete."
+        live_status = None
         previous_target = self.execution_target_var.get()
         try:
             if paper_enabled or live_enabled:
@@ -9044,16 +9284,35 @@ class TimmyNativeApp:
                 elif paper_enabled:
                     self.execution_target_var.set("Paper")
                 self._refresh_payload()
-                self._set_text(
-                    self.broker_text,
-                    "\n\n".join(self._run_automation_lanes(paper_enabled=paper_enabled, live_enabled=live_enabled)),
+                lane_result_text = "\n\n".join(self._run_automation_lanes(paper_enabled=paper_enabled, live_enabled=live_enabled))
+                self._set_text(self.broker_text, lane_result_text)
+                live_status = (
+                    self._live_submission_status(
+                        "Submitting live order",
+                        self._automation_live_result_text(lane_result_text),
+                    )
+                    if live_enabled else None
                 )
+                if self._live_result_requires_automation_hold(live_status):
+                    self._hold_live_automation(live_status)
+                cycle_result = live_status or self._automation_result_label(lane_result_text)
+                if live_status:
+                    self.status_bar.configure(text=live_status)
             self.execution_target_var.set(previous_target if not live_enabled else "Live")
-            self.status_bar.configure(text="Market-open automation cycle complete.")
+            if not live_enabled or not live_status:
+                self.status_bar.configure(text=cycle_result)
         except Exception as exc:
             self.status_bar.configure(text=f"Market-open automation cycle failed: {exc}")
             self._set_text(self.broker_text, f"Market-open automation cycle failed:\n{exc}")
+            cycle_result = f"Market-open cycle failed: {str(exc)[:160]}"
         finally:
+            finished_at = datetime.now(tz=ZoneInfo("America/New_York"))
+            started_at = self._automation_cycle_started_at
+            self._automation_last_run_at = finished_at
+            self._automation_last_duration_seconds = (
+                max(0.0, (finished_at - started_at).total_seconds()) if started_at else None
+            )
+            self._automation_last_result = cycle_result[:220]
             self.execution_target_var.set(previous_target if not live_enabled else "Live")
             self._automation_cycle_in_progress = False
             self._automation_cycle_started_at = None
@@ -9061,11 +9320,15 @@ class TimmyNativeApp:
 
     def _schedule_automation(self) -> None:
         if self.closing or not self._automation_enabled():
+            self._cancel_automation_callback("automation_after_id")
+            self._automation_next_run_at = None
+            self._render_automation_panel()
             return
         if self.automation_after_id:
-            self.root.after_cancel(self.automation_after_id)
+            self._cancel_automation_callback("automation_after_id")
         self.auto_interval_value = self._bounded_int(self.auto_interval_var, 1, 1, 60)
         self._automation_next_run_at = datetime.now(tz=ZoneInfo("America/New_York")) + timedelta(minutes=self.auto_interval_value)
+        self._automation_wait_reason = ""
         self.automation_after_id = self.root.after(self.auto_interval_value * 60_000, self._automation_tick)
         self._render_automation_panel()
 
@@ -9081,6 +9344,7 @@ class TimmyNativeApp:
                 "market refresh" if self._refresh_in_progress else "another automation cycle"
             )
             self.status_bar.configure(text=f"Automation cycle waiting for {active} to finish.")
+            self._automation_wait_reason = f"Waiting for {active} to finish. Retry in {AUTOMATION_RETRY_MS // 1000} seconds."
             self._automation_next_run_at = datetime.now(tz=ZoneInfo("America/New_York")) + timedelta(milliseconds=AUTOMATION_RETRY_MS)
             self.automation_after_id = self.root.after(AUTOMATION_RETRY_MS, self._automation_tick)
             self._render_automation_panel()
@@ -9091,15 +9355,10 @@ class TimmyNativeApp:
     def stop_automation(self) -> None:
         self.paper_auto_var.set(False)
         self.execution_mode_var.set("User")
-        if self.automation_after_id:
-            self.root.after_cancel(self.automation_after_id)
-            self.automation_after_id = None
-        if self.market_open_after_id:
-            try:
-                self.root.after_cancel(self.market_open_after_id)
-            except tk.TclError:
-                pass
-            self.market_open_after_id = None
+        self._automation_hold_reason = ""
+        self._automation_wait_reason = ""
+        self._cancel_automation_callback("automation_after_id")
+        self._cancel_automation_callback("market_open_after_id")
         self._automation_next_run_at = None
         self._sync_manual_controls()
         self.status_bar.configure(text="Automation stopped.")
@@ -9271,6 +9530,8 @@ class TimmyNativeApp:
         cache_key = (file_key, len(getattr(self, "execution_events", [])))
         if getattr(self, "_unresolved_live_orders_cache_key", None) == cache_key:
             return list(getattr(self, "_unresolved_live_orders_cache", []))
+        if file_key == (0, 0, 0, 0):
+            self._persisted_live_automation_hold_id = ""
 
         events = list(getattr(self, "execution_events", []))
         trusted_unknown_events: list[dict] = []
@@ -9295,6 +9556,7 @@ class TimmyNativeApp:
                 saw_records = False
                 resolution_candidates: set[str] = set()
                 order_result_candidates: set[str] = set()
+                active_automation_hold_id = ""
                 self.audit_status = "Audit chain ok"
                 for line in event_log:
                     if not line.strip():
@@ -9319,6 +9581,16 @@ class TimmyNativeApp:
                     if event.get("mode") == "live":
                         event_type = str(event.get("event_type", "")).lower()
                         event_status = str(event.get("status", "")).lower()
+                        hold_id = str(event.get("hold_id") or "")
+                        if event_hash and event_type == "live-automation-hold" and event_status == "held" and hold_id:
+                            active_automation_hold_id = hold_id
+                        elif (
+                            event_hash
+                            and event_type == "live-automation-rearm"
+                            and event_status == "rearmed"
+                            and hold_id == active_automation_hold_id
+                        ):
+                            active_automation_hold_id = ""
                         if event_type == "live-order-intent" and event_status == "pending-submit":
                             trusted_unknown_events.append(event)
                         elif event_type == "buy-order" and event_status == "unknown":
@@ -9343,6 +9615,7 @@ class TimmyNativeApp:
                 if chain_valid:
                     trusted_resolution_ids = resolution_candidates
                     trusted_order_result_ids = order_result_candidates
+                    self._persisted_live_automation_hold_id = active_automation_hold_id
 
             events.extend(trusted_unknown_events)
 

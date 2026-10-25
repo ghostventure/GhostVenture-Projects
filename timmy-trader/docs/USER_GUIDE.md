@@ -260,7 +260,11 @@ If a live response is marked **unknown**, the broker may have received the
 request even if Timmy did not receive a final response. Timmy stops the current
 submission batch, blocks later plans for that symbol, and requires you to check
 Webull and record a terminal resolution before that symbol can pass the local
-guard again. Do not assume “unknown” means rejected or retry it. See
+guard again. Live Auto pauses, including a pending market-open Live callback;
+a signed automation hold keeps it paused after restart. After you record a
+terminal resolution, switch to User and then back to Auto to re-arm Live. An
+independent Paper lane can continue on its schedule. Do not assume
+“unknown” means rejected or retry it. See
 [Automation and Order Safety Review](AUTOMATION_AND_ORDER_SAFETY_REVIEW.md) for
 the preview/submit ID contract and documented Webull limitations.
 

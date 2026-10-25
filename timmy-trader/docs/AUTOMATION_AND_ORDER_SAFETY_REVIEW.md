@@ -7,6 +7,9 @@
 - **Pause All Automation** cancels both the interval callback and any pending market-open callback for this app session. Starting the app again still follows the existing saved market-open preferences.
 - The Automation panel reports a running cycle, the next local Eastern-time due time, market-open arming, or paused state instead of only saying “Every N min.”
 - Paper automation has one enable control: the shared Paper Lane checkbox. One shared Pause All Automation action appears with the execution controls in both Execution and Automation; duplicate enable/pause buttons were removed from the Automation detail panel.
+- It also keeps the last run time, duration, concise result, and any retry/hold reason visible for the current session.
+- Scheduled Paper and Simulation lanes skip a symbol already journaled for the same latest daily candle, preventing repeated entries from unchanged plans. Manual submissions remain available and are not deduplicated by this automation guard.
+- An unknown Live outcome halts Live Auto and cancels a pending market-open Live callback. Timmy writes a signed Live automation hold; on restart, that hold remains until unresolved orders are reconciled and the operator explicitly switches back to Auto. An enabled Paper lane may continue on its own schedule while Live is held.
 - Paper, Simulation, and Live use one visible target selector and one target-aware Preview/Submit pair. Paper behavior remains on its original journal. Simulation uses local-only preview/submission and a separate journal; Live alone constructs the Webull adapter.
 - Previewed and submitted orders carry the same `client_order_id`; the ID uses the UUID hex form shown in Webull's current Python example. A broker result classified as unknown stops the rest of that submission batch.
 - Simulation uses the current strategy plans. Later daily OHLC observations record target/stop threshold results, with stop-first when both appear in the same candle. Simulation events stay out of Paper performance and Live's daily loss/rejection/cooldown counters.
@@ -23,7 +26,7 @@ Mapped Tk windows were inspected under Xvfb at 1280, 1120, and 1024 px. At all t
 
 1. Timmy builds the current plans, previews each plan, and stores a fingerprint of the full plan plus latest candle timestamp, account ID, preview time, and the client order ID present in Timmy's preview request payload. The response is not assumed to echo this ID.
 2. Submission recomputes that fingerprint and requires a matching unexpired preview for the same account. Existing settings and live guards are checked again before the broker call.
-3. Timmy durably journals a `pending-submit` intent with the client ID before calling the broker. A lost response or uncertain 5xx result is recorded as unknown; no client-side retry is attempted.
+3. Timmy durably journals a `pending-submit` intent with the client ID before calling the broker. A lost response or uncertain 5xx result is recorded as unknown; no client-side retry is attempted. The automatic Live lane pauses and requires an explicit re-arm after terminal reconciliation.
 4. Unknown outcomes block future plans for that symbol. The operator must check Webull and record a terminal resolution through **Review unknown orders** before that symbol can pass the local guard again. The UI does not currently query Order Detail automatically.
 
 ## Webull contract evidence and limits
