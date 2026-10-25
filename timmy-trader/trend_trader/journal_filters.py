@@ -86,8 +86,8 @@ class JournalFilterState:
         mode = _optional_text(self.mode, "mode", 16)
         if mode is not None:
             mode = mode.lower()
-            if mode not in {"paper", "live"}:
-                raise ValueError("mode must be 'paper', 'live', or None")
+            if mode not in {"paper", "simulation", "live"}:
+                raise ValueError("mode must be 'paper', 'simulation', 'live', or None")
         symbol = _optional_text(self.symbol, "symbol", 32)
         if symbol is not None:
             symbol = symbol.upper()

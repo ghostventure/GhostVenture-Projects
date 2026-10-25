@@ -206,6 +206,26 @@ stop scheduled activity. Paper simulation settings can permit simulations
 outside regular market hours; this does not make the data current or the
 simulation equivalent to market execution.
 
+### Simulation
+
+Choose **Simulation** in the shared Target selector to exercise the current
+strategy plan through the same **Preview** and **Submit** controls without
+constructing a Webull client. Simulation writes to
+`simulation-trade-journal.jsonl`, separate from the Paper ledger, and its rows
+are labeled **Simulation** in Journal Review. Preview is a local snapshot of
+the already loaded plan and candle data; it expires after three minutes or
+when the target/plan changes. User mode requires that preview before submit;
+Auto mode repeats the local preview and submit workflow on the configured
+interval. It does not change strategy or risk settings.
+
+Simulation outcome tracking uses later daily OHLC candles to record a target or
+stop threshold, with stop-first when both thresholds appear in the same candle.
+It assumes the entry price and does not model intraday order priority, fills,
+slippage, spread, fees, or broker behavior. Daily data may be delayed. These
+results are local scenario records, not broker-equivalent fills or performance.
+Simulation events are excluded from Paper performance and the recent-failure,
+cooldown, daily-trade, and loss guards used by Live.
+
 ### Live
 
 Live can place real broker orders. Do not switch to Live until you intend to use
@@ -223,17 +243,25 @@ configuration must permit the submit path. Follow the Webull Setup guide and
 keep the preview gate enabled unless you deliberately complete that validation.
 
 In **User** mode, Timmy asks for confirmation before a manual live submission.
-In **Auto** mode, manual execution controls are locked. Live automation can
-preview and submit a current eligible plan automatically only when every live
-switch and runtime gate is open. Keep live auto-start disabled unless you have
-specifically prepared and tested unattended operation. **Stop automation**
-returns operation to user control, but it cannot cancel an order already sent
-to the broker.
+In **Auto** mode, manual execution controls are locked. The Automation panel's
+Next Cycle status shows whether the cycle is running, its next Eastern-time due
+time, armed for market open, or paused. **Pause All Automation** cancels both
+the interval and pending market-open callbacks for the current app session; a
+later app launch still follows the saved market-open preferences. Live
+automation can preview and submit a current eligible plan automatically only
+when every live switch and runtime gate is open. Keep live auto-start disabled
+unless you have specifically prepared and tested unattended operation. A
+market-open callback waits for active refresh/action work and rechecks the
+regular session before it runs. Pausing cannot cancel an order already sent to
+the broker.
 
 If a live response is marked **unknown**, the broker may have received the
-request even if Timmy did not receive a final response. Check Webull and resolve
-the event before allowing another order for that symbol. Do not assume
-“unknown” means rejected.
+request even if Timmy did not receive a final response. Timmy stops the current
+submission batch, blocks later plans for that symbol, and requires you to check
+Webull and record a terminal resolution before that symbol can pass the local
+guard again. Do not assume “unknown” means rejected or retry it. See
+[Automation and Order Safety Review](AUTOMATION_AND_ORDER_SAFETY_REVIEW.md) for
+the preview/submit ID contract and documented Webull limitations.
 
 ## Configure Webull locally
 

@@ -87,7 +87,10 @@ class WebullOpenApiBroker:
         return snapshot
 
     def new_order_payload(self, order: OrderPlan, client_order_id: str | None = None) -> dict:
-        client_order_id = client_order_id or f"timmy-{order.symbol.lower()}-{uuid4().hex[:8]}"
+        # Match Webull's documented UUID client order ID shape. The caller may
+        # supply the ID already previewed so preview and placement refer to the
+        # same order intent.
+        client_order_id = client_order_id or uuid4().hex
         payload = {
             "client_order_id": client_order_id[:32],
             "combo_type": "NORMAL",
@@ -121,7 +124,7 @@ class WebullOpenApiBroker:
             raise RuntimeError("WEBULL_ACCOUNT_ID is required for Webull order preview.")
         self._ensure_connected()
         payload = self.preview_order_payload(order)
-        response = self.trade_client.order_v2.preview_order(
+        response = self._order_api().preview_order(
             self.config.webull_account_id,
             payload["new_orders"],
         )
@@ -141,11 +144,12 @@ class WebullOpenApiBroker:
                 "status": "preview-required",
                 "message": "Order was not placed. Run webull-preview first, then disable WEBULL_REQUIRE_PREVIEW only after validation.",
                 "payload": payload,
+                "request_payload": self._redacted_payload(payload),
                 "order_plan": asdict(order),
             }
 
         try:
-            response = self.trade_client.order_v2.place_order(
+            response = self._order_api().place_order(
                 self.config.webull_account_id,
                 payload["new_orders"],
             )
@@ -168,6 +172,15 @@ class WebullOpenApiBroker:
     def _ensure_connected(self) -> None:
         if self.trade_client is None:
             self.connect()
+
+    def _order_api(self):
+        """Prefer Webull's current v3 interface, retaining an older SDK fallback."""
+        order_api = getattr(self.trade_client, "order_v3", None)
+        if order_api is None:
+            order_api = getattr(self.trade_client, "order_v2", None)
+        if order_api is None:
+            raise RuntimeError("This Webull SDK exposes neither order_v3 nor order_v2.")
+        return order_api
 
     def _try_sdk_call(self, *paths: tuple[str, str]) -> dict:
         for object_name, method_name in paths:
