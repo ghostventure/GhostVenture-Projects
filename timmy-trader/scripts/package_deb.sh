@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION=${1:-0.1.6}
+VERSION=${1:-0.1.7}
 ARCH=amd64
 PKG_NAME=timmy-trader
 PKG_ROOT="build/deb/${PKG_NAME}_${VERSION}_${ARCH}"
@@ -29,6 +29,10 @@ install -m 0644 docs/WEBULL_SETUP.md "$PKG_ROOT/usr/share/doc/timmy-trader/WEBUL
 install -m 0644 docs/HOTFIX_IMPLEMENTATION_LOG.md "$PKG_ROOT/usr/share/doc/timmy-trader/HOTFIX_IMPLEMENTATION_LOG.md"
 install -m 0644 docs/OPERATOR_CHECKLIST.md "$PKG_ROOT/usr/share/doc/timmy-trader/OPERATOR_CHECKLIST.md"
 install -m 0644 docs/IMPLEMENTATION_OUTLINE.md "$PKG_ROOT/usr/share/doc/timmy-trader/IMPLEMENTATION_OUTLINE.md"
+install -m 0644 docs/TIMMY_MASTER_DOCUMENTATION.md "$PKG_ROOT/usr/share/doc/timmy-trader/TIMMY_MASTER_DOCUMENTATION.md"
+install -m 0644 docs/WORKFLOWS.md "$PKG_ROOT/usr/share/doc/timmy-trader/WORKFLOWS.md"
+install -m 0644 docs/RESEARCH_WORKBENCH.md "$PKG_ROOT/usr/share/doc/timmy-trader/RESEARCH_WORKBENCH.md"
+install -m 0644 docs/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md "$PKG_ROOT/usr/share/doc/timmy-trader/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md"
 install -m 0644 knowledge/*.md "$PKG_ROOT/usr/share/doc/timmy-trader/knowledge/"
 
 cat > "$PKG_ROOT/DEBIAN/control" <<CONTROL

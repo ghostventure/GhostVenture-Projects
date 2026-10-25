@@ -18,20 +18,24 @@ Operational workflows for validation, live brokerage, actual trade placement, fr
 docs/WORKFLOWS.md
 ```
 
-## 0.1.6 Release Notes
+## 0.1.7 Release Notes
 
-This source checkout targets Timmy 0.1.6. It includes a reorganized financial
-workspace, saved views and scanner filters, local alerts and watchlist groups,
-clearer market-data and trade-readiness explanations, stronger recovery paths,
-and bounded market-data processing. This source release also improves operator
-health, settings, and order-journal workflows.
+This local source release targets Timmy 0.1.7. It adds 30 capabilities across
+research and data review, risk and trade planning, and operations and journal
+review. Market refreshes now report cached, partial, and empty results clearly;
+provider bars are validated before caching, and market-data writes are atomic.
+See `docs/RESEARCH_WORKBENCH.md`, `docs/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md`,
+and `docs/WORKFLOWS.md` for behavior and data limits.
+
+The 0.1.7 package is a local installation; the public Firebase download page
+has not been updated and may still offer 0.1.6.
 
 For the Debian install, verify the downloaded package with the accompanying
 `SHA256SUMS.txt`, then install it:
 
 ```bash
 sha256sum -c SHA256SUMS.txt
-sudo apt install ./timmy-trader_0.1.6_amd64.deb
+sudo apt install ./timmy-trader_0.1.7_amd64.deb
 ```
 
 The native updater expects the GitHub release archive
@@ -189,7 +193,7 @@ scripts/package_deb.sh
 Install it locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.6_amd64.deb
+sudo apt install ./dist/timmy-trader_0.1.7_amd64.deb
 ```
 
 After install, launch **Timmy** from the system menu or run:

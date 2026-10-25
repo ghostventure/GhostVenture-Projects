@@ -25,7 +25,7 @@ Status vocabulary:
 | 9 | Settings import/export | setup profile, UI settings, config serializer | Account Setup | Planned implementation | Export omits secrets unless encrypted locally; import restores non-secret settings and validates schema. |
 | 10 | Desktop notifications | future notification adapter, execution events | Account Readiness | Installed hook | Critical, warning, and info notifications are backed by journaled events. |
 | 11 | Order fill tracker | broker order read-back, execution journal | Broker Desk | Planned implementation | Submitted orders transition to filled, partial, canceled, rejected, or unknown from broker evidence. |
-| 12 | Open order monitor | broker open-order endpoint, execution loop | Broker Desk | Planned implementation | Duplicate orders are blocked when an open order exists for the same account/symbol/side. |
+| 12 | Open order monitor | broker open-order endpoint, execution loop | Review & Operations | Existing surface | A read-only Webull snapshot shows current open orders and a reconciliation discrepancy inbox; no cancel/replace actions are exposed. |
 | 13 | Cancel/replace order logic | broker order adapter, execution controls | Orders Ready | Planned implementation | Cancel and replace actions require known order IDs and journal every broker response. |
 | 14 | Trailing stop support | risk model, execution planner | Orders Ready | Planned implementation | Trailing stops use asset-specific tick/precision rules and never exceed risk caps. |
 | 15 | Partial profit-taking rules | strategy and execution planner | Today's Guardrails | Planned implementation | Split exits have explicit targets, remaining quantity, and journaled reason codes. |
@@ -47,7 +47,7 @@ Status vocabulary:
 | 31 | Trade-ready reason inspector | scanner, strategy, risk blockers | Today's Guardrails | Planned implementation | Each trade-ready or blocked symbol shows the reason stack from scan through broker gates. |
 | 32 | Why no trade diagnostics panel | shared classifier, strategy, execution | Trading Scoreboard | Planned implementation | No-trade sessions group blockers by data, strategy, risk, broker, account, market, and system state. |
 | 33 | Strategy change audit log | settings persistence, audit journal | Trade Log | Planned implementation | Strategy changes write who/when/what summaries without secrets. |
-| 34 | Config versioning/rollback | setup profile, settings store | Account Setup | Planned implementation | Config snapshots can roll back locally and preserve credential safety. |
+| 34 | Config versioning/rollback | setup profile, settings store | Review & Operations | Existing surface | Named private config snapshots can be compared by hash and restored after integrity checks, with a pre-restore snapshot. |
 | 35 | Safe mode boot option | launcher, config loader | Account Readiness | Planned implementation | Safe mode starts Paper/User, disables broker submit, and loads minimal recoverable state. |
 | 36 | Crash recovery report | launcher, crash log, audit journal | Account Readiness | Planned implementation | Crash reports show last action, exception, restart result, and recovery recommendation. |
 | 37 | Local encrypted profile vault | setup profile storage | Account Setup | Planned implementation | Credentials are encrypted locally and never written to source, logs, screenshots, or public mirror. |

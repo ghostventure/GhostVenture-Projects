@@ -1,6 +1,6 @@
 # Timmy Trader risk and trade-planning UX wave
 
-Branch: `codex/timmy-ux-planning-20261025`  
+Branch: `codex/timmy-ux-planning-20261025`
 Base: `b4fb368704bb28e621fd1075a47f9e8d4077d383`
 
 This wave adds a review-only Risk & Trade Planning Lab reachable from the
