@@ -1,23 +1,41 @@
 # Timmy Public Website
 
-Static public website for Timmy's Linux download, user guide, advanced setup
-examples, support, FAQ, and legal notices.
+Next.js public website for Timmy's Linux download, user guide, advanced setup
+examples, support, FAQ, and legal notices. It uses static export, so Firebase
+Hosting serves generated files without a Next.js server or Functions runtime.
 
 Live Firebase Hosting site: <https://timmy-tradesonauto.web.app>. Hosting serves
 the public website only; it does not install or update the native Linux app.
 
-## Local Preview
+## Local Development
+
+Use Node.js `>=20.9` and npm.
 
 ```sh
-python3 -m http.server 8787 --directory site
+cd site
+npm ci
+npm run dev
 ```
 
-Open `http://127.0.0.1:8787`.
+Open `http://localhost:3000`.
+
+## Static Export
+
+Build the static site before deploying:
+
+```sh
+npm run build
+```
+
+Next.js writes the Firebase Hosting root to `site/out`. The app emits `.html`
+files for the existing public routes. Files in `site/public/` are copied into
+the export unchanged.
 
 ## Firebase Hosting
 
-The local Firebase project ID is `timmy-tradesonauto`. The site serves the
-`site/` directory and keeps Timmy runtime files outside the public root.
+From the Timmy repository root, deploy the built export. The local Firebase project ID is `timmy-tradesonauto`. Hosting serves the
+`site/out/` export and keeps the Next.js source and Timmy runtime files outside
+the public root.
 
 ```sh
 npx --yes firebase-tools deploy --only hosting --project timmy-tradesonauto
@@ -25,14 +43,15 @@ npx --yes firebase-tools deploy --only hosting --project timmy-tradesonauto
 
 ## Download Artifact
 
-`site/downloads/Timmy-Installation-Manager_0.1.16_amd64.deb` is the current
+`site/public/downloads/Timmy-Installation-Manager_0.1.16_amd64.deb` is the current
 public Linux installer. Keep `SHA256SUMS.txt` synchronized with this package
 before deploying. Generate it from the download directory so the listed
 basename resolves beside the checksum file:
 
 ```sh
-cd site/downloads
+cd site/public/downloads
 sha256sum Timmy-Installation-Manager_0.1.16_amd64.deb > SHA256SUMS.txt
 ```
 
-Do not deploy until the package and matching checksum are both present.
+Do not deploy until the package and matching checksum are both present. Run
+`npm run build` from `site/` before Firebase Hosting deployment.
