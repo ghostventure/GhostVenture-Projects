@@ -29,7 +29,9 @@ npm run build
 
 Next.js writes the Firebase Hosting root to `site/out`. The app emits `.html`
 files for the existing public routes. Files in `site/public/` are copied into
-the export unchanged.
+the export unchanged. Shared navigation and footer components live in
+`site/app/SiteChrome.jsx`; the preserved page copy lives in
+`site/content/pages/` and is rendered by the static route components.
 
 ## Firebase Hosting
 

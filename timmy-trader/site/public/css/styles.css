@@ -138,6 +138,65 @@ a:hover {
   color: var(--ink);
 }
 
+.nav-menu {
+  position: relative;
+}
+
+.nav-menu summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.nav-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-menu summary::after {
+  color: var(--teal);
+  content: "+";
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.nav-menu[open] summary::after {
+  content: "−";
+}
+
+.nav-menu-items {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  display: grid;
+  min-width: 210px;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: #0b100d;
+  box-shadow: var(--shadow);
+}
+
+.nav-menu-items a {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  padding: 8px 10px;
+}
+
+.nav-menu-items a:hover,
+.nav-menu-items a:focus-visible {
+  background: rgba(199, 255, 56, 0.08);
+}
+
+.nav-download {
+  min-height: 40px;
+  margin-left: 4px;
+  padding: 8px 13px;
+  font-size: 0.78rem;
+}
+
 .icon-button {
   display: none;
   align-items: center;
@@ -152,7 +211,7 @@ a:hover {
 
 .hero {
   display: grid;
-  min-height: calc(84vh - 72px);
+  min-height: min(680px, calc(80svh - 72px));
   grid-template-columns: minmax(0, 0.92fr) minmax(420px, 1.08fr);
   align-items: center;
   gap: 40px;
@@ -368,6 +427,8 @@ h3 {
 
 .card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 160px;
   padding: 22px;
   border: 1px solid var(--line);
@@ -387,6 +448,19 @@ h3 {
   content: "";
 }
 
+.step-number {
+  margin-bottom: 14px;
+  color: var(--teal);
+  font-size: 0.77rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.card h3 + p {
+  margin-top: 12px;
+}
+
 .alt .card {
   border-color: rgba(245, 240, 232, 0.18);
   background: rgba(255, 250, 241, 0.07);
@@ -397,6 +471,11 @@ h3 {
 .faq-item p {
   margin: 10px 0 0;
   color: var(--muted);
+}
+
+.card .actions {
+  margin-top: auto;
+  padding-top: 22px;
 }
 
 .alt .card p {
@@ -523,7 +602,7 @@ textarea {
 
 .site-footer {
   border-top: 2px solid var(--teal);
-  padding: 28px 24px;
+  padding: 22px 24px;
   background: #050807;
   color: #e9f0e9;
 }
@@ -545,6 +624,11 @@ textarea {
 }
 
 .footer-links a {
+  text-decoration: none;
+}
+
+.footer-brand {
+  font-weight: 800;
   text-decoration: none;
 }
 
@@ -579,6 +663,36 @@ textarea {
     border-radius: 8px;
     background: var(--panel);
     box-shadow: var(--shadow);
+  }
+
+  .nav-menu {
+    width: 100%;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .nav-menu summary {
+    justify-content: space-between;
+    min-height: 48px;
+  }
+
+  .nav-menu-items {
+    position: static;
+    min-width: 0;
+    gap: 0;
+    padding: 0 0 8px 10px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .nav-menu-items a {
+    min-height: 42px;
+  }
+
+  .nav-download {
+    width: 100%;
+    margin: 4px 0 0;
   }
 
   .nav.open {

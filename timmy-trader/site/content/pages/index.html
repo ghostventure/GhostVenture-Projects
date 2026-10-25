@@ -10,21 +10,8 @@
     <link rel="stylesheet" href="css/styles.css">
   </head>
   <body>
-    <a class="skip-link" href="#main-content">Skip to content</a>
-    <header class="site-header">
-      <a class="brand" href="index.html" aria-label="Timmy home"><span class="brand-mark">T</span><span>Timmy</span></a>
-      <button class="icon-button" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="Open navigation">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <nav class="nav" id="site-nav" data-nav>
-        <a href="download.html">Download</a>
-        <a href="user-guide.html">User Guide</a>
-        <a href="boilerplates.html">Setup examples</a>
-        <a href="faq.html">FAQ</a>
-        <a href="support.html">Support</a>
-        <a href="legal.html">Legal</a>
-      </nav>
-    </header>
+
+
 
     <main id="main-content" tabindex="-1">
       <section class="hero">
@@ -33,12 +20,7 @@
           <h1>Independent markets. Disciplined execution.</h1>
           <p class="lead">Timmy is a Linux market-scanning and trade-assistance platform. It monitors configured symbols, evaluates rule-based candidates, and keeps strategy, account, and order controls visible throughout the workflow.</p>
           <div class="actions">
-            <a class="button" href="download.html" aria-label="Download Timmy for Linux">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-              Download for Linux
-            </a>
-            <a class="button secondary" href="legal.html#risk">Risk disclosure</a>
-            <a class="button secondary" href="user-guide.html">Product guide</a>
+            <a class="button secondary" href="user-guide.html">Explore the product guide</a>
           </div>
           <div class="pill-row" aria-label="Timmy priorities">
             <span class="pill">Percentage-based discovery</span>
@@ -58,20 +40,26 @@
       <section class="section">
         <div class="section-inner">
           <div class="section-head">
-            <h2>A measured path from discovery to review</h2>
-            <p>Timmy brings market data, strategy rules, account readiness, and execution status into a single desktop workflow.</p>
+            <div>
+              <p class="eyebrow">Operating flow</p>
+              <h2>From market movement to a reviewed decision.</h2>
+            </div>
+            <p>Each stage has its own criteria and clear status, so a watchlist entry does not silently become a live order.</p>
           </div>
           <div class="grid three">
             <article class="card">
-              <h3>Identify market activity</h3>
+              <span class="step-number">01 / DISCOVER</span>
+              <h3>Find notable movement</h3>
               <p>Rotating universe scans rank daily price movement against configurable percentage thresholds. Discovery remains separate from the active manual watchlist.</p>
             </article>
             <article class="card">
-              <h3>Evaluate risk before sizing</h3>
+              <span class="step-number">02 / QUALIFY</span>
+              <h3>Check strategy and risk</h3>
               <p>Plans apply configured quantity, notional, account-cash, and strategy limits. Fractional quantities depend on broker and instrument support.</p>
             </article>
             <article class="card">
-              <h3>Maintain a reviewable record</h3>
+              <span class="step-number">03 / CONTROL</span>
+              <h3>Review and record</h3>
               <p>Separate paper, simulation, and execution journals preserve decisions and broker outcomes for follow-up.</p>
             </article>
           </div>
@@ -81,57 +69,31 @@
       <section class="section alt">
         <div class="section-inner">
           <div class="section-head">
-            <h2>Designed for operator oversight</h2>
-            <p>Local configuration, explicit account checks, and distinct execution lanes make each stage of the workflow easier to inspect.</p>
+            <div>
+              <p class="eyebrow">Built for operator oversight</p>
+              <h2>Practice locally. Execute deliberately.</h2>
+            </div>
+            <p>Use the same market context while keeping simulated records separate from real broker activity.</p>
           </div>
-          <div class="grid two">
+          <div class="grid three">
             <article class="card">
-              <h3>Credentials remain local</h3>
+              <h3>Local configuration</h3>
               <p>Broker credentials are entered in Timmy's Setup workspace. The public website does not request or store them.</p>
             </article>
             <article class="card">
-              <h3>Live execution is gated</h3>
+              <h3>Paper and Simulation</h3>
+              <p>Practice and review are stored locally. These records are separate from broker-confirmed orders and positions.</p>
+            </article>
+            <article class="card">
+              <h3>Gated Live execution</h3>
               <p>Live orders require a verified account, supported instrument, current account data, exact order preview, and configured risk limits.</p>
             </article>
           </div>
         </div>
       </section>
-
-      <section class="section">
-        <div class="section-inner download-panel">
-          <div>
-            <p class="eyebrow">Get started</p>
-            <h2>Install the Auto Trade Assistant</h2>
-            <p class="lead">Download release 0.1.16, verify its SHA-256 checksum, and install the Debian package. Timmy then appears in your desktop application menu.</p>
-            <div class="actions">
-              <a class="button" href="downloads/Timmy-Installation-Manager_0.1.16_amd64.deb" download>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-                Download installer
-              </a>
-              <a class="button secondary" href="download.html">Installation instructions</a>
-            </div>
-          </div>
-          <div class="facts" aria-label="Release facts">
-            <div class="fact"><strong>Version</strong><span>0.1.16</span></div>
-            <div class="fact"><strong>Platform</strong><span>Linux amd64</span></div>
-            <div class="fact"><strong>Package</strong><span>Debian .deb</span></div>
-            <div class="fact"><strong>Maintainer</strong><span>Black Lion Studios</span></div>
-          </div>
-        </div>
-      </section>
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <strong>Timmy by Black Lion Studios</strong>
-        <div class="footer-links">
-          <a href="contact.html">Contact</a>
-          <a href="support.html">Support</a>
-          <a href="legal.html#privacy">Privacy</a>
-          <a href="legal.html#terms">Terms of Use</a>
-        </div>
-      </div>
-    </footer>
-    <script src="js/site.js"></script>
+
+
   </body>
 </html>
