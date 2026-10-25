@@ -22,12 +22,12 @@ export function SiteHeader() {
           </svg>
         </button>
         <nav className="nav" id="site-nav" data-nav aria-label="Main navigation">
-          <a href="/user-guide.html">Product guide</a>
+          <a href="/user-guide.html">User guide</a>
           <details className="nav-menu">
-            <summary>Resources</summary>
+            <summary>Learn &amp; support</summary>
             <div className="nav-menu-items">
               <a href="/faq.html">FAQ</a>
-              <a href="/boilerplates.html">Setup examples</a>
+              <a href="/boilerplates.html">Configuration examples</a>
               <a href="/support.html">Support</a>
               <a href="/legal.html">Legal</a>
             </div>
