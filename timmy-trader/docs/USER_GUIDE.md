@@ -21,9 +21,10 @@ following a workflow that is not present in your version.
 
 ## Start safely
 
-1. Download **Timmy Installation Manager 0.1.16** from the [Download page](https://timmy-tradesonauto.web.app/download.html).
-   Keep the `.deb` and matching `.sha256` file together, then verify them with
-   `sha256sum -c Timmy-Installation-Manager_0.1.16_amd64.deb.sha256`.
+1. Download **Timmy Installation Manager 0.1.16** and the linked checksum file
+   from the [Download page](https://timmy-tradesonauto.web.app/download.html).
+   Keep them in the same directory, then verify with
+   `sha256sum -c SHA256SUMS.txt`.
    Install or upgrade with
    `sudo apt install ./Timmy-Installation-Manager_0.1.16_amd64.deb`.
 2. Launch Timmy from your desktop application menu, or run `timmy-trader` from

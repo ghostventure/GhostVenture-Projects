@@ -1,7 +1,7 @@
 # Timmy Public Website
 
-Static public website for Timmy's Linux download, support, FAQ, boilerplates,
-and legal/risk pages.
+Static public website for Timmy's Linux download, user guide, advanced setup
+examples, support, FAQ, and legal notices.
 
 Live Firebase Hosting site: <https://timmy-tradesonauto.web.app>. Hosting serves
 the public website only; it does not install or update the native Linux app.
@@ -25,14 +25,14 @@ npx --yes firebase-tools deploy --only hosting --project timmy-tradesonauto
 
 ## Download Artifact
 
-`site/downloads/timmy-trader_0.1.6_amd64.deb` is the public Linux download
-package for release 0.1.6. Keep the checksum file in sync with that artifact
-before deploying so it contains the basename and can be checked in the same
-download directory:
+`site/downloads/Timmy-Installation-Manager_0.1.16_amd64.deb` is the current
+public Linux installer. Keep `SHA256SUMS.txt` synchronized with this package
+before deploying. Generate it from the download directory so the listed
+basename resolves beside the checksum file:
 
 ```sh
 cd site/downloads
-sha256sum timmy-trader_0.1.6_amd64.deb > SHA256SUMS.txt
+sha256sum Timmy-Installation-Manager_0.1.16_amd64.deb > SHA256SUMS.txt
 ```
 
 Do not deploy until the package and matching checksum are both present.

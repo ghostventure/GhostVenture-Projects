@@ -35,8 +35,10 @@ These market-data views do not expand Timmy's planning or live-order support for
 those instruments. Trade-event streaming is not wired into the GUI. Money
 movement, transfers, options/crypto position reductions, and broad instrument
 order controls are not included. Live account mutations were not exercised
-during implementation. The public Firebase download page has not been updated
-and may still offer 0.1.6.
+during implementation. At the time this 0.1.11 note was written, the Firebase
+download page had not yet been updated from 0.1.6. Treat that statement as
+historical; the current source and installer target are documented at the top
+of this file.
 
 Version 0.1.12 adds a manually opened guarded order-entry workflow for US
 equity/ETF limit orders, single and multi-leg option strategies, futures, and

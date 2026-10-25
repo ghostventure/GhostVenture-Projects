@@ -456,12 +456,13 @@ git push origin HEAD
 git ls-remote origin HEAD
 ```
 
-For the 0.1.6 native updater, publish a GitHub Release containing
-`Timmy-linux-x86_64.tar.gz` and a matching `SHA256SUMS` asset. The Firebase
-Download page offers `timmy-trader_0.1.6_amd64.deb` with its
-`SHA256SUMS.txt`; verify both artifacts and their checksums before announcing
-availability. Firebase Hosting publication and GitHub Release publication
-are separate actions.
+The current public Firebase Download page uses the
+`Timmy-Installation-Manager_0.1.16_amd64.deb` package and its SHA-256 checksum.
+Verify the page, package, and checksum together before announcing a release.
+Firebase Hosting serves the website and installer download; it does not install
+or update an already-running desktop app. Any GitHub release archive used by
+the native updater is a separate release surface and must be verified against
+the current updater configuration before publication.
 
 ## 13. GitHub CI Workflow
 

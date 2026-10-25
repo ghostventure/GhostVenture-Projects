@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Timmy setup boilerplates for paper, guarded live, and runtime reliability profiles.">
-    <title>Timmy | Configuration templates</title>
+    <meta name="description" content="Advanced Timmy configuration examples for paper workflows, live preparation, and runtime monitoring.">
+    <title>Timmy | Advanced configuration examples</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="css/styles.css">
   </head>
@@ -12,38 +12,39 @@
     <header class="site-header">
       <a class="brand" href="index.html"><span class="brand-mark">T</span><span>Timmy</span></a>
       <button class="icon-button" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-      <nav class="nav" id="site-nav" data-nav><a href="download.html">Download</a><a href="boilerplates.html">Templates</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="legal.html">Legal</a></nav>
+      <nav class="nav" id="site-nav" data-nav><a href="download.html">Download</a><a href="user-guide.html">User Guide</a><a href="boilerplates.html">Setup examples</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="legal.html">Legal</a></nav>
     </header>
     <main class="section">
       <div class="section-inner">
         <div class="section-head">
           <div>
-            <p class="eyebrow">Configuration templates</p>
-            <h1>Timmy templates</h1>
+            <p class="eyebrow">Advanced setup references</p>
+            <h1>Configuration examples</h1>
           </div>
-          <p>Use these example environment files as configuration references. Review each setting for your account and operating environment; enter credentials only in Timmy's local Setup workspace.</p>
+          <p>These downloads are plain-text examples for experienced operators. They are not presets and Timmy does not import them. Most users should configure their broker in the app’s Setup workspace and follow the <a href="user-guide.html#configure-webull-locally">Webull setup guide</a>.</p>
         </div>
+        <p class="fineprint">A saved local Webull profile can override broker-profile settings from environment files. Never put real credentials in these examples. Review each variable against the installed version before changing a local environment.</p>
         <div class="grid three">
           <article class="card">
             <h3>Paper workflow</h3>
             <p>Example settings for market scanning, local paper activity, and review without broker order submission.</p>
-            <div class="actions"><a class="button secondary" href="boilerplates/paper-desk.env.example" download>Download template</a></div>
+            <div class="actions"><a class="button secondary" href="boilerplates/paper-desk.env.example" download>Download example</a></div>
           </article>
           <article class="card">
-            <h3>Guarded Live workflow</h3>
-            <p>Example settings for exact order previews, position sizing, exposure limits, drawdown controls, and broker rejection handling. Account-specific review is required.</p>
-            <div class="actions"><a class="button secondary" href="boilerplates/live-guarded.env.example" download>Download template</a></div>
+            <h3>Live preparation</h3>
+            <p>Shows where Live controls and risk limits are configured. Live order submission and market-open auto-start remain off, and Live Auto exposure limits remain fail-closed in the download. Use it as a reference, not a ready-to-trade profile.</p>
+            <div class="actions"><a class="button secondary" href="boilerplates/live-preparation.env.example" download>Download example</a></div>
           </article>
           <article class="card">
-            <h3>Runtime reliability</h3>
+            <h3>Runtime monitoring</h3>
             <p>Example health checks, watchdog behavior, and market-open polling settings for supervised long-running sessions.</p>
-            <div class="actions"><a class="button secondary" href="boilerplates/runtime-reliability.env.example" download>Download template</a></div>
+            <div class="actions"><a class="button secondary" href="boilerplates/runtime-reliability.env.example" download>Download example</a></div>
           </article>
         </div>
-        <p class="fineprint">Templates are examples, not account-specific recommendations. Do not publish completed profiles or place credentials in environment files committed to source control. Verify broker access and review Paper and Simulation behavior before enabling Live.</p>
+        <p class="fineprint">Examples are not account-specific recommendations. Do not publish completed profiles or place credentials in environment files committed to source control. Start in Paper, verify broker access, and review Timmy’s Live readiness and order preview before any live order.</p>
       </div>
     </main>
-    <footer class="site-footer"><div class="footer-inner"><strong>Timmy by Black Lion Studios</strong><div class="footer-links"><a href="contact.html">Contact</a><a href="support.html">Support</a><a href="legal.html#privacy">Privacy</a><a href="legal.html#terms">Terms</a></div></div></footer>
+    <footer class="site-footer"><div class="footer-inner"><strong>Timmy by Black Lion Studios</strong><div class="footer-links"><a href="contact.html">Contact</a><a href="support.html">Support</a><a href="legal.html#privacy">Privacy</a><a href="legal.html#terms">Terms of Use</a></div></div></footer>
     <script src="js/site.js"></script>
   </body>
 </html>
