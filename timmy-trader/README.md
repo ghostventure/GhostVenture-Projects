@@ -18,19 +18,20 @@ Operational workflows for validation, live brokerage, actual trade placement, fr
 docs/WORKFLOWS.md
 ```
 
-## 0.1.7 Release Notes
+## 0.1.8 Release Notes
 
-This local source release targets Timmy 0.1.7. It adds 30 capabilities across
-research and data review, risk and trade planning, and operations and journal
-review. Trading now uses shared Paper, Simulation, and Live controls; Simulation
-is local-only with its own journal, and automation shows cycle state and
-recovery guidance. Market refreshes report cached, partial, and empty results;
-provider bars are validated before caching, and market-data writes are atomic.
+This local source release targets Timmy 0.1.8 and builds on 0.1.7's 30
+research, risk/planning, and operations capabilities. Automation now skips
+repeat scheduled Paper/Simulation/Live Auto entries for an unchanged daily
+candle, keeps last-run and waiting details visible, and persists a Live Auto
+hold after an unknown broker outcome until review and explicit re-arm. The GUI
+removes duplicate automation/profile shortcuts and uses one Overview workspace
+label.
 See `docs/RESEARCH_WORKBENCH.md`, `docs/TIMMY_RISK_PLANNING_UX_WAVE_2026-10-25.md`,
 `docs/WORKFLOWS.md`, and `docs/AUTOMATION_AND_ORDER_SAFETY_REVIEW.md` for
 behavior, broker limits, and data caveats.
 
-The 0.1.7 package is a local installation; the public Firebase download page
+The 0.1.8 package is a local installation; the public Firebase download page
 has not been updated and may still offer 0.1.6.
 
 For the Debian install, verify the downloaded package with the accompanying
@@ -38,7 +39,7 @@ For the Debian install, verify the downloaded package with the accompanying
 
 ```bash
 sha256sum -c SHA256SUMS.txt
-sudo apt install ./timmy-trader_0.1.7_amd64.deb
+sudo apt install ./timmy-trader_0.1.8_amd64.deb
 ```
 
 The native updater expects the GitHub release archive
@@ -196,7 +197,7 @@ scripts/package_deb.sh
 Install it locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.7_amd64.deb
+sudo apt install ./dist/timmy-trader_0.1.8_amd64.deb
 ```
 
 After install, launch **Timmy** from the system menu or run:

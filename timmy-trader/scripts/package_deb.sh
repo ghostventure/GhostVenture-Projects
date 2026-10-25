@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION=${1:-0.1.7}
+VERSION=${1:-0.1.8}
 ARCH=amd64
 PKG_NAME=timmy-trader
 PKG_ROOT="build/deb/${PKG_NAME}_${VERSION}_${ARCH}"

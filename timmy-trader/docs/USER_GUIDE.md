@@ -11,7 +11,7 @@ installed release. For live trading, read the [Operator Checklist](OPERATOR_CHEC
 and [Webull Setup guide](WEBULL_SETUP.md) first. Public product page:
 [Timmy User Guide](https://timmy-tradesonauto.web.app/user-guide.html).
 
-**Version compatibility:** this guide documents Timmy 0.1.7, built October 25,
+**Version compatibility:** this guide documents Timmy 0.1.8, built October 25,
 2026. If you use an older installed build, some controls may differ. Use the
 controls present in your installed version rather than assuming a feature is
 available in an older build because it appears in this guide.

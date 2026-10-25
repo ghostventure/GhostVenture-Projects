@@ -1,23 +1,25 @@
 # Timmy Master Documentation
 
-## Release Target: 0.1.7 (local installation)
+## Release Target: 0.1.8 (local installation)
 
-The current local source and Debian package target version 0.1.7. This release
-adds 30 research/data, risk/planning, and review/operations capabilities,
-shared Paper/Simulation/Live controls, a separate local simulation journal,
-clearer automation status and recovery, and provider-data validation with
-atomic cache writes. The public Firebase download page has not been updated and
-may still offer 0.1.6.
+The current local source and Debian package target version 0.1.8. It builds on
+the 0.1.7 research/data, risk/planning, and review/operations wave with
+same-candle scheduled Paper/Simulation/Live Auto dedupe, clearer cycle
+result/wait feedback, persistent Live Auto holds after unknown outcomes, and
+removal of duplicate controls and workspace aliases. Shared Paper/Simulation/Live
+controls, the separate local simulation journal, provider-data validation, and
+atomic cache writes remain included. The public Firebase download page has not
+been updated and may still offer 0.1.6.
 
 For a downloaded Debian package, run its matching checksum command from the
-download directory, then install the 0.1.7 package:
+download directory, then install the 0.1.8 package:
 
 ```bash
 sha256sum -c SHA256SUMS.txt
-sudo apt install ./timmy-trader_0.1.7_amd64.deb
+sudo apt install ./timmy-trader_0.1.8_amd64.deb
 ```
 
-The local 0.1.7 Debian package is installed from this source checkout. The
+The local 0.1.8 Debian package is installed from this source checkout. The
 Firebase-hosted Download page and GitHub release assets have not been updated.
 The native updater expects the GitHub Release assets
 `Timmy-linux-x86_64.tar.gz` and `SHA256SUMS`; a Hosting deployment does not
@@ -88,7 +90,7 @@ The browser dashboard remains only a development fallback. The main operating su
 - The development dashboard reads the journal as a stream and retains only the latest 50 valid events in memory.
 - The native app checks GitHub Releases shortly after launch and once per day. Stable Linux packages are checksum-verified, installed under the user's home directory, and selected automatically the next time Timmy starts. The active session is never restarted. Release tags use `timmy-v*`, with assets named `Timmy-linux-x86_64.tar.gz` and `SHA256SUMS`.
 
-## 0.1.7 UX Capability Wave
+## 0.1.7 UX Capability Wave (included in 0.1.8)
 
 The local 0.1.7 package adds 30 user-facing capabilities across the Research
 Workbench, Risk & Trade Planning Lab, and Review & Operations workspace. Read
@@ -133,10 +135,10 @@ Build the Debian package:
 ./scripts/package_deb.sh
 ```
 
-Install the resulting 0.1.7 Debian package locally:
+Install the resulting 0.1.8 Debian package locally:
 
 ```bash
-sudo apt install ./dist/timmy-trader_0.1.7_amd64.deb
+sudo apt install ./dist/timmy-trader_0.1.8_amd64.deb
 ```
 
 ## Single-Instance Rule

@@ -50,7 +50,7 @@ submits, previews, or changes an order.
 - Provider comparison and group performance can be misleading when their saved
   date windows or symbol sets differ; labels disclose that limitation.
 - Research history and annotations remain in the local runtime home. The UX
-  code is part of the local 0.1.7 package; no research data is synced or shared
+  code is part of the local 0.1.8 package; no research data is synced or shared
   automatically, and the public download page has not been updated.
 
 ## Source map
