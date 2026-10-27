@@ -1,58 +1,29 @@
 import html
 import json
 import os
-import socket
+import shutil
 import sys
 import hashlib
 import hmac
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote_plus
+from network_routing import TOR_ENDPOINT
 
-TOR_SOCKS_CANDIDATES = (("127.0.0.1", 9050), ("127.0.0.1", 9150))
-
-
-def detect_tor_endpoint() -> tuple[str, int] | None:
-    for host, port in TOR_SOCKS_CANDIDATES:
-        try:
-            with socket.create_connection((host, port), timeout=0.35):
-                return host, port
-        except OSError:
-            continue
-    return None
-
-
-TOR_ENDPOINT = detect_tor_endpoint()
-CHROMIUM_FLAGS = (
-    "--disable-features=Translate "
-    "--disable-background-networking "
-    "--disable-sync "
-    "--disable-default-apps "
-    "--disable-component-update "
-    "--disable-domain-reliability "
-    "--disable-client-side-phishing-detection "
-    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
-)
-if TOR_ENDPOINT:
-    host, port = TOR_ENDPOINT
-    CHROMIUM_FLAGS += (
-        f" --proxy-server=socks5://{host}:{port}"
-        " --host-resolver-rules=\"MAP * ~NOTFOUND , EXCLUDE 127.0.0.1\""
-    )
-
-os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", CHROMIUM_FLAGS)
-
-from PySide6.QtCore import QSize, QStandardPaths, Qt, QTimer, QUrl
+from PySide6.QtCore import QSize, QStandardPaths, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QKeySequence, QPainter, QPainterPath, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -64,6 +35,7 @@ from PySide6.QtWidgets import (
     QSplashScreen,
     QScrollArea,
     QSplitter,
+    QStackedWidget,
     QStatusBar,
     QTabWidget,
     QToolButton,
@@ -75,13 +47,25 @@ from PySide6.QtWebEngineCore import (
     QWebEnginePage,
     QWebEngineProfile,
     QWebEngineSettings,
-    QWebEngineUrlRequestInterceptor,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from find_in_page import FindInPageDialog
+from save_as_pdf import save_current_page_as_pdf
+from shortcuts_guide import show_shortcuts_guide
+from tab_features import TabFeatures
+from page_ux_features import PageUxFeatures
+from library_features import LibraryFeatures
+from ghost_guard import (
+    FirstPartyCookiePolicy,
+    GhostGuardRequestInterceptor,
+    apply_web_engine_security,
+    handle_permission_request,
+    registrable_domain,
+)
 
 
 APP_NAME = "Ghost Surfer"
-HOME_URL = "https://www.startpage.com/"
+HOME_URL = "https://duckduckgo.com/"
 DASHBOARD_URL = "ghostsurfer://dashboard"
 SEARCH_URL = "https://www.startpage.com/sp/search?query={query}"
 TOR_CHECK_URL = "https://check.torproject.org/"
@@ -101,103 +85,6 @@ THEMES = {
     "Deep Violet": {"accent": "#a855f7", "accent_soft": "#d8b4fe", "hover": "#7e22ce"},
     "Sea Glass": {"accent": "#14b8a6", "accent_soft": "#5eead4", "hover": "#0f766e"},
 }
-
-COMMON_SECOND_LEVEL_SUFFIXES = {
-    "co.uk",
-    "org.uk",
-    "ac.uk",
-    "com.au",
-    "net.au",
-    "org.au",
-    "co.nz",
-    "com.br",
-    "com.mx",
-    "co.jp",
-}
-
-TRACKER_HOST_PARTS = (
-    "2mdn.net",
-    "adform.net",
-    "adsafeprotected.com",
-    "adsrvr.org",
-    "amazon-adsystem.com",
-    "appsflyer.com",
-    "bluekai.com",
-    "chartbeat.com",
-    "criteo.com",
-    "doubleclick.net",
-    "everesttech.net",
-    "googleadservices.com",
-    "googlesyndication.com",
-    "google-analytics.com",
-    "googletagmanager.com",
-    "facebook.net",
-    "connect.facebook.net",
-    "analytics.twitter.com",
-    "ads-twitter.com",
-    "scorecardresearch.com",
-    "quantserve.com",
-    "hotjar.com",
-    "segment.io",
-    "mixpanel.com",
-    "adnxs.com",
-    "taboola.com",
-    "outbrain.com",
-)
-
-
-def registrable_domain(host: str) -> str:
-    host = (host or "").lower().strip(".")
-    if not host:
-        return ""
-    parts = host.split(".")
-    if len(parts) <= 2:
-        return host
-    suffix = ".".join(parts[-2:])
-    if suffix in COMMON_SECOND_LEVEL_SUFFIXES and len(parts) >= 3:
-        return ".".join(parts[-3:])
-    return ".".join(parts[-2:])
-
-
-def same_site(host: str, top_domain: str) -> bool:
-    host = (host or "").lower()
-    top_domain = (top_domain or "").lower()
-    return bool(host and top_domain and (host == top_domain or host.endswith("." + top_domain)))
-
-
-class PrivacyInterceptor(QWebEngineUrlRequestInterceptor):
-    def __init__(self, window: "BrowserWindow") -> None:
-        super().__init__(window)
-        self.window = window
-
-    def interceptRequest(self, info) -> None:
-        url = info.requestUrl()
-        scheme = url.scheme().lower()
-        host = url.host().lower()
-
-        if scheme == "http":
-            upgraded = QUrl(url)
-            upgraded.setScheme("https")
-            info.redirect(upgraded)
-            return
-
-        if any(part in host for part in TRACKER_HOST_PARTS):
-            self.window.blocked_count += 1
-            self.window.notify_spy_attempt(host, url.toString())
-            self.window.update_security_chips()
-            info.block(True)
-            return
-
-        if self.window.speed_mode and info.resourceType().name in {"ResourceTypeMedia", "ResourceTypePing"}:
-            self.window.blocked_count += 1
-            self.window.update_security_chips()
-            info.block(True)
-            return
-
-        info.setHttpHeader(b"DNT", b"1")
-        info.setHttpHeader(b"Sec-GPC", b"1")
-        info.setHttpHeader(b"Upgrade-Insecure-Requests", b"1")
-
 
 def app_data_dir() -> Path:
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
@@ -269,7 +156,7 @@ def make_splash() -> QSplashScreen:
     painter.drawText(224, 148, "Private-first browser shell")
     painter.setPen(QColor("#dce8f5"))
     painter.setFont(QFont("Segoe UI", 10))
-    painter.drawText(224, 190, "Loading Ghost Guard, Speed Mode, Tor check, and Startpage...")
+    painter.drawText(224, 190, "Loading Ghost Guard, Speed Mode, Tor check, and DuckDuckGo...")
     painter.setPen(QPen(QColor("#38a9e6"), 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
     painter.drawLine(224, 230, 540, 230)
     painter.end()
@@ -279,15 +166,24 @@ def make_splash() -> QSplashScreen:
 
 
 class BrowserStore:
+    BACKUP_FORMAT = "ghost-surfer-browser-data"
+    BACKUP_VERSION = 1
+    BACKUP_KEYS = ("bookmarks", "history", "cookie_permissions", "spy_alerts", "download_history")
+
     def __init__(self) -> None:
         self.path = app_data_dir() / "browser-data.json"
         self.tamper_detected = False
         self.tamper_message = ""
+        self.last_error = ""
+        self.recovery_backup: Path | None = None
+        self.write_protected = False
         self.data = {
+            "schema_version": 2,
             "bookmarks": [],
             "history": [],
             "cookie_permissions": {},
             "spy_alerts": [],
+            "download_history": [],
             "settings": {
                 "speed_mode": True,
                 "block_images": False,
@@ -297,6 +193,8 @@ class BrowserStore:
                 "cookie_policy": "ask",
                 "theme": "Ghost Blue",
                 "zoom": 100,
+                "home_page_url": "https://duckduckgo.com/",
+                "home_page_default_migrated": True,
             },
         }
         self.load()
@@ -307,33 +205,146 @@ class BrowserStore:
             return
         try:
             loaded = json.loads(self.path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                if loaded.get("_seal") and not self.verify_seal(loaded):
-                    self.tamper_detected = True
-                    self.tamper_message = "Ghost Surfer detected that local browser settings were changed outside the app. Review privacy settings before browsing."
-                    backup = self.path.with_suffix(".tamper-backup.json")
+            if not isinstance(loaded, dict):
+                raise ValueError("Browser data must be a JSON object")
+            if loaded.get("_seal") and not self.verify_seal(loaded):
+                self.tamper_detected = True
+                self._preserve_recovery_copy("tampered")
+                self.tamper_message = "Ghost Surfer detected that local browser data changed outside the app. Review the recovery copy and privacy settings before browsing."
+                loaded.pop("_seal", None)
+            self.data.update(loaded)
+            self.data["schema_version"] = 2
+            for key in ("bookmarks", "history", "spy_alerts"):
+                if not isinstance(self.data.get(key), list):
+                    self.data[key] = []
+            self.data["bookmarks"] = [
+                {"title": str(row.get("title") or row["url"]), "url": str(row["url"]), "folder": str(row.get("folder", ""))}
+                for row in self.data["bookmarks"]
+                if isinstance(row, dict) and str(row.get("url", "")).startswith(("http://", "https://"))
+            ]
+            self.data["history"] = [
+                {"title": str(row.get("title") or row["url"]), "url": str(row["url"]), "visited_at": str(row.get("visited_at", ""))}
+                for row in self.data["history"]
+                if isinstance(row, dict) and str(row.get("url", "")).startswith(("http://", "https://"))
+            ]
+            self.data["spy_alerts"] = [row for row in self.data["spy_alerts"] if isinstance(row, dict)]
+            if not isinstance(self.data.get("download_history"), list):
+                self.data["download_history"] = []
+            self.data["download_history"] = [
+                {"path": str(row.get("path", "")), "state": str(row.get("state", "Interrupted")),
+                 "url": str(row.get("url", "")), "started_at": str(row.get("started_at", "")),
+                 "finished_at": str(row.get("finished_at", ""))}
+                for row in self.data["download_history"] if isinstance(row, dict) and row.get("path")
+            ]
+            if not isinstance(self.data.get("cookie_permissions"), dict):
+                self.data["cookie_permissions"] = {}
+            self.data["cookie_permissions"] = {
+                str(domain): choice for domain, choice in list(self.data["cookie_permissions"].items())[:5000]
+                if isinstance(choice, str) and choice in {"allow", "deny"}
+            }
+            if not isinstance(self.data.get("settings"), dict):
+                self.data["settings"] = {}
+            for key, value in {
+                "speed_mode": True,
+                "block_images": False,
+                "ghost_cleanup_on_close": False,
+                "allow_javascript": True,
+                "allow_webgl": False,
+                "cookie_policy": "ask",
+                "theme": "Ghost Blue",
+                "zoom": 100,
+                "history_retention_days": 0,
+                "home_page_url": "https://duckduckgo.com/",
+            }.items():
+                self.data["settings"].setdefault(key, value)
+            settings = self.data["settings"]
+            if not settings.get("home_page_default_migrated", False):
+                legacy_home = settings.get("home_page_url")
+                if legacy_home is None or legacy_home == "https://www.startpage.com/":
+                    settings["home_page_url"] = "https://duckduckgo.com/"
+                settings["home_page_default_migrated"] = True
+            for key in ("speed_mode", "block_images", "ghost_cleanup_on_close", "allow_javascript", "allow_webgl", "high_contrast"):
+                settings[key] = bool(settings.get(key, key == "speed_mode"))
+            if not isinstance(settings.get("cookie_policy"), str) or settings["cookie_policy"] not in {"ask", "allow", "deny"}:
+                settings["cookie_policy"] = "ask"
+            if not isinstance(settings.get("theme"), str) or settings["theme"] not in THEMES:
+                settings["theme"] = "Ghost Blue"
+            try:
+                settings["zoom"] = int(settings.get("zoom", 100))
+            except (TypeError, ValueError):
+                settings["zoom"] = 100
+            if settings["zoom"] not in {80, 90, 100, 110, 125, 150}:
+                settings["zoom"] = 100
+            try:
+                settings["interface_text_size"] = max(80, min(180, int(settings.get("interface_text_size", 100))))
+            except (TypeError, ValueError):
+                settings["interface_text_size"] = 100
+            if not isinstance(settings.get("site_zoom"), dict):
+                settings["site_zoom"] = {}
+            else:
+                normalized_zoom = {}
+                for host, percent in list(settings["site_zoom"].items())[:500]:
                     try:
-                        backup.write_text(json.dumps(loaded, indent=2), encoding="utf-8")
-                    except OSError:
-                        pass
-                    loaded.pop("_seal", None)
-                self.data.update(loaded)
-                self.data.setdefault("settings", {})
-                self.data.setdefault("cookie_permissions", {})
-                self.data.setdefault("spy_alerts", [])
-                for key, value in {
-                    "speed_mode": True,
-                    "block_images": False,
-                    "ghost_cleanup_on_close": False,
-                    "allow_javascript": True,
-                    "allow_webgl": False,
-                    "cookie_policy": "ask",
-                    "theme": "Ghost Blue",
-                    "zoom": 100,
-                }.items():
-                    self.data["settings"].setdefault(key, value)
-        except (OSError, json.JSONDecodeError):
-            pass
+                        normalized_zoom[str(host).lower()[:253]] = max(50, min(200, int(percent)))
+                    except (TypeError, ValueError):
+                        continue
+                settings["site_zoom"] = normalized_zoom
+            if not isinstance(settings.get("search_engine"), str) or settings["search_engine"] not in {"Startpage", "DuckDuckGo", "Brave Search", "Bing"}:
+                settings["search_engine"] = "Startpage"
+            if not isinstance(settings.get("home_page_url"), str):
+                settings["home_page_url"] = "https://duckduckgo.com/"
+            if not isinstance(settings.get("startup_page"), str) or settings["startup_page"] not in {"restore_session", "start_page", "home_page", "blank"}:
+                settings["startup_page"] = "restore_session"
+            try:
+                settings["history_retention_days"] = max(0, min(3650, int(settings.get("history_retention_days", 0))))
+            except (TypeError, ValueError):
+                settings["history_retention_days"] = 0
+            tab_state = self.data.get("ghost_surfer_tab_features")
+            if not isinstance(tab_state, dict):
+                tab_state = {}
+            for key in ("previous_session", "recently_closed"):
+                rows = tab_state.get(key, [])
+                if not isinstance(rows, list):
+                    rows = []
+                tab_state[key] = [
+                    row for row in rows
+                    if isinstance(row, dict) and isinstance(row.get("url"), str)
+                    and row["url"].startswith(("http://", "https://", "ghostsurfer://", "about:blank"))
+                ][:30]
+            try:
+                tab_state["previous_session_active_index"] = max(0, int(tab_state.get("previous_session_active_index", 0)))
+            except (TypeError, ValueError):
+                tab_state["previous_session_active_index"] = 0
+            sessions = tab_state.get("named_sessions", {})
+            if not isinstance(sessions, dict):
+                sessions = {}
+            tab_state["named_sessions"] = {
+                str(name)[:80]: [
+                    row for row in rows[:50]
+                    if isinstance(row, dict) and isinstance(row.get("url"), str)
+                    and row["url"].startswith(("http://", "https://", "ghostsurfer://", "about:blank"))
+                ]
+                for name, rows in list(sessions.items())[:100]
+                if isinstance(rows, list)
+            }
+            self.data["ghost_surfer_tab_features"] = tab_state
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            self.tamper_detected = True
+            self.last_error = str(exc)
+            self._preserve_recovery_copy("corrupt")
+            self.tamper_message = "Ghost Surfer could not read its local browser data. The original file was preserved for recovery."
+
+    def _preserve_recovery_copy(self, reason: str) -> None:
+        if not self.path.exists():
+            return
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = self.path.with_name(f"browser-data-{reason}-{stamp}.json")
+        try:
+            shutil.copy2(self.path, backup)
+            self.recovery_backup = backup
+        except OSError as exc:
+            self.last_error = f"Could not preserve the previous browser data: {exc}"
+            self.write_protected = True
 
     def sealed_payload(self, data: dict | None = None) -> dict:
         payload = dict(data if data is not None else self.data)
@@ -348,18 +359,132 @@ class BrowserStore:
         expected = data.get("_seal", "")
         return bool(expected) and hmac.compare_digest(str(expected), self.seal_for(data))
 
-    def save(self) -> None:
-        self.data["_seal"] = self.seal_for()
-        self.path.write_text(json.dumps(self.data, indent=2), encoding="utf-8")
+    def save(self) -> bool:
+        if self.write_protected:
+            return False
+        temporary = self.path.with_name(f".{self.path.name}.{os.getpid()}.tmp")
+        try:
+            self.data["schema_version"] = 2
+            self.data["_seal"] = self.seal_for()
+            with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(self.data, indent=2, ensure_ascii=False))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.path)
+            self.last_error = ""
+            return True
+        except (OSError, TypeError, ValueError) as exc:
+            self.last_error = str(exc)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return False
 
-    def add_history(self, title: str, url: str) -> None:
+    def export_backup(self, destination: Path) -> None:
+        payload = {
+            "format": self.BACKUP_FORMAT,
+            "version": self.BACKUP_VERSION,
+            "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "data": {key: self.data.get(key) for key in self.BACKUP_KEYS},
+        }
+        temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+        try:
+            with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(payload, indent=2, ensure_ascii=False))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, destination)
+        except (OSError, TypeError, ValueError):
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+
+    def restore_backup(self, source: Path) -> None:
+        if source.stat().st_size > 10 * 1024 * 1024:
+            raise ValueError("The selected backup is larger than the 10 MB import limit.")
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or payload.get("format") != self.BACKUP_FORMAT or payload.get("version") != self.BACKUP_VERSION:
+            raise ValueError("This file is not a supported Ghost Surfer browser-data backup.")
+        incoming = payload.get("data")
+        if not isinstance(incoming, dict):
+            raise ValueError("The backup does not contain a browser-data object.")
+        bookmarks = incoming.get("bookmarks")
+        history = incoming.get("history")
+        permissions = incoming.get("cookie_permissions")
+        alerts = incoming.get("spy_alerts")
+        downloads = incoming.get("download_history", [])
+        if not all(isinstance(value, list) for value in (bookmarks, history, alerts, downloads)) or not isinstance(permissions, dict):
+            raise ValueError("The backup is incomplete or has invalid data types.")
+        cleaned_bookmarks = [
+            {"title": str(row.get("title") or row["url"]), "url": str(row["url"]), "folder": str(row.get("folder", ""))}
+            for row in bookmarks
+            if isinstance(row, dict) and str(row.get("url", "")).startswith(("http://", "https://"))
+        ]
+        cleaned_history = [
+            {"title": str(row.get("title") or row["url"]), "url": str(row["url"]), "visited_at": str(row.get("visited_at", ""))}
+            for row in history
+            if isinstance(row, dict) and str(row.get("url", "")).startswith(("http://", "https://"))
+        ]
+        cleaned_permissions = {
+            str(domain): choice for domain, choice in list(permissions.items())[:5000]
+            if isinstance(choice, str) and choice in {"allow", "deny"}
+        }
+        cleaned_alerts = [
+            {
+                "site": str(row.get("site", "unknown site")),
+                "detail": str(row.get("detail", ""))[:180],
+                "category": str(row.get("category", "tracker")),
+                "seen_at": str(row.get("seen_at", "")),
+            }
+            for row in alerts if isinstance(row, dict)
+        ]
+        cleaned_downloads = [
+            {"path": str(row.get("path", "")), "state": str(row.get("state", "Interrupted")),
+             "url": str(row.get("url", "")), "started_at": str(row.get("started_at", "")),
+             "finished_at": str(row.get("finished_at", ""))}
+            for row in downloads if isinstance(row, dict) and row.get("path")
+        ]
+        previous = {key: self.data.get(key) for key in self.BACKUP_KEYS}
+        self.data["bookmarks"] = cleaned_bookmarks
+        self.data["history"] = cleaned_history
+        self.data["cookie_permissions"] = cleaned_permissions
+        self.data["spy_alerts"] = cleaned_alerts
+        self.data["download_history"] = cleaned_downloads
+        if not self.save():
+            self.data.update(previous)
+            raise OSError(f"Could not save restored browser data: {self.last_error}")
+
+    def storage_summary(self) -> str:
+        try:
+            size = self.path.stat().st_size if self.path.exists() else 0
+        except OSError:
+            size = 0
+        return f"{len(self.data.get('bookmarks', []))} bookmarks  ·  {len(self.data.get('history', []))} history entries  ·  {size / 1024:.1f} KB stored"
+
+    def add_history(self, title: str, url: str, *, persist: bool = True) -> bool:
         if not url.startswith(("http://", "https://")):
-            return
-        entry = {"title": title or url, "url": url}
+            return False
+        entry = {"title": title or url, "url": url, "visited_at": datetime.now().astimezone().isoformat(timespec="seconds")}
         history = [item for item in self.data["history"] if item.get("url") != url]
         history.insert(0, entry)
-        self.data["history"] = history[:100]
-        self.save()
+        retention = int(self.data.get("settings", {}).get("history_retention_days", 0) or 0)
+        if retention:
+            cutoff = datetime.now().astimezone().timestamp() - retention * 86400
+            kept = []
+            for row in history:
+                try:
+                    if datetime.fromisoformat(row.get("visited_at", "")).timestamp() >= cutoff:
+                        kept.append(row)
+                except (ValueError, TypeError):
+                    kept.append(row)
+            history = kept
+        self.data["history"] = history
+        if persist:
+            return self.save()
+        return True
 
     def add_bookmark(self, title: str, url: str) -> None:
         if not url.startswith(("http://", "https://")):
@@ -367,7 +492,6 @@ class BrowserStore:
         if any(item.get("url") == url for item in self.data["bookmarks"]):
             return
         self.data["bookmarks"].insert(0, {"title": title or url, "url": url})
-        self.data["bookmarks"] = self.data["bookmarks"][:100]
         self.save()
 
 
@@ -382,28 +506,14 @@ class BrowserPage(QWebEnginePage):
         return tab.page()
 
     def handle_permission_request(self, origin: QUrl, feature: QWebEnginePage.Feature) -> None:
-        denied_features = {
-            QWebEnginePage.Feature.Geolocation,
-            QWebEnginePage.Feature.MediaAudioCapture,
-            QWebEnginePage.Feature.MediaVideoCapture,
-            QWebEnginePage.Feature.MediaAudioVideoCapture,
-            QWebEnginePage.Feature.DesktopVideoCapture,
-            QWebEnginePage.Feature.DesktopAudioVideoCapture,
-            QWebEnginePage.Feature.Notifications,
-            QWebEnginePage.Feature.LocalFontsAccess,
-            QWebEnginePage.Feature.ClipboardReadWrite,
-        }
-        if feature in denied_features:
-            self.setFeaturePermission(origin, feature, QWebEnginePage.PermissionPolicy.PermissionDeniedByUser)
-            self.window.notify_spy_attempt(origin.host().lower(), f"Permission request blocked: {feature.name}")
-            return
-        self.setFeaturePermission(origin, feature, QWebEnginePage.PermissionPolicy.PermissionDeniedByUser)
+        handle_permission_request(self.window, self, origin, feature)
 
 
 class BrowserTab(QWebEngineView):
     def __init__(self, window: "BrowserWindow") -> None:
         super().__init__(window)
         self.window = window
+        self.setAcceptDrops(True)
         self.setPage(BrowserPage(window, window.profile))
         self.settings().setAttribute(QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True)
         self.loadStarted.connect(window.on_load_started)
@@ -413,21 +523,97 @@ class BrowserTab(QWebEngineView):
         self.titleChanged.connect(window.on_title_changed)
 
     def contextMenuEvent(self, event) -> None:
+        page = self.page()
+        data = page.contextMenuData()
         menu = QMenu(self)
+        link = data.linkUrl()
+        media = data.mediaUrl()
+        selected = data.selectedText().strip()
+        if link.isValid() and not link.isEmpty():
+            menu.addAction("Open link in new tab", lambda: self.window.add_tab(link.toString(), True))
+            menu.addAction("Copy link address", lambda: QApplication.clipboard().setText(link.toString()))
+            menu.addAction("Open link in this tab", lambda: self.window.navigate(self, link.toString()))
+            menu.addSeparator()
+        if not media.isEmpty():
+            menu.addAction("Copy image", lambda: page.action(QWebEnginePage.WebAction.CopyImageToClipboard).trigger())
+            menu.addAction("Save image…", lambda: page.action(QWebEnginePage.WebAction.SaveImageToDisk).trigger())
+            menu.addSeparator()
+        if selected:
+            menu.addAction("Copy selection", lambda: page.action(QWebEnginePage.WebAction.Copy).trigger())
+            menu.addAction("Search Startpage for selection", lambda: self.window.search_selected_text(selected))
+            menu.addSeparator()
+        if page.isContentEditable():
+            for label, action_name in (("Undo", "Undo"), ("Redo", "Redo"), ("Cut", "Cut"),
+                                       ("Copy", "Copy"), ("Paste", "Paste"), ("Select all", "SelectAll")):
+                action_enum = getattr(QWebEnginePage.WebAction, action_name, None)
+                if action_enum is not None:
+                    action = page.action(action_enum)
+                    action.setText(label)
+                    menu.addAction(action)
+            menu.addSeparator()
         menu.addAction("Back", self.back).setEnabled(self.history().canGoBack())
         menu.addAction("Forward", self.forward).setEnabled(self.history().canGoForward())
         menu.addAction("Reload", self.reload)
         menu.addSeparator()
-        menu.addAction("Open developer tools externally", lambda: QDesktopServices.openUrl(self.url()))
+        menu.addAction("Copy page address", lambda: QApplication.clipboard().setText(self.url().toString()))
+        menu.addAction("Translate this page…", lambda: self.window.translate_current_page(self))
+        menu.addAction("Picture in picture", lambda: self.window.toggle_picture_in_picture(self))
         menu.exec(event.globalPos())
+
+    def dragEnterEvent(self, event) -> None:
+        mime = event.mimeData()
+        if mime.hasUrls() or (mime.hasText() and mime.text().strip()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:
+        mime = event.mimeData()
+        if mime.hasUrls() and mime.urls():
+            url = mime.urls()[0]
+            if url.isLocalFile():
+                extension = Path(url.toLocalFile()).suffix.lower()
+                if extension not in {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}:
+                    self.window.status.showMessage("Dropped files are limited to PDF and image formats", 4000)
+                    event.ignore()
+                    return
+            elif url.scheme().lower() not in {"http", "https"}:
+                event.ignore()
+                return
+            self.window.navigate(self, url.toString())
+            event.acceptProposedAction()
+            return
+        if mime.hasText() and mime.text().strip():
+            self.window.navigate(self, mime.text().strip())
+            event.acceptProposedAction()
+            return
+        event.ignore()
 
 
 class BrowserWindow(QMainWindow):
+    blocked_request_event = Signal(str, str, bool)
+    cookie_filter_event = Signal(str, str)
+    ip_lookup_event = Signal(str, str, str, str)
+
     def __init__(self) -> None:
         super().__init__()
         self.store = BrowserStore()
+        self._store_save_timer = QTimer(self)
+        self._store_save_timer.setSingleShot(True)
+        self._store_save_timer.setInterval(450)
+        self._store_save_timer.timeout.connect(self.flush_store_save)
+        self._store_save_pending = False
+        self._download_save_timer = QTimer(self)
+        self._download_save_timer.setSingleShot(True)
+        self._download_save_timer.setInterval(800)
+        self._download_save_timer.timeout.connect(self.persist_download_history)
         self.blocked_count = 0
-        self.downloads = []
+        self.tracker_blocked_count = 0
+        self.downloads = [
+            {**row, "request": None, "item": None,
+             "state": "Interrupted" if row.get("state") in {"Queued", "Downloading"} else row.get("state", "Interrupted")}
+            for row in self.store.data.get("download_history", [])
+        ]
         self.closed_tabs = []
         self.settings_data = self.store.data["settings"]
         self.speed_mode = bool(self.settings_data.get("speed_mode", True))
@@ -436,12 +622,27 @@ class BrowserWindow(QMainWindow):
         self.cookie_prompt_queue = []
         self.active_cookie_prompt = None
         self.notified_spy_hosts = set()
+        self.notified_ip_lookup_sites = set()
+        self.recorded_ip_lookup_keys = set()
+        self.notified_third_party_cookie_hosts = set()
+        self.blocked_request_event.connect(self.queue_blocked_request, Qt.ConnectionType.QueuedConnection)
+        self.cookie_filter_event.connect(self.handle_cookie_filter_event, Qt.ConnectionType.QueuedConnection)
+        self.ip_lookup_event.connect(self.queue_ip_lookup_alert, Qt.ConnectionType.QueuedConnection)
+        self._pending_blocked_count = 0
+        self._pending_tracker_count = 0
+        self._pending_spy_hosts = {}
+        self._pending_ip_lookup_events = {}
+        self._privacy_flush_timer = QTimer(self)
+        self._privacy_flush_timer.setSingleShot(True)
+        self._privacy_flush_timer.setInterval(250)
+        self._privacy_flush_timer.timeout.connect(self.flush_privacy_events)
         self.profile = QWebEngineProfile.defaultProfile()
         self.profile.setPersistentStoragePath(str(app_data_dir() / "web-profile"))
         self.profile.setCachePath(str(app_data_dir() / "web-cache"))
         self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
-        self.profile.cookieStore().setCookieFilter(self.cookie_filter)
-        self.privacy_interceptor = PrivacyInterceptor(self)
+        self.cookie_policy = FirstPartyCookiePolicy(self)
+        self.profile.cookieStore().setCookieFilter(self.cookie_policy.filter)
+        self.privacy_interceptor = GhostGuardRequestInterceptor(self)
         self.profile.setUrlRequestInterceptor(self.privacy_interceptor)
         self.profile.downloadRequested.connect(self.handle_download)
 
@@ -459,6 +660,7 @@ class BrowserWindow(QMainWindow):
         self.tabs.setTabsClosable(True)
         self.tabs.currentChanged.connect(self.sync_current_tab)
         self.tabs.tabCloseRequested.connect(self.close_tab)
+        self.find_dialog = FindInPageDialog(self, self.current_tab)
 
         self.address = QLineEdit()
         self.address.setPlaceholderText("Type a site, search, or paste a URL")
@@ -480,7 +682,7 @@ class BrowserWindow(QMainWindow):
         self.spy_chip.setObjectName("spyChip")
         self.tabs_chip = QLabel("Tabs: 0")
         self.tabs_chip.setObjectName("tabsChip")
-        self.home_chip = QLabel("Home: Startpage")
+        self.home_chip = QLabel("Home: DuckDuckGo")
         self.home_chip.setObjectName("homeChip")
 
         self.status = QStatusBar()
@@ -491,9 +693,14 @@ class BrowserWindow(QMainWindow):
 
         self.build_shell()
         self.build_control_center()
-        self.add_tab(HOME_URL, switch=True)
-        self.apply_engine_settings()
+        self.library_features = LibraryFeatures(self)
+        self.library_features.install()
         self.apply_style()
+        self.page_ux = PageUxFeatures(self)
+        self.add_tab(HOME_URL, switch=True)
+        self.tab_features = TabFeatures(self)
+        self.tab_features.attach()
+        self.apply_engine_settings()
         if self.store.tamper_detected:
             QTimer.singleShot(650, lambda: self.show_privacy_notice(self.store.tamper_message))
 
@@ -549,9 +756,10 @@ class BrowserWindow(QMainWindow):
         self.back_btn = self.rail_button("Back", self.style().standardIcon(self.style().StandardPixmap.SP_ArrowBack), self.go_back)
         self.forward_btn = self.rail_button("Forward", self.style().standardIcon(self.style().StandardPixmap.SP_ArrowForward), self.go_forward)
         self.reload_btn = self.rail_button("Reload", self.style().standardIcon(self.style().StandardPixmap.SP_BrowserReload), self.reload_page)
-        self.home_btn = self.rail_button("Home", self.style().standardIcon(self.style().StandardPixmap.SP_DesktopIcon), self.go_home)
+        self.home_btn = self.rail_button("Home", self.style().standardIcon(self.style().StandardPixmap.SP_DesktopIcon), lambda: self.go_home())
         self.new_btn = self.rail_button("New tab", self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogNewFolder), lambda: self.add_tab(HOME_URL, True))
         self.bookmark_btn = self.rail_button("Bookmark", self.style().standardIcon(self.style().StandardPixmap.SP_DialogSaveButton), self.bookmark_current)
+        self.clear_cache_btn = self.rail_button("Clear cookies & cache", self.style().standardIcon(self.style().StandardPixmap.SP_DialogResetButton), self.clear_cookies_and_cache)
         self.library_btn = self.rail_button("Library", self.style().standardIcon(self.style().StandardPixmap.SP_DirOpenIcon), self.open_library_menu)
         self.clear_btn = self.rail_button("Clear ghost data", self.style().standardIcon(self.style().StandardPixmap.SP_DialogResetButton), self.clear_ghost_data)
         self.tor_btn = self.rail_button("Tor check", self.style().standardIcon(self.style().StandardPixmap.SP_DriveNetIcon), self.open_tor_check)
@@ -565,10 +773,8 @@ class BrowserWindow(QMainWindow):
             self.home_btn,
             self.new_btn,
             self.bookmark_btn,
+            self.clear_cache_btn,
             self.library_btn,
-            self.clear_btn,
-            self.tor_btn,
-            self.dashboard_btn,
             self.control_btn,
         ):
             rail_layout.addWidget(button)
@@ -647,6 +853,12 @@ class BrowserWindow(QMainWindow):
 
     def install_shortcuts(self) -> None:
         shortcuts = (
+            ("Ctrl+K", self.open_command_palette),
+            ("Ctrl+,", self.toggle_control_center),
+            ("Ctrl+F", self.find_dialog.open_find),
+            ("Ctrl+P", self.save_current_page_as_pdf),
+            ("F1", self.show_shortcuts_guide),
+            ("F11", self.toggle_distraction_free),
             ("Ctrl+L", self.focus_address),
             ("Ctrl+T", lambda: self.add_tab(HOME_URL, switch=True)),
             ("Ctrl+W", lambda: self.close_tab(self.tabs.currentIndex())),
@@ -655,10 +867,200 @@ class BrowserWindow(QMainWindow):
             ("Ctrl+D", self.bookmark_current),
             ("Ctrl+J", self.open_download_manager),
             ("Escape", self.stop_loading),
+            ("Alt+P", self.toggle_picture_in_picture),
         )
         for sequence, callback in shortcuts:
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.activated.connect(callback)
+
+    def open_command_palette(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Ghost Surfer quick access")
+        dialog.setObjectName("commandPalette")
+        dialog.setMinimumWidth(560)
+        dialog.resize(620, 520)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(18, 18, 18, 16)
+        layout.setSpacing(10)
+
+        heading = QLabel("Quick access")
+        heading.setObjectName("paletteHeading")
+        layout.addWidget(heading)
+        hint = QLabel("Run an action, switch tabs, or open a bookmark or recent page. Press Esc to close.")
+        hint.setWordWrap(True)
+        hint.setObjectName("paletteHint")
+        layout.addWidget(hint)
+
+        search = QLineEdit()
+        search.setPlaceholderText("Search actions, tabs, bookmarks, and history…")
+        search.setClearButtonEnabled(True)
+        search.setAccessibleName("Search quick access")
+        layout.addWidget(search)
+
+        results = QListWidget()
+        results.setObjectName("paletteResults")
+        results.setAlternatingRowColors(True)
+        layout.addWidget(results, 1)
+        footer = QLabel("Enter to open  ·  Ctrl+K to reopen")
+        footer.setObjectName("paletteHint")
+        layout.addWidget(footer)
+
+        actions = [
+            ("New tab", "action", "new_tab", "create blank start page"),
+            ("Focus address bar", "action", "address", "type a URL or search"),
+            ("Reload current page", "action", "reload", "refresh"),
+            ("Save bookmark", "action", "bookmark", "favorites current page"),
+            ("Open downloads", "action", "downloads", "download manager"),
+            ("Open Ghost Control", "action", "control", "settings privacy appearance"),
+            ("Show start page", "action", "home", "dashboard"),
+            ("Run Tor connection check", "action", "tor", "check tor status"),
+            ("Reopen closed tab", "action", "reopen", "undo close"),
+            ("Close other tabs", "action", "close_others", "keep current tab"),
+            ("Find in page", "action", "find", "search text on current page"),
+            ("Save current page as PDF", "action", "save_pdf", "print export"),
+            ("Keyboard shortcuts guide", "action", "shortcuts", "help hotkeys"),
+            ("Recently closed tabs", "action", "recent_tabs", "reopen recently closed pages"),
+            ("Save named tab session", "action", "save_session", "save workspace tabs"),
+            ("Manage tab sessions", "action", "manage_sessions", "restore saved workspace"),
+            ("Restore previous session", "action", "restore_session", "restore last browsing session"),
+            ("Pin or unpin current tab", "action", "pin_tab", "protect tab from closing"),
+            ("Set current tab group", "action", "group_tab", "color group organize"),
+            ("Mute or unmute current tab", "action", "mute_tab", "silence audio"),
+            ("Open split view", "action", "split_view", "two pages side by side"),
+            ("Reader view", "action", "reader", "simplified text view"),
+            ("Capture page screenshot", "action", "screenshot", "save visible page as png"),
+            ("Toggle distraction-free view", "action", "fullscreen", "full screen hide browser controls"),
+            ("Toggle high contrast", "action", "high_contrast", "accessibility contrast"),
+            ("Manage bookmarks", "action", "manage_bookmarks", "search rename delete folders"),
+            ("Import bookmarks from HTML", "action", "import_bookmarks", "restore bookmarks"),
+            ("Export bookmarks to HTML", "action", "export_bookmarks", "backup bookmarks"),
+            ("Remove selected history", "action", "remove_history", "delete selected visits"),
+            ("Export browser-data backup", "action", "export_data", "backup bookmarks history privacy choices"),
+            ("Restore browser-data backup", "action", "restore_data", "import saved browser data"),
+            ("Clear cookies and cache", "action", "clear_site_data", "remove website cookies and cached files keep history"),
+            ("Clear browsing data…", "action", "clear_data", "cookies cache history"),
+            ("Translate current page…", "action", "translate", "language external"),
+            ("Picture in picture", "action", "pip", "video floating player"),
+            ("Recover browser data…", "action", "recover_data", "restore recovery copy"),
+            ("Select tabs for bulk actions…", "action", "bulk_tabs", "multi select close group mute pin"),
+        ]
+        entries = [(label, kind, value, keywords) for label, kind, value, keywords in actions]
+
+        for index in range(self.tabs.count()):
+            tab = self.tabs.widget(index)
+            if isinstance(tab, BrowserTab):
+                title = tab.title().strip() or "Loading page"
+                entries.append((f"Tab {index + 1}  ·  {title}", "tab", index, tab.url().toString()))
+        for item in self.store.data.get("bookmarks", []):
+            url = item.get("url", "")
+            if url:
+                title = item.get("title") or url
+                entries.append((f"Bookmark  ·  {title}", "url", url, url))
+        for item in self.store.data.get("history", []):
+            url = item.get("url", "")
+            if url:
+                title = item.get("title") or url
+                entries.append((f"Recent  ·  {title}", "url", url, url))
+
+        def populate(query: str = "") -> None:
+            needle = query.strip().casefold()
+            matches = [entry for entry in entries if not needle or needle in " ".join((entry[0], entry[3])).casefold()]
+            if needle and not matches:
+                matches = [(f"Search Startpage for  ‘{query.strip()}’", "search", query.strip(), query.strip())]
+            results.clear()
+            for label, kind, value, _keywords in matches:
+                item = QListWidgetItem(label)
+                item.setData(Qt.ItemDataRole.UserRole, (kind, value))
+                results.addItem(item)
+            if results.count():
+                results.setCurrentRow(0)
+
+        def activate(item: QListWidgetItem | None = None) -> None:
+            item = item or results.currentItem()
+            if not item:
+                return
+            kind, value = item.data(Qt.ItemDataRole.UserRole)
+            if kind == "action":
+                callbacks = {
+                    "new_tab": lambda: self.add_tab(HOME_URL, True),
+                    "address": self.focus_address,
+                    "reload": self.reload_page,
+                    "bookmark": self.bookmark_current,
+                    "downloads": self.open_download_manager,
+                    "control": self.toggle_control_center,
+                    "home": self.open_dashboard,
+                    "tor": self.open_tor_check,
+                    "reopen": self.reopen_closed_tab,
+                    "close_others": self.close_other_tabs,
+                    "find": self.find_dialog.open_find,
+                    "save_pdf": self.save_current_page_as_pdf,
+                    "shortcuts": self.show_shortcuts_guide,
+                    "recent_tabs": self.tab_features.show_recently_closed,
+                    "save_session": self.tab_features.save_named_session,
+                    "manage_sessions": self.tab_features.manage_sessions,
+                    "restore_session": self.tab_features.restore_previous_session_now,
+                    "pin_tab": self.tab_features.toggle_pin_current,
+                    "group_tab": self.tab_features.set_tab_group,
+                    "mute_tab": self.tab_features.toggle_mute_current,
+                    "split_view": self.tab_features.show_split_view,
+                    "reader": self.toggle_reader_view,
+                    "screenshot": self.capture_page_screenshot,
+                    "fullscreen": self.toggle_distraction_free,
+                    "high_contrast": self.toggle_high_contrast,
+                    "manage_bookmarks": self.library_features.show_bookmark_manager,
+                    "import_bookmarks": self.library_features.import_bookmarks,
+                    "export_bookmarks": self.library_features.export_bookmarks,
+                    "remove_history": self.library_features.remove_selected_history,
+                    "export_data": self.export_browser_data,
+                    "restore_data": self.restore_browser_data,
+                    "clear_site_data": self.clear_cookies_and_cache,
+                    "clear_data": self.clear_ghost_data,
+                    "translate": self.translate_current_page,
+                    "pip": self.toggle_picture_in_picture,
+                    "recover_data": self.show_recovery_center,
+                    "bulk_tabs": self.tab_features.show_bulk_tab_actions,
+                }
+                callbacks[value]()
+            elif kind == "tab":
+                if 0 <= value < self.tabs.count():
+                    self.tabs.setCurrentIndex(value)
+            elif kind in {"url", "search"}:
+                tab = self.current_tab()
+                if tab:
+                    self.navigate(tab, value)
+                else:
+                    self.add_tab(value, True)
+            dialog.accept()
+
+        search.textChanged.connect(populate)
+        search.returnPressed.connect(lambda: activate())
+        results.itemActivated.connect(activate)
+        populate()
+        dialog.show()
+        search.setFocus()
+        dialog.exec()
+
+    def save_current_page_as_pdf(self) -> None:
+        save_current_page_as_pdf(self, self.current_tab())
+
+    def show_shortcuts_guide(self) -> None:
+        show_shortcuts_guide(self)
+
+    def toggle_reader_view(self) -> None:
+        self.page_ux.toggle_reader_view()
+
+    def capture_page_screenshot(self) -> None:
+        self.page_ux.capture_page_screenshot()
+
+    def toggle_distraction_free(self) -> None:
+        self.page_ux.toggle_distraction_free()
+
+    def toggle_high_contrast(self) -> None:
+        enabled = not bool(self.settings_data.get("high_contrast", False))
+        if hasattr(self, "high_contrast_check"):
+            self.high_contrast_check.setChecked(enabled)
+        else:
+            self.page_ux.set_high_contrast(enabled)
 
     def rail_button(self, tip: str, icon: QIcon, callback) -> QToolButton:
         button = QToolButton()
@@ -666,6 +1068,7 @@ class BrowserWindow(QMainWindow):
         labels = {
             "Back": "Back", "Forward": "Next", "Reload": "Reload", "Home": "Home",
             "New tab": "New tab", "Bookmark": "Save", "Library": "Library",
+            "Clear cookies & cache": "Clear cache",
             "Clear ghost data": "Clear data", "Tor check": "Tor", "Dashboard": "Start", "Control center": "Control",
         }
         button.setText(labels.get(tip, tip))
@@ -682,14 +1085,75 @@ class BrowserWindow(QMainWindow):
         self.control_dock = QDockWidget("Ghost Control", self)
         self.control_dock.setObjectName("controlDock")
         self.control_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
-        scroll = QScrollArea()
-        scroll.setObjectName("controlScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        self.control_category = QComboBox()
+        self.control_category.setObjectName("controlCategory")
+        self.control_category.setAccessibleName("Ghost Control section")
+        category_row = QHBoxLayout()
+        category_row.setContentsMargins(0, 0, 0, 0)
+        category_row.setSpacing(8)
+        category_label = QLabel("SECTION")
+        category_label.setObjectName("controlSectionLabel")
+        category_row.addWidget(category_label)
+        category_row.addWidget(self.control_category, 1)
+        self.control_pages = QStackedWidget()
+        self.control_pages.setObjectName("controlPages")
+        self.control_search = QLineEdit()
+        self.control_search.setObjectName("controlSearch")
+        self.control_search.setPlaceholderText("Search settings and tools…")
+        self.control_search.setClearButtonEnabled(True)
+        self.control_search.setAccessibleName("Search Ghost Control settings and tools")
+        self.control_search.setToolTip("Filter settings and tools by name. Matching sections are grouped by page.")
+        self.control_search_feedback = QLabel()
+        self.control_search_feedback.setObjectName("controlSearchFeedback")
+        self.control_search_feedback.setWordWrap(True)
+        self.control_search_feedback.hide()
+        control_panel = QWidget()
+        control_panel_layout = QVBoxLayout(control_panel)
+        control_panel_layout.setContentsMargins(8, 8, 8, 8)
+        control_panel_layout.setSpacing(6)
+        control_panel_layout.addWidget(self.control_search)
+        control_panel_layout.addWidget(self.control_search_feedback)
+        control_panel_layout.addLayout(category_row)
+        control_panel_layout.addWidget(self.control_pages, 1)
+
+        def make_control_page(title: str):
+            scroll = QScrollArea()
+            scroll.setObjectName("controlScroll")
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            panel = QWidget()
+            page_layout = QVBoxLayout(panel)
+            page_layout.setContentsMargins(12, 12, 12, 12)
+            page_layout.setSpacing(10)
+            scroll.setWidget(panel)
+            self.control_category.addItem(title)
+            self.control_pages.addWidget(scroll)
+            return page_layout
+
+        general_layout = make_control_page("General")
+        privacy_layout = make_control_page("Privacy")
+        appearance_layout = make_control_page("Display")
+        performance_layout = make_control_page("Performance")
+        workspace_layout = make_control_page("Tabs & Data")
+        self.control_page_layouts = {
+            "General": general_layout,
+            "Privacy": privacy_layout,
+            "Display": appearance_layout,
+            "Performance": performance_layout,
+            "Tabs & Data": workspace_layout,
+        }
+        saved_page = str(self.settings_data.get("control_last_page", "General"))
+        saved_page_index = 0
+        for page_index in range(self.control_category.count()):
+            if self.control_category.itemText(page_index) == saved_page:
+                saved_page_index = page_index
+                break
+        self.control_category.setCurrentIndex(saved_page_index)
+        self.control_pages.setCurrentIndex(saved_page_index)
+        self.control_category.currentIndexChanged.connect(self.control_pages.setCurrentIndex)
+        self.control_category.currentIndexChanged.connect(self.save_control_page_selection)
+        self.control_search.textChanged.connect(self.filter_control_pages)
+        layout = privacy_layout
 
         status_group = QGroupBox("Privacy Status")
         status_layout = QGridLayout(status_group)
@@ -697,12 +1161,14 @@ class BrowserWindow(QMainWindow):
         self.cookie_status = QLabel("Cookies: ask per site")
         self.tracker_status = QLabel("Trackers blocked: 0")
         self.spy_status = QLabel("Spy alerts: 0")
+        self.ip_tripwire_status = QLabel("IP tripwire: watching (alerts only)")
         self.tor_status = QLabel(f"Tor: {TOR_ENDPOINT[0]}:{TOR_ENDPOINT[1]}" if TOR_ENDPOINT else "Tor: standby")
         status_layout.addWidget(self.location_status, 0, 0)
         status_layout.addWidget(self.cookie_status, 1, 0)
         status_layout.addWidget(self.tracker_status, 2, 0)
         status_layout.addWidget(self.spy_status, 3, 0)
         status_layout.addWidget(self.tor_status, 4, 0)
+        status_layout.addWidget(self.ip_tripwire_status, 5, 0)
         layout.addWidget(status_group)
 
         cookie_policy_group = QGroupBox("Cookies & Consent")
@@ -721,6 +1187,8 @@ class BrowserWindow(QMainWindow):
         cookie_policy_layout.addWidget(self.cookie_policy_combo)
         cookie_policy_layout.addWidget(QLabel("Third-party tracking cookies stay blocked. Site permissions such as camera and location stay blocked."))
         layout.addWidget(cookie_policy_group)
+
+        layout = appearance_layout
 
         theme_group = QGroupBox("Theme Color")
         theme_layout = QVBoxLayout(theme_group)
@@ -741,6 +1209,41 @@ class BrowserWindow(QMainWindow):
         zoom_layout.addWidget(self.zoom_combo)
         layout.addWidget(zoom_group)
 
+        accessibility_group = QGroupBox("Page & Accessibility")
+        accessibility_layout = QVBoxLayout(accessibility_group)
+        self.site_zoom_combo = QComboBox()
+        self.site_zoom_combo.addItems([f"{value}%" for value in (50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200)])
+        self.site_zoom_combo.setCurrentText(f"{self.zoom_level}%")
+        self.site_zoom_combo.setToolTip("Set a saved zoom level for the current website")
+        self.site_zoom_combo.currentTextChanged.connect(lambda value: self.page_ux.set_site_zoom(int(value.rstrip("%"))))
+        self.reset_site_zoom_btn = QPushButton("Use default zoom for this site")
+        self.reset_site_zoom_btn.setObjectName("panelButton")
+        self.reset_site_zoom_btn.clicked.connect(self.use_default_site_zoom)
+        accessibility_layout.addWidget(QLabel("Current site zoom"))
+        accessibility_layout.addWidget(self.site_zoom_combo)
+        accessibility_layout.addWidget(self.reset_site_zoom_btn)
+        self.interface_size_combo = QComboBox()
+        self.interface_size_combo.addItems([f"{value}%" for value in (80, 90, 100, 110, 125, 150, 175, 180)])
+        self.interface_size_combo.setCurrentText(f"{self.settings_data.get('interface_text_size', 100)}%")
+        self.interface_size_combo.currentTextChanged.connect(lambda value: self.page_ux.set_interface_text_size(int(value.rstrip("%"))))
+        accessibility_layout.addWidget(QLabel("Interface text size"))
+        accessibility_layout.addWidget(self.interface_size_combo)
+        self.high_contrast_check = QCheckBox("High contrast colors")
+        self.high_contrast_check.setChecked(bool(self.settings_data.get("high_contrast", False)))
+        self.high_contrast_check.toggled.connect(self.set_high_contrast)
+        accessibility_layout.addWidget(self.high_contrast_check)
+        reader_btn = QPushButton("Toggle reader view")
+        screenshot_btn = QPushButton("Capture page screenshot")
+        fullscreen_btn = QPushButton("Toggle distraction-free view")
+        for button in (reader_btn, screenshot_btn, fullscreen_btn):
+            button.setObjectName("panelButton")
+            accessibility_layout.addWidget(button)
+        reader_btn.clicked.connect(self.toggle_reader_view)
+        screenshot_btn.clicked.connect(self.capture_page_screenshot)
+        fullscreen_btn.clicked.connect(self.toggle_distraction_free)
+        layout.addWidget(accessibility_group)
+
+        layout = performance_layout
         perf_group = QGroupBox("Performance")
         perf_layout = QVBoxLayout(perf_group)
         self.speed_check = QCheckBox("Speed mode")
@@ -762,8 +1265,15 @@ class BrowserWindow(QMainWindow):
             perf_layout.addWidget(widget)
         layout.addWidget(perf_group)
 
+        layout = workspace_layout
         tabs_group = QGroupBox("Tab Actions")
         tabs_layout = QVBoxLayout(tabs_group)
+        session_checkpoint_note = QLabel(
+            "Open tabs, the selected tab, groups, pinned tabs, and mute state are checkpointed in the background. "
+            "Choose Restore previous session in General to reopen that set on launch."
+        )
+        session_checkpoint_note.setWordWrap(True)
+        tabs_layout.addWidget(session_checkpoint_note)
         duplicate_btn = QPushButton("Duplicate tab")
         duplicate_btn.clicked.connect(self.duplicate_current_tab)
         close_others_btn = QPushButton("Close other tabs")
@@ -772,7 +1282,24 @@ class BrowserWindow(QMainWindow):
         reopen_btn.clicked.connect(self.reopen_closed_tab)
         suspend_btn = QPushButton("Suspend inactive tabs")
         suspend_btn.clicked.connect(self.suspend_inactive_tabs)
-        for widget in (duplicate_btn, close_others_btn, reopen_btn, suspend_btn):
+        recent_tabs_btn = QPushButton("Recently closed tabs")
+        recent_tabs_btn.clicked.connect(lambda: self.tab_features.show_recently_closed())
+        save_session_btn = QPushButton("Save current tab session")
+        save_session_btn.clicked.connect(lambda: self.tab_features.save_named_session())
+        manage_sessions_btn = QPushButton("Manage saved sessions")
+        manage_sessions_btn.clicked.connect(lambda: self.tab_features.manage_sessions())
+        pin_tab_btn = QPushButton("Pin / unpin current tab")
+        pin_tab_btn.clicked.connect(lambda: self.tab_features.toggle_pin_current())
+        group_tab_btn = QPushButton("Set tab group")
+        group_tab_btn.clicked.connect(lambda: self.tab_features.set_tab_group())
+        mute_tab_btn = QPushButton("Mute / unmute current tab")
+        mute_tab_btn.clicked.connect(lambda: self.tab_features.toggle_mute_current())
+        split_view_btn = QPushButton("Open split view")
+        split_view_btn.clicked.connect(lambda: self.tab_features.show_split_view())
+        bulk_tabs_btn = QPushButton("Select tabs for bulk actions")
+        bulk_tabs_btn.clicked.connect(self.tab_features.show_bulk_tab_actions)
+        for widget in (duplicate_btn, close_others_btn, reopen_btn, suspend_btn, recent_tabs_btn,
+                       save_session_btn, manage_sessions_btn, pin_tab_btn, group_tab_btn, mute_tab_btn, split_view_btn, bulk_tabs_btn):
             widget.setObjectName("panelButton")
             tabs_layout.addWidget(widget)
         layout.addWidget(tabs_group)
@@ -784,10 +1311,23 @@ class BrowserWindow(QMainWindow):
         self.bookmark_list = QListWidget()
         self.history_list = QListWidget()
         self.spy_list = QListWidget()
+        self.spy_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.cookie_list = QListWidget()
         self.bookmark_list.itemDoubleClicked.connect(lambda item: self.navigate(self.current_tab(), item.data(Qt.ItemDataRole.UserRole)))
         self.history_list.itemDoubleClicked.connect(lambda item: self.navigate(self.current_tab(), item.data(Qt.ItemDataRole.UserRole)))
-        layout.addWidget(self.panel_list("Recent Spy Alerts", self.spy_list))
+        layout = privacy_layout
+        self.spy_filter_combo = QComboBox()
+        self.spy_filter_combo.addItem("All alerts", "all")
+        self.spy_filter_combo.addItem("Trackers", "tracker")
+        self.spy_filter_combo.addItem("Permissions", "permission")
+        self.spy_filter_combo.addItem("IP tripwire", "ip_lookup")
+        self.spy_filter_combo.currentIndexChanged.connect(self.refresh_lists)
+        layout.addWidget(self.spy_filter_combo)
+        layout.addWidget(self.panel_list("Privacy Alerts", self.spy_list))
+        dismiss_alerts_btn = QPushButton("Dismiss selected alerts")
+        dismiss_alerts_btn.setObjectName("panelButton")
+        dismiss_alerts_btn.clicked.connect(self.dismiss_selected_alerts)
+        layout.addWidget(dismiss_alerts_btn)
         layout.addWidget(self.panel_list("Cookie Decisions", self.cookie_list))
         forget_cookie_btn = QPushButton("Forget selected cookie decision")
         forget_cookie_btn.setObjectName("panelButton")
@@ -795,8 +1335,14 @@ class BrowserWindow(QMainWindow):
         forget_all_cookies_btn = QPushButton("Forget all cookie decisions")
         forget_all_cookies_btn.setObjectName("panelButton")
         forget_all_cookies_btn.clicked.connect(self.forget_all_cookie_decisions)
-        layout.addWidget(forget_cookie_btn)
-        layout.addWidget(forget_all_cookies_btn)
+        permission_actions = QGroupBox("Site Decisions")
+        permission_actions_layout = QVBoxLayout(permission_actions)
+        permission_actions_layout.setContentsMargins(10, 12, 10, 10)
+        permission_actions_layout.setSpacing(8)
+        permission_actions_layout.addWidget(forget_cookie_btn)
+        permission_actions_layout.addWidget(forget_all_cookies_btn)
+        layout.addWidget(permission_actions)
+        layout = workspace_layout
         downloads_group = self.panel_list("Downloads", self.download_list)
         download_actions = QGridLayout()
         download_actions.setHorizontalSpacing(8)
@@ -820,16 +1366,59 @@ class BrowserWindow(QMainWindow):
         layout.addWidget(self.panel_list("Bookmarks", self.bookmark_list))
         layout.addWidget(self.panel_list("History", self.history_list))
 
+        data_group = QGroupBox("Browser Data")
+        data_layout = QVBoxLayout(data_group)
+        self.storage_summary_label = QLabel()
+        self.storage_summary_label.setWordWrap(True)
+        data_layout.addWidget(self.storage_summary_label)
+        backup_row = QHBoxLayout()
+        export_data_btn = QPushButton("Export backup")
+        restore_data_btn = QPushButton("Restore backup")
+        for button in (export_data_btn, restore_data_btn):
+            button.setObjectName("panelButton")
+            backup_row.addWidget(button)
+        export_data_btn.clicked.connect(self.export_browser_data)
+        restore_data_btn.clicked.connect(self.restore_browser_data)
+        data_layout.addLayout(backup_row)
+        retention_row = QHBoxLayout()
+        retention_row.addWidget(QLabel("Keep history"))
+        self.history_retention_combo = QComboBox()
+        for label, days in (("Forever", 0), ("30 days", 30), ("90 days", 90), ("1 year", 365)):
+            self.history_retention_combo.addItem(label, days)
+        current_retention = int(self.settings_data.get("history_retention_days", 0) or 0)
+        retention_index = self.history_retention_combo.findData(current_retention)
+        self.history_retention_combo.setCurrentIndex(max(0, retention_index))
+        self.history_retention_combo.currentIndexChanged.connect(self.set_history_retention)
+        retention_row.addWidget(self.history_retention_combo, 1)
+        data_layout.addLayout(retention_row)
+        recovery_btn = QPushButton("Recover from a saved copy…")
+        recovery_btn.setObjectName("panelButton")
+        recovery_btn.clicked.connect(self.show_recovery_center)
+        data_layout.addWidget(recovery_btn)
+        data_layout.addWidget(QLabel("Backup includes bookmarks, history, cookie choices, privacy alerts, and download history. It excludes website cookies/cache and is readable JSON; store it somewhere private."))
+        layout.addWidget(data_group)
+
+        maintenance_group = QGroupBox("Maintenance")
+        maintenance_layout = QVBoxLayout(maintenance_group)
+        clear_site_data_btn = QPushButton("Clear cookies & cache")
+        clear_site_data_btn.setObjectName("panelButton")
+        clear_site_data_btn.clicked.connect(self.clear_cookies_and_cache)
+        maintenance_layout.addWidget(clear_site_data_btn)
         clear_btn = QPushButton("Clear cookies, cache, history")
         clear_btn.setObjectName("panelButton")
         clear_btn.clicked.connect(self.clear_ghost_data)
-        layout.addWidget(clear_btn)
-        layout.addStretch(1)
-        scroll.setWidget(panel)
-        self.control_dock.setWidget(scroll)
+        maintenance_layout.addWidget(clear_btn)
+        layout.addWidget(maintenance_group)
+        for page_layout in (general_layout, privacy_layout, appearance_layout, performance_layout, workspace_layout):
+            page_layout.addStretch(1)
+        self.control_dock.setWidget(control_panel)
+        self.control_dock.setMinimumWidth(320)
+        self.control_dock.setMaximumWidth(440)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.control_dock)
+        self.resizeDocks([self.control_dock], [370], Qt.Orientation.Horizontal)
         self.control_dock.hide()
         self.refresh_lists()
+        self.update_storage_summary()
 
     def panel_list(self, title: str, list_widget: QListWidget) -> QGroupBox:
         group = QGroupBox(title)
@@ -840,34 +1429,71 @@ class BrowserWindow(QMainWindow):
         layout.addWidget(list_widget)
         return group
 
-    def cookie_filter(self, request) -> bool:
-        origin_host = request.origin.host().lower()
-        first_party_host = request.firstPartyUrl.host().lower()
-        top_domain = registrable_domain(first_party_host or origin_host)
+    def save_control_page_selection(self, index: int) -> None:
+        if not 0 <= index < self.control_category.count():
+            return
+        page = self.control_category.itemText(index)
+        if self.settings_data.get("control_last_page") == page:
+            return
+        self.settings_data["control_last_page"] = page
+        self.store.save()
 
-        if request.thirdParty:
-            self.status.showMessage(f"Blocked outside tracking cookie from {registrable_domain(origin_host) or origin_host}", 4500)
-            return False
+    def filter_control_pages(self, query: str) -> None:
+        needle = query.strip().casefold()
+        matching_sections = 0
+        matching_pages: list[int] = []
+        for page_index in range(self.control_pages.count()):
+            page_scroll = self.control_pages.widget(page_index)
+            panel = page_scroll.widget() if isinstance(page_scroll, QScrollArea) else None
+            groups = panel.findChildren(QGroupBox) if panel is not None else []
+            page_matches = bool(needle and needle in self.control_category.itemText(page_index).casefold())
+            has_match = False
+            for group in groups:
+                terms = [group.title(), group.toolTip(), group.accessibleName()]
+                for child in group.findChildren(QWidget):
+                    for attribute in ("text", "toolTip", "accessibleName", "placeholderText", "currentText"):
+                        value = getattr(child, attribute, None)
+                        if callable(value):
+                            try:
+                                value = value()
+                            except RuntimeError:
+                                continue
+                        if isinstance(value, str) and value:
+                            terms.append(value)
+                    if isinstance(child, QComboBox):
+                        terms.extend(child.itemText(i) for i in range(child.count()))
+                matched = not needle or page_matches or needle in " ".join(terms).casefold()
+                group.setVisible(matched)
+                if matched:
+                    matching_sections += 1
+                    has_match = True
+            if has_match:
+                matching_pages.append(page_index)
 
-        policy = self.settings_data.get("cookie_policy", "ask")
-        if policy == "allow":
-            return True
-        if policy == "deny":
-            return False
+        if not needle:
+            self.control_search_feedback.hide()
+            return
+        if matching_sections:
+            page_count = len(matching_pages)
+            self.control_search_feedback.setText(
+                f"{matching_sections} matching sections across {page_count} "
+                f"{'page' if page_count == 1 else 'pages'}"
+            )
+            if self.control_category.currentIndex() not in matching_pages:
+                self.control_category.setCurrentIndex(matching_pages[0])
+        else:
+            self.control_search_feedback.setText("No matching settings or tools. Clear the search to show everything.")
+        self.control_search_feedback.show()
 
-        if not top_domain or not same_site(origin_host, top_domain):
-            return False
-
-        decision = self.store.data.setdefault("cookie_permissions", {}).get(top_domain)
-        if decision == "allow":
-            return True
-        if decision == "deny":
-            return False
-
-        if top_domain not in self.pending_cookie_prompts:
-            self.pending_cookie_prompts.add(top_domain)
-            QTimer.singleShot(0, lambda domain=top_domain: self.prompt_cookie_decision(domain))
-        return False
+    @Slot(str, str)
+    def handle_cookie_filter_event(self, domain: str, event_kind: str) -> None:
+        if event_kind == "third-party":
+            if domain not in self.notified_third_party_cookie_hosts:
+                self.notified_third_party_cookie_hosts.add(domain)
+                self.status.showMessage(f"Blocked outside tracking cookie from {domain}", 3500)
+            return
+        if event_kind == "prompt":
+            QTimer.singleShot(0, lambda value=domain: self.prompt_cookie_decision(value))
 
     def prompt_cookie_decision(self, domain: str) -> None:
         self.pending_cookie_prompts.discard(domain)
@@ -932,6 +1558,25 @@ class BrowserWindow(QMainWindow):
         self.update_security_chips()
         self.status.showMessage("Cookie preference updated for all sites. Third-party cookies remain blocked.", 3500)
 
+    def set_history_retention(self, _index: int = -1) -> None:
+        if not hasattr(self, "history_retention_combo"):
+            return
+        days = int(self.history_retention_combo.currentData() or 0)
+        self.settings_data["history_retention_days"] = days
+        if days:
+            cutoff = datetime.now().astimezone().timestamp() - days * 86400
+            kept = []
+            for row in self.store.data.get("history", []):
+                try:
+                    if datetime.fromisoformat(row.get("visited_at", "")).timestamp() >= cutoff:
+                        kept.append(row)
+                except (TypeError, ValueError):
+                    kept.append(row)
+            self.store.data["history"] = kept
+        self.store.save()
+        self.refresh_history_list()
+        self.status.showMessage("History retention updated", 2500)
+
     def allow_all_first_party_cookies(self) -> None:
         self.settings_data["cookie_policy"] = "allow"
         if hasattr(self, "cookie_policy_combo"):
@@ -957,6 +1602,8 @@ class BrowserWindow(QMainWindow):
         self.settings_data["theme"] = theme_name
         self.store.save()
         self.apply_style()
+        if hasattr(self, "page_ux") and bool(self.settings_data.get("high_contrast", False)):
+            self.page_ux.set_high_contrast(True, persist=False)
         tab = self.current_tab()
         if tab and self.display_url(tab.url()) == DASHBOARD_URL:
             self.open_dashboard()
@@ -971,7 +1618,22 @@ class BrowserWindow(QMainWindow):
         self.settings_data["zoom"] = zoom
         self.store.save()
         self.apply_engine_settings()
+        if hasattr(self, "page_ux"):
+            self.page_ux.apply_site_zoom()
         self.status.showMessage(f"Page zoom set to {zoom}%", 2200)
+
+    def use_default_site_zoom(self) -> None:
+        if hasattr(self, "page_ux"):
+            self.page_ux.use_default_zoom_for_site()
+            tab = self.current_tab()
+            if tab and hasattr(self, "site_zoom_combo"):
+                self.site_zoom_combo.blockSignals(True)
+                self.site_zoom_combo.setCurrentText(f"{int(self.settings_data.get('zoom', 100))}%")
+                self.site_zoom_combo.blockSignals(False)
+
+    def set_high_contrast(self, enabled: bool) -> None:
+        if hasattr(self, "page_ux"):
+            self.page_ux.set_high_contrast(enabled)
 
     def update_setting(self, key: str, value: bool) -> None:
         self.settings_data[key] = bool(value)
@@ -998,30 +1660,23 @@ class BrowserWindow(QMainWindow):
 
     def apply_tab_settings(self, tab: BrowserTab) -> None:
         settings = tab.settings()
-        settings.setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.DnsPrefetchEnabled, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.HyperlinkAuditingEnabled, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanPaste, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.AllowGeolocationOnInsecureOrigins, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.AllowRunningInsecureContent, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.ScreenCaptureEnabled, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.WebRTCPublicInterfacesOnly, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.BackForwardCacheEnabled, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.AutoLoadImages, not bool(self.settings_data.get("block_images", False)))
-        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, bool(self.settings_data.get("allow_javascript", True)))
-        settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, bool(self.settings_data.get("allow_webgl", False)))
-        settings.setAttribute(QWebEngineSettings.WebAttribute.ReadingFromCanvasEnabled, not self.speed_mode)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.ScrollAnimatorEnabled, not self.speed_mode)
-        tab.setZoomFactor(self.zoom_level / 100)
+        apply_web_engine_security(settings, self.settings_data, self.speed_mode)
+        if hasattr(self, "page_ux"):
+            self.page_ux.apply_site_zoom(tab)
+        else:
+            tab.setZoomFactor(self.zoom_level / 100)
 
     def update_security_chips(self) -> None:
-        self.speed_chip.setText("Speed: On" if self.speed_mode else "Speed: Off")
+        frozen = sum(1 for i in range(self.tabs.count()) if bool(getattr(self.tabs.widget(i), "property", lambda _key: False)("ghost_frozen"))) if hasattr(self, "tabs") else 0
+        self.speed_chip.setText(f"Speed: On · {frozen} paused" if self.speed_mode else "Speed: Off")
         self.blocked_chip.setText(f"Blocked: {self.blocked_count}")
         self.spy_chip.setText(f"Spy alerts: {len(self.store.data.get('spy_alerts', []))}")
-        self.tracker_status.setText(f"Trackers blocked: {self.blocked_count}")
+        self.tracker_status.setText(f"Trackers blocked: {self.tracker_blocked_count}")
         self.spy_status.setText(f"Spy alerts: {len(self.store.data.get('spy_alerts', []))}")
+        ip_alerts = sum(1 for row in self.store.data.get("spy_alerts", []) if row.get("category") == "ip_lookup")
+        self.ip_tripwire_status.setText(
+            f"IP tripwire: {ip_alerts} observed" if ip_alerts else "IP tripwire: watching (alerts only)"
+        )
         self.tor_status.setText(f"Tor: {TOR_ENDPOINT[0]}:{TOR_ENDPOINT[1]}" if TOR_ENDPOINT else "Tor: standby")
         permissions = self.store.data.get("cookie_permissions", {})
         allowed = sum(1 for value in permissions.values() if value == "allow")
@@ -1030,24 +1685,107 @@ class BrowserWindow(QMainWindow):
         policy_label = {"ask": "ask per site", "allow": "allow first-party", "deny": "block all"}.get(policy, "ask per site")
         self.cookie_status.setText(f"Cookies: {policy_label} ({allowed} approved, {denied} declined)")
 
+    @Slot(str, str, bool)
+    def queue_blocked_request(self, host: str, detail: str, is_tracker: bool) -> None:
+        """Coalesce interceptor callbacks onto the UI thread before updating widgets or disk."""
+        self._pending_blocked_count += 1
+        if is_tracker:
+            self._pending_tracker_count += 1
+            domain = registrable_domain(host) or host or "unknown site"
+            self._pending_spy_hosts.setdefault(domain, "Tracker request blocked")
+        if not self._privacy_flush_timer.isActive():
+            self._privacy_flush_timer.start()
+
     def notify_spy_attempt(self, host: str, detail: str) -> None:
+        """Queue a permission alert; this method also stays safe for non-UI callers."""
         domain = registrable_domain(host) or host or "unknown site"
-        message = f"Ghost Guard blocked a spying attempt from {domain}"
-        self.status.showMessage(message, 8000)
-        self.privacy_chip.setText("Ghost Guard: Spy blocked")
+        self._pending_spy_hosts.setdefault(domain, detail[:180])
+        if not self._privacy_flush_timer.isActive():
+            self._privacy_flush_timer.start()
+
+    @Slot(str, str, str, str)
+    def queue_ip_lookup_alert(self, page_host: str, endpoint_host: str, category: str, detail: str) -> None:
+        """Record a recognized IP lookup request as an alert without blocking it."""
+        site = registrable_domain(page_host) or page_host or "unknown site"
+        endpoint = endpoint_host or "unknown endpoint"
+        key = (site, endpoint)
+        if key in self.recorded_ip_lookup_keys:
+            return
+        self.recorded_ip_lookup_keys.add(key)
+        kind = "geolocation API" if category == "ip_geolocation_lookup" else "public-IP lookup"
+        message = f"IP lookup tripwire observed a {kind} request to {endpoint}. Request was allowed."
+        self._pending_ip_lookup_events.setdefault(key, message[:180])
+        if not self._privacy_flush_timer.isActive():
+            self._privacy_flush_timer.start()
+
+    def flush_privacy_events(self) -> None:
+        blocked = self._pending_blocked_count
+        trackers = self._pending_tracker_count
+        hosts = self._pending_spy_hosts
+        ip_lookup_events = self._pending_ip_lookup_events
+        self._pending_blocked_count = 0
+        self._pending_tracker_count = 0
+        self._pending_spy_hosts = {}
+        self._pending_ip_lookup_events = {}
+        self.blocked_count += blocked
+        self.tracker_blocked_count += trackers
+
         alerts = self.store.data.setdefault("spy_alerts", [])
-        entry = {"site": domain, "detail": detail[:180]}
-        if not alerts or alerts[0] != entry:
-            alerts.insert(0, entry)
-            self.store.data["spy_alerts"] = alerts[:50]
+        added = False
+        new_notices = []
+        for domain, detail in hosts.items():
+            category = "permission" if detail.startswith("Permission request blocked") else "tracker"
+            existing = next((row for row in alerts if row.get("site") == domain and row.get("category", "tracker") == category), None)
+            if existing is None:
+                alerts.insert(0, {
+                    "site": domain,
+                    "detail": detail[:180],
+                    "category": category,
+                    "seen_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                })
+                added = True
+        for (site, endpoint), detail in ip_lookup_events.items():
+            existing = next((row for row in alerts if row.get("site") == site and row.get("category") == "ip_lookup"), None)
+            timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+            if existing is None:
+                alerts.insert(0, {
+                    "site": site,
+                    "detail": detail,
+                    "category": "ip_lookup",
+                    "endpoint": endpoint,
+                    "seen_at": timestamp,
+                })
+            else:
+                existing.update({"detail": detail, "endpoint": endpoint, "seen_at": timestamp})
+            added = True
+            if site not in self.notified_ip_lookup_sites:
+                self.notified_ip_lookup_sites.add(site)
+                new_notices.append(
+                    f"IP lookup tripwire: {site} requested a known IP lookup service ({endpoint}). "
+                    "The request was allowed. Direct connections still reveal your public IP to the site."
+                )
+        if added:
+            self.store.data["spy_alerts"] = alerts
             self.store.save()
             self.refresh_lists()
+        if blocked:
+            self.status.showMessage(f"Ghost Guard blocked {blocked} request{'s' if blocked != 1 else ''}", 3500)
         self.update_security_chips()
-        if domain not in self.notified_spy_hosts:
-            self.notified_spy_hosts.add(domain)
-            QTimer.singleShot(0, lambda d=domain: self.show_privacy_notice(
-                f"Privacy alert: Ghost Guard blocked a tracking or permission request from {d}. Access remains denied."
-            ))
+        if ip_lookup_events and not hosts:
+            self.privacy_chip.setText("Ghost Guard: IP lookup noticed")
+        if hosts:
+            self.privacy_chip.setText("Ghost Guard: Spy blocked")
+            for domain in hosts:
+                if domain not in self.notified_spy_hosts:
+                    self.notified_spy_hosts.add(domain)
+                    new_notices.append(
+                        f"Privacy alert: Ghost Guard blocked tracking or a permission request from {domain}. Access remains denied."
+                    )
+                    break
+        if new_notices:
+            if ip_lookup_events:
+                self.status.showMessage("IP lookup tripwire noticed a request; it was allowed", 6500)
+            self.show_privacy_notice("\n".join(new_notices))
 
     def update_session_ui(self) -> None:
         if hasattr(self, "tabs_chip"):
@@ -1055,6 +1793,8 @@ class BrowserWindow(QMainWindow):
 
     def add_tab(self, url: str, switch: bool = True) -> BrowserTab:
         tab = BrowserTab(self)
+        if hasattr(self, "page_ux"):
+            self.page_ux.attach_tab(tab)
         index = self.tabs.addTab(tab, "New")
         self.tabs.setTabToolTip(index, url)
         if switch:
@@ -1087,6 +1827,12 @@ class BrowserWindow(QMainWindow):
         if not tab:
             return
         self.address.setText(self.display_url(tab.url()))
+        if hasattr(self, "page_ux"):
+            percent = self.page_ux.apply_site_zoom(tab)
+            if hasattr(self, "site_zoom_combo"):
+                self.site_zoom_combo.blockSignals(True)
+                self.site_zoom_combo.setCurrentText(f"{percent}%")
+                self.site_zoom_combo.blockSignals(False)
         self.update_navigation_state(tab)
         self.update_session_ui()
         if self.speed_mode:
@@ -1103,6 +1849,8 @@ class BrowserWindow(QMainWindow):
         self.address.selectAll()
 
     def stop_loading(self) -> None:
+        if hasattr(self, "page_ux"):
+            self.page_ux.set_distraction_free(False)
         tab = self.current_tab()
         if tab:
             tab.stop()
@@ -1162,6 +1910,22 @@ class BrowserWindow(QMainWindow):
         self.refresh_lists()
         self.status.showMessage("Bookmark saved", 2200)
 
+    def clear_cookies_and_cache(self, confirm: bool = True) -> None:
+        if confirm:
+            answer = QMessageBox.question(
+                self,
+                "Clear cookies and cache?",
+                "This removes website cookies and cached web files. You may be signed out of sites and pages may reload assets. History, bookmarks, and saved per-site cookie choices stay in place.",
+                QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        self.profile.cookieStore().deleteAllCookies()
+        self.profile.clearHttpCache()
+        self.update_security_chips()
+        self.status.showMessage("Website cookies and cache cleared; history and bookmarks were kept", 5000)
+
     def clear_ghost_data(self, confirm: bool = True) -> None:
         if confirm:
             answer = QMessageBox.question(
@@ -1183,10 +1947,170 @@ class BrowserWindow(QMainWindow):
         self.active_cookie_prompt = None
         self.hide_privacy_notice()
         self.notified_spy_hosts.clear()
+        self.notified_ip_lookup_sites.clear()
+        self.recorded_ip_lookup_keys.clear()
         self.store.save()
         self.refresh_lists()
         self.update_security_chips()
         self.status.showMessage("Cookies, cache, history, cookie choices, and alerts cleared", 4200)
+
+    def update_storage_summary(self) -> None:
+        if hasattr(self, "storage_summary_label"):
+            summary = self.store.storage_summary()
+            if self.store.last_error:
+                summary += f"\nStorage warning: {self.store.last_error}"
+            self.storage_summary_label.setText(summary)
+
+    def export_browser_data(self) -> None:
+        documents = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+        default_path = Path(documents or str(Path.home())) / "Ghost Surfer Browser Data.json"
+        target, _filter = QFileDialog.getSaveFileName(self, "Export Ghost Surfer browser data", str(default_path), "JSON backup (*.json)")
+        if not target:
+            return
+        if not target.lower().endswith(".json"):
+            target += ".json"
+        try:
+            self.store.export_backup(Path(target))
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.warning(self, "Backup export failed", str(exc))
+            return
+        self.status.showMessage(f"Browser-data backup saved: {Path(target).name}", 4500)
+
+    def restore_browser_data(self) -> None:
+        target, _filter = QFileDialog.getOpenFileName(self, "Restore Ghost Surfer browser data", str(Path.home()), "JSON backup (*.json)")
+        if not target:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Restore browser data?",
+            "This replaces bookmarks, history, cookie choices, and privacy alerts. A safety backup of the current data will be saved first. Website cookies and cache are not part of this restore.",
+            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        safety_copy = self.store.path.with_name(f"browser-data-before-restore-{stamp}.json")
+        try:
+            self.store.export_backup(safety_copy)
+            self.store.restore_backup(Path(target))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            QMessageBox.warning(self, "Backup restore failed", str(exc))
+            return
+        self.refresh_lists()
+        self.update_security_chips()
+        self.update_storage_summary()
+        self.status.showMessage("Browser data restored; your previous data is in the safety backup", 5000)
+
+    def show_recovery_center(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Browser data recovery")
+        dialog.resize(720, 500)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Saved recovery copies are listed by date. Select one to preview it before restoring."))
+        listing = QListWidget(dialog)
+        preview = QLabel("Select a recovery copy.")
+        preview.setWordWrap(True)
+        layout.addWidget(listing, 1)
+        layout.addWidget(preview)
+        for path in sorted(app_data_dir().glob("browser-data-*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                data = raw.get("data", {}) if raw.get("format") == BrowserStore.BACKUP_FORMAT else raw
+                if not isinstance(data, dict) or not any(key in data for key in ("bookmarks", "history", "settings", "spy_alerts")):
+                    raise ValueError("No browser data fields found")
+                counts = f"{len(data.get('bookmarks', []))} bookmarks, {len(data.get('history', []))} history entries"
+                item = QListWidgetItem(f"{path.name}  ·  {datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d %H:%M')}  ·  {counts}")
+                item.setData(Qt.ItemDataRole.UserRole, str(path))
+                item.setData(Qt.ItemDataRole.UserRole + 1, True)
+                listing.addItem(item)
+            except (OSError, json.JSONDecodeError, AttributeError, TypeError, ValueError) as exc:
+                item = QListWidgetItem(f"{path.name}  ·  Could not preview: {exc}")
+                item.setData(Qt.ItemDataRole.UserRole, str(path))
+                item.setData(Qt.ItemDataRole.UserRole + 1, False)
+                listing.addItem(item)
+        def show_preview(item=None):
+            item = item or listing.currentItem()
+            if item is None:
+                return
+            try:
+                raw = json.loads(Path(item.data(Qt.ItemDataRole.UserRole)).read_text(encoding="utf-8"))
+                data = raw.get("data", {}) if raw.get("format") == BrowserStore.BACKUP_FORMAT else raw
+                preview.setText("\n".join((f"File: {Path(item.data(Qt.ItemDataRole.UserRole)).name}",
+                    f"Bookmarks: {len(data.get('bookmarks', []))}", f"History entries: {len(data.get('history', []))}",
+                    f"Cookie choices: {len(data.get('cookie_permissions', {}))}", f"Privacy alerts: {len(data.get('spy_alerts', []))}",
+                    "This restore saves a safety copy of current data first.")))
+            except (OSError, json.JSONDecodeError, TypeError, AttributeError):
+                preview.setText("This file cannot be previewed and will not be restored.")
+        listing.currentItemChanged.connect(show_preview)
+        row = QHBoxLayout()
+        restore = QPushButton("Restore selected copy", dialog)
+        close = QPushButton("Close", dialog)
+        row.addStretch(1); row.addWidget(restore); row.addWidget(close)
+        layout.addLayout(row)
+        def restore_copy():
+            item = listing.currentItem()
+            if not item or not item.data(Qt.ItemDataRole.UserRole + 1):
+                return
+            path = Path(item.data(Qt.ItemDataRole.UserRole))
+            answer = QMessageBox.question(dialog, "Restore this recovery copy?",
+                "Current browser data will be copied to a safety file before this restore.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            safety = self.store.path.with_name(f"browser-data-before-recovery-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json")
+            try:
+                shutil.copy2(self.store.path, safety)
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                if raw.get("format") == BrowserStore.BACKUP_FORMAT:
+                    self.store.restore_backup(path)
+                else:
+                    incoming = raw
+                    if not isinstance(incoming, dict):
+                        raise ValueError("Recovery file is not an object")
+                    updates = {}
+                    for key in ("bookmarks", "history"):
+                        rows = incoming.get(key, [])
+                        if not isinstance(rows, list):
+                            raise ValueError(f"Recovery file has invalid {key} data")
+                        updates[key] = [row for row in rows if isinstance(row, dict) and str(row.get("url", "")).startswith(("http://", "https://"))]
+                    for key in ("cookie_permissions", "settings", "ghost_surfer_tab_features", "download_history"):
+                        if key in incoming:
+                            value = incoming[key]
+                            if key in {"settings", "cookie_permissions", "ghost_surfer_tab_features"} and not isinstance(value, dict):
+                                raise ValueError(f"Recovery file has invalid {key} data")
+                            if key == "download_history" and not isinstance(value, list):
+                                raise ValueError("Recovery file has invalid download history")
+                            if key == "cookie_permissions":
+                                updates[key] = {str(domain): choice for domain, choice in value.items() if choice in {"allow", "deny"}}
+                            elif key == "download_history":
+                                updates[key] = [{"path": str(row.get("path", "")), "state": str(row.get("state", "Interrupted")),
+                                    "url": str(row.get("url", "")), "started_at": str(row.get("started_at", "")),
+                                    "finished_at": str(row.get("finished_at", ""))}
+                                    for row in value if isinstance(row, dict) and row.get("path")]
+                            else:
+                                updates[key] = value
+                    alerts = incoming.get("spy_alerts", [])
+                    if not isinstance(alerts, list):
+                        raise ValueError("Recovery file has invalid privacy alerts")
+                    updates["spy_alerts"] = [row for row in alerts if isinstance(row, dict)]
+                    previous = dict(self.store.data)
+                    self.store.data.update(updates)
+                    if not self.store.save():
+                        self.store.data = previous
+                        raise OSError(self.store.last_error)
+                self.refresh_lists()
+                self.update_security_chips()
+                self.update_storage_summary()
+                self.status.showMessage(f"Recovered browser data. Safety copy: {safety.name}", 6000)
+                dialog.accept()
+            except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+                QMessageBox.warning(dialog, "Recovery failed", str(exc))
+        restore.clicked.connect(restore_copy)
+        close.clicked.connect(dialog.reject)
+        if listing.count():
+            listing.setCurrentRow(0)
+        dialog.exec()
 
     def open_dashboard(self) -> None:
         tab = self.current_tab()
@@ -1194,12 +2118,24 @@ class BrowserWindow(QMainWindow):
             self.navigate(tab, DASHBOARD_URL)
 
     def toggle_control_center(self) -> None:
-        self.control_dock.setVisible(not self.control_dock.isVisible())
+        visible = not self.control_dock.isVisible()
+        self.control_dock.setVisible(visible)
+        if visible:
+            self.control_search.clear()
+            self.control_search.setFocus(Qt.FocusReason.ShortcutFocusReason)
 
-    def open_download_manager(self) -> None:
+    def open_control_page(self, title: str, focus_widget=None) -> None:
+        self.control_search.clear()
+        index = self.control_category.findText(title)
+        if index >= 0:
+            self.control_category.setCurrentIndex(index)
         self.control_dock.show()
         self.control_dock.raise_()
-        self.download_list.setFocus()
+        target = focus_widget if focus_widget is not None else self.control_search
+        target.setFocus(Qt.FocusReason.ShortcutFocusReason)
+
+    def open_download_manager(self) -> None:
+        self.open_control_page("Tabs & Data", self.download_list)
         self.status.showMessage("Downloads", 1800)
 
     def duplicate_current_tab(self) -> None:
@@ -1223,25 +2159,35 @@ class BrowserWindow(QMainWindow):
         for i in range(self.tabs.count()):
             tab = self.tabs.widget(i)
             if isinstance(tab, BrowserTab):
-                state = QWebEnginePage.LifecycleState.Frozen if self.speed_mode and i != self.tabs.currentIndex() else QWebEnginePage.LifecycleState.Active
+                should_freeze = self.speed_mode and i != self.tabs.currentIndex() and not bool(tab.property("ghost_keep_active"))
+                state = QWebEnginePage.LifecycleState.Frozen if should_freeze else QWebEnginePage.LifecycleState.Active
                 try:
                     tab.page().setLifecycleState(state)
+                    tab.setProperty("ghost_frozen", should_freeze)
+                    if hasattr(self, "tab_features"):
+                        self.tab_features.refresh_tab_presentation(tab)
                 except RuntimeError:
                     pass
+        self.update_security_chips()
+
+    def toggle_tab_keep_active(self, tab=None) -> None:
+        tab = tab or self.current_tab()
+        if tab is None:
+            return
+        enabled = not bool(tab.property("ghost_keep_active"))
+        tab.setProperty("ghost_keep_active", enabled)
+        self.suspend_inactive_tabs()
+        self.status.showMessage("This tab stays active in Speed Mode" if enabled else "This tab follows Speed Mode again", 3000)
 
     def refresh_lists(self) -> None:
         if not hasattr(self, "bookmark_list"):
             return
         self.bookmark_list.clear()
-        for item in self.store.data.get("bookmarks", [])[:30]:
+        for item in self.store.data.get("bookmarks", []):
             list_item = QListWidgetItem(item.get("title") or item.get("url", "Bookmark"))
             list_item.setData(Qt.ItemDataRole.UserRole, item.get("url", ""))
             self.bookmark_list.addItem(list_item)
-        self.history_list.clear()
-        for item in self.store.data.get("history", [])[:30]:
-            list_item = QListWidgetItem(item.get("title") or item.get("url", "History"))
-            list_item.setData(Qt.ItemDataRole.UserRole, item.get("url", ""))
-            self.history_list.addItem(list_item)
+        self.refresh_history_list()
         if hasattr(self, "cookie_list"):
             self.cookie_list.clear()
             for domain, decision in sorted(self.store.data.get("cookie_permissions", {}).items()):
@@ -1249,19 +2195,70 @@ class BrowserWindow(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, domain)
                 self.cookie_list.addItem(item)
         self.download_list.clear()
+        for entry in self.downloads:
+            entry["item"] = None
         for entry in self.downloads[-30:]:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, id(entry))
             entry["item"] = item
             self.download_list.addItem(item)
-            self.update_download_item(entry)
+            self.update_download_item(entry, persist=False)
+        self.persist_download_history()
         self.update_download_actions()
         if hasattr(self, "spy_list"):
             self.spy_list.clear()
-            for item in self.store.data.get("spy_alerts", [])[:30]:
+            category_filter = self.spy_filter_combo.currentData() if hasattr(self, "spy_filter_combo") else "all"
+            for item in self.store.data.get("spy_alerts", []):
+                if category_filter != "all" and item.get("category", "tracker") != category_filter:
+                    continue
                 site = item.get("site", "unknown site")
                 detail = item.get("detail", "Blocked tracking or permission attempt")
-                self.spy_list.addItem(f"{site}: {detail}")
+                listing_item = QListWidgetItem(f"{site}: {detail}")
+                listing_item.setData(Qt.ItemDataRole.UserRole, item)
+                listing_item.setToolTip(f"{item.get('category', 'tracker')} · {item.get('seen_at', '')}")
+                self.spy_list.addItem(listing_item)
+        self.update_storage_summary()
+
+    def refresh_history_list(self) -> None:
+        if hasattr(self, "library_features"):
+            self.library_features.refresh_history()
+            return
+        listing = getattr(self, "history_list", None)
+        if listing is None:
+            return
+        listing.clear()
+        for entry in self.store.data.get("history", []):
+            item = QListWidgetItem(entry.get("title") or entry.get("url", "History"))
+            item.setData(Qt.ItemDataRole.UserRole, entry.get("url", ""))
+            listing.addItem(item)
+
+    def dismiss_selected_alerts(self) -> None:
+        selected = [item.data(Qt.ItemDataRole.UserRole) for item in self.spy_list.selectedItems()]
+        if not selected:
+            self.status.showMessage("Select the privacy alerts to dismiss", 2500)
+            return
+        kept = list(self.store.data.get("spy_alerts", []))
+        for entry in selected:
+            try:
+                kept.remove(entry)
+            except ValueError:
+                pass
+        self.store.data["spy_alerts"] = kept
+        self.store.save()
+        self.refresh_lists()
+        self.update_security_chips()
+        self.status.showMessage(f"Dismissed {len(selected)} privacy alert{'s' if len(selected) != 1 else ''}", 2500)
+
+    def queue_store_save(self, delay_ms: int = 450) -> None:
+        self._store_save_pending = True
+        self._store_save_timer.start(max(0, int(delay_ms)))
+
+    def flush_store_save(self) -> None:
+        if not self._store_save_pending:
+            return
+        if self.store.save():
+            self._store_save_pending = False
+        self.update_storage_summary()
 
     def forget_selected_cookie_decision(self) -> None:
         item = self.cookie_list.currentItem() if hasattr(self, "cookie_list") else None
@@ -1294,6 +2291,43 @@ class BrowserWindow(QMainWindow):
             self.tor_chip.setText("Tor: Standby")
             self.status.showMessage("Tor route inactive: start Tor Browser or a Tor service, then reopen Ghost Surfer", 6500)
 
+    def search_selected_text(self, text: str) -> None:
+        query = " ".join(str(text or "").split())[:500]
+        if query:
+            self.add_tab(self.normalized_url(query), True)
+
+    def translate_current_page(self, tab=None) -> None:
+        tab = tab or self.current_tab()
+        if tab is None or tab.url().scheme().lower() not in {"http", "https"}:
+            self.status.showMessage("Translate is available on regular web pages", 3000)
+            return
+        languages = {"English": "en", "Spanish": "es", "French": "fr", "German": "de", "Italian": "it",
+                     "Portuguese": "pt", "Japanese": "ja", "Korean": "ko", "Chinese (Simplified)": "zh-CN",
+                     "Arabic": "ar", "Russian": "ru"}
+        language, accepted = QInputDialog.getItem(self, "Translate page", "Translate into:", list(languages), 0, False)
+        if not accepted or language not in languages:
+            return
+        source_url = tab.url().toString()
+        disclosure = ("Google Translate will receive this page URL and the target language. The page will open in a new tab. "
+                      "Do not continue with private or sensitive URLs.\n\nPage: " + source_url)
+        if QMessageBox.question(self, "Send page to Google Translate?", disclosure,
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        target = "https://translate.google.com/translate?sl=auto&tl=" + languages[language] + "&u=" + quote_plus(source_url)
+        self.add_tab(target, True)
+
+    def toggle_picture_in_picture(self, tab=None) -> None:
+        tab = tab or self.current_tab()
+        if tab is None:
+            return
+        script = """(async()=>{try{if(document.pictureInPictureElement){await document.exitPictureInPicture();return 'closed'}const v=[...document.querySelectorAll('video')].find(x=>x.readyState>=1);if(!v)return 'no-video';await v.requestPictureInPicture();return 'opened'}catch(e){return 'unavailable'}})()"""
+        def finished(result):
+            messages = {"opened": "Picture in picture opened", "closed": "Picture in picture closed",
+                        "no-video": "No video is available on this page", "unavailable": "This page does not allow picture in picture"}
+            self.status.showMessage(messages.get(result, "Picture in picture could not start"), 3500)
+        tab.page().runJavaScript(script, finished)
+
     def open_library_menu(self) -> None:
         menu = QMenu(self)
         bookmarks = self.store.data.get("bookmarks", [])
@@ -1314,6 +2348,14 @@ class BrowserWindow(QMainWindow):
                 history_menu.addAction(action)
         else:
             menu.addAction("No history yet").setEnabled(False)
+        menu.addSeparator()
+        menu.addAction("Manage bookmarks", self.library_features.show_bookmark_manager)
+        menu.addAction("Open downloads", self.open_download_manager)
+        menu.addAction("Start page", self.open_dashboard)
+        menu.addAction("Tor connection check", self.open_tor_check)
+        menu.addAction("Ghost Control", self.toggle_control_center)
+        menu.addSeparator()
+        menu.addAction("Clear browsing data…", self.clear_ghost_data)
         menu.exec(self.library_btn.mapToGlobal(self.library_btn.rect().bottomLeft()))
 
     def handle_download(self, download: QWebEngineDownloadRequest) -> None:
@@ -1325,8 +2367,11 @@ class BrowserWindow(QMainWindow):
             return
         download.setDownloadDirectory(str(Path(target).parent))
         download.setDownloadFileName(Path(target).name)
-        entry = {"request": download, "path": target, "state": "Queued", "item": None}
+        entry = {"request": download, "path": target, "state": "Queued", "item": None,
+                 "url": download.url().toString(), "started_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                 "finished_at": ""}
         self.downloads.append(entry)
+        self.persist_download_history()
         self.refresh_lists()
         download.stateChanged.connect(lambda *_args, record=entry: self.update_download_item(record))
         download.receivedBytesChanged.connect(lambda *_args, record=entry: self.update_download_item(record))
@@ -1345,12 +2390,15 @@ class BrowserWindow(QMainWindow):
             value /= 1024
         return f"{value:.1f} GB"
 
-    def update_download_item(self, entry: dict) -> None:
+    def update_download_item(self, entry: dict, persist: bool = True) -> None:
         item = entry.get("item")
         if item is None:
+            if persist:
+                self._download_save_timer.start()
             return
         request = entry.get("request")
-        state_text = entry.get("state", "Queued")
+        previous_state = entry.get("state", "Queued")
+        state_text = previous_state
         progress_text = ""
         if request is not None:
             try:
@@ -1362,22 +2410,46 @@ class BrowserWindow(QMainWindow):
                     progress_text = f" · {received / total:.0%}" if total else f" · {self.format_download_size(received)}"
                 elif state == QWebEngineDownloadRequest.DownloadState.DownloadCompleted:
                     state_text = "Complete"
+                    entry["finished_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
                     progress_text = f" · {self.format_download_size(received)}"
                     entry["request"] = None
                 elif state == QWebEngineDownloadRequest.DownloadState.DownloadCancelled:
                     state_text = "Canceled"
+                    entry["finished_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
                     entry["request"] = None
                 elif state == QWebEngineDownloadRequest.DownloadState.DownloadInterrupted:
                     state_text = "Interrupted"
+                    entry["finished_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
                     entry["request"] = None
                 elif state == QWebEngineDownloadRequest.DownloadState.DownloadRequested:
                     state_text = "Queued"
             except RuntimeError:
                 entry["request"] = None
         entry["state"] = state_text
-        item.setText(f"{Path(entry['path']).name}  —  {state_text}{progress_text}")
-        item.setToolTip(entry["path"])
+        if state_text == "Complete" and previous_state != "Complete" and hasattr(self, "page_ux"):
+            self.page_ux.download_completed(entry)
+        missing = state_text == "Complete" and not Path(entry["path"]).is_file()
+        item.setText(f"{Path(entry['path']).name}  —  {'File missing' if missing else state_text}{progress_text}")
+        item.setToolTip("\n".join(part for part in (entry["path"], entry.get("url", ""), entry.get("started_at", "")) if part))
+        if persist:
+            self._download_save_timer.start()
         self.update_download_actions()
+
+    def persist_download_history(self) -> None:
+        if hasattr(self, "_download_save_timer"):
+            self._download_save_timer.stop()
+        rows = []
+        for entry in self.downloads:
+            path = str(entry.get("path", ""))
+            if not path:
+                continue
+            state = str(entry.get("state", "Interrupted"))
+            if state in {"Queued", "Downloading"} and entry.get("request") is None:
+                state = "Interrupted"
+            rows.append({"path": path, "state": state, "url": str(entry.get("url", "")),
+                         "started_at": str(entry.get("started_at", "")), "finished_at": str(entry.get("finished_at", ""))})
+        self.store.data["download_history"] = rows[-500:]
+        self.store.save()
 
     def selected_download(self) -> dict | None:
         item = self.download_list.currentItem()
@@ -1424,6 +2496,7 @@ class BrowserWindow(QMainWindow):
 
     def clear_finished_downloads(self) -> None:
         self.downloads = [entry for entry in self.downloads if entry.get("state") in {"Queued", "Downloading"}]
+        self.persist_download_history()
         self.refresh_lists()
         self.status.showMessage("Finished downloads cleared from this list", 3000)
 
@@ -1444,8 +2517,9 @@ class BrowserWindow(QMainWindow):
             return
         if tab is self.current_tab():
             self.update_navigation_state(tab)
-        self.store.add_history(tab.title(), self.display_url(tab.url()))
-        self.refresh_lists()
+        if self.store.add_history(tab.title(), self.display_url(tab.url()), persist=False):
+            self.queue_store_save()
+            self.refresh_history_list()
         if tab is self.current_tab():
             self.progress_label.setText("Ready" if ok else "Load failed")
             self.privacy_chip.setText("Ghost Guard: On" if ok else "Ghost Guard: Check page")
@@ -1460,6 +2534,13 @@ class BrowserWindow(QMainWindow):
             self.address.setText(self.display_url(url))
             self.update_navigation_state(tab)
             self.update_page_security_state(url)
+        tab = self.current_tab()
+        if tab and hasattr(self, "page_ux"):
+            percent = self.page_ux.apply_site_zoom(tab)
+            if hasattr(self, "site_zoom_combo"):
+                self.site_zoom_combo.blockSignals(True)
+                self.site_zoom_combo.setCurrentText(f"{percent}%")
+                self.site_zoom_combo.blockSignals(False)
 
     def on_title_changed(self, title: str) -> None:
         tab = self.sender()
@@ -1483,6 +2564,12 @@ class BrowserWindow(QMainWindow):
             self.privacy_chip.setText("Ghost Guard: Local page")
 
     def closeEvent(self, event) -> None:
+        self._store_save_timer.stop()
+        self.flush_store_save()
+        self._download_save_timer.stop()
+        self.persist_download_history()
+        if hasattr(self, "tab_features"):
+            self.tab_features.save_previous_session()
         if bool(self.settings_data.get("ghost_cleanup_on_close", False)):
             self.clear_ghost_data(confirm=False)
         super().closeEvent(event)
@@ -1929,6 +3016,9 @@ class BrowserWindow(QMainWindow):
             QPushButton, QToolButton, QComboBox, QLineEdit {
                 border-radius: 10px;
             }
+            QGroupBox, QTabWidget::pane, QListWidget, #statusDeck, #addressDock, #privacyNotice {
+                border-radius: 10px;
+            }
             QPushButton, QComboBox {
                 min-height: 40px;
             }
@@ -1939,6 +3029,18 @@ class BrowserWindow(QMainWindow):
                 min-height: 48px;
                 padding: 3px 2px;
                 font-size: 9px;
+            }
+            #controlSectionLabel {
+                color: #8fd6ff;
+                font-size: 9px;
+                font-weight: 900;
+                letter-spacing: 1.2px;
+                min-width: 56px;
+            }
+            #controlPages {
+                background: #03070d;
+                border: 1px solid #26384e;
+                border-radius: 10px;
             }
             QPushButton:focus, QToolButton:focus, QLineEdit:focus, QComboBox:focus {
                 border: 1px solid #8fd6ff;
@@ -1957,6 +3059,22 @@ class BrowserWindow(QMainWindow):
             #controlScroll {
                 background: #03070d;
                 border: 0;
+            }
+            QTabWidget#controlPages::pane {
+                border: 0;
+                border-top: 1px solid #26384e;
+                background: #03070d;
+            }
+            QTabWidget#controlPages QTabBar::tab {
+                min-width: 0;
+                max-width: 110px;
+                padding: 8px 7px;
+                font-size: 10px;
+            }
+            #controlSearchFeedback {
+                color: #8fd6ff;
+                font-size: 10px;
+                padding: 2px 4px;
             }
             QMenu {
                 border-radius: 10px;
