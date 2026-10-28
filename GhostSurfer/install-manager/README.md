@@ -1,42 +1,61 @@
 # GS Install Manager
 
-GS Install Manager is a per-user Windows tool for installing, updating from a local package, launching, or removing Ghost Surfer. It does not remove Ghost Surfer's browser profile or browsing data.
-The manager uses the Ghost Surfer logo and runs as a single instance per Windows user; reopening it focuses the existing window.
-On first launch, one Legal & Consent dialog presents the full Terms, License, Privacy, Cookies, Acceptable Use, Refunds/Downloads, Security, Accessibility, Copyright/IP, Third-Party Notices, Compliance Overview, Support, and Legal Overview pages in nested scrollable tabs. It also includes a manager-specific install/update/uninstall and prerequisite-download disclosure. The DMCA tab reports the site's rights-holder contact details without claiming a statutory agent or legal service. The user checks the Terms/License acceptance box to continue. Acceptance is stored per user with the legal-content version and shown again when that version changes. Help / Legal reopens the same dialog.
+GS Install Manager installs, updates from a local package, launches, and uninstalls Ghost Surfer for the current Windows user. It uses the Ghost Surfer logo, allows one running manager instance per user, and leaves browser profile data in place when the app is updated or removed.
 
-## Build
+## For users
 
-Build on Windows x64 with Python 3.13 and the pinned project requirements (`PySide6==6.12.0`, `PyInstaller==6.21.0`). From the `GhostSurfer` project root, install them with:
+### Install
+
+1. Download and extract the current Ghost Surfer package from the [Firebase website](https://ghost-surfer-browser.web.app/).
+2. Run **GS Install Manager.exe** from the extracted folder.
+3. Review the bundled Legal & Consent information and accept the Terms/License to continue on first launch. The manager displays the consent dialog again when its legal-content version changes.
+4. Select **Install**. The manager checks the app package, Windows version and architecture, disk space, install-folder access, and Visual C++ runtime before changing browser program files.
+
+The package includes a `Ghost Surfer` folder beside the manager. The manager detects it automatically. If it cannot, select an extracted payload folder or a package ZIP in the manager.
+
+### Update, launch, or uninstall
+
+The manager checks whether Ghost Surfer is installed in `%LOCALAPPDATA%\Programs\Ghost Surfer` when it opens and after each operation. **Install** is available when the app is absent; **Update**, **Launch**, and **Uninstall** are available when it is present. Manager updates use the bundled or selected local package.
+
+Ghost Surfer also has a separate GitHub release checker in **General → Ghost Surfer Updates**. That browser control looks for a compatible release package and asks before applying an update that closes and restarts the browser.
+
+If Ghost Surfer is open during a manager install or update, the manager queues the operation and waits for the user to close the browser; it does not force-close it. A queued operation can be canceled. Program files are staged and checked before they replace the installed app.
+
+Uninstall removes the application and its Ghost Surfer shortcuts. Bookmarks, history, website profile, and other browser data remain under `%LOCALAPPDATA%\GhostSurferLocal\Ghost Surfer`.
+
+### Required Microsoft runtime
+
+The x64 package supports Windows 10 version 1809 (build 17763) or newer and Windows 11. It requires the Microsoft Visual C++ v14 x64 runtime, version 14.28 or newer. If the runtime is missing or outdated, the manager asks for consent before downloading it from Microsoft's HTTPS endpoint. It verifies the download source, Microsoft Authenticode signer, and SHA-256 before requesting Windows UAC approval. Declining consent or UAC stops the install/update before Ghost Surfer's program files change.
+
+The manager checks requirements on the computer where it runs. It does not send browser data, browsing history, or profile contents to the manager's publisher.
+
+## Build from source
+
+Build on Windows x64 with Python 3.13. From the `GhostSurfer` project root, install the pinned dependencies:
 
 ```powershell
 py -3 -m pip install -r requirements.txt
 ```
 
-Then build the manager:
+Build Ghost Surfer and the manager:
 
 ```powershell
+py -3 -m PyInstaller --clean -y "Ghost Surfer.spec" --distpath dist --workpath build
+Push-Location install-manager
 py -3 -m PyInstaller --clean -y "GS Install Manager.spec" --distpath dist --workpath build
+Pop-Location
 ```
 
-The standalone executable is `dist\GS Install Manager.exe`.
+Then create the manager-plus-browser distribution folder:
 
-## One-click distribution
+```powershell
+./install-manager/Build-Distribution.ps1
+```
 
-Place `GS Install Manager.exe` beside a folder named `Ghost Surfer` that contains `Ghost Surfer.exe` and `_internal`. The manager auto-detects that sibling payload at launch; manual ZIP/folder selection remains available as a fallback. To build the distribution folder, run `Build-Distribution.ps1` after building Ghost Surfer and GS Install Manager. The standalone manager executable does not embed the roughly 548 MiB app payload.
+The output is `install-manager/distribution/GS Install Manager for Ghost Surfer/`, with `GS Install Manager.exe` beside the `Ghost Surfer` application directory. The manager executable alone does not contain the browser payload.
 
-## Preflight and prerequisites
+## Website and release assets
 
-Each time the manager runs, it inspects the current PC's Windows version/build and architecture, Microsoft Visual C++ x64 runtime, install-folder writability, and available disk space. A selected Ghost Surfer ZIP or payload folder is checked for the executable, app-local VC runtime DLLs, Qt WebEngine process/modules/resources, and Qt Windows platform plugin. The x64 package requires Windows 10 1809 (build 17763) or newer, Windows 11, and the Microsoft Visual C++ v14 x64 runtime version 14.28 or newer.
+The current published browser package is **0.2.0** at [ghost-surfer-browser.web.app](https://ghost-surfer-browser.web.app/). Large ZIPs are hosted on Firebase Hosting rather than committed to GitHub. `site/downloads/SHA256SUMS.txt` records the published asset hashes.
 
-Install / Update runs directly. If the VC++ runtime is missing or too old, the manager first asks once for consent to install it. After consent, it downloads the current x64 redistributable from Microsoft's official `https://aka.ms/vc14/vc_redist.x64.exe` link, requires an HTTPS redirect to a Microsoft-owned domain, verifies the Authenticode signature and signer, hashes the downloaded file and confirms the hash still matches before launch, then asks Windows for UAC approval. If consent or UAC is declined, or the download is offline or invalid, installation stops before Ghost Surfer program files are changed. When the required runtime is already present, there is no prerequisite prompt.
-
-WebEngine files must be present in the chosen app package; the manager refuses incomplete packages instead of sourcing individual Qt binaries. The preflight runs on the computer where GS Install Manager is launched. Other computers are checked only when the manager runs on them.
-
-## Install behavior
-
-- Install path: `%LOCALAPPDATA%\Programs\Ghost Surfer`.
-- On startup and after each operation, the manager checks that standard install path. If absent, Install is enabled and Update is disabled. If present, Update, Launch, and Uninstall are enabled and Install is disabled.
-- Updates stage and validate new files before swapping program files. The previous program directory is kept until the new directory is in place.
-- A running Ghost Surfer copy is detected by its full executable path. Install/Update is queued with an in-app status message; the manager waits for the user to close Ghost Surfer at a convenient time and never force-terminates it. A queued operation can be canceled.
-- Start Menu shortcut is created; Desktop shortcut is optional.
-- Install, Update, and Uninstall run directly when clicked. Uninstall is limited to the standard app directory and Ghost Surfer shortcuts; it does not touch `%LOCALAPPDATA%\GhostSurferLocal\Ghost Surfer`.
+From the project root, `npm run deploy` runs `scripts/prepare-release-assets.ps1` first. That script downloads the ZIPs named in its asset list from the live Hosting site and verifies their SHA-256 values; the Firebase CLI then deploys the website. This step preserves already-published packages and does not create or upload a new package. Update the release asset, checksum manifest, and preparation list together when preparing a new release.

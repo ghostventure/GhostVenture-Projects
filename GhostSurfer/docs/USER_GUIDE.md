@@ -1,75 +1,92 @@
 # Ghost Surfer User Guide
 
-## A consistent browsing layout
+This guide describes the Windows browser in release 0.2.0. Use the contents list to jump to a task.
 
-The left navigation rail keeps the main browser actions in one place. Secondary actions such as Tor check, downloads, and clearing data are grouped in the **Library** menu. The right-side **Ghost Control** panel is split into **General**, **Privacy**, **Display**, **Performance**, and **Tabs & Data** pages, so related settings and tools are easier to find without scrolling through one long list.
+## Contents
 
-Use **Ctrl+,** to open or close Ghost Control. Its search box filters settings and tools across all five pages, reports how many sections match, and jumps to the first matching page. Your last selected page is restored the next time you open Ghost Control. Use **Ctrl+L** to focus the address bar, **Ctrl+T** to open a tab, **Ctrl+W** to close one, **Ctrl+Shift+T** to reopen a closed tab, **Ctrl+R** to reload, **Ctrl+D** to bookmark the current page, **Ctrl+J** to open downloads, and **Esc** to stop loading.
+- [Find controls and common shortcuts](#find-controls-and-common-shortcuts)
+- [Browse, search, and manage tabs](#browse-search-and-manage-tabs)
+- [Bookmarks and history](#bookmarks-and-history)
+- [Privacy and site compatibility](#privacy-and-site-compatibility)
+- [Downloads and browser data](#downloads-and-browser-data)
+- [Display and accessibility](#display-and-accessibility)
+- [Page tools and external services](#page-tools-and-external-services)
+- [Updates and privacy limits](#updates-and-privacy-limits)
 
-Press **Ctrl+K** to open Quick access. Type to filter browser actions, open tabs, bookmarks, and recent pages. Choose a result with Enter; if there are no matching saved items or actions, Enter searches Startpage for the typed text.
+## Find controls and common shortcuts
 
-Use **Ctrl+F** to find text on the current page. Enter moves to the next match, **Shift+Enter** moves to the previous match, and **Match case** makes the search case-sensitive. Press **Esc** to close Find in Page. Use **Ctrl+P** to save the current page as a PDF, and **F1** to open the searchable keyboard shortcuts guide.
+The left navigation rail contains the main browser actions. The **Library** menu groups secondary actions such as Tor check and downloads. Open **Ghost Control** with **Ctrl+,**. Its pages group options under **General**, **Privacy**, **Display**, **Performance**, and **Tabs & Data**. Use the search field to filter settings and tools; Ghost Control remembers the last page you selected.
 
-## Tabs and sessions
+| Shortcut | Action |
+| --- | --- |
+| Ctrl+L | Focus the address bar |
+| Ctrl+T / Ctrl+W | Open / close a tab |
+| Ctrl+Shift+T | Reopen a closed tab |
+| Ctrl+R / Esc | Reload / stop loading |
+| Ctrl+D / Ctrl+J | Bookmark the page / open downloads |
+| Ctrl+K | Open Quick Access |
+| Ctrl+F | Find text on the current page |
+| Ctrl+P | Save the current page as a PDF |
+| Ctrl+Tab / Ctrl+Shift+Tab | Move between tabs |
+| F1 | Open the searchable shortcuts guide |
+| F11 | Toggle distraction-free view; Esc exits |
 
-Right-click a tab for pinning, grouping, muting, duplicating, closing, split view, and a **Keep active in Speed Mode** exemption. Pinned tabs cannot be closed until unpinned. Tab hover shows the title, address, group, mute/pin state, and whether Speed Mode paused the tab. Speed Mode freezes inactive tabs; selecting one resumes it. Tabs with the exemption remain active while Speed Mode is on. Use **Ctrl+Tab** and **Ctrl+Shift+Tab** to cycle tabs. The **Tabs & Data / Tab Actions** section in Ghost Control opens named sessions and recently closed tabs.
+Quick access filters actions, open tabs, bookmarks, and recent pages. If there is no matching action or saved item, Enter searches Startpage by default. The home page is DuckDuckGo; the address-bar search provider is a separate setting.
 
-**Open split view** creates a separate split workspace. Choose any open tab for each side, swap sides, and add either pane back to the main tab strip. The workspace loads each tab's current address in a new view; it does not clone the exact scroll position or live page state.
+In Find in Page, Enter goes to the next match and Shift+Enter goes to the previous one. **Match case** makes the search case-sensitive; Esc closes the search.
 
-Use **Manage saved sessions** to preview a named session's tabs. You can replace the current set, merge the saved tabs into it, or open only the checked entries. Replacing removes the current tabs from the window, so choose Merge or Open checked tabs when you want to keep them. **Select tabs for bulk actions** offers multi-select pin, mute, group, and close actions.
+## Browse, search, and manage tabs
 
-Ghost Surfer restores the previous tab session at startup by default. Choose another startup behavior under **General → Search & Startup** in Ghost Control. Named sessions can be saved, restored, and deleted under **Tabs & Data → Tab Actions**. After an unclean exit, Ghost Surfer asks which tabs to recover, removes exact duplicate URLs from the choice list, and leaves tabs whose URLs contain query or fragment data unchecked. Those URL values are not shown in the recovery dialog. Choose **Restore previous session** in Quick Access if you later want to restore tabs you left unchecked.
+Right-click a tab for actions such as duplicate, pin, group, mute, split view, and **Keep active in Speed Mode**. Pinned tabs must be unpinned before they can be closed. Speed Mode pauses inactive tabs; selecting a paused tab resumes it. The exemption keeps a selected tab active. **Tabs & Data > Tab Actions** also opens named sessions and recently closed tabs.
 
-## Bookmarks, history, and navigation
+Use **Manage saved sessions** to preview a session and replace the current tabs, merge the saved tabs, or open only selected tabs. Replacing removes the current tab set. Split view opens two selected pages in a separate workspace; it loads their addresses in new views and does not preserve the exact scroll position or live page state.
 
-The **Tabs & Data / Library Tools** section in Ghost Control can search, rename, delete, and folder-organize bookmarks, and import or export Netscape-format bookmark HTML. Unfiled bookmarks appear on the bookmarks toolbar; foldered bookmarks are grouped into menus. Address-bar suggestions match bookmark and history titles or addresses. Bookmarks and history no longer have the previous 100-entry storage cap. Under **Tabs & Data / Browser Data**, choose **Keep history**: Forever, 30 days, 90 days, or 1 year. The selected retention period is applied as new pages are recorded and when you change the setting; you can also remove selected history entries at any time.
+Ghost Surfer restores the previous session at startup by default. Change this under **General > Search & Startup**. After an unclean exit, a recovery dialog lets you choose tabs to reopen. Exact duplicate URLs are listed once. URLs with query or fragment data start unchecked, and those values are not shown in the dialog. You can later choose **Restore previous session** from Quick Access to restore unchecked tabs.
 
-History is searchable and grouped by visit date. Select one or more history entries and choose **Remove selected history entries** to delete them. History saves are batched in the background to keep page navigation responsive. Open tabs, the selected tab, pinned/grouped state, and mute state are checkpointed in the background so the existing restore-session behavior can recover recent state after an unexpected exit. DuckDuckGo is the default home page; Startpage remains the default address-bar search provider. Existing settings that used Startpage as the home page are moved to DuckDuckGo during upgrade, while the saved search provider remains unchanged. Search & Startup settings let you choose Startpage, DuckDuckGo, Brave Search, or Bing, set a home page, and choose what opens at startup.
+## Bookmarks and history
 
-## Page and accessibility tools
+Open **Tabs & Data > Library Tools** to search, rename, delete, and organize bookmarks, or import/export Netscape-format bookmark HTML. Unfiled bookmarks appear on the bookmarks toolbar; bookmarks in folders are grouped into menus. Address suggestions can match bookmark and history titles or addresses.
 
-Open **Reader view** from Ctrl+K to show the page's readable text in a simplified layout. **Capture page screenshot** saves the visible viewport as PNG. Under **Display / Page & Accessibility**, set zoom for the current website or reset it to the default. **F11** hides browser controls and enters distraction-free full screen; press **Esc** to exit. Completed downloads show an in-app notification with an **Open** button. The page right-click menu offers actions for links, images, selected text, and editable fields. Dropping a URL or text onto the page navigates to it or searches it. Dropped local files are limited to PDF and common image formats; other file types are rejected.
+History is searchable and grouped by visit date. Select entries and choose **Remove selected history entries** to delete them. Under **Tabs & Data > Browser Data**, choose a retention period: Forever, 30 days, 90 days, or 1 year. The selected limit applies when history is recorded and when you change the setting.
 
-The same Page & Accessibility section can enlarge interface text, enable high-contrast colors, and reduce browser scrolling motion. These preferences are saved locally. Keyboard focus uses a visible highlight; the tab strip, address bar, and page-loading status have screen-reader labels. Reduced motion controls browser scrolling where supported and does not change animations inside websites.
+## Privacy and site compatibility
 
-For temporary site compatibility, right-click a page and choose **Allow JavaScript for this site until Ghost Surfer closes** or **Load images for this site until Ghost Surfer closes**. The status chip shows active overrides for the current site. These switches affect only that site for this app session, and the page may need a reload. Global JavaScript or image restrictions can break sign-in, video, or interactive controls. Cookie blocking can also sign you out or reset carts and preferences. Privacy settings reduce some tracking but do not hide your network address or make browsing anonymous.
+Cookie prompts and privacy alerts share the notification bar at the bottom of the browser. For first-party cookies, choose **Allow this site** or **Block this site**. To set the default for all sites, open **Ghost Control > Privacy > Cookies & Consent**:
 
-## Browser-data backup and recovery
+- **Ask once per site** prompts for a site decision.
+- **Allow first-party cookies** allows first-party cookies without prompting.
+- **Block all cookies** rejects cookies.
 
-Open **Ghost Control / Tabs & Data / Browser Data** to see the local bookmark/history footprint, export a JSON backup, choose history retention, or open **Recover from a saved copy**. Restoring a backup asks for confirmation and first writes a safety copy beside Ghost Surfer's local data file. Backups contain bookmarks, history, cookie choices, privacy alerts, and download history; they do not contain site cookies or cache. Backup files are readable JSON, so keep them somewhere private. The recovery center lists available copies with dates and a data-count preview; restoring a selected copy also saves a safety copy of current data first. Copies that cannot be read or previewed cannot be restored from that list. **Reset browser profile** makes a dated copy before clearing settings, history, cookie choices, alerts, download records, and saved sessions; you can choose to keep bookmarks. It also clears website cookies and cache, so expect to sign in again.
+Third-party tracking cookies and sensitive permissions, including camera, microphone, location, notifications, and clipboard access, remain blocked. Allowing first-party cookies can keep sign-ins, carts, and site preferences working; blocking them may sign you out or break those features.
 
-Ghost Surfer writes local browser data through a temporary file and atomic replacement. If the saved data is corrupt or fails its integrity check, the app preserves a recovery copy before creating fresh data. Privacy network events are handled on the UI thread and grouped before they update alerts.
+For a temporary compatibility change, right-click an HTTP or HTTPS page and choose **Allow JavaScript for this site until Ghost Surfer closes** or **Load images for this site until Ghost Surfer closes**. The **Site controls** status chip shows overrides for the current site. The change lasts until Ghost Surfer closes. A reload may be needed. Global JavaScript or image restrictions can break sign-in, video, or interactive controls.
 
-## Cookie and privacy choices
+Use **Tabs & Data > Maintenance > Clear cookies & cache** to remove website cookies and cached files while keeping history, bookmarks, and saved per-site cookie decisions. **Clear cookies, cache, history** also clears history, saved cookie decisions, and recent privacy alerts while preserving bookmarks. The **Cookie Decisions** list under Privacy lets you forget one site's decision or all decisions.
 
-Cookie prompts and privacy alerts appear in one notification bar at the bottom of the browser window instead of opening separate pop-up dialogs. When a site asks to store first-party cookies, choose **Allow this site** or **Block this site** in that bar. The choice is saved for that site. If another site's cookie request is waiting, its notice appears in the same bar after the current decision.
+The IP tripwire reports certain recognized public-IP echo and IP-geolocation requests and allows them to continue. It cannot identify every lookup service, custom endpoint, server-side logging, or other way a site may infer location. A site reached directly sees the public IP used for the connection. Tor, a VPN, or a proxy changes the network route; Ghost Surfer's privacy settings do not make browsing anonymous.
 
-To set the default for all sites, open **Ghost Control → Privacy** and use **Cookies & Consent**:
+## Downloads and browser data
 
-- **Ask once per site** keeps the per-site prompt behavior.
-- **Allow first-party cookies** allows first-party cookies across sites without prompting.
-- **Block all cookies** rejects cookies across sites.
+The Downloads panel shows progress and recent results, including the source URL and saved file path. Select an entry to open the downloaded file or its folder; cancel an active transfer; clear finished entries from the list; or choose **Delete file & record**. Deletion asks for confirmation before removing an inactive file and its history entry. If the file is already missing, the action removes only the record. Ghost Surfer keeps up to 500 download-history entries.
 
-The **Allow all sites** button in a cookie notice is a shortcut to the global **Allow first-party cookies** setting. Third-party cookies remain blocked under every option. Camera, microphone, location, notification, and clipboard requests remain blocked; the cookie setting does not grant these permissions.
+Under **Tabs & Data > Browser Data**, review the local data summary, export a JSON backup, set history retention, or use **Recover from a saved copy**. A backup contains bookmarks, history, cookie decisions, privacy alerts, and download history. It does not contain website cookies or cache. Backups are readable JSON; store them privately. Restoring a copy asks for confirmation and saves a safety copy of current data first.
 
-The left rail has a **Clear cache** button, and the same action is available under **Tabs & Data → Maintenance** and in Quick Access (`Ctrl+K`). It clears website cookies and cached web files while keeping history, bookmarks, and saved per-site cookie choices. The action asks for confirmation because clearing cookies may sign you out of sites. **Clear cookies, cache, history** remains available separately to remove history, saved cookie choices, and recent privacy alerts while preserving bookmarks. The **Cookie Decisions** list in Ghost Control → Privacy lets you forget the selected site's saved decision or clear all saved decisions. The privacy status area shows the current cookie policy, blocked tracker count, privacy alerts, IP tripwire state, and Tor connection state.
+**Reset browser profile** makes a dated safety copy, then resets settings, history, site cookie decisions, privacy alerts, download records, and saved sessions. You can choose to preserve bookmarks. It also clears website cookies and cache, so you may need to sign in again.
 
-The Privacy page's alert filter can show all alerts, tracker alerts, permission alerts, or IP-tripwire alerts. Select one or more and choose **Dismiss selected alerts** to remove those records without clearing the remaining alerts or other browser data. The IP tripwire is alert-only. It recognizes a limited set of common public-IP echo and IP-geolocation API requests, records the requesting site and endpoint, and allows the request to continue. It cannot detect server-side logging, custom lookup endpoints, or every way a site might infer location. A site reached directly sees the public IP used for that connection; use a Tor, VPN, or proxy route to send a different network IP.
+## Display and accessibility
 
-## Appearance and browsing controls
+Under **Display > Page & Accessibility**, set a saved zoom for the current site or use the default zoom. **Page Zoom** sets the general zoom; **Interface text size** changes Ghost Surfer's controls. **High contrast colors** and **Reduce interface motion** are also available. Reduced motion affects browser scrolling where supported; it does not change animations inside websites. Keyboard focus has a visible highlight, and the tabs, address bar, and loading status expose screen-reader names.
 
-Choose an accent color under **Display → Theme Color** in Ghost Control; the change is applied immediately. **Page Zoom** offers 80%, 90%, 100%, 110%, 125%, and 150%. These preferences are saved locally. Performance toggles are under **Performance**, while tab actions, downloads, bookmarks, and history are under **Tabs & Data**.
+Use **Reader view** to show readable page text in a simplified layout, or **Capture page screenshot** to save the visible viewport as PNG. The page context menu also offers actions for links, images, selected text, and editable fields. Dropping a URL or text onto a page navigates to it or searches it. Local file drops are limited to PDF and common image formats.
 
-Downloads show progress and completion state and keep the latest 500 entries across browser restarts, including source URL and file path. Select an item to open the file or its containing folder when available; an active download can be canceled, and finished entries can be cleared from the list. **Delete file & record** asks before permanently deleting a selected inactive file and removing its history entry. If a saved file was moved or deleted, the row indicates that the file is missing and Open is unavailable; removing that row only deletes its record.
+## Page tools and external services
 
-Under **General → Ghost Surfer Updates**, choose **Check for updates** to query GitHub. The updater scans releases for a compatible Ghost Surfer package and ignores other products that share the repository. If a package is available, Ghost Surfer shows its release notes, downloads and verifies the package, then asks before closing and restarting to install it. Update checking is user-initiated. When Ghost Surfer is not installed in the standard per-user folder, use GS Install Manager to install it first.
+Choose **Picture in picture** from the page context menu, Quick Access, or **Alt+P**. The site and Chromium must support the request and have a ready video; a site can refuse it.
 
-Speed Mode displays how many background tabs are paused. A paused tab resumes when selected. Right-click a tab and select **Keep active in Speed Mode** to exempt it, for example when a site must continue an active task in the background.
+For translation, choose **Translate this page**, select a language, and review the confirmation. If you continue, Ghost Surfer opens Google Translate with the current page URL and target language. Google receives that URL. Avoid using the feature with private or sensitive URLs; translation is provided by Google, not locally.
 
-Right-click a page and choose **Picture in picture**, use **Alt+P**, or select it from Ctrl+K. Ghost Surfer asks the page's video element to enter or leave Picture-in-Picture. Availability depends on the website and Chromium's support for that video; a site can refuse the request, and a page without a ready video cannot open the player.
+## Updates and privacy limits
 
-For translation, choose **Translate this page** from the page menu or Ctrl+K, select a language, and review the confirmation. If you continue, Ghost Surfer opens Google Translate with the current page URL and target language. Google receives that URL; do not use the feature with private or sensitive URLs. Translation is provided by Google, not locally by Ghost Surfer.
+Under **General > Ghost Surfer Updates**, press **Check for updates** to query the configured GitHub releases. The updater ignores unrelated products in the shared release list and looks for a compatible Ghost Surfer package. If one is available, Ghost Surfer shows the release notes, downloads and verifies the package, then asks before closing and restarting to apply it. Checking is user-initiated. When the browser is not installed in the standard per-user folder, use GS Install Manager to install or update it.
 
-## Scope of privacy controls
-
-Ghost Surfer's controls describe browser behavior; they cannot guarantee that a site will not identify a user through its own account, content, or other browser signals. Allowing first-party cookies may be needed for sign-in, carts, and preferences. Tor routing is available only when a local Tor service is listening on the supported port when Ghost Surfer starts.
+Ghost Surfer's controls describe browser behavior. They cannot prevent identification through a site account, information you submit, server-side logs, or other browser signals. Tor routing is available only when a local Tor service is listening on a supported port when Ghost Surfer starts.

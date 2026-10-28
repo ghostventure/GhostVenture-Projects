@@ -1,95 +1,69 @@
 # Ghost Surfer
 
-Ghost Surfer is a simple Windows web browser shell built with Python, PySide6, and QtWebEngine.
+Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. The current published browser package is **0.2.0**. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
 
-It intentionally avoids copying the current mainstream browser look:
+## What it includes
 
-- left-side navigation rail instead of a common top toolbar
-- custom "Ghost Surfer" start pane
-- green, brass, and off-white visual system
-- local bookmarks and history stored under the user's local app data
-- standard browser functions: address/search, back, forward, reload, home, tabs, bookmarks, downloads
-- familiar shortcuts: `Ctrl+L` address bar, `Ctrl+T` new tab, `Ctrl+W` close tab, `Ctrl+Shift+T` reopen tab, `Ctrl+R` reload, and `Esc` stop loading
-- quick access palette (`Ctrl+K`) for actions, open tabs, bookmarks, recent pages, and Startpage searches
-- page search (`Ctrl+F`) with next/previous matches and case sensitivity, PDF export (`Ctrl+P`), and a searchable shortcuts guide (`F1`)
-- tab/session tools: restore the last session, save named sessions, pin and group tabs, mute tab audio, cycle tabs, split view, and choose recently closed tabs
-- tab management: preview saved sessions before replacing, merging, or opening selected tabs; multi-select tabs for bulk pin, mute, group, or close actions; split workspaces can choose and swap pages
-- per-tab Speed Mode exemptions and paused-tab indicators; drag-and-drop navigation for web addresses and text, with local file drops limited to PDF and common image formats
-- context menus for links, images, selected text, and editable fields, plus video picture-in-picture controls
-- bookmark and history tools: organize/search/import/export bookmarks, bookmark toolbar, searchable day-grouped history with selected-entry removal, and address suggestions
-- local navigation preferences for search engine, home page, and startup behavior
-- reader view, visible-page PNG capture, per-site zoom, distraction-free full screen (`F11`), and download-complete Open notifications
-- accessibility options for larger interface text and high-contrast colors
-- local data backend with atomic writes, integrity checks, corrupt-file recovery copies, schema versioning, and a storage summary
-- debounced history persistence and background session checkpoints that preserve the selected, pinned, grouped, and muted tabs for recovery
-- browser-data backup and restore for bookmarks, history, cookie decisions, privacy alerts, and download history
-- a recovery center that previews saved recovery copies and saves a safety copy before restoring one
-- searchable privacy alerts with tracker, permission, and IP-tripwire filters and individual dismissal
-- privacy interceptor events are queued back to the UI thread and batched before alert/storage updates
-- an alert-only IP tripwire that records recognized public-IP echo and IP-geolocation API requests without blocking them
-- modular Ghost Guard policies for tracker requests, cookie decisions, permission requests, WebEngine privacy settings, and startup network routing
-- visible labels on the navigation rail, consistent rounded controls and focus states, plus quick bookmark/download shortcuts (`Ctrl+D`, `Ctrl+J`)
-- a cleaner address row and a categorized control center with separate General, Privacy, Display, Performance, and Tabs & Data pages
-- a shorter primary navigation rail, with secondary actions grouped in the Library menu
-- searchable Ghost Control pages with saved page selection and the `Ctrl+,` shortcut
-- download progress and outcomes with open, show-folder, cancel, and clear-finished actions
-- delete a selected completed download from disk and its download history with a path-specific confirmation
-- persisted download history for the latest 500 entries, including status, source address, and file availability
-- no fixed 100-entry cap on saved bookmarks or history, plus user-selectable history retention (Forever, 30 days, 90 days, or 1 year)
-- clear-data confirmation that also removes saved cookie decisions and Ghost Guard alerts while preserving bookmarks
-- one-click-access controls for clearing website cookies and cache without deleting history, bookmarks, or saved cookie choices
-- an opt-in GitHub update check that scans shared releases for Ghost Surfer package names, verifies the package before staging, and asks before closing/restarting to apply it
-- crash-session recovery that de-duplicates saved tabs and leaves URLs with query or fragment data unchecked until the user opts in
-- temporary per-site JavaScript and image overrides, discarded when Ghost Surfer closes
-- reduced-motion support for browser scrolling, keyboard focus visibility, accessible tab/address/status labels, and interface text scaling
-- a profile reset that creates a dated safety copy first and lets users preserve bookmarks
-- a bottom notification bar for cookie choices and privacy alerts, so browsing is not interrupted by privacy pop-ups
-- one consolidated consent panel with per-site allow/block choices, an optional "Allow all sites" shortcut, and a global privacy setting to ask per site, allow first-party cookies, or block all cookies
-- third-party tracking cookies and camera, microphone, location, notification, and clipboard permissions remain blocked regardless of the first-party cookie setting
-- persistent page zoom from 80% through 150%, plus a Cookie Decisions manager for forgetting one site or all saved choices
-- DuckDuckGo as the default home page; Startpage remains the default address-bar search provider
-- optional Google Translate page opening with a per-use disclosure and confirmation that the page URL is sent to Google Translate
-- ghost mode defaults: blocks common trackers, third-party cookies, geolocation, camera, microphone, notifications, clipboard access, and local font access
-- Tor-aware startup: if Tor is listening on `127.0.0.1:9050` or `127.0.0.1:9150`, Ghost Surfer routes browser traffic through that local SOCKS endpoint and opens `https://check.torproject.org/` from the Tor button
+- **Browsing and tabs:** bookmarks, history, named sessions, split view, tab groups, reader view, PDF export, page search, and a searchable shortcuts guide.
+- **Privacy controls:** first-party cookie choices, third-party cookie blocking, permission restrictions, tracker alerts, and an alert-only IP tripwire for a limited set of known lookup services.
+- **Compatibility and accessibility:** temporary per-site JavaScript and image overrides, interface text sizing, high contrast, reduced browser-scroll motion, and visible keyboard focus.
+- **Recovery and cleanup:** crash-session recovery, browser-data backup and restore, profile reset with an optional bookmark keep, cookie/cache controls, and download management.
+- **Updates:** the browser can check GitHub releases for a compatible Ghost Surfer package, verify and stage it, and ask before applying an update that closes and restarts the browser.
 
-Ghost Guard labels the current page as secure, upgrading, or local so the browsing state is easier to read at a glance.
+Privacy controls reduce some tracking; they do not make a direct connection anonymous. The IP tripwire recognizes only a limited set of client-side lookup patterns and allows recognized requests to continue. A site can still observe the network address used for its connection.
 
-The IP tripwire recognizes a limited list of common client-side IP lookup services and records an alert while allowing the request. It cannot detect a site using its own server logs or custom lookup APIs. Any site reached over a direct connection receives the public IP used for that connection; Tor or a VPN/proxy is needed to route traffic through another endpoint. Picture-in-picture depends on the page's video and Chromium allowing the page's Picture-in-Picture request. Google Translate is an external service; Ghost Surfer asks before sending the current page URL and chosen language.
+For operating instructions, see the [Ghost Surfer User Guide](docs/USER_GUIDE.md). For installation requirements and the manager workflow, see [GS Install Manager](install-manager/README.md).
 
-For the control center, cookie choices, and privacy notice behavior, see the [user guide](docs/USER_GUIDE.md).
+## Install the current package
 
-Run from source:
+Download the current Windows ZIP from the [Ghost Surfer website](https://ghost-surfer-browser.web.app/), extract it, and run **GS Install Manager.exe**. Choose **Install**. The manager checks the Windows version, architecture, package files, disk space, and Microsoft Visual C++ runtime. It asks for consent before downloading a required Visual C++ component. Ghost Surfer installs per user under `%LOCALAPPDATA%\Programs\Ghost Surfer`; browser profile data stays under `%LOCALAPPDATA%\GhostSurferLocal\Ghost Surfer`.
+
+The manager's **Update** action uses the bundled or selected local package. The browser's **General → Ghost Surfer Updates** control checks GitHub releases. A release must contain a compatible Ghost Surfer package with verifiable integrity data before the browser will stage it.
+
+## Project layout
+
+- `ghost_surfer.py` and the adjacent Python modules: browser application.
+- `install-manager/`: GS Install Manager source, build spec, legal pages, and distribution script.
+- `installer/`: per-user installer and uninstaller scripts used by package workflows.
+- `docs/USER_GUIDE.md`: browser controls and user-facing workflows.
+- `site/`: Firebase-hosted website, policies, release notes, checksum manifest, and download links.
+- `scripts/prepare-release-assets.ps1`: downloads the release ZIPs listed in the script from the live site and verifies their SHA-256 values before a Hosting deploy.
+
+Large release ZIPs are hosted on Firebase rather than stored in Git. Their published names and hashes are listed in `site/downloads/SHA256SUMS.txt` and in the release-asset preparation script.
+
+## Build from source
+
+Build on Windows x64 with Python 3.13. The pinned dependencies are in `requirements.txt`:
 
 ```powershell
-py -3 ghost_surfer.py
+py -3 -m pip install -r requirements.txt
 ```
 
-Build an executable:
+Build Ghost Surfer from this directory:
 
 ```powershell
-py -3 -m pip install PySide6==6.12.0 PyInstaller
-py -3 -m PyInstaller --clean -y --onedir --windowed --name "Ghost Surfer" ghost_surfer.py
+py -3 -m PyInstaller --clean -y "Ghost Surfer.spec" --distpath dist --workpath build
 ```
 
-The Windows package uses PySide6 6.12.0 with Qt WebEngine's bundled Chromium runtime. Qt 6.12 supports Windows 10 version 1809 and newer on x64 and Windows 11; Windows 10 support ends with the Qt 6.12 release line.
-
-## Repository, manager, and website
-
-- `install-manager/`: GS Install Manager source, bundled legal disclosures, build spec, and one-click distribution script. Build outputs and packaged binaries are not committed.
-- `installer/`: per-user PowerShell installer and uninstaller scripts.
-- `site/`: public website, policies, icons, release notes, and checksum manifest.
-- `firebase.json` and `.firebaserc`: Firebase Hosting configuration for `ghost-surfer-browser`.
-- `scripts/prepare-release-assets.ps1`: downloads and verifies public ZIP assets before deployment.
-
-The large ZIP release assets stay on Firebase Hosting rather than being committed to GitHub. Their names and hashes are recorded in `site/downloads/SHA256SUMS.txt`.
-
-To build the manager, install the pinned requirements above, then run:
+Build GS Install Manager from its directory:
 
 ```powershell
-py -3 -m PyInstaller --clean -y "install-manager/GS Install Manager.spec" --distpath install-manager/dist --workpath install-manager/build
+Set-Location install-manager
+py -3 -m PyInstaller --clean -y "GS Install Manager.spec" --distpath dist --workpath build
+Set-Location ..
 ```
 
-For the website, install Node.js, then run these commands from this folder:
+After both builds succeed, create the one-click distribution folder:
+
+```powershell
+./install-manager/Build-Distribution.ps1
+```
+
+The manager executable and browser payload are separate build outputs. The distribution script puts them together; it does not build or publish the Firebase download ZIP.
+
+## Firebase website
+
+The Firebase project and Hosting site are `ghost-surfer-browser`. Install Node.js, then from this directory run:
 
 ```powershell
 npm ci
@@ -97,4 +71,4 @@ npx firebase login
 npm run deploy
 ```
 
-The deploy command downloads the release ZIPs from the live site and checks their SHA-256 values before Firebase CLI publishes the website. This keeps the complete source project together without storing files larger than GitHub's individual-file size limit.
+The deploy script first downloads the release assets listed in `scripts/prepare-release-assets.ps1` from the live site and verifies each SHA-256. It then publishes `site/` to Firebase Hosting. A new installer must be packaged, uploaded, and added to the checksum and asset lists as part of the release process; the preparation script only downloads and verifies already-published assets.
