@@ -5,6 +5,7 @@ import socket
 import sys
 import hashlib
 import hmac
+import platform
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -202,7 +203,10 @@ class PrivacyInterceptor(QWebEngineUrlRequestInterceptor):
 def app_data_dir() -> Path:
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
     if not base:
-        base = str(Path.home() / "AppData" / "Local" / "GhostSurfer")
+        if sys.platform == "win32":
+            base = str(Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "GhostSurfer")
+        else:
+            base = str(Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "ghost-surfer")
     path = Path(base)
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -1404,7 +1408,7 @@ class BrowserWindow(QMainWindow):
             self.status.showMessage("That download is not complete or the file has moved", 3500)
             return
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
-            self.status.showMessage("Windows could not open this downloaded file", 3500)
+            self.status.showMessage("Could not open this downloaded file with the system application", 3500)
 
     def show_selected_download(self) -> None:
         entry = self.selected_download()
@@ -1617,7 +1621,7 @@ class BrowserWindow(QMainWindow):
         <body>
           <main>
             <section class="mast">
-              <div class="kicker">Privacy-first browsing for Windows</div>
+              <div class="kicker">Privacy-first browsing for {html.escape(platform.system() or 'your desktop')}</div>
               <h1>Ghost Surfer</h1>
               <p>A compact browser that blocks location prompts, rejects common trackers, asks before storing site cookies, auto-upgrades HTTP to HTTPS, and uses a local Tor route when one is available.</p>
             </section>
