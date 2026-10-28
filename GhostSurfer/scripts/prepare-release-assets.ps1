@@ -13,7 +13,7 @@ $assets = @(
     },
     @{
         Name = 'Ghost-Surfer-Setup-Windows-2026-10-27.zip'
-        Sha256 = 'B3DC7A3F4BAC42B69DCC99C00770320912A512E7D24A1F7F9EFCEBE92B93D525'
+        Sha256 = 'B2E813A48451D18157A899F4220BC7742832CBB2EB229738E98392EA55C37896'
     },
     @{
         Name = 'Ghost-Surfer-Browser-Windows.zip'

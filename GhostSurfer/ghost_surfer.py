@@ -2655,12 +2655,23 @@ class BrowserWindow(QMainWindow):
             QMessageBox.warning(self, "Profile reset stopped", f"Could not create the safety backup. No profile data was changed.\n\n{exc}")
             return
         bookmarks = list(self.store.data.get("bookmarks", [])) if preserve.isChecked() else []
+        self._download_save_timer.stop()
+        for entry in self.downloads:
+            request = entry.get("request")
+            if request is not None and entry.get("state") in {"Queued", "Downloading"}:
+                request.cancel()
+        self.downloads = []
         self.store.data["bookmarks"] = bookmarks
         self.store.data["history"] = []
         self.store.data["cookie_permissions"] = {}
         self.store.data["spy_alerts"] = []
         self.store.data["download_history"] = []
-        self.store.data["ghost_surfer_tab_features"] = {"previous_session": [], "recently_closed": [], "named_sessions": {}}
+        tab_state = self.store.data.setdefault("ghost_surfer_tab_features", {})
+        tab_state.clear()
+        tab_state.update({
+            "previous_session": [], "previous_session_active_index": 0,
+            "recently_closed": [], "named_sessions": {},
+        })
         self.store.data["settings"] = {
             "speed_mode": True, "block_images": False, "ghost_cleanup_on_close": False,
             "allow_javascript": True, "allow_webgl": False, "cookie_policy": "ask",
@@ -2673,6 +2684,13 @@ class BrowserWindow(QMainWindow):
         self.speed_mode = True
         self.zoom_level = 100
         self._temporary_site_overrides.clear()
+        self.closed_tabs.clear()
+        while self.tabs.count():
+            old_tab = self.tabs.widget(self.tabs.count() - 1)
+            self.tabs.removeTab(self.tabs.count() - 1)
+            if old_tab is not None:
+                old_tab.deleteLater()
+        self.add_tab(HOME_URL, switch=True)
         self.profile.cookieStore().deleteAllCookies()
         self.profile.clearHttpCache()
         self.store.save()
