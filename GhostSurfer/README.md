@@ -33,10 +33,16 @@ It intentionally avoids copying the current mainstream browser look:
 - a shorter primary navigation rail, with secondary actions grouped in the Library menu
 - searchable Ghost Control pages with saved page selection and the `Ctrl+,` shortcut
 - download progress and outcomes with open, show-folder, cancel, and clear-finished actions
+- delete a selected completed download from disk and its download history with a path-specific confirmation
 - persisted download history for the latest 500 entries, including status, source address, and file availability
 - no fixed 100-entry cap on saved bookmarks or history, plus user-selectable history retention (Forever, 30 days, 90 days, or 1 year)
 - clear-data confirmation that also removes saved cookie decisions and Ghost Guard alerts while preserving bookmarks
 - one-click-access controls for clearing website cookies and cache without deleting history, bookmarks, or saved cookie choices
+- an opt-in GitHub update check that scans shared releases for Ghost Surfer package names, verifies the package before staging, and asks before closing/restarting to apply it
+- crash-session recovery that de-duplicates saved tabs and leaves URLs with query or fragment data unchecked until the user opts in
+- temporary per-site JavaScript and image overrides, discarded when Ghost Surfer closes
+- reduced-motion support for browser scrolling, keyboard focus visibility, accessible tab/address/status labels, and interface text scaling
+- a profile reset that creates a dated safety copy first and lets users preserve bookmarks
 - a bottom notification bar for cookie choices and privacy alerts, so browsing is not interrupted by privacy pop-ups
 - one consolidated consent panel with per-site allow/block choices, an optional "Allow all sites" shortcut, and a global privacy setting to ask per site, allow first-party cookies, or block all cookies
 - third-party tracking cookies and camera, microphone, location, notification, and clipboard permissions remain blocked regardless of the first-party cookie setting

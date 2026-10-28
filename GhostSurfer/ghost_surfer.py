@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QSplashScreen,
     QScrollArea,
@@ -55,6 +56,8 @@ from shortcuts_guide import show_shortcuts_guide
 from tab_features import TabFeatures
 from page_ux_features import PageUxFeatures
 from library_features import LibraryFeatures
+from browser_update import UpdateWorker
+from github_updater import GitHubReleasesUpdater
 from ghost_guard import (
     FirstPartyCookiePolicy,
     GhostGuardRequestInterceptor,
@@ -65,6 +68,9 @@ from ghost_guard import (
 
 
 APP_NAME = "Ghost Surfer"
+APP_VERSION = "0.2.0"
+GITHUB_REPOSITORY_URL = "https://github.com/ghostventure/GhostVenture-Projects"
+GITHUB_RELEASES_URL = f"{GITHUB_REPOSITORY_URL}/releases"
 HOME_URL = "https://duckduckgo.com/"
 DASHBOARD_URL = "ghostsurfer://dashboard"
 SEARCH_URL = "https://www.startpage.com/sp/search?query={query}"
@@ -177,8 +183,10 @@ class BrowserStore:
         self.last_error = ""
         self.recovery_backup: Path | None = None
         self.write_protected = False
+        self.previous_session_was_clean = True
         self.data = {
             "schema_version": 2,
+            "clean_shutdown": True,
             "bookmarks": [],
             "history": [],
             "cookie_permissions": {},
@@ -195,9 +203,12 @@ class BrowserStore:
                 "zoom": 100,
                 "home_page_url": "https://duckduckgo.com/",
                 "home_page_default_migrated": True,
+                "reduce_motion": False,
             },
         }
         self.load()
+        self.previous_session_was_clean = self.data.get("clean_shutdown") is True
+        self.data["clean_shutdown"] = False
         self.save()
 
     def load(self) -> None:
@@ -255,6 +266,7 @@ class BrowserStore:
                 "zoom": 100,
                 "history_retention_days": 0,
                 "home_page_url": "https://duckduckgo.com/",
+                "reduce_motion": False,
             }.items():
                 self.data["settings"].setdefault(key, value)
             settings = self.data["settings"]
@@ -263,7 +275,7 @@ class BrowserStore:
                 if legacy_home is None or legacy_home == "https://www.startpage.com/":
                     settings["home_page_url"] = "https://duckduckgo.com/"
                 settings["home_page_default_migrated"] = True
-            for key in ("speed_mode", "block_images", "ghost_cleanup_on_close", "allow_javascript", "allow_webgl", "high_contrast"):
+            for key in ("speed_mode", "block_images", "ghost_cleanup_on_close", "allow_javascript", "allow_webgl", "high_contrast", "reduce_motion"):
                 settings[key] = bool(settings.get(key, key == "speed_mode"))
             if not isinstance(settings.get("cookie_policy"), str) or settings["cookie_policy"] not in {"ask", "allow", "deny"}:
                 settings["cookie_policy"] = "ask"
@@ -551,6 +563,19 @@ class BrowserTab(QWebEngineView):
                     action.setText(label)
                     menu.addAction(action)
             menu.addSeparator()
+        page_url = self.url()
+        host = page_url.host().lower()
+        if host and page_url.scheme().lower() in {"http", "https"}:
+            menu.addSection(f"Temporary controls for {host}")
+            javascript_action = menu.addAction("Allow JavaScript for this site until Ghost Surfer closes")
+            javascript_action.setCheckable(True)
+            javascript_action.setChecked(page.settings().testAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled))
+            javascript_action.toggled.connect(lambda enabled: self.window.set_temporary_site_control(self, "javascript", enabled))
+            images_action = menu.addAction("Load images for this site until Ghost Surfer closes")
+            images_action.setCheckable(True)
+            images_action.setChecked(page.settings().testAttribute(QWebEngineSettings.WebAttribute.AutoLoadImages))
+            images_action.toggled.connect(lambda enabled: self.window.set_temporary_site_control(self, "images", enabled))
+            menu.addSeparator()
         menu.addAction("Back", self.back).setEnabled(self.history().canGoBack())
         menu.addAction("Forward", self.forward).setEnabled(self.history().canGoForward())
         menu.addAction("Reload", self.reload)
@@ -607,6 +632,11 @@ class BrowserWindow(QMainWindow):
         self._download_save_timer.setSingleShot(True)
         self._download_save_timer.setInterval(800)
         self._download_save_timer.timeout.connect(self.persist_download_history)
+        self._temporary_site_overrides: dict[str, dict[str, bool]] = {}
+        self._update_worker: UpdateWorker | None = None
+        self._update_candidate = None
+        self._staged_update = None
+        self._update_progress_dialog: QProgressDialog | None = None
         self.blocked_count = 0
         self.tracker_blocked_count = 0
         self.downloads = [
@@ -655,6 +685,8 @@ class BrowserWindow(QMainWindow):
         self.progress_timer.timeout.connect(lambda: self.progress_label.setText("Ready"))
 
         self.tabs = QTabWidget()
+        self.tabs.setAccessibleName("Open browser tabs")
+        self.tabs.setAccessibleDescription("Use Control and Tab to move between open pages. Right-click a tab for tab actions.")
         self.tabs.setDocumentMode(True)
         self.tabs.setMovable(True)
         self.tabs.setTabsClosable(True)
@@ -665,10 +697,13 @@ class BrowserWindow(QMainWindow):
         self.address = QLineEdit()
         self.address.setPlaceholderText("Type a site, search, or paste a URL")
         self.address.setClearButtonEnabled(True)
+        self.address.setAccessibleName("Address and search bar")
+        self.address.setAccessibleDescription("Enter a website address or search phrase, then press Enter.")
         self.address.returnPressed.connect(self.navigate_from_address)
 
         self.progress_label = QLabel("Ready")
         self.progress_label.setObjectName("progressLabel")
+        self.progress_label.setAccessibleName("Page loading status")
         self.privacy_chip = QLabel("Ghost Guard: On")
         self.privacy_chip.setObjectName("privacyChip")
         tor_text = f"Tor: {TOR_ENDPOINT[1]}" if TOR_ENDPOINT else "Tor: Standby"
@@ -684,6 +719,10 @@ class BrowserWindow(QMainWindow):
         self.tabs_chip.setObjectName("tabsChip")
         self.home_chip = QLabel("Home: DuckDuckGo")
         self.home_chip.setObjectName("homeChip")
+        self.site_controls_chip = QLabel("Site controls: defaults")
+        self.site_controls_chip.setObjectName("siteControlsChip")
+        self.site_controls_chip.setToolTip("Temporary JavaScript or image overrides last until Ghost Surfer closes")
+        self.site_controls_chip.setAccessibleName("Temporary site compatibility controls")
 
         self.status = QStatusBar()
         self.build_privacy_notice()
@@ -831,6 +870,7 @@ class BrowserWindow(QMainWindow):
         status_deck_layout.setSpacing(8)
         status_deck_layout.addWidget(self.tabs_chip, 0)
         status_deck_layout.addWidget(self.home_chip, 0)
+        status_deck_layout.addWidget(self.site_controls_chip, 0)
         status_deck_layout.addWidget(self.blocked_chip, 0)
         status_deck_layout.addWidget(self.spy_chip, 0)
         session_note = QLabel("Per-site cookies  |  Tracker blocking  |  HTTPS preferred")
@@ -1153,6 +1193,21 @@ class BrowserWindow(QMainWindow):
         self.control_category.currentIndexChanged.connect(self.control_pages.setCurrentIndex)
         self.control_category.currentIndexChanged.connect(self.save_control_page_selection)
         self.control_search.textChanged.connect(self.filter_control_pages)
+        update_group = QGroupBox("Ghost Surfer Updates")
+        update_layout = QVBoxLayout(update_group)
+        update_source = QLabel(f"Installed version: {APP_VERSION}\nUpdate source: GitHub releases for ghostventure/GhostVenture-Projects")
+        update_source.setWordWrap(True)
+        update_layout.addWidget(update_source)
+        self.update_status_label = QLabel("Updates are checked only when you ask.")
+        self.update_status_label.setWordWrap(True)
+        self.update_status_label.setAccessibleName("Update status")
+        update_layout.addWidget(self.update_status_label)
+        self.check_updates_btn = QPushButton("Check for updates")
+        self.check_updates_btn.setObjectName("panelButton")
+        self.check_updates_btn.setAccessibleName("Check Ghost Surfer updates on GitHub")
+        self.check_updates_btn.clicked.connect(self.check_for_updates)
+        update_layout.addWidget(self.check_updates_btn)
+        general_layout.addWidget(update_group)
         layout = privacy_layout
 
         status_group = QGroupBox("Privacy Status")
@@ -1186,6 +1241,10 @@ class BrowserWindow(QMainWindow):
         self.cookie_policy_combo.currentIndexChanged.connect(self.set_cookie_policy)
         cookie_policy_layout.addWidget(self.cookie_policy_combo)
         cookie_policy_layout.addWidget(QLabel("Third-party tracking cookies stay blocked. Site permissions such as camera and location stay blocked."))
+        cookie_effect_note = QLabel("Blocking cookies can sign you out or break carts and preferences. Disabling JavaScript or images can make sites unusable. These controls reduce some tracking; they do not hide your network address or make browsing anonymous.")
+        cookie_effect_note.setWordWrap(True)
+        cookie_effect_note.setObjectName("mutedHelpText")
+        cookie_policy_layout.addWidget(cookie_effect_note)
         layout.addWidget(cookie_policy_group)
 
         layout = appearance_layout
@@ -1232,6 +1291,12 @@ class BrowserWindow(QMainWindow):
         self.high_contrast_check.setChecked(bool(self.settings_data.get("high_contrast", False)))
         self.high_contrast_check.toggled.connect(self.set_high_contrast)
         accessibility_layout.addWidget(self.high_contrast_check)
+        self.reduce_motion_check = QCheckBox("Reduce interface motion")
+        self.reduce_motion_check.setToolTip("Disables animated page scrolling where supported; does not change website animations.")
+        self.reduce_motion_check.setAccessibleName("Reduce interface motion")
+        self.reduce_motion_check.setChecked(bool(self.settings_data.get("reduce_motion", False)))
+        self.reduce_motion_check.toggled.connect(self.set_reduce_motion)
+        accessibility_layout.addWidget(self.reduce_motion_check)
         reader_btn = QPushButton("Toggle reader view")
         screenshot_btn = QPushButton("Capture page screenshot")
         fullscreen_btn = QPushButton("Toggle distraction-free view")
@@ -1263,6 +1328,10 @@ class BrowserWindow(QMainWindow):
         self.webgl_check.toggled.connect(lambda value: self.update_setting("allow_webgl", value))
         for widget in (self.speed_check, self.image_check, self.cleanup_check, self.js_check, self.webgl_check):
             perf_layout.addWidget(widget)
+        privacy_effect_note = QLabel("JavaScript and image settings affect every site. A site may need JavaScript for sign-in, video, or interactive controls. Use a temporary site override from the page context menu when needed.")
+        privacy_effect_note.setWordWrap(True)
+        privacy_effect_note.setObjectName("mutedHelpText")
+        perf_layout.addWidget(privacy_effect_note)
         layout.addWidget(perf_group)
 
         layout = workspace_layout
@@ -1359,7 +1428,11 @@ class BrowserWindow(QMainWindow):
         self.clear_downloads_btn = QPushButton("Clear finished")
         self.clear_downloads_btn.setObjectName("panelButton")
         self.clear_downloads_btn.clicked.connect(self.clear_finished_downloads)
-        for position, button in enumerate((self.open_download_btn, self.show_download_btn, self.cancel_download_btn, self.clear_downloads_btn)):
+        self.delete_download_btn = QPushButton("Delete file & record")
+        self.delete_download_btn.setObjectName("panelButton")
+        self.delete_download_btn.setToolTip("Permanently delete the selected completed file and remove its history entry")
+        self.delete_download_btn.clicked.connect(self.delete_selected_download)
+        for position, button in enumerate((self.open_download_btn, self.show_download_btn, self.cancel_download_btn, self.clear_downloads_btn, self.delete_download_btn)):
             download_actions.addWidget(button, position // 2, position % 2)
         downloads_group.layout().addLayout(download_actions)
         layout.addWidget(downloads_group)
@@ -1408,6 +1481,11 @@ class BrowserWindow(QMainWindow):
         clear_btn.setObjectName("panelButton")
         clear_btn.clicked.connect(self.clear_ghost_data)
         maintenance_layout.addWidget(clear_btn)
+        reset_profile_btn = QPushButton("Reset browser profile…")
+        reset_profile_btn.setObjectName("panelButton")
+        reset_profile_btn.setToolTip("Back up browser data, then reset settings, site decisions, history, and tab sessions")
+        reset_profile_btn.clicked.connect(self.reset_browser_profile)
+        maintenance_layout.addWidget(reset_profile_btn)
         layout.addWidget(maintenance_group)
         for page_layout in (general_layout, privacy_layout, appearance_layout, performance_layout, workspace_layout):
             page_layout.addStretch(1)
@@ -1635,6 +1713,38 @@ class BrowserWindow(QMainWindow):
         if hasattr(self, "page_ux"):
             self.page_ux.set_high_contrast(enabled)
 
+    def set_reduce_motion(self, enabled: bool) -> None:
+        self.settings_data["reduce_motion"] = bool(enabled)
+        self.store.save()
+        self.apply_engine_settings()
+
+    def set_temporary_site_control(self, tab: BrowserTab, feature: str, enabled: bool) -> None:
+        host = tab.url().host().lower()
+        if not host or feature not in {"javascript", "images"}:
+            return
+        overrides = self._temporary_site_overrides.setdefault(host, {})
+        overrides[feature] = bool(enabled)
+        self.apply_tab_settings(tab)
+        self.update_site_controls_chip(tab)
+        self.status.showMessage(f"Temporary {feature} setting changed for {host}; reload the page if needed", 4500)
+
+    def update_site_controls_chip(self, tab: BrowserTab | None = None) -> None:
+        if not hasattr(self, "site_controls_chip"):
+            return
+        tab = tab or self.current_tab()
+        host = tab.url().host().lower() if tab else ""
+        overrides = self._temporary_site_overrides.get(host, {}) if host else {}
+        labels = []
+        if "javascript" in overrides:
+            labels.append("JS on" if overrides["javascript"] else "JS off")
+        if "images" in overrides:
+            labels.append("Images on" if overrides["images"] else "Images off")
+        self.site_controls_chip.setText("Site controls: " + (", ".join(labels) if labels else "defaults"))
+        self.site_controls_chip.setToolTip(
+            f"Temporary controls for {host}: {', '.join(labels)}. They last until Ghost Surfer closes."
+            if labels else "No temporary overrides for this site. Site overrides last until Ghost Surfer closes."
+        )
+
     def update_setting(self, key: str, value: bool) -> None:
         self.settings_data[key] = bool(value)
         self.store.save()
@@ -1661,10 +1771,20 @@ class BrowserWindow(QMainWindow):
     def apply_tab_settings(self, tab: BrowserTab) -> None:
         settings = tab.settings()
         apply_web_engine_security(settings, self.settings_data, self.speed_mode)
+        host_overrides = self._temporary_site_overrides.get(tab.url().host().lower(), {})
+        if "javascript" in host_overrides:
+            settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, host_overrides["javascript"])
+        if "images" in host_overrides:
+            settings.setAttribute(QWebEngineSettings.WebAttribute.AutoLoadImages, host_overrides["images"])
+        scroll_animator = getattr(QWebEngineSettings.WebAttribute, "ScrollAnimatorEnabled", None)
+        if scroll_animator is not None:
+            settings.setAttribute(scroll_animator, not bool(self.settings_data.get("reduce_motion", False)))
         if hasattr(self, "page_ux"):
             self.page_ux.apply_site_zoom(tab)
         else:
             tab.setZoomFactor(self.zoom_level / 100)
+        if tab is self.current_tab():
+            self.update_site_controls_chip(tab)
 
     def update_security_chips(self) -> None:
         frozen = sum(1 for i in range(self.tabs.count()) if bool(getattr(self.tabs.widget(i), "property", lambda _key: False)("ghost_frozen"))) if hasattr(self, "tabs") else 0
@@ -2465,7 +2585,231 @@ class BrowserWindow(QMainWindow):
         self.open_download_btn.setEnabled(bool(exists and not active))
         self.show_download_btn.setEnabled(bool(entry and Path(entry["path"]).parent.exists()))
         self.cancel_download_btn.setEnabled(active)
+        self.delete_download_btn.setEnabled(bool(entry and not active))
         self.clear_downloads_btn.setEnabled(any(item.get("state") not in {"Queued", "Downloading"} for item in self.downloads))
+
+    def delete_selected_download(self) -> None:
+        entry = self.selected_download()
+        if not entry or (entry.get("request") is not None and entry.get("state") in {"Queued", "Downloading"}):
+            return
+        path = Path(entry["path"])
+        file_existed = path.is_file()
+        if file_existed:
+            answer = QMessageBox.question(
+                self, "Delete downloaded file?",
+                f"Permanently delete this downloaded file and remove its record?\n\n{path}",
+                QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                path.unlink()
+            except OSError as exc:
+                QMessageBox.warning(self, "Could not delete download", f"The file was kept. Windows reported: {exc}")
+                return
+        else:
+            answer = QMessageBox.question(
+                self, "Remove missing download record?",
+                f"The file is missing. Remove only its record?\n\n{path}",
+                QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        self.downloads.remove(entry)
+        self.persist_download_history()
+        self.refresh_lists()
+        self.status.showMessage("Download file and record removed" if file_existed else "Download record removed", 3500)
+
+    def reset_browser_profile(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Reset browser profile")
+        dialog.setMinimumWidth(460)
+        layout = QVBoxLayout(dialog)
+        explanation = QLabel(
+            "Ghost Surfer will first make a dated backup of browser-data.json. Reset removes settings, history, site cookie decisions, privacy alerts, download records, and saved tab sessions. Website cookies and cache will also be cleared."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        preserve = QCheckBox("Keep bookmarks")
+        preserve.setChecked(True)
+        layout.addWidget(preserve)
+        actions = QHBoxLayout()
+        reset = QPushButton("Back up and reset")
+        cancel = QPushButton("Cancel")
+        actions.addStretch(1)
+        actions.addWidget(cancel)
+        actions.addWidget(reset)
+        layout.addLayout(actions)
+        cancel.clicked.connect(dialog.reject)
+        reset.clicked.connect(dialog.accept)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = self.store.path.with_name(f"browser-data-before-reset-{stamp}.json")
+        try:
+            if self.store.path.exists():
+                shutil.copy2(self.store.path, backup)
+        except OSError as exc:
+            QMessageBox.warning(self, "Profile reset stopped", f"Could not create the safety backup. No profile data was changed.\n\n{exc}")
+            return
+        bookmarks = list(self.store.data.get("bookmarks", [])) if preserve.isChecked() else []
+        self.store.data["bookmarks"] = bookmarks
+        self.store.data["history"] = []
+        self.store.data["cookie_permissions"] = {}
+        self.store.data["spy_alerts"] = []
+        self.store.data["download_history"] = []
+        self.store.data["ghost_surfer_tab_features"] = {"previous_session": [], "recently_closed": [], "named_sessions": {}}
+        self.store.data["settings"] = {
+            "speed_mode": True, "block_images": False, "ghost_cleanup_on_close": False,
+            "allow_javascript": True, "allow_webgl": False, "cookie_policy": "ask",
+            "theme": "Ghost Blue", "zoom": 100, "home_page_url": "https://duckduckgo.com/",
+            "home_page_default_migrated": True, "reduce_motion": False,
+            "history_retention_days": 0, "interface_text_size": 100,
+            "startup_page": "restore_session", "search_engine": "DuckDuckGo",
+        }
+        self.settings_data = self.store.data["settings"]
+        self.speed_mode = True
+        self.zoom_level = 100
+        self._temporary_site_overrides.clear()
+        self.profile.cookieStore().deleteAllCookies()
+        self.profile.clearHttpCache()
+        self.store.save()
+        self.theme_combo.setCurrentText("Ghost Blue")
+        self.zoom_combo.setCurrentText("100%")
+        self.interface_size_combo.setCurrentText("100%")
+        for widget, value in ((self.high_contrast_check, False), (self.reduce_motion_check, False),
+                              (self.speed_check, True), (self.image_check, False),
+                              (self.cleanup_check, False), (self.js_check, True), (self.webgl_check, False)):
+            widget.blockSignals(True)
+            widget.setChecked(value)
+            widget.blockSignals(False)
+        self.cookie_policy_combo.setCurrentIndex(self.cookie_policy_combo.findData("ask"))
+        self.apply_style()
+        self.page_ux.set_high_contrast(False)
+        self.site_zoom_combo.setCurrentText("100%")
+        self.apply_engine_settings()
+        self.refresh_lists()
+        self.update_storage_summary()
+        self.update_security_chips()
+        self.status.showMessage(f"Profile reset complete. Safety copy: {backup}", 8000)
+
+    def _updater_install_directory(self) -> Path | None:
+        running_exe = Path(sys.executable)
+        if getattr(sys, "frozen", False) and (running_exe.parent / "Ghost Surfer.exe").is_file():
+            return running_exe.parent
+        local = os.environ.get("LOCALAPPDATA")
+        target = Path(local) / "Programs" / "Ghost Surfer" if local else None
+        return target if target and (target / "Ghost Surfer.exe").is_file() else None
+
+    def check_for_updates(self) -> None:
+        if self._update_worker and self._update_worker.isRunning():
+            return
+        self._update_candidate = None
+        self._staged_update = None
+        self.check_updates_btn.setEnabled(False)
+        self.check_updates_btn.setText("Checking GitHub…")
+        self.update_status_label.setText("Checking compatible Ghost Surfer packages on GitHub. Other products in the shared release list are ignored.")
+        updater = GitHubReleasesUpdater("ghostventure", "GhostVenture-Projects", APP_VERSION,
+                                        self._updater_install_directory())
+        self._start_update_worker(updater, "check")
+
+    def _start_update_worker(self, updater, operation: str, candidate=None) -> None:
+        self._update_worker = UpdateWorker(updater, operation, candidate, self)
+        self._update_worker.completed.connect(self._update_worker_completed)
+        self._update_worker.progress.connect(self._update_progress)
+        self._update_worker.start()
+
+    def _update_progress(self, done, total) -> None:
+        dialog = self._update_progress_dialog
+        if dialog is None:
+            dialog = QProgressDialog("Downloading and verifying the GitHub package…", "", 0, 100, self)
+            dialog.setCancelButton(None)
+            dialog.setWindowTitle("Ghost Surfer Update")
+            dialog.setMinimumDuration(250)
+            self._update_progress_dialog = dialog
+        if total:
+            dialog.setMaximum(100)
+            dialog.setValue(min(100, int(done * 100 / total)))
+        else:
+            dialog.setMaximum(0)
+            dialog.setValue(0)
+        dialog.show()
+
+    def _update_worker_completed(self, result, error: str) -> None:
+        worker = self.sender()
+        operation = getattr(worker, "operation", "")
+        self.check_updates_btn.setEnabled(True)
+        if self._update_progress_dialog:
+            self._update_progress_dialog.close()
+            self._update_progress_dialog = None
+        if error:
+            self.update_status_label.setText(f"Update check failed: {error}")
+            if operation == "download":
+                self.check_updates_btn.setText("Retry download")
+            else:
+                self.check_updates_btn.setText("Check for updates")
+                try:
+                    self.check_updates_btn.clicked.disconnect()
+                except (RuntimeError, TypeError):
+                    pass
+                self.check_updates_btn.clicked.connect(self.check_for_updates)
+        elif operation == "check" and result is None:
+            self.update_status_label.setText("No newer compatible Ghost Surfer release package was found on GitHub.")
+            self.check_updates_btn.setText("Check again")
+        elif operation == "check":
+            self._update_candidate = result
+            self.update_status_label.setText(f"Version {result.version} is available: {result.release_name or result.tag}")
+            self.check_updates_btn.setText("Download and verify update")
+            try:
+                self.check_updates_btn.clicked.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self.check_updates_btn.clicked.connect(self.download_update)
+            if result.release_notes:
+                QMessageBox.information(self, f"Ghost Surfer {result.version} release notes", result.release_notes[:12000])
+        elif operation == "download":
+            self._staged_update = result
+            if not self._updater_install_directory():
+                self.update_status_label.setText("The package is verified and staged. Install Ghost Surfer first with GS Install Manager, then check again to apply updates.")
+                self.check_updates_btn.setText("Check for updates")
+                try:
+                    self.check_updates_btn.clicked.disconnect()
+                except (RuntimeError, TypeError):
+                    pass
+                self.check_updates_btn.clicked.connect(self.check_for_updates)
+                return
+            answer = QMessageBox.question(
+                self, "Install Ghost Surfer update?",
+                f"Ghost Surfer {result.version} is downloaded and verified. Applying it closes Ghost Surfer, updates its files, and restarts it. Your browser data is stored separately. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                try:
+                    updater = GitHubReleasesUpdater("ghostventure", "GhostVenture-Projects", APP_VERSION,
+                                                    self._updater_install_directory())
+                    updater.launch_apply(result, current_pid=os.getpid(), install_directory=self._updater_install_directory())
+                    self.close()
+                except Exception as exc:
+                    QMessageBox.warning(self, "Could not start update", str(exc))
+            self.check_updates_btn.setText("Check for updates")
+            try:
+                self.check_updates_btn.clicked.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self.check_updates_btn.clicked.connect(self.check_for_updates)
+
+    def download_update(self) -> None:
+        if not self._update_candidate or (self._update_worker and self._update_worker.isRunning()):
+            return
+        self.check_updates_btn.setEnabled(False)
+        self.check_updates_btn.setText("Downloading…")
+        self.update_status_label.setText("Downloading and checking GitHub-provided package integrity data.")
+        updater = GitHubReleasesUpdater("ghostventure", "GhostVenture-Projects", APP_VERSION,
+                                        self._updater_install_directory())
+        self._start_update_worker(updater, "download", self._update_candidate)
 
     def open_selected_download(self) -> None:
         entry = self.selected_download()
@@ -2530,10 +2874,13 @@ class BrowserWindow(QMainWindow):
         index = self.tabs.indexOf(tab)
         if index >= 0:
             self.tabs.setTabToolTip(index, self.display_url(url))
+            if isinstance(tab, BrowserTab):
+                self.apply_tab_settings(tab)
         if tab == self.current_tab():
             self.address.setText(self.display_url(url))
             self.update_navigation_state(tab)
             self.update_page_security_state(url)
+            self.update_site_controls_chip(tab if isinstance(tab, BrowserTab) else None)
         tab = self.current_tab()
         if tab and hasattr(self, "page_ux"):
             percent = self.page_ux.apply_site_zoom(tab)
@@ -2573,6 +2920,9 @@ class BrowserWindow(QMainWindow):
         if bool(self.settings_data.get("ghost_cleanup_on_close", False)):
             self.clear_ghost_data(confirm=False)
         super().closeEvent(event)
+        if event.isAccepted():
+            self.store.data["clean_shutdown"] = True
+            self.store.save()
 
     def home_html(self) -> str:
         theme = THEMES.get(self.settings_data.get("theme", "Ghost Blue"), THEMES["Ghost Blue"])
@@ -2795,7 +3145,7 @@ class BrowserWindow(QMainWindow):
                 min-width: 58px;
                 letter-spacing: 1.4px;
             }
-            #privacyChip, #torChip, #speedChip, #blockedChip, #spyChip, #tabsChip, #homeChip {
+            #privacyChip, #torChip, #speedChip, #blockedChip, #spyChip, #tabsChip, #homeChip, #siteControlsChip {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #122034, stop:1 #07111d);
                 color: #dff4ff;
                 border: 1px solid #33506b;
@@ -3013,6 +3363,9 @@ class BrowserWindow(QMainWindow):
             """
         )
         stylesheet += """
+            QPushButton:focus, QToolButton:focus, QComboBox:focus, QLineEdit:focus, QListWidget:focus, QTabBar::tab:focus {
+                border: 2px solid #ffd166;
+            }
             QPushButton, QToolButton, QComboBox, QLineEdit {
                 border-radius: 10px;
             }

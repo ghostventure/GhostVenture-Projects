@@ -1,5 +1,19 @@
 Ghost Surfer Browser
-Release: 2026-10-17
+Release: 2026-10-27
+Version: 0.2.0
+Package: Ghost-Surfer-Setup-Windows-2026-10-27.zip
+GitHub update package: GhostSurfer-Setup-v0.2.0.zip
+
+2026-10-27
+- Added a GitHub release updater that checks only compatible Ghost Surfer packages in the shared release list and verifies integrity before staging.
+- Added crash recovery with duplicate removal and private URL parameters unchecked by default.
+- Added temporary per-site JavaScript and image compatibility overrides with a visible status indicator.
+- Added a download action to delete an inactive downloaded file and its record after confirmation.
+- Added profile reset with a dated safety backup and an option to preserve bookmarks.
+- Added reduced-motion support, visible keyboard focus, screen-reader names, and clearer privacy-setting effects.
+- Updated GS Install Manager package contents and DuckDuckGo home-page references.
+
+Previous release: 2026-10-17
 Package: Ghost-Surfer-Setup-Windows-2026-10-17.zip
 
 2026-10-17
@@ -10,7 +24,7 @@ Package: Ghost-Surfer-Setup-Windows-2026-10-17.zip
 - Third-party cookies and sensitive site permissions remain blocked.
 - Improved downloads with progress, cancel, open, and show-folder actions.
 - Added Ctrl+D bookmark and Ctrl+J downloads shortcuts.
-- Kept the previous portable ZIP available for existing users.
+- Kept the previous portable ZIP available.
 
 Previous release: 2026-08-14
 Package: Ghost-Surfer-Browser-Windows.zip

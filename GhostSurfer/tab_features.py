@@ -223,7 +223,53 @@ class TabFeatures:
             return
         entries = self._state.get("previous_session", [])
         if entries:
-            self._replace_session(entries, self._state.get("previous_session_active_index", 0))
+            if not getattr(self.window.store, "previous_session_was_clean", True):
+                self._offer_crash_recovery(entries)
+            else:
+                self._replace_session(entries, self._state.get("previous_session_active_index", 0))
+
+    def _offer_crash_recovery(self, entries: list[dict[str, Any]]) -> None:
+        """Let users choose crash-session tabs; URLs carrying parameters start unchecked."""
+        dialog = QDialog(self.window)
+        dialog.setWindowTitle("Recover tabs from the previous session?")
+        dialog.setMinimumWidth(460)
+        layout = QVBoxLayout(dialog)
+        intro = QLabel(
+            "Ghost Surfer did not close cleanly last time. Choose which tabs to reopen. "
+            "Pages with query or fragment data start unchecked because those parts of a URL can contain private tokens."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        unique: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for entry in entries:
+            if not isinstance(entry, dict) or not entry.get("url"):
+                continue
+            url = QUrl(str(entry["url"]))
+            key = url.toString()
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(entry)
+        checks: list[tuple[QCheckBox, dict[str, Any]]] = []
+        for index, entry in enumerate(unique[:40], 1):
+            url = QUrl(str(entry["url"]))
+            origin = f"{url.scheme()}://{url.host()}" if url.host() else "local or blank page"
+            sensitive = bool(url.query() or url.fragment())
+            check = QCheckBox(f"Tab {index}: {origin}" + (" (URL contains private parameters)" if sensitive else ""))
+            check.setChecked(not sensitive)
+            checks.append((check, entry))
+            layout.addWidget(check)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Restore selected")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        chosen = [entry for check, entry in checks if check.isChecked()]
+        if chosen:
+            self._replace_session(chosen, min(self._state.get("previous_session_active_index", 0), len(chosen) - 1))
 
     def _replace_session(self, entries: list[dict[str, Any]], active_index: int = 0) -> None:
         clean = [entry for entry in entries if isinstance(entry, dict) and entry.get("url")]

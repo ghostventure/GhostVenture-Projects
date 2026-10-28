@@ -59,6 +59,7 @@ class UpdateCandidate:
     tag: str
     version: str
     release_name: str
+    release_notes: str
     release_url: str
     asset_name: str
     asset_url: str
@@ -222,78 +223,94 @@ class GitHubReleasesUpdater:
         return payload
 
     def check_for_update(self) -> UpdateCandidate | None:
-        """Return the newest compatible stable update, or ``None`` if current."""
+        """Find the newest newer stable Ghost Surfer package in a shared repo.
+
+        The repository can host releases for several products. Select only a
+        release carrying one matching Ghost Surfer archive, rather than using
+        GitHub's repository-wide ``/latest`` endpoint.
+        """
         self._require_configured()
         owner = urllib.parse.quote(self.owner, safe="")
         repository = urllib.parse.quote(self.repository, safe="")
-        url = f"{self.API_ROOT}/repos/{owner}/{repository}/releases/latest"
+        url = f"{self.API_ROOT}/repos/{owner}/{repository}/releases?per_page=30"
         try:
             payload = json.loads(self._read_url(url, self.MAX_RELEASE_JSON))
         except json.JSONDecodeError as exc:
             raise UpdateError("GitHub returned invalid release metadata.") from exc
-        if not isinstance(payload, dict) or payload.get("draft") or payload.get("prerelease"):
-            raise UpdateError("GitHub did not return a stable published release.")
+        if not isinstance(payload, list):
+            raise UpdateError("GitHub returned an invalid release list.")
 
-        tag = str(payload.get("tag_name") or "").strip()
-        candidate_version = tag.lstrip("v")
-        candidate_key = _version_key(tag)
-        if candidate_key <= _version_key(self.current_version):
-            return None
-        assets = payload.get("assets")
-        if not isinstance(assets, list):
-            raise UpdateError("The GitHub release has no usable assets.")
-
-        package = None
-        package_version = None
-        checksum = None
-        for asset in assets:
-            if not isinstance(asset, dict):
+        current_key = _version_key(self.current_version)
+        candidates: list[UpdateCandidate] = []
+        for release in payload:
+            if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
                 continue
-            name = str(asset.get("name") or "")
-            match = _PACKAGE_RE.fullmatch(name)
-            if match:
-                if package is not None:
-                    raise UpdateError("The release has more than one Ghost Surfer installer archive.")
-                package = asset
-                package_version = match.group("version")
-            elif name.casefold() in {"sha256sums.txt", "checksums.txt"}:
-                checksum = asset
-        if package is None or package_version is None:
-            raise UpdateError("The release is missing GhostSurfer-Setup-vMAJOR.MINOR.PATCH.zip.")
-        if _version_key(package_version) != candidate_key:
-            raise UpdateError("The release tag and Ghost Surfer package version do not match.")
-        try:
-            size = int(package.get("size", 0))
-        except (TypeError, ValueError):
-            size = 0
-        if size < 1 or size > self.MAX_DOWNLOAD_BYTES:
-            raise UpdateError("The Ghost Surfer release archive has an invalid size.")
-        raw_digest = package.get("digest")
-        digest = None
-        if isinstance(raw_digest, str) and raw_digest.lower().startswith("sha256:"):
-            digest = raw_digest.split(":", 1)[1].lower()
-            if not re.fullmatch(r"[0-9a-f]{64}", digest):
-                raise UpdateError("GitHub supplied an invalid SHA-256 asset digest.")
-        checksum_url = None
-        checksum_name = None
-        if checksum is not None:
-            checksum_name = str(checksum.get("name") or "")
-            checksum_url = _asset_download_url(self.owner, self.repository, checksum.get("browser_download_url"))
+            tag = str(release.get("tag_name") or "").strip()
+            try:
+                candidate_key = _version_key(tag)
+            except UpdateError:
+                continue
+            if candidate_key <= current_key:
+                continue
+            assets = release.get("assets")
+            if not isinstance(assets, list):
+                continue
 
-        return UpdateCandidate(
-            owner=self.owner,
-            repository=self.repository,
-            tag=tag,
-            version=candidate_version,
-            release_name=str(payload.get("name") or tag),
-            release_url=str(payload.get("html_url") or f"https://github.com/{owner}/{repository}/releases/tag/{urllib.parse.quote(tag, safe='') }"),
-            asset_name=str(package.get("name") or ""),
-            asset_url=_asset_download_url(self.owner, self.repository, package.get("browser_download_url")),
-            asset_size=size,
-            asset_digest=digest,
-            checksum_asset_url=checksum_url,
-            checksum_asset_name=checksum_name,
-        )
+            package = None
+            package_version = None
+            checksum = None
+            for asset in assets:
+                if not isinstance(asset, dict):
+                    continue
+                name = str(asset.get("name") or "")
+                match = _PACKAGE_RE.fullmatch(name)
+                if match:
+                    if package is not None:
+                        package = None
+                        package_version = None
+                        break
+                    package = asset
+                    package_version = match.group("version")
+                elif name.casefold() in {"sha256sums.txt", "checksums.txt"}:
+                    checksum = asset
+            if package is None or package_version is None:
+                continue
+            if _version_key(package_version) != candidate_key:
+                continue
+            try:
+                size = int(package.get("size", 0))
+            except (TypeError, ValueError):
+                continue
+            if size < 1 or size > self.MAX_DOWNLOAD_BYTES:
+                continue
+            raw_digest = package.get("digest")
+            digest = None
+            if isinstance(raw_digest, str) and raw_digest.lower().startswith("sha256:"):
+                digest = raw_digest.split(":", 1)[1].lower()
+                if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                    continue
+            checksum_url = None
+            checksum_name = None
+            if checksum is not None:
+                checksum_name = str(checksum.get("name") or "")
+                checksum_url = _asset_download_url(self.owner, self.repository, checksum.get("browser_download_url"))
+
+            candidates.append(UpdateCandidate(
+                owner=self.owner,
+                repository=self.repository,
+                tag=tag,
+                version=tag.lstrip("v"),
+                release_name=str(release.get("name") or tag),
+                release_notes=str(release.get("body") or "").strip(),
+                release_url=str(release.get("html_url") or f"https://github.com/{owner}/{repository}/releases/tag/{urllib.parse.quote(tag, safe='')}"),
+                asset_name=str(package.get("name") or ""),
+                asset_url=_asset_download_url(self.owner, self.repository, package.get("browser_download_url")),
+                asset_size=size,
+                asset_digest=digest,
+                checksum_asset_url=checksum_url,
+                checksum_asset_name=checksum_name,
+            ))
+        return max(candidates, key=lambda item: _version_key(item.tag), default=None)
 
     def _download(self, url: str, destination: Path, expected_size: int | None, limit: int, progress: ProgressCallback | None = None) -> int:
         request = self._request(url, accept="application/octet-stream")
