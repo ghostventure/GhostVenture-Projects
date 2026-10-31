@@ -1,6 +1,6 @@
 # Ghost Surfer
 
-Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. The current published browser package is **0.2.1**. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
+Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. The current browser release is **0.2.2**. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
 
 ## What it includes
 
@@ -10,9 +10,15 @@ Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. 
 - **Recovery and cleanup:** crash-session recovery, browser-data backup and restore, profile reset with an optional bookmark keep, cookie/cache controls, and download management.
 - **Optional Personal Data Vault:** store names, addresses, phone numbers, usernames, and passwords in a Windows account-encrypted module. It can be selected during install or toggled in Settings; credit cards are not stored.
 - **Personal data consent guard:** pause common sensitive HTML form submissions, show each requested field, and send only the fields the user selects. Optional monthly RDAP registration checks provide risk signals without claiming to verify a company's identity.
+- **Optional local extensions:** import Manifest V3 packages from a local ZIP or unpacked folder, review their declared permissions, then explicitly enable or remove them in **Ghost Control > Extensions**. Extension mode uses a separate persistent browser profile and is off by default; switching modes requires a restart. This is Qt WebEngine MV3 support, not Chrome Web Store or native-messaging compatibility.
+- **Optional ChatGPT bridge module:** a disabled-by-default, loopback-only MCP server that exposes user-approved current-page metadata, visible text, and HTTP(S) navigation. It asks in Ghost Surfer before each request, does not access saved passwords, and does not execute arbitrary scripts. ChatGPT requires a separately configured supported Secure MCP Tunnel or HTTPS MCP host; this module alone cannot connect ChatGPT to a local browser.
 - **Updates:** the browser can check GitHub releases for a compatible Ghost Surfer package, verify and stage it, and ask before applying an update that closes and restarts the browser.
 
 Privacy controls reduce some tracking; they do not make a direct connection anonymous. The IP tripwire recognizes only a limited set of client-side lookup patterns and allows recognized requests to continue. A site can still observe the network address used for its connection.
+
+Extensions can access or change pages covered by their declared permissions. Ghost Surfer does not automatically download extensions, and newly imported packages remain disabled until the user enables them. Extension mode stores cookies and website data under a separate local profile; disabling extension mode leaves those files and installed packages in place.
+
+The ChatGPT bridge binds only to `127.0.0.1:8765` while enabled. It shares no page data until the user approves a specific request in Ghost Surfer. The bridge module is bundled with the browser application; adding it in ChatGPT requires a supported Secure MCP Tunnel or a trusted HTTPS MCP host, the platform authentication/API key required by that service, and ChatGPT account/workspace access for custom MCP apps. The installer does not provision a remote relay, tunnel, API key, or ChatGPT access.
 
 For operating instructions, see the [Ghost Surfer User Guide](docs/USER_GUIDE.md). For installation requirements and the manager workflow, see [GS Install Manager](install-manager/README.md).
 

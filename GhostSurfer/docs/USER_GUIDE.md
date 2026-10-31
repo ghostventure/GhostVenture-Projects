@@ -1,6 +1,6 @@
 # Ghost Surfer User Guide
 
-This guide describes the Windows browser in release 0.2.1. Use the contents list to jump to a task.
+This guide describes the Windows browser in release 0.2.2. Use the contents list to jump to a task.
 
 ## Contents
 
@@ -8,6 +8,7 @@ This guide describes the Windows browser in release 0.2.1. Use the contents list
 - [Browse, search, and manage tabs](#browse-search-and-manage-tabs)
 - [Bookmarks and history](#bookmarks-and-history)
 - [Privacy and site compatibility](#privacy-and-site-compatibility)
+- [Local extensions](#local-extensions)
 - [Downloads and browser data](#downloads-and-browser-data)
 - [Display and accessibility](#display-and-accessibility)
 - [Page tools and external services](#page-tools-and-external-services)
@@ -15,7 +16,7 @@ This guide describes the Windows browser in release 0.2.1. Use the contents list
 
 ## Find controls and common shortcuts
 
-The left navigation rail contains the main browser actions. The **Library** menu groups secondary actions such as Tor check and downloads. Open **Ghost Control** with **Ctrl+,**. Its pages group options under **General**, **Privacy**, **Display**, **Performance**, and **Tabs & Data**. Use the search field to filter settings and tools; Ghost Control remembers the last page you selected.
+The left navigation rail contains the main browser actions. The **Library** menu groups secondary actions such as Tor check and downloads. Open **Ghost Control** with **Ctrl+,**. Its pages group options under **General**, **Privacy**, **Display**, **Performance**, **Tabs & Data**, and **Extensions**. Use the search field to filter settings and tools; Ghost Control remembers the last page you selected.
 
 | Shortcut | Action |
 | --- | --- |
@@ -79,13 +80,27 @@ For an unrecognized destination, Ghost Surfer says it has not been marked as rec
 
 These checks cannot prove that a company is real or that a site is honest. HTTPS means the connection is encrypted; it does not verify the business. The form monitor recognizes common field labels and HTML form submissions. A site can request data through custom scripts, images, or other mechanisms that the form monitor does not identify, so review the site and the information you enter. Turning off the form guard stops the pause; turning off periodic site checks stops RDAP lookups.
 
+## Local extensions
+
+Open **Ghost Control > Extensions**. Extension support starts off. Turn it on and restart Ghost Surfer to use its separate persistent profile; cookies and website storage in that profile remain on this device between runs. Your temporary profile is kept separate and unchanged. Turn extension support off and restart to return to the temporary profile. Installed extensions and the extension profile remain on disk when extension support is off.
+
+Choose **Import package** to select a local Manifest V3 ZIP or an unpacked folder. Ghost Surfer displays the local source, declared permissions, and host access in a confirmation before installation. ZIPs are limited to 2,048 entries and 100 MiB uncompressed and are rejected if they contain absolute or parent-traversal paths or symbolic links. The extension is installed disabled. Select it and choose **Enable / Disable** to review its permissions again and explicitly enable it. Choose **Remove** to uninstall its files. An enabled extension may read or change pages covered by its declared access.
+
+This provides local Qt WebEngine Manifest V3 support. Chrome Web Store integration and native messaging are not supported; an extension that depends on either may not work. Ghost Surfer does not fetch extension code from the network.
+
+### ChatGPT browser bridge
+
+The optional **ChatGPT browser bridge (MCP)** module is in the same Extensions page and is off by default. Turn it on to run a local MCP endpoint at `http://127.0.0.1:8765/mcp`. It offers three actions: share the current tab title and URL, share up to 20,000 characters of visible page text, or navigate the current tab to an HTTP(S) address. Ghost Surfer asks before every action. Page text is untrusted website content; review the page before sharing it. The bridge cannot read the Personal Data Vault or run arbitrary JavaScript.
+
+ChatGPT cannot connect directly to a local server. To connect, add the MCP server to ChatGPT through a supported Secure MCP Tunnel or use a trusted HTTPS MCP host, configure the authentication/API key required by that tunnel or host, and follow [OpenAI's setup and account/workspace access requirements for custom MCP servers](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt). The Ghost Surfer installer includes the local module only; it does not include or provision a tunnel, hosted relay, API key, or ChatGPT access. Availability of tools that navigate or modify state depends on the ChatGPT account and workspace permissions. Turn the bridge off in Settings when you are done.
+
 ## Downloads and browser data
 
 The Downloads panel shows progress and recent results, including the source URL and saved file path. Select an entry to open the downloaded file or its folder; cancel an active transfer; clear finished entries from the list; or choose **Delete file & record**. Deletion asks for confirmation before removing an inactive file and its history entry. If the file is already missing, the action removes only the record. Ghost Surfer keeps up to 500 download-history entries.
 
 Under **Tabs & Data > Browser Data**, review the local data summary, export a JSON backup, set history retention, or use **Recover from a saved copy**. A backup contains bookmarks, history, cookie decisions, privacy alerts, and download history. It does not contain website cookies or cache. Backups are readable JSON; store them privately. Restoring a copy asks for confirmation and saves a safety copy of current data first.
 
-**Reset browser profile** makes a dated safety copy, then resets settings, history, site cookie decisions, privacy alerts, download records, and saved sessions. You can choose to preserve bookmarks. It also clears website cookies and cache, so you may need to sign in again.
+**Reset browser profile** makes a dated safety copy, then resets settings, history, site cookie decisions, privacy alerts, download records, and saved sessions. You can choose to preserve bookmarks. It also clears website cookies and cache, so you may need to sign in again. Installed extension files and the separate extension-profile data remain on disk; reset preserves whether extension mode is on and which extensions are enabled.
 
 ## Display and accessibility
 

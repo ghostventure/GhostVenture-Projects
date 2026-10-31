@@ -4,39 +4,43 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $downloadDirectory = Join-Path $PSScriptRoot '..\site\downloads'
+$checksumPath = Join-Path $downloadDirectory 'SHA256SUMS.txt'
 New-Item -ItemType Directory -Path $downloadDirectory -Force | Out-Null
+if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) {
+    throw "Release checksum manifest was not found: $checksumPath"
+}
 
-$assets = @(
-    @{
-        Name = 'Ghost-Surfer-Setup-Windows-2026-10-17.zip'
-        Sha256 = 'D76640BACDD20D2F8E3BB13FD8638970F683962A95B9920118BF2A3E0D851595'
-    },
-    @{
-        Name = 'Ghost-Surfer-Setup-Windows-2026-10-27.zip'
-        Sha256 = 'B2E813A48451D18157A899F4220BC7742832CBB2EB229738E98392EA55C37896'
-    },
-    @{
-        Name = 'Ghost-Surfer-Setup-Windows-2026-10-31.zip'
-        Sha256 = 'EB1A7542F382855CA50E671078D489EFAEAD913FCBED865E298C995B4EBC3EB3'
-    },
-    @{
-        Name = 'Ghost-Surfer-Browser-Windows.zip'
-        Sha256 = '149617247AE51B518BB750AB4772577E74BBAEE34D9A9BB7FB6C52BF5A69B0FD'
+$assets = foreach ($line in [IO.File]::ReadAllLines($checksumPath)) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    if ($line -notmatch '^(?<hash>[A-Fa-f0-9]{64})\s+(?<name>[^\r\n]+)$') {
+        throw "Invalid checksum manifest line: $line"
     }
-)
+
+    $name = $Matches.name.Trim()
+    if ([IO.Path]::GetFileName($name) -ne $name -or $name -eq '.' -or $name -eq '..') {
+        throw "Unsafe release asset name in checksum manifest: $name"
+    }
+    @{ Name = $name; Sha256 = $Matches.hash.ToUpperInvariant() }
+}
+
+if (-not $assets) { throw 'The release checksum manifest contains no assets.' }
+if (($assets.Name | Select-Object -Unique).Count -ne $assets.Count) {
+    throw 'The release checksum manifest contains duplicate asset names.'
+}
 
 foreach ($asset in $assets) {
     $destination = Join-Path $downloadDirectory $asset.Name
     if (Test-Path -LiteralPath $destination -PathType Leaf) {
         $existingHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
         if ($existingHash -eq $asset.Sha256) {
-            Write-Host "Verified existing release asset $($asset.Name)."
+            Write-Host "Verified release asset $($asset.Name)."
             continue
         }
     }
 
     $temporaryPath = "$destination.download"
-    $assetUrl = "$($HostingRoot.TrimEnd('/'))/$($asset.Name)"
+    $encodedName = [Uri]::EscapeDataString($asset.Name)
+    $assetUrl = "$($HostingRoot.TrimEnd('/'))/$encodedName"
     & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output $temporaryPath $assetUrl
     if ($LASTEXITCODE -ne 0) {
         throw "Download failed for $($asset.Name) with curl exit code $LASTEXITCODE."
@@ -44,7 +48,7 @@ foreach ($asset in $assets) {
 
     $downloadedHash = (Get-FileHash -LiteralPath $temporaryPath -Algorithm SHA256).Hash
     if ($downloadedHash -ne $asset.Sha256) {
-        [System.IO.File]::Delete((Resolve-Path -LiteralPath $temporaryPath).Path)
+        [System.IO.File]::Delete([IO.Path]::GetFullPath($temporaryPath))
         throw "SHA-256 verification failed for $($asset.Name)."
     }
 

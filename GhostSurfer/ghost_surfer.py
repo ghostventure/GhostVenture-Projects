@@ -67,10 +67,12 @@ from ghost_guard import (
 )
 from personal_data_vault import PersonalDataVaultDialog
 from personal_data_guard import PersonalDataRequestDialog, SiteRecognitionStore, SiteVerificationWorker, install_personal_data_monitor
+from extension_features import ExtensionFeatures
+from chatgpt_bridge import ChatGPTBridgeSettings
 
 
 APP_NAME = "Ghost Surfer"
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.2.2"
 GITHUB_REPOSITORY_URL = "https://github.com/ghostventure/GhostVenture-Projects"
 GITHUB_RELEASES_URL = f"{GITHUB_REPOSITORY_URL}/releases"
 HOME_URL = "https://duckduckgo.com/"
@@ -214,6 +216,9 @@ class BrowserStore:
                 "personal_vault_enabled": personal_vault_install_default(),
                 "data_request_guard_enabled": True,
                 "site_verification_enabled": True,
+                "extensions_profile_enabled": False,
+                "enabled_extensions": {},
+                "chatgpt_bridge_enabled": False,
             },
         }
         self.load()
@@ -280,6 +285,9 @@ class BrowserStore:
                 "personal_vault_enabled": personal_vault_install_default(),
                 "data_request_guard_enabled": True,
                 "site_verification_enabled": True,
+                "extensions_profile_enabled": False,
+                "enabled_extensions": {},
+                "chatgpt_bridge_enabled": False,
             }.items():
                 self.data["settings"].setdefault(key, value)
             settings = self.data["settings"]
@@ -290,6 +298,15 @@ class BrowserStore:
                 settings["home_page_default_migrated"] = True
             for key in ("speed_mode", "block_images", "ghost_cleanup_on_close", "allow_javascript", "allow_webgl", "high_contrast", "reduce_motion", "personal_vault_enabled", "data_request_guard_enabled", "site_verification_enabled"):
                 settings[key] = bool(settings.get(key, key == "speed_mode"))
+            settings["extensions_profile_enabled"] = bool(settings.get("extensions_profile_enabled", False))
+            settings["chatgpt_bridge_enabled"] = bool(settings.get("chatgpt_bridge_enabled", False))
+            if not isinstance(settings.get("enabled_extensions"), dict):
+                settings["enabled_extensions"] = {}
+            settings["enabled_extensions"] = {
+                str(extension_id): bool(enabled)
+                for extension_id, enabled in list(settings["enabled_extensions"].items())[:500]
+                if isinstance(extension_id, str) and isinstance(enabled, bool)
+            }
             if not isinstance(settings.get("cookie_policy"), str) or settings["cookie_policy"] not in {"ask", "allow", "deny"}:
                 settings["cookie_policy"] = "ask"
             if not isinstance(settings.get("theme"), str) or settings["theme"] not in THEMES:
@@ -680,9 +697,13 @@ class BrowserWindow(QMainWindow):
         self._privacy_flush_timer.setSingleShot(True)
         self._privacy_flush_timer.setInterval(250)
         self._privacy_flush_timer.timeout.connect(self.flush_privacy_events)
-        self.profile = QWebEngineProfile.defaultProfile()
-        self.profile.setPersistentStoragePath(str(app_data_dir() / "web-profile"))
-        self.profile.setCachePath(str(app_data_dir() / "web-cache"))
+        self.extensions_profile_enabled = bool(self.settings_data.get("extensions_profile_enabled", False))
+        if self.extensions_profile_enabled:
+            self.profile = QWebEngineProfile("GhostSurferExtensions", self)
+            self.profile.setPersistentStoragePath(str(app_data_dir() / "extensions-profile"))
+            self.profile.setCachePath(str(app_data_dir() / "extensions-cache"))
+        else:
+            self.profile = QWebEngineProfile.defaultProfile()
         self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
         self.cookie_policy = FirstPartyCookiePolicy(self)
         self.profile.cookieStore().setCookieFilter(self.cookie_policy.filter)
@@ -746,6 +767,10 @@ class BrowserWindow(QMainWindow):
 
         self.build_shell()
         self.build_control_center()
+        self.extension_features = ExtensionFeatures(self)
+        self.extension_features.add_settings(self.control_page_layouts["Extensions"])
+        self.chatgpt_bridge_settings = ChatGPTBridgeSettings(self)
+        self.chatgpt_bridge_settings.add_settings(self.control_page_layouts["Extensions"])
         self.library_features = LibraryFeatures(self)
         self.library_features.install()
         self.apply_style()
@@ -1192,12 +1217,14 @@ class BrowserWindow(QMainWindow):
         appearance_layout = make_control_page("Display")
         performance_layout = make_control_page("Performance")
         workspace_layout = make_control_page("Tabs & Data")
+        extensions_layout = make_control_page("Extensions")
         self.control_page_layouts = {
             "General": general_layout,
             "Privacy": privacy_layout,
             "Display": appearance_layout,
             "Performance": performance_layout,
             "Tabs & Data": workspace_layout,
+            "Extensions": extensions_layout,
         }
         saved_page = str(self.settings_data.get("control_last_page", "General"))
         saved_page_index = 0
@@ -2755,7 +2782,7 @@ class BrowserWindow(QMainWindow):
         dialog.setMinimumWidth(460)
         layout = QVBoxLayout(dialog)
         explanation = QLabel(
-            "Ghost Surfer will first make a dated backup of browser-data.json. Reset removes settings, history, site cookie decisions, privacy alerts, download records, and saved tab sessions. Website cookies and cache will also be cleared."
+            "Ghost Surfer will first make a dated backup of browser-data.json. Reset removes settings, history, site cookie decisions, privacy alerts, download records, and saved tab sessions. Website cookies and cache will also be cleared. Installed extension files and the separate extension-profile data are retained; extension mode and enabled-extension choices are preserved."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
@@ -2799,6 +2826,10 @@ class BrowserWindow(QMainWindow):
             "previous_session": [], "previous_session_active_index": 0,
             "recently_closed": [], "named_sessions": {},
         })
+        extension_enabled_states = self.settings_data.get("enabled_extensions", {})
+        if not isinstance(extension_enabled_states, dict):
+            extension_enabled_states = {}
+        chatgpt_bridge_enabled = bool(self.settings_data.get("chatgpt_bridge_enabled", False))
         self.store.data["settings"] = {
             "speed_mode": True, "block_images": False, "ghost_cleanup_on_close": False,
             "allow_javascript": True, "allow_webgl": False, "cookie_policy": "ask",
@@ -2808,6 +2839,9 @@ class BrowserWindow(QMainWindow):
             "startup_page": "restore_session", "search_engine": "DuckDuckGo",
             "personal_vault_enabled": personal_vault_install_default(),
             "data_request_guard_enabled": True, "site_verification_enabled": True,
+            "extensions_profile_enabled": self.extensions_profile_enabled,
+            "enabled_extensions": dict(extension_enabled_states),
+            "chatgpt_bridge_enabled": chatgpt_bridge_enabled,
         }
         self.settings_data = self.store.data["settings"]
         self.speed_mode = True
@@ -3079,6 +3113,8 @@ class BrowserWindow(QMainWindow):
             self.clear_ghost_data(confirm=False)
         super().closeEvent(event)
         if event.isAccepted():
+            if hasattr(self, "chatgpt_bridge_settings"):
+                self.chatgpt_bridge_settings.close()
             self.store.data["clean_shutdown"] = True
             self.store.save()
 

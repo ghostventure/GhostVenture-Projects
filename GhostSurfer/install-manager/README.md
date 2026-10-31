@@ -57,6 +57,6 @@ The output is `install-manager/distribution/GS Install Manager for Ghost Surfer/
 
 ## Website and release assets
 
-The current published browser package is **0.2.1** at [ghost-surfer-browser.web.app](https://ghost-surfer-browser.web.app/). Large ZIPs are hosted on Firebase Hosting rather than committed to GitHub. `site/downloads/SHA256SUMS.txt` records the published asset hashes.
+The current browser release is **0.2.2** at [ghost-surfer-browser.web.app](https://ghost-surfer-browser.web.app/). Large ZIPs are hosted on Firebase Hosting rather than committed to GitHub. `site/downloads/SHA256SUMS.txt` records the published asset hashes.
 
 From the project root, `npm run deploy` runs `scripts/prepare-release-assets.ps1` first. That script downloads the ZIPs named in its asset list from the live Hosting site and verifies their SHA-256 values; the Firebase CLI then deploys the website. This step preserves already-published packages and does not create or upload a new package. Update the release asset, checksum manifest, and preparation list together when preparing a new release.

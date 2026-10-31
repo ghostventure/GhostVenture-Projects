@@ -1,5 +1,16 @@
-﻿Ghost Surfer Browser
+Ghost Surfer Browser
 Release: 2026-10-31
+Version: 0.2.2
+Package: Ghost-Surfer-Setup-Windows-0.2.2.zip
+GitHub update package: GhostSurfer-Setup-v0.2.2.zip
+
+2026-10-31
+- Added optional local Manifest V3 extension management with permission review, disabled-by-default installs, and a separate persistent profile.
+- Added an optional ChatGPT MCP bridge module, off by default, with per-action confirmation for current-page metadata, visible text, and HTTP(S) navigation.
+- Bundled the bridge and extension manager in the Windows install package. ChatGPT use requires a separately configured Secure MCP Tunnel or HTTPS MCP host, service authentication, and suitable account/workspace access.
+- Documented Qt WebEngine extension compatibility limits; the official ChatGPT Chrome extension and Chrome Web Store installation are not included or claimed compatible.
+
+Previous release: 2026-10-31
 Version: 0.2.1
 Package: Ghost-Surfer-Setup-Windows-2026-10-31.zip
 GitHub update package: GhostSurfer-Setup-v0.2.1.zip
