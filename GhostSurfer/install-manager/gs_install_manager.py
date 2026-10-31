@@ -52,7 +52,7 @@ CHUNK_BYTES = 4 * 1024 * 1024
 VC_REDIST_URL = "https://aka.ms/vc14/vc_redist.x64.exe"
 VC_MINIMUM = (14, 28, 0, 0)
 VC_DOWNLOAD_LIMIT = 50 * 1024 * 1024
-LEGAL_CONTENT_VERSION = "2026-10-27-v2"
+LEGAL_CONTENT_VERSION = "2026-10-31-v1"
 WEBENGINE_FILES = (
     "PySide6/QtWebEngineCore.pyd",
     "PySide6/QtWebEngineWidgets.pyd",

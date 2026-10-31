@@ -1,6 +1,6 @@
 # Ghost Surfer
 
-Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. The current published browser package is **0.2.0**. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
+Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. The current published browser package is **0.2.1**. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
 
 ## What it includes
 

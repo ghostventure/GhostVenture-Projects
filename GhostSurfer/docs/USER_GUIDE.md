@@ -1,6 +1,6 @@
 # Ghost Surfer User Guide
 
-This guide describes the Windows browser in release 0.2.0. Use the contents list to jump to a task.
+This guide describes the Windows browser in release 0.2.1. Use the contents list to jump to a task.
 
 ## Contents
 

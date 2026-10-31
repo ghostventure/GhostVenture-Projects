@@ -70,7 +70,7 @@ from personal_data_guard import PersonalDataRequestDialog, SiteRecognitionStore,
 
 
 APP_NAME = "Ghost Surfer"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.2.1"
 GITHUB_REPOSITORY_URL = "https://github.com/ghostventure/GhostVenture-Projects"
 GITHUB_RELEASES_URL = f"{GITHUB_REPOSITORY_URL}/releases"
 HOME_URL = "https://duckduckgo.com/"
