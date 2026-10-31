@@ -49,6 +49,12 @@ Open **Tabs & Data > Library Tools** to search, rename, delete, and organize boo
 
 History is searchable and grouped by visit date. Select entries and choose **Remove selected history entries** to delete them. Under **Tabs & Data > Browser Data**, choose a retention period: Forever, 30 days, 90 days, or 1 year. The selected limit applies when history is recorded and when you change the setting.
 
+### Personal Data Vault
+
+The optional **Personal Data Vault** stores contact names, addresses, phone numbers, and website usernames and passwords. Enable or disable it during installation or later under **Ghost Control > Tabs & Data**. When enabled, open it from the **Personal Vault** button on the navigation rail or from Settings. Add and edit entries in the vault. For a login, **Fill login on this site** requires the exact HTTPS site to be open and fills only after you choose the action; review the fields before submitting. Contact details are stored for reference. Credit cards are not supported.
+
+Vault contents are encrypted by Windows for the current user and saved in a separate `personal-vault.dpapi` file. They are not included in browser-data backups, exports, or history. Disabling the module hides access but keeps saved vault data so it can be used again if re-enabled. Windows account access is required to decrypt it; moving the file to another account or PC will not make it readable there.
+
 ## Privacy and site compatibility
 
 Cookie prompts and privacy alerts share the notification bar at the bottom of the browser. For first-party cookies, choose **Allow this site** or **Block this site**. To set the default for all sites, open **Ghost Control > Privacy > Cookies & Consent**:
@@ -64,6 +70,14 @@ For a temporary compatibility change, right-click an HTTP or HTTPS page and choo
 Use **Tabs & Data > Maintenance > Clear cookies & cache** to remove website cookies and cached files while keeping history, bookmarks, and saved per-site cookie decisions. **Clear cookies, cache, history** also clears history, saved cookie decisions, and recent privacy alerts while preserving bookmarks. The **Cookie Decisions** list under Privacy lets you forget one site's decision or all decisions.
 
 The IP tripwire reports certain recognized public-IP echo and IP-geolocation requests and allows them to continue. It cannot identify every lookup service, custom endpoint, server-side logging, or other way a site may infer location. A site reached directly sees the public IP used for the connection. Tor, a VPN, or a proxy changes the network route; Ghost Surfer's privacy settings do not make browsing anonymous.
+
+### Personal information submission review
+
+Under **Ghost Control > Privacy > Personal Data Requests & Site Checks**, Ghost Surfer can pause HTML form submissions that contain recognizable name, email, phone, address, username, password, date-of-birth, government-identifier, or payment-card fields. The review lists up to 100 detected fields, whether the page marks each one required, and whether it currently contains a value. Nothing is selected by default. Select only the fields you choose to send; Ghost Surfer temporarily excludes the other detected controls from that form submission. **Deny all and stop** leaves the form unsubmitted.
+
+For an unrecognized destination, Ghost Surfer says it has not been marked as recognized on this PC. The optional periodic check looks up the destination's public domain-registration record through IANA's RDAP directory and the registry listed for that domain suffix. It refreshes at most once every 30 days per domain and sends the domain name, not the page URL or form contents. The IANA directory is reused for up to 30 days to reduce repeat network work. A recent registration, unusual registry status, internationalized domain, or a form that sends data to a different domain can raise a caution. You can mark that you recognize a site for 30 days; this does not create an automatic sharing permission. Use **Forget recognized sites** to remove those local recognition choices.
+
+These checks cannot prove that a company is real or that a site is honest. HTTPS means the connection is encrypted; it does not verify the business. The form monitor recognizes common field labels and HTML form submissions. A site can request data through custom scripts, images, or other mechanisms that the form monitor does not identify, so review the site and the information you enter. Turning off the form guard stops the pause; turning off periodic site checks stops RDAP lookups.
 
 ## Downloads and browser data
 

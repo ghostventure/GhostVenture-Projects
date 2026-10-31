@@ -65,6 +65,8 @@ from ghost_guard import (
     handle_permission_request,
     registrable_domain,
 )
+from personal_data_vault import PersonalDataVaultDialog
+from personal_data_guard import PersonalDataRequestDialog, SiteRecognitionStore, SiteVerificationWorker, install_personal_data_monitor
 
 
 APP_NAME = "Ghost Surfer"
@@ -76,6 +78,11 @@ DASHBOARD_URL = "ghostsurfer://dashboard"
 SEARCH_URL = "https://www.startpage.com/sp/search?query={query}"
 TOR_CHECK_URL = "https://check.torproject.org/"
 STORE_SEAL_KEY = b"GhostSurfer.BlackLionStudios.local-state.v2"
+
+
+def personal_vault_install_default() -> bool:
+    marker = Path(sys.executable).resolve().parent / "personal-vault.enabled"
+    return marker.exists() if getattr(sys, "frozen", False) else True
 
 THEMES = {
     "Ghost Blue": {"accent": "#38a9e6", "accent_soft": "#8fd6ff", "hover": "#1f7fb4"},
@@ -204,6 +211,9 @@ class BrowserStore:
                 "home_page_url": "https://duckduckgo.com/",
                 "home_page_default_migrated": True,
                 "reduce_motion": False,
+                "personal_vault_enabled": personal_vault_install_default(),
+                "data_request_guard_enabled": True,
+                "site_verification_enabled": True,
             },
         }
         self.load()
@@ -267,6 +277,9 @@ class BrowserStore:
                 "history_retention_days": 0,
                 "home_page_url": "https://duckduckgo.com/",
                 "reduce_motion": False,
+                "personal_vault_enabled": personal_vault_install_default(),
+                "data_request_guard_enabled": True,
+                "site_verification_enabled": True,
             }.items():
                 self.data["settings"].setdefault(key, value)
             settings = self.data["settings"]
@@ -275,7 +288,7 @@ class BrowserStore:
                 if legacy_home is None or legacy_home == "https://www.startpage.com/":
                     settings["home_page_url"] = "https://duckduckgo.com/"
                 settings["home_page_default_migrated"] = True
-            for key in ("speed_mode", "block_images", "ghost_cleanup_on_close", "allow_javascript", "allow_webgl", "high_contrast", "reduce_motion"):
+            for key in ("speed_mode", "block_images", "ghost_cleanup_on_close", "allow_javascript", "allow_webgl", "high_contrast", "reduce_motion", "personal_vault_enabled", "data_request_guard_enabled", "site_verification_enabled"):
                 settings[key] = bool(settings.get(key, key == "speed_mode"))
             if not isinstance(settings.get("cookie_policy"), str) or settings["cookie_policy"] not in {"ask", "allow", "deny"}:
                 settings["cookie_policy"] = "ask"
@@ -512,6 +525,7 @@ class BrowserPage(QWebEnginePage):
         super().__init__(profile, window)
         self.window = window
         self.featurePermissionRequested.connect(self.handle_permission_request)
+        self.personal_data_consent_bridge = install_personal_data_monitor(self, window.handle_personal_data_request)
 
     def createWindow(self, _type: QWebEnginePage.WebWindowType) -> "BrowserPage":
         tab = self.window.add_tab("about:blank", switch=True)
@@ -800,6 +814,8 @@ class BrowserWindow(QMainWindow):
         self.bookmark_btn = self.rail_button("Bookmark", self.style().standardIcon(self.style().StandardPixmap.SP_DialogSaveButton), self.bookmark_current)
         self.clear_cache_btn = self.rail_button("Clear cookies & cache", self.style().standardIcon(self.style().StandardPixmap.SP_DialogResetButton), self.clear_cookies_and_cache)
         self.library_btn = self.rail_button("Library", self.style().standardIcon(self.style().StandardPixmap.SP_DirOpenIcon), self.open_library_menu)
+        self.personal_vault_btn = self.rail_button("Personal Vault", self.style().standardIcon(self.style().StandardPixmap.SP_DialogSaveButton), self.open_personal_vault)
+        self.personal_vault_btn.setEnabled(bool(self.settings_data.get("personal_vault_enabled", False)))
         self.clear_btn = self.rail_button("Clear ghost data", self.style().standardIcon(self.style().StandardPixmap.SP_DialogResetButton), self.clear_ghost_data)
         self.tor_btn = self.rail_button("Tor check", self.style().standardIcon(self.style().StandardPixmap.SP_DriveNetIcon), self.open_tor_check)
         self.dashboard_btn = self.rail_button("Dashboard", self.style().standardIcon(self.style().StandardPixmap.SP_ComputerIcon), self.open_dashboard)
@@ -814,6 +830,7 @@ class BrowserWindow(QMainWindow):
             self.bookmark_btn,
             self.clear_cache_btn,
             self.library_btn,
+            self.personal_vault_btn,
             self.control_btn,
         ):
             rail_layout.addWidget(button)
@@ -1210,6 +1227,23 @@ class BrowserWindow(QMainWindow):
         general_layout.addWidget(update_group)
         layout = privacy_layout
 
+        request_guard_group = QGroupBox("Personal Data Requests & Site Checks")
+        request_guard_layout = QVBoxLayout(request_guard_group)
+        self.data_request_guard_check = QCheckBox("Pause form submissions that request personal or payment information")
+        self.data_request_guard_check.setChecked(bool(self.settings_data.get("data_request_guard_enabled", True)))
+        self.data_request_guard_check.toggled.connect(lambda enabled: self.update_setting("data_request_guard_enabled", enabled))
+        request_guard_layout.addWidget(self.data_request_guard_check)
+        self.site_verification_check = QCheckBox("Refresh public domain registration details at most every 30 days")
+        self.site_verification_check.setChecked(bool(self.settings_data.get("site_verification_enabled", True)))
+        self.site_verification_check.toggled.connect(lambda enabled: self.update_setting("site_verification_enabled", enabled))
+        request_guard_layout.addWidget(self.site_verification_check)
+        request_guard_layout.addWidget(QLabel("Ghost Surfer lists requested fields and sends only fields you select. Registration age and registrar data are risk signals, not proof of company identity or honesty. Domain checks send the destination domain to IANA and its authoritative registry."))
+        forget_recognized_btn = QPushButton("Forget recognized sites")
+        forget_recognized_btn.setObjectName("panelButton")
+        forget_recognized_btn.clicked.connect(self.forget_recognized_sites)
+        request_guard_layout.addWidget(forget_recognized_btn)
+        layout.addWidget(request_guard_group)
+
         status_group = QGroupBox("Privacy Status")
         status_layout = QGridLayout(status_group)
         self.location_status = QLabel("Location: blocked")
@@ -1335,6 +1369,21 @@ class BrowserWindow(QMainWindow):
         layout.addWidget(perf_group)
 
         layout = workspace_layout
+        vault_group = QGroupBox("Personal Data Vault")
+        vault_layout = QVBoxLayout(vault_group)
+        self.personal_vault_check = QCheckBox("Enable names, addresses, phone numbers, usernames, and passwords")
+        self.personal_vault_check.setChecked(bool(self.settings_data.get("personal_vault_enabled", False)))
+        self.personal_vault_check.toggled.connect(self.set_personal_vault_enabled)
+        vault_layout.addWidget(self.personal_vault_check)
+        vault_layout.addWidget(QLabel("Saved information is encrypted for this Windows account and kept outside browser history and backups. Credit cards are not stored. Login autofill is manual and limited to the exact HTTPS site."))
+        open_vault_btn = QPushButton("Open Personal Vault")
+        open_vault_btn.setObjectName("panelButton")
+        open_vault_btn.setEnabled(bool(self.settings_data.get("personal_vault_enabled", False)))
+        open_vault_btn.clicked.connect(self.open_personal_vault)
+        self.personal_vault_open_btn = open_vault_btn
+        self.personal_vault_check.toggled.connect(open_vault_btn.setEnabled)
+        vault_layout.addWidget(open_vault_btn)
+        layout.addWidget(vault_group)
         tabs_group = QGroupBox("Tab Actions")
         tabs_layout = QVBoxLayout(tabs_group)
         session_checkpoint_note = QLabel(
@@ -1750,6 +1799,84 @@ class BrowserWindow(QMainWindow):
         self.store.save()
         self.apply_engine_settings()
         self.update_security_chips()
+
+    def set_personal_vault_enabled(self, enabled: bool) -> None:
+        self.settings_data["personal_vault_enabled"] = bool(enabled)
+        self.store.save()
+        if hasattr(self, "personal_vault_btn"):
+            self.personal_vault_btn.setEnabled(bool(enabled))
+        if hasattr(self, "personal_vault_open_btn"):
+            self.personal_vault_open_btn.setEnabled(bool(enabled))
+
+    def open_personal_vault(self) -> None:
+        if not bool(self.settings_data.get("personal_vault_enabled", False)):
+            return
+        try:
+            PersonalDataVaultDialog(self, app_data_dir() / "personal-vault.dpapi").exec()
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(self, "Personal Vault unavailable", str(exc))
+
+    def handle_personal_data_request(self, page: BrowserPage, request: dict) -> None:
+        bridge = getattr(page, "personal_data_consent_bridge", None)
+        if bridge is None:
+            return
+        decision = {"allow": False, "fields": []}
+        token = request.get("token", "")
+        if not bool(self.settings_data.get("data_request_guard_enabled", True)):
+            decision = {"allow": True, "fields": [field["id"] for field in request["fields"]]}
+            bridge.submissionResolved.emit(token, json.dumps(decision))
+            return
+        if getattr(self, "_personal_data_prompt_open", False):
+            bridge.submissionResolved.emit(token, json.dumps(decision))
+            return
+        if page.url().host().lower() != request.get("page_host"):
+            bridge.submissionResolved.emit(token, json.dumps(decision))
+            return
+        self._personal_data_prompt_open = True
+        trust_path = app_data_dir() / "site-recognition.json"
+        trust = SiteRecognitionStore(trust_path)
+        dialog = PersonalDataRequestDialog(
+            request,
+            app_data_dir() / "domain-registration-cache.json",
+            trust.recognized(request["action_host"]),
+            bool(self.settings_data.get("site_verification_enabled", True)),
+            self,
+        )
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted and page.url().host().lower() == request.get("page_host"):
+                decision = {"allow": True, "fields": dialog.allowed_field_ids}
+                if dialog.remember_recognition:
+                    try:
+                        trust.remember(request["action_host"])
+                    except OSError as exc:
+                        self.status.showMessage(f"Recognition was not saved: {exc}", 6000)
+                self.status.showMessage("Only the selected personal data fields were allowed for this submission.", 5000)
+            else:
+                self.status.showMessage("Submission stopped. No selected form fields were released by Ghost Surfer.", 5000)
+        finally:
+            self._personal_data_prompt_open = False
+            try:
+                bridge.submissionResolved.emit(token, json.dumps(decision))
+            except RuntimeError:
+                pass
+
+    def forget_recognized_sites(self) -> None:
+        path = app_data_dir() / "site-recognition.json"
+        if not path.exists():
+            self.status.showMessage("No recognized sites are saved.", 3000)
+            return
+        answer = QMessageBox.question(
+            self, "Forget recognized sites?", "Remove all sites you previously marked as recognized?",
+            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            path.unlink(missing_ok=True)
+            self.status.showMessage("Saved site recognitions were cleared.", 3500)
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not clear site recognitions", str(exc))
 
     def set_speed_mode(self, value: bool) -> None:
         self.speed_mode = bool(value)
@@ -2679,6 +2806,8 @@ class BrowserWindow(QMainWindow):
             "home_page_default_migrated": True, "reduce_motion": False,
             "history_retention_days": 0, "interface_text_size": 100,
             "startup_page": "restore_session", "search_engine": "DuckDuckGo",
+            "personal_vault_enabled": personal_vault_install_default(),
+            "data_request_guard_enabled": True, "site_verification_enabled": True,
         }
         self.settings_data = self.store.data["settings"]
         self.speed_mode = True
@@ -2704,6 +2833,14 @@ class BrowserWindow(QMainWindow):
             widget.setChecked(value)
             widget.blockSignals(False)
         self.cookie_policy_combo.setCurrentIndex(self.cookie_policy_combo.findData("ask"))
+        self.personal_vault_check.blockSignals(True)
+        self.personal_vault_check.setChecked(bool(self.settings_data["personal_vault_enabled"]))
+        self.personal_vault_check.blockSignals(False)
+        self.set_personal_vault_enabled(bool(self.settings_data["personal_vault_enabled"]))
+        for control, value in ((self.data_request_guard_check, True), (self.site_verification_check, True)):
+            control.blockSignals(True)
+            control.setChecked(value)
+            control.blockSignals(False)
         self.apply_style()
         self.page_ux.set_high_contrast(False)
         self.site_zoom_combo.setCurrentText("100%")
@@ -2929,6 +3066,9 @@ class BrowserWindow(QMainWindow):
             self.privacy_chip.setText("Ghost Guard: Local page")
 
     def closeEvent(self, event) -> None:
+        for worker in self.findChildren(SiteVerificationWorker):
+            if worker.isRunning():
+                worker.wait(9000)
         self._store_save_timer.stop()
         self.flush_store_save()
         self._download_save_timer.stop()

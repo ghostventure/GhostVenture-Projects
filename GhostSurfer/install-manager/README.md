@@ -9,7 +9,8 @@ GS Install Manager installs, updates from a local package, launches, and uninsta
 1. Download and extract the current Ghost Surfer package from the [Firebase website](https://ghost-surfer-browser.web.app/).
 2. Run **GS Install Manager.exe** from the extracted folder.
 3. Review the bundled Legal & Consent information and accept the Terms/License to continue on first launch. The manager displays the consent dialog again when its legal-content version changes.
-4. Select **Install**. The manager checks the app package, Windows version and architecture, disk space, install-folder access, and Visual C++ runtime before changing browser program files.
+4. Choose whether to enable **Personal Data Vault**. It stores names, addresses, phone numbers, usernames, and passwords; it does not store credit cards. The choice can be changed later in Ghost Control settings.
+5. Select **Install**. The manager checks the app package, Windows version and architecture, disk space, install-folder access, and Visual C++ runtime before changing browser program files.
 
 The package includes a `Ghost Surfer` folder beside the manager. The manager detects it automatically. If it cannot, select an extracted payload folder or a package ZIP in the manager.
 

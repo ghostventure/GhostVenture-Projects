@@ -438,13 +438,14 @@ class OperationWorker(QObject):
     finished = Signal(bool, str)
     queued = Signal(bool, str)
 
-    def __init__(self, mode: str, source: Path | None, target: Path, desktop_shortcut: bool = False, install_vc: bool = False):
+    def __init__(self, mode: str, source: Path | None, target: Path, desktop_shortcut: bool = False, install_vc: bool = False, personal_vault_enabled: bool = True):
         super().__init__()
         self.mode = mode
         self.source = source
         self.target = target
         self.desktop_shortcut = desktop_shortcut
         self.install_vc = install_vc
+        self.personal_vault_enabled = personal_vault_enabled
         self.cancel_requested = threading.Event()
 
     def cancel(self) -> None:
@@ -497,12 +498,12 @@ class OperationWorker(QObject):
         if self.source.suffix.casefold() == ".zip" and self.source.is_file():
             with tempfile.TemporaryDirectory(prefix=".gs-install-manager-package-", dir=self.target.parent) as temporary:
                 payload = _extract_archive(self.source, Path(temporary) / "extract", self.progress.emit)
-                self._copy_commit(payload)
+                self._copy_commit(payload, self.personal_vault_enabled if self.mode == "install" else None)
         elif self.source.is_dir():
             payload = _find_payload(self.source.resolve())
             if self.target.parent.resolve().is_relative_to(payload):
                 raise ValueError("Choose the Ghost Surfer payload folder, not a parent containing the install location.")
-            self._copy_commit(payload)
+            self._copy_commit(payload, self.personal_vault_enabled if self.mode == "install" else None)
         else:
             raise ValueError("Choose an extracted Ghost Surfer payload folder or a .zip package.")
         self.progress.emit(96, "Creating Start Menu shortcuts")
@@ -589,13 +590,20 @@ class OperationWorker(QObject):
             raise RuntimeError("Microsoft runtime installation failed, was canceled, or needs a restart. No Ghost Surfer files were changed.")
         installer.unlink(missing_ok=True)
 
-    def _copy_commit(self, payload: Path) -> None:
+    def _copy_commit(self, payload: Path, personal_vault_enabled: bool | None = None) -> None:
         stage = self.target.parent / f".gs-install-manager-stage-{uuid.uuid4().hex}"
         backup = self.target.parent / f".gs-install-manager-backup-{uuid.uuid4().hex}"
         try:
             _copy_payload(payload, stage, self.progress.emit)
             if not (stage / APP_EXE_NAME).is_file() or not (stage / "_internal").is_dir():
                 raise ValueError("The staged payload is incomplete.")
+            vault_marker = stage / "personal-vault.enabled"
+            if personal_vault_enabled is True:
+                vault_marker.write_text("enabled\n", encoding="ascii")
+            elif personal_vault_enabled is False:
+                vault_marker.unlink(missing_ok=True)
+            elif (self.target / "personal-vault.enabled").is_file():
+                vault_marker.write_text("enabled\n", encoding="ascii")
             moved_existing = False
             if self.target.exists():
                 if self.target.is_symlink() or not self.target.is_dir():
@@ -750,6 +758,10 @@ class InstallManagerWindow(QMainWindow):
         self.desktop_check = QCheckBox("Create a desktop shortcut")
         self.desktop_check.setChecked(False)
         layout.addWidget(self.desktop_check)
+        self.personal_vault_check = QCheckBox("Enable Personal Data Vault (names, addresses, phone numbers, usernames, passwords)")
+        self.personal_vault_check.setChecked(True)
+        self.personal_vault_check.setToolTip("Credit cards are not stored. You can turn the module off or on later in Ghost Control > Tabs & Data.")
+        layout.addWidget(self.personal_vault_check)
         layout.addStretch(1)
 
         self.progress_label = QLabel("Ready")
@@ -816,6 +828,7 @@ class InstallManagerWindow(QMainWindow):
         self.remove_button.setEnabled(installed)
         self.install_button.setEnabled(not installed)
         self.update_button.setEnabled(installed)
+        self.personal_vault_check.setEnabled(not installed)
 
     def _refresh_checks(self) -> None:
         os_info = inspect_os()
@@ -869,10 +882,11 @@ class InstallManagerWindow(QMainWindow):
         self.folder_button.setEnabled(False)
         self.zip_button.setEnabled(False)
         self.desktop_check.setEnabled(False)
+        self.personal_vault_check.setEnabled(False)
         self.cancel_button.hide()
         self.progress.setValue(0)
         self.thread = QThread(self)
-        self.worker = OperationWorker(mode, self.source, self.target, self.desktop_check.isChecked(), install_vc)
+        self.worker = OperationWorker(mode, self.source, self.target, self.desktop_check.isChecked(), install_vc, self.personal_vault_check.isChecked())
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
         self.worker.progress.connect(self._on_progress)
@@ -908,6 +922,7 @@ class InstallManagerWindow(QMainWindow):
     def _on_thread_finished(self) -> None:
         self.thread = None
         self.worker = None
+        self.personal_vault_check.setEnabled(not (self.target / APP_EXE_NAME).is_file())
         self.cancel_button.hide()
         self.folder_button.setEnabled(True)
         self.zip_button.setEnabled(True)

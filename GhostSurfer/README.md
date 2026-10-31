@@ -8,6 +8,8 @@ Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. 
 - **Privacy controls:** first-party cookie choices, third-party cookie blocking, permission restrictions, tracker alerts, and an alert-only IP tripwire for a limited set of known lookup services.
 - **Compatibility and accessibility:** temporary per-site JavaScript and image overrides, interface text sizing, high contrast, reduced browser-scroll motion, and visible keyboard focus.
 - **Recovery and cleanup:** crash-session recovery, browser-data backup and restore, profile reset with an optional bookmark keep, cookie/cache controls, and download management.
+- **Optional Personal Data Vault:** store names, addresses, phone numbers, usernames, and passwords in a Windows account-encrypted module. It can be selected during install or toggled in Settings; credit cards are not stored.
+- **Personal data consent guard:** pause common sensitive HTML form submissions, show each requested field, and send only the fields the user selects. Optional monthly RDAP registration checks provide risk signals without claiming to verify a company's identity.
 - **Updates:** the browser can check GitHub releases for a compatible Ghost Surfer package, verify and stage it, and ask before applying an update that closes and restarts the browser.
 
 Privacy controls reduce some tracking; they do not make a direct connection anonymous. The IP tripwire recognizes only a limited set of client-side lookup patterns and allows recognized requests to continue. A site can still observe the network address used for its connection.
