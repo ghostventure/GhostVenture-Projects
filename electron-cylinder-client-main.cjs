@@ -1,17 +1,11 @@
 const { app, dialog } = require('electron')
-const { execFileSync } = require('node:child_process')
+const { detectCylinderHost } = require('./cylinder-platform.cjs')
 
 process.env.OVERHEAD_DEPLOYMENT_MODE = 'cylinder'
 process.env.OVERHEAD_CYLINDER_VARIANT = 'client'
 
 function isSupportedWorkstation() {
-  if (process.platform !== 'win32') return false
-  try {
-    const output = execFileSync('reg.exe', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion', '/v', 'ProductName'], { encoding: 'utf8', windowsHide: true, timeout: 5000, maxBuffer: 16384 })
-    return /Windows 10|Windows 11/i.test(output) && !/Windows Server|\bIoT\b/i.test(output)
-  } catch {
-    return false
-  }
+  return detectCylinderHost().variant === 'client'
 }
 
 if (!isSupportedWorkstation()) {

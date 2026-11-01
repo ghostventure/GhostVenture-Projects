@@ -1,7 +1,7 @@
 {
   "name": "overhead",
   "private": true,
-  "version": "0.3.26",
+  "version": "0.3.27",
   "description": "Installed desktop console for reducing small-business admin overload.",
   "author": "Black Lion Media Studio",
   "main": "electron-main.cjs",
@@ -40,6 +40,7 @@
       "update-schedule.cjs",
       "electron-server-main.cjs",
       "electron-cylinder-client-main.cjs",
+      "cylinder-platform.cjs",
       "electron-backend.cjs",
       "stripe-connector.cjs",
       "electron-preload.cjs",

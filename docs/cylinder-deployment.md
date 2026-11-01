@@ -27,6 +27,12 @@ Both scripts build the shared renderer before packaging. The Server installer is
 
 `npm run build` verifies the shared renderer build only. A completed installer build verifies packaging, not installation or operation on real Server/IoT hardware, Windows workstations, VPNs, or remote PowerShell. `npm run release:verify` checks the published release feeds and artifact hashes after deployment; it does not prove those device/runtime behaviors. Do not describe a local package as published or installed without checking those steps separately.
 
+## 0.3.27 runtime upgrade
+
+Cylinder Server and Cylinder Client inherit the shared Electron IPC and persistence hardening: backend IPC is restricted to the canonical top-level renderer, untrusted navigation is blocked, session locking validates the active session, and local records, update preferences, and recovery state use unique temporary files with atomic replacement. The shared bounded, fail-closed Windows edition detection is used by both launchers. The existing GUI appearance and the Server/Client separation remain unchanged.
+
+Cylinder retains its standalone updater rather than embedding the OverHead Install Manager. Its startup update check runs before the workspace window with a bounded wait. The 0.3.27 source changes require fresh Server and Client packages and release publication before installed users receive them. A local build alone does not verify signatures, installation, or operation on every supported host.
+
 ## 0.3.24 package and service status
 
 The 0.3.24 Desktop UX and shared backend updates are included in both locally built Cylinder packages through the shared renderer and Electron backend. The shared work includes lazy-loaded workspaces, keyboard navigation and command search, the work planner and record history, bulk status updates, and batched persistence writes. Cylinder Server additionally retains its department Rank and device-policy integration; Cylinder Client remains an endpoint build and does not gain management authority from the shared UI.
