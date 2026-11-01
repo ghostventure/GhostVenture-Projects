@@ -4,6 +4,7 @@ const { autoUpdater } = require('electron-updater')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 const { spawn, spawnSync } = require('node:child_process')
 const backend = require('./electron-backend.cjs')
 const { nextUpdateCheck } = require('./update-schedule.cjs')
@@ -17,6 +18,8 @@ let appReady = false
 const iconPath = path.join(__dirname, 'public', 'overhead.ico')
 const INACTIVITY_LOCK_MS = 30 * 60 * 1000
 const MAX_RECOVERY_RETRIES = 3
+const APP_ENTRY_PATH = path.join(__dirname, 'dist', 'index.html')
+const APP_ENTRY_URL = pathToFileURL(APP_ENTRY_PATH).href
 const DEVELOPER_EMAIL = 'solidartentertainment@gmail.com'
 const DEPLOYMENT_MODE = process.env.OVERHEAD_DEPLOYMENT_MODE === 'cylinder' ? 'cylinder' : 'desktop'
 const DEPLOYMENT_VARIANT = DEPLOYMENT_MODE === 'cylinder' && process.env.OVERHEAD_CYLINDER_VARIANT === 'client' ? 'client' : 'server'
@@ -26,9 +29,13 @@ const UPDATE_FEED_URL = process.env.OVERHEAD_UPDATE_URL || `https://overhead-off
 const STARTUP_UPDATE_TIMEOUT_MS = 2500
 const GITHUB_UPDATE_TIMEOUT_MS = 10000
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 60 * 1000
+const GITHUB_RELEASE_CACHE_MS = 60 * 1000
 const MANAGER_MANAGED_UPDATES = RELEASE_TARGET === 'desktop'
 let updateCheckInFlight = false
 let pendingUpdateAssessment = null
+let cachedGitHubRelease = null
+let cachedGitHubReleaseAt = 0
+let githubReleaseRequest = null
 const STARTUP_RECOVERY_HTML = 'data:text/html;charset=utf-8,' + encodeURIComponent([
   '<!doctype html><html><head><meta charset="utf-8"><title>OverHead Recovery</title>',
   '<style>body{font:16px system-ui,-apple-system,"Segoe UI",sans-serif;background:#edf1f4;color:#18212b;margin:0;display:grid;min-height:100vh;place-items:center}.card{max-width:520px;padding:32px;background:white;border-radius:18px;box-shadow:0 18px 50px #1a27301c}h1{margin-top:0}p{line-height:1.55}button{background:#152b3d;color:#fff;border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer}</style></head>',
@@ -131,14 +138,24 @@ function readUpdatePreferences() {
   }
 }
 
+function writeJsonAtomically(filePath, value) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  const temporaryPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`
+  try {
+    fs.writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
+    fs.renameSync(temporaryPath, filePath)
+  } catch (error) {
+    try { fs.rmSync(temporaryPath, { force: true }) } catch {}
+    throw error
+  }
+}
+
 function saveUpdatePreferences() {
-  fs.mkdirSync(path.dirname(updatePreferencesPath), { recursive: true })
-  fs.writeFileSync(updatePreferencesPath, JSON.stringify(updatePreferences, null, 2), 'utf8')
+  writeJsonAtomically(updatePreferencesPath, updatePreferences)
 }
 
 function writeRecoveryState(nextState) {
-  fs.mkdirSync(path.dirname(recoveryStatePath), { recursive: true })
-  fs.writeFileSync(recoveryStatePath, JSON.stringify({ ...nextState, updatedAt: new Date().toISOString() }, null, 2), 'utf8')
+  writeJsonAtomically(recoveryStatePath, { ...nextState, updatedAt: new Date().toISOString() })
 }
 
 function markLaunchAttempt() {
@@ -231,9 +248,10 @@ function integrityReport() {
 
 function isTrustedSender(event) {
   try {
-    const senderUrl = event.senderFrame?.url || ''
-    const expectedUrl = new URL(`file://${path.join(__dirname, 'dist', 'index.html').replace(/\\/g, '/')}`).href
-    return event.sender === mainWindow?.webContents && senderUrl === expectedUrl
+    const frame = event.senderFrame
+    return event.sender === mainWindow?.webContents
+      && frame?.parent === null
+      && frame.url === APP_ENTRY_URL
   } catch {
     return false
   }
@@ -324,10 +342,9 @@ function createWindow() {
   mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('file://')) {
-      event.preventDefault()
-      if (openAllowedExternal(url)) shell.openExternal(url)
-    }
+    if (url === APP_ENTRY_URL) return
+    event.preventDefault()
+    if (openAllowedExternal(url)) shell.openExternal(url)
   })
 
   mainWindow.on('closed', () => {
@@ -351,12 +368,11 @@ function createWindow() {
     if (lockTimer) clearTimeout(lockTimer)
   })
 
-  const appPage = path.join(__dirname, 'dist', 'index.html')
-  if (!fs.existsSync(appPage)) {
+  if (!fs.existsSync(APP_ENTRY_PATH)) {
     showStartupRecovery('The OverHead screen files are missing. Reinstall OverHead to restore them.')
     return
   }
-  mainWindow.loadFile(appPage).catch((error) => showStartupRecovery(`The main screen could not start: ${error.message || String(error)}`))
+  mainWindow.loadFile(APP_ENTRY_PATH).catch((error) => showStartupRecovery(`The main screen could not start: ${error.message || String(error)}`))
 }
 
 function focusMainWindow() {
@@ -611,21 +627,32 @@ async function verifyUpdateFeed() {
 }
 
 async function verifyGitHubRelease() {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), GITHUB_UPDATE_TIMEOUT_MS)
-  try {
-    const response = await fetch(GITHUB_RELEASES_API_URL, {
-      headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-      signal: controller.signal,
-    })
-    if (!response.ok) return null
-    const releases = await response.json()
-    return latestCompatibleRelease(releases, RELEASE_TARGET)
-  } catch {
-    return null
-  } finally {
-    clearTimeout(timeout)
-  }
+  const now = Date.now()
+  if (cachedGitHubRelease && now - cachedGitHubReleaseAt < GITHUB_RELEASE_CACHE_MS) return cachedGitHubRelease
+  if (githubReleaseRequest) return githubReleaseRequest
+  githubReleaseRequest = (async () => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), GITHUB_UPDATE_TIMEOUT_MS)
+    try {
+      const response = await fetch(GITHUB_RELEASES_API_URL, {
+        headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+        signal: controller.signal,
+      })
+      if (!response.ok) return null
+      const releases = await response.json()
+      const release = latestCompatibleRelease(releases, RELEASE_TARGET)
+      if (release) {
+        cachedGitHubRelease = release
+        cachedGitHubReleaseAt = Date.now()
+      }
+      return release
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timeout)
+    }
+  })().finally(() => { githubReleaseRequest = null })
+  return githubReleaseRequest
 }
 
 async function checkForUpdatesBeforeLaunch({ force = false } = {}) {
@@ -817,10 +844,10 @@ if (singleInstanceLock) app.whenReady().then(async () => {
       showStartupRecovery('OverHead detected repeated incomplete launches. The recovery screen is available instead of closing the app.')
       return
     }
-    if (updatePreferences.autoCheck) {
+    const checkUpdatesAfterWindowLoads = updatePreferences.autoCheck && MANAGER_MANAGED_UPDATES
+    if (updatePreferences.autoCheck && !MANAGER_MANAGED_UPDATES) {
       await checkForUpdatesBeforeLaunch()
-      if (MANAGER_MANAGED_UPDATES && updateState.status === 'manager-starting') return
-    } else {
+    } else if (!updatePreferences.autoCheck) {
       setUpdateState('auto-check-disabled', { message: 'Auto-Check is off. Use Check when you want to look for updates.' })
     }
     try {
@@ -1004,6 +1031,15 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('app:power-cycle', trustedHandler(() => powerCycle()))
     createWindow()
     createTray()
+    if (checkUpdatesAfterWindowLoads && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.once('did-finish-load', () => {
+        setImmediate(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            checkForUpdatesBeforeLaunch().catch((error) => log.error('OverHead startup update check failed', error))
+          }
+        })
+      })
+    }
     setInterval(() => {
       if (updatePreferences.autoCheck && Date.now() >= nextUpdateCheck(updatePreferences.lastAttemptAt)) checkForUpdatesBeforeLaunch()
     }, AUTO_UPDATE_CHECK_INTERVAL_MS)

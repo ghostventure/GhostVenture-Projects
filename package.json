@@ -1,7 +1,7 @@
 {
   "name": "overhead",
   "private": true,
-  "version": "0.3.25",
+  "version": "0.3.26",
   "description": "Installed desktop console for reducing small-business admin overload.",
   "author": "Black Lion Media Studio",
   "main": "electron-main.cjs",
@@ -71,14 +71,14 @@
     }
   },
   "dependencies": {
-    "@azure/msal-node": "^5.6.0",
+    "@azure/msal-node": "^7.1.2",
     "adm-zip": "^0.6.0",
     "bcryptjs": "^3.0.3",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "lucide-react": "^1.25.0",
     "node-cron": "^4.6.0",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^10.3.1",
     "pdf-lib": "^1.17.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -90,8 +90,8 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
-    "electron": "^43.1.1",
-    "electron-builder": "^26.15.3",
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0",
     "oxlint": "^1.71.0",
     "playwright": "^1.61.1",
     "vite": "^8.1.1"

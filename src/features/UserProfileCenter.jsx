@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, BriefcaseBusiness, Building2, Clock3, MapPin, PencilLine, Save, ShieldCheck, UserRound, X } from 'lucide-react'
+import { BadgeCheck, BriefcaseBusiness, Building2, Clock3, KeyRound, MapPin, PencilLine, Save, ShieldCheck, UserRound, X } from 'lucide-react'
 import './UserProfileCenter.css'
 
 const blankProfile = {
@@ -35,11 +35,17 @@ function readProfile(email) {
   }
 }
 
-export default function UserProfileCenter({ session, backendState }) {
+export default function UserProfileCenter({ session, backendState, onCredentialsChanged }) {
   const [profile, setProfile] = useState(() => readProfile(session?.email))
   const [draft, setDraft] = useState(profile)
   const [editing, setEditing] = useState(false)
   const [notice, setNotice] = useState('')
+  const [credentialDraft, setCredentialDraft] = useState({ currentPassword: '', newEmail: session?.email || '', newPassword: '', confirmPassword: '' })
+  const [credentialBusy, setCredentialBusy] = useState(false)
+  const [credentialNotice, setCredentialNotice] = useState('')
+  const [credentialNoticeError, setCredentialNoticeError] = useState(false)
+  const [emailVerificationCode, setEmailVerificationCode] = useState('')
+  const [localEmailVerificationPending, setLocalEmailVerificationPending] = useState(false)
 
   useEffect(() => {
     const next = readProfile(session?.email)
@@ -47,6 +53,10 @@ export default function UserProfileCenter({ session, backendState }) {
     setDraft(next)
     setEditing(false)
     setNotice('')
+  }, [session?.email])
+
+  useEffect(() => {
+    setCredentialDraft((current) => ({ ...current, newEmail: session?.email || '', currentPassword: '', newPassword: '', confirmPassword: '' }))
   }, [session?.email])
 
   const account = useMemo(() => (backendState?.userProfiles || []).find((item) => item.email?.toLowerCase() === session?.email?.toLowerCase()), [backendState?.userProfiles, session?.email])
@@ -97,6 +107,78 @@ export default function UserProfileCenter({ session, backendState }) {
     window.setTimeout(() => document.getElementById('upc-edit-profile')?.focus(), 0)
   }
 
+  async function changeCredentials(event) {
+    event.preventDefault()
+    setCredentialNotice('')
+    setCredentialNoticeError(false)
+    if (credentialDraft.newPassword !== credentialDraft.confirmPassword) {
+      setCredentialNotice('The new passwords do not match.')
+      setCredentialNoticeError(true)
+      return
+    }
+    if (credentialDraft.newPassword.length < 12) {
+      setCredentialNotice('Use a new password with at least 12 characters.')
+      setCredentialNoticeError(true)
+      return
+    }
+    setCredentialBusy(true)
+    try {
+      const result = await window.overheadBackend.changeSignInCredentials({
+        currentPassword: credentialDraft.currentPassword,
+        newEmail: credentialDraft.newEmail,
+        newPassword: credentialDraft.newPassword,
+      })
+      const oldEmail = String(session?.email || '').toLowerCase()
+      if (result.emailChanged && oldEmail) {
+        try {
+          const all = JSON.parse(window.localStorage.getItem('overhead.userProfile.details.v1') || '{}')
+          if (all[oldEmail] && !all[result.email.toLowerCase()]) all[result.email.toLowerCase()] = all[oldEmail]
+          delete all[oldEmail]
+          window.localStorage.setItem('overhead.userProfile.details.v1', JSON.stringify(all))
+        } catch { /* Credential changes should not fail because optional profile details cannot migrate. */ }
+      }
+      setCredentialDraft({ currentPassword: '', newEmail: result.email, newPassword: '', confirmPassword: '' })
+      onCredentialsChanged?.(result.email)
+      setLocalEmailVerificationPending(result.emailChanged && result.verificationMethod === 'code')
+      setEmailVerificationCode('')
+      setCredentialNoticeError(false)
+      setCredentialNotice(result.emailChanged
+        ? result.verificationMethod === 'code'
+          ? result.verificationSent
+            ? `Sign-in details updated. Enter the verification code sent to ${result.email}.`
+            : result.verificationQueued
+              ? 'Sign-in details updated. A verification code was queued locally; configure email delivery before signing out.'
+              : 'Sign-in details updated, but the verification message was not sent. Contact OverHead support before signing out.'
+          : result.verificationSent
+            ? `Sign-in details updated. Check ${result.email} for a verification link before your next sign-in.`
+            : 'Sign-in details updated, but the verification link could not be sent. Contact OverHead support before signing out.'
+        : 'Password updated for your OverHead sign-in.')
+    } catch (reason) {
+      setCredentialNotice(reason?.message || 'Could not update the sign-in details. Check the current password and try again.')
+      setCredentialNoticeError(true)
+    } finally {
+      setCredentialBusy(false)
+    }
+  }
+
+  async function verifyChangedEmail() {
+    setCredentialBusy(true)
+    setCredentialNotice('')
+    setCredentialNoticeError(false)
+    try {
+      await window.overheadBackend.verifyEmail({ email: session?.email, code: emailVerificationCode })
+      setLocalEmailVerificationPending(false)
+      setEmailVerificationCode('')
+      setCredentialNotice('Your new sign-in email is verified.')
+      onCredentialsChanged?.(session?.email)
+    } catch (reason) {
+      setCredentialNotice(reason?.message || 'The email verification code could not be confirmed.')
+      setCredentialNoticeError(true)
+    } finally {
+      setCredentialBusy(false)
+    }
+  }
+
   return (
     <section className="user-profile-center" aria-labelledby="user-profile-title">
       <header className={`upc-hero upc-accent-${profile.accent}`}>
@@ -116,10 +198,10 @@ export default function UserProfileCenter({ session, backendState }) {
           </div>
           {!editing && <button id="upc-edit-profile" type="button" className="upc-edit-button" aria-label="Edit your workspace profile" title="Edit profile details" onClick={() => { setDraft(profile); setEditing(true); setNotice('') }}><PencilLine size={16} /> Edit profile</button>}
         </div>
-        <div className="upc-readiness" role="progressbar" aria-label="Profile completeness" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent}>
+        <div className="upc-readiness">
           <div className="upc-readiness-top"><span>Profile completeness</span><strong>{percent}%</strong></div>
-          <div className="upc-progress"><span style={{ width: `${percent}%` }} /></div>
-          <small>{completed === milestones.length ? 'Your workspace profile is looking sharp.' : `${milestones.length - completed} details left to round out your profile.`} Account verification and permissions are managed separately.</small>
+          <div className="upc-progress" role="progressbar" aria-label="Profile completeness" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${percent}% complete`}><span aria-hidden="true" style={{ width: `${percent}%` }} /></div>
+          <small id="upc-readiness-details">{completed === milestones.length ? 'Your workspace profile is looking sharp.' : `${milestones.length - completed} details left to round out your profile.`} Account verification and permissions are managed separately.</small>
         </div>
       </header>
 
@@ -144,6 +226,19 @@ export default function UserProfileCenter({ session, backendState }) {
             <div className="upc-card-heading"><span className="upc-icon-tile"><UserRound size={18} /></span><div><h3>Account identity</h3><p>Connected to your OverHead sign-in</p></div></div>
             <dl><div><dt>Email</dt><dd>{session?.email || 'Not available'}</dd></div><div><dt>Business</dt><dd>{business || 'Add a business name in Accounts'}</dd></div><div><dt>Access role</dt><dd>{session?.role || 'Not available'} <span className="upc-managed">Managed access</span></dd></div><div><dt>License</dt><dd>{account?.license_number || 'No license linked'}</dd></div></dl>
             <small>Sign-in email and access role are managed by account security. This profile card does not change credentials or permissions.</small>
+          </article>
+          <article className="upc-detail-card upc-security-card">
+            <div className="upc-card-heading"><span className="upc-icon-tile"><KeyRound size={18} /></span><div><h3>Sign-in security</h3><p>Change your OverHead email or password</p></div></div>
+            <form className="upc-credentials-form" aria-busy={credentialBusy} onSubmit={changeCredentials}>
+              <label>Current password<input type="password" autoComplete="current-password" required value={credentialDraft.currentPassword} onChange={(event) => setCredentialDraft((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
+              <label>New sign-in email<input type="email" autoComplete="email" required value={credentialDraft.newEmail} onChange={(event) => setCredentialDraft((current) => ({ ...current, newEmail: event.target.value }))} /></label>
+              <label>New password<input type="password" autoComplete="new-password" minLength={12} required value={credentialDraft.newPassword} onChange={(event) => setCredentialDraft((current) => ({ ...current, newPassword: event.target.value }))} /></label>
+              <label>Confirm new password<input type="password" autoComplete="new-password" minLength={12} required value={credentialDraft.confirmPassword} onChange={(event) => setCredentialDraft((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+              <small>Your current password is checked before the change. New email addresses must be verified. Passwords stay out of saved profile data.</small>
+              <button className="upc-save" type="submit" disabled={credentialBusy}><KeyRound size={15} /> {credentialBusy ? 'Updating…' : 'Update sign-in details'}</button>
+              {localEmailVerificationPending && <div className="upc-email-verify"><label>Verification code<input inputMode="numeric" autoComplete="one-time-code" value={emailVerificationCode} onChange={(event) => setEmailVerificationCode(event.target.value)} placeholder="Enter the 6-digit code" /></label><button className="upc-save" type="button" disabled={credentialBusy || emailVerificationCode.trim().length < 6} onClick={verifyChangedEmail}>Verify email</button></div>}
+              {credentialNotice && <p className={`upc-notice${credentialNoticeError ? ' is-error' : ''}`} role={credentialNoticeError ? 'alert' : 'status'} aria-live={credentialNoticeError ? 'assertive' : 'polite'}>{credentialNotice}</p>}
+            </form>
           </article>
           <article className="upc-detail-card">
             <div className="upc-card-heading"><span className="upc-icon-tile"><BriefcaseBusiness size={18} /></span><div><h3>Work profile</h3><p>Helpful context for your workspace</p></div></div>

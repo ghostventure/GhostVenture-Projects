@@ -1088,11 +1088,15 @@ function withPersistenceBatch(operation) {
 
 function persistNow() {
   state.updatedAt = now()
-  const tmpPath = `${dbPath}.tmp`
-  fs.writeFileSync(tmpPath, encryptStore(JSON.stringify(state)), { encoding: 'utf8', flush: true })
-  if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, `${dbPath}.bak`)
-  fs.renameSync(tmpPath, dbPath)
-  if (fs.existsSync(legacyDbPath)) fs.renameSync(legacyDbPath, `${legacyDbPath}.migrated-${Date.now()}`)
+  const tmpPath = `${dbPath}.${process.pid}.${crypto.randomUUID()}.tmp`
+  try {
+    fs.writeFileSync(tmpPath, encryptStore(JSON.stringify(state)), { encoding: 'utf8', flag: 'wx', flush: true })
+    if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, `${dbPath}.bak`)
+    fs.renameSync(tmpPath, dbPath)
+    if (fs.existsSync(legacyDbPath)) fs.renameSync(legacyDbPath, `${legacyDbPath}.migrated-${Date.now()}`)
+  } finally {
+    try { fs.unlinkSync(tmpPath) } catch {}
+  }
 }
 
 function encryptStore(plainText) {
@@ -1778,16 +1782,29 @@ function enforceCustomerLimit() {
 }
 
 function lockSession(sessionId) {
-  const session = state.sessions.find((item) => item.id === sessionId)
-  if (session) {
-    session.lock_state = 'locked'
-    session.ended_at = now()
-    session.last_seen_at = now()
-    persist()
+  requireSession('session lock')
+  const currentSessionId = activeSession.id
+  const requestedSessionId = typeof sessionId === 'string' ? sessionId.trim() : ''
+  if (!requestedSessionId || requestedSessionId !== currentSessionId) {
+    recordAudit('access.denied', 'Session lock rejected', {
+      action: 'session lock',
+      requestedSessionId: requestedSessionId.slice(0, 120),
+    }, activeSession.email)
+    throw new Error('Only the active session can be locked.')
   }
-  activeSession = null
+
+  const session = state.sessions.find((item) => item.id === currentSessionId)
+  if (!session || session.ended_at || session.revoked_at) {
+    throw new Error('The active session is no longer available to lock.')
+  }
+  const actor = activeSession.email
+  session.lock_state = 'locked'
+  session.ended_at = now()
+  session.last_seen_at = session.ended_at
+  persist()
   if (cylinderHeartbeatTimer) { clearInterval(cylinderHeartbeatTimer); cylinderHeartbeatTimer = null }
-  recordAudit('session.locked', 'Desktop session locked', { sessionId })
+  recordAudit('session.locked', 'Desktop session locked', { sessionId: currentSessionId }, actor)
+  activeSession = null
   return { locked: true }
 }
 

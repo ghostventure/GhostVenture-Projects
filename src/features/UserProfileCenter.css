@@ -59,6 +59,20 @@
 .upc-detail-card dd { display: flex; align-items: center; gap: 5px; min-width: 0; margin: 0; color: var(--heading, var(--upc-ink)); font-size: 11px; font-weight: 650; text-align: right; overflow-wrap: anywhere; }
 .upc-managed { padding: 3px 6px; border-radius: 999px; background: #edf5f0; color: #387456; font-size: 8px; white-space: nowrap; }
 .upc-detail-card > small { display: block; margin-top: 10px; color: var(--upc-muted); font-size: 9px; line-height: 1.5; }
+.upc-security-card { grid-column: 1 / -1; }
+.upc-credentials-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 14px; }
+.upc-credentials-form label { display: grid; gap: 6px; color: var(--heading, var(--upc-ink)); font-size: 11px; font-weight: 700; }
+.upc-credentials-form input { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--upc-line); border-radius: 9px; background: var(--upc-panel); color: var(--text, var(--upc-ink)); font: inherit; font-size: 12px; font-weight: 450; outline: none; }
+.upc-credentials-form input:focus { border-color: #6174cf; box-shadow: 0 0 0 3px rgba(97,116,207,.17); }
+.upc-credentials-form > small, .upc-credentials-form > .upc-notice { grid-column: 1 / -1; }
+.upc-credentials-form > small { color: var(--upc-muted); font-size: 9px; line-height: 1.5; }
+.upc-email-verify { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 10px; }
+.upc-email-verify label { display: grid; gap: 6px; color: var(--heading, var(--upc-ink)); font-size: 11px; font-weight: 700; }
+.upc-email-verify input { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--upc-line); border-radius: 9px; background: var(--upc-panel); color: var(--text, var(--upc-ink)); font: inherit; font-size: 12px; }
+.upc-credentials-form .upc-save { justify-self: start; min-height: 38px; padding: 0 13px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.upc-credentials-form .upc-save:disabled { opacity: .62; cursor: wait; }
+.upc-credentials-form .upc-notice { margin: 0; }
+.upc-credentials-form .upc-notice.is-error { border-color: color-mix(in srgb, #a84d42 30%, var(--upc-line)); background: color-mix(in srgb, #fff0ed 80%, var(--upc-panel)); color: #964739; }
 .upc-about-display { margin: 12px 0 0; padding: 10px 12px; border-left: 2px solid #8796de; border-radius: 0 8px 8px 0; background: rgba(238,241,253,.65); color: var(--upc-muted); font-size: 11px; line-height: 1.5; }
 .upc-checklist-card { grid-column: 1 / -1; }
 .upc-checklist-card ul { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 7px; margin: 0; padding: 0; list-style: none; }
@@ -103,6 +117,10 @@
   .upc-avatar { flex-basis: 58px; width: 58px; height: 58px; border-radius: 18px; font-size: 19px; }
   .upc-readiness { margin: 20px 0 0; max-width: calc(100% - 2px); }
   .upc-detail-grid { grid-template-columns: 1fr; padding: 12px; }
+  .upc-security-card { grid-column: auto; }
+  .upc-credentials-form { grid-template-columns: 1fr; }
+  .upc-credentials-form > small, .upc-credentials-form > .upc-notice { grid-column: auto; }
+  .upc-email-verify { grid-column: auto; grid-template-columns: 1fr; }
   .upc-checklist-card { grid-column: auto; }
   .upc-checklist-card ul { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }

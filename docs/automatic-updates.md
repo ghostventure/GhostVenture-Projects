@@ -1,6 +1,6 @@
 ﻿# Automatic updates: desktop and Cylinder
 
-Desktop, Cylinder Server, and Cylinder Client check before opening the main workspace when due. A saved `lastAttemptAt` in each edition's `update-preferences.json` limits automatic checks to once every 72 hours, including across app restarts. First launch with no recorded attempt checks immediately. Offline or failed attempts count toward the interval. Manual Firebase Check and re-enabling Auto-Check respect the same limit.
+Desktop, Cylinder Server, and Cylinder Client check when due, with edition-specific startup behavior. Desktop opens its main window first, then starts its Manager-led startup check; Cylinder checks before opening the main workspace. A saved `lastAttemptAt` in each edition's `update-preferences.json` limits automatic checks to once every 72 hours, including across app restarts. First launch with no recorded attempt checks immediately. Offline or failed attempts count toward the interval. Manual Firebase Check and re-enabling Auto-Check respect the same limit.
 
 While the app remains open, a local timer checks eligibility once a minute; it makes no network requests until the 72 hours have elapsed. Startup waits are bounded, so an unavailable update service does not prevent opening the workspace. A check already in progress cannot be duplicated.
 

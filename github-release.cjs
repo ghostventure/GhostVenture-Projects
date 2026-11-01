@@ -3,6 +3,7 @@ const GITHUB_RELEASE_DOWNLOAD_BASE = 'https://github.com/ghostventure/GhostVentu
 
 function isCompatibleRelease(release, deploymentMode = 'desktop') {
   if (!release || release.draft || release.prerelease || !Array.isArray(release.assets)) return false
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(releaseVersion(release))) return false
   const assetNames = new Set(release.assets.map((asset) => asset?.name).filter(Boolean))
   const installerPrefix = deploymentMode === 'cylinder-client'
     ? 'OverHead-Cylinder-Client-Setup-'

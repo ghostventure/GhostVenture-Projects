@@ -458,6 +458,18 @@ select:focus {
   font-size: 12px;
   font-weight: 800;
 }
+.login-username-confirmed {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid rgba(31, 94, 119, 0.24);
+  border-radius: 7px;
+  background: rgba(31, 94, 119, 0.05);
+}
+.login-username-confirmed span { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.login-username-confirmed strong { color: var(--heading); font-size: 14px; overflow-wrap: anywhere; }
+.login-username-confirmed .text-button { justify-self: start; margin: 2px 0 0; }
+.login-username-check { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
 .splash-screen {
   min-height: 100vh;

@@ -40,6 +40,7 @@ import { workflowBoilerplates } from './boilerplates'
 import { customerDatabaseSchema } from './customerDatabase'
 import { complianceBadges, legalDocuments, marketableFeatures, planTiers, supportChannels } from './productBlueprint'
 import { themes } from './themes'
+const EMPTY_RECORDS = Object.freeze([])
 const GrowthWorkspace = lazy(() => import('./features/GrowthWorkspace'))
 const SalesWorkspace = lazy(() => import('./features/SalesWorkspace'))
 const CustomerManagementWorkspace = lazy(() => import('./features/CustomerManagementWorkspace'))
@@ -99,26 +100,6 @@ const navSections = [
   { id: 'settings', label: 'Settings', detail: 'Themes, toggles, backup', icon: Settings2 },
 ]
 
-const sectionFeatures = {
-  overview: ['Command palette', 'Readiness checklist', 'Current work queue', 'Quick notes'],
-  reports: ['Date range filters', 'Activity summaries', 'CSV export', 'Local-only reports'],
-  work: ['Service intake flows', 'Quote approvals', 'Invoice nudges', 'Follow-up rules'],
-  customers: ['Customer policy records', 'Workflow preferences', 'Protected fields', 'Service area notes'],
-  imports: ['Microsoft sign-in', 'Read-only preview', 'Duplicate protection', 'Local encrypted token cache'],
-  automations: ['Owner digest', 'Due job runner', 'Offline queue', 'Reminder controls'],
-  evidence: ['Integrity manifest', 'Tamper ledger', 'Audit history', 'Protected evidence mask'],
-  support: ['Support tickets', 'Legal acknowledgements', 'Support bundle', 'Contact channels'],
-  tools: ['Fillable PDFs', 'Support bundles', 'Data exports', 'Restore validation'],
-  accounts: ['Role manager', 'Suspension status', 'Recovery hints', 'Manager profiles'],
-  'cylinder-admin': ['Ranked employees', 'Departments', 'Enrolled devices', 'Central OverHead policy'],
-  licenses: ['Profile license numbers', 'Subscription numbers', 'OverHead employee register', 'Access status'],
-  plans: ['Silver/Gold/Black', 'Billing profile', 'Locked features', 'Access rules'],
-  payments: ['Open Stripe verify', 'Save connection', 'Import billing', 'Import payments'],
-  square: ['Open browser verify', 'Save connection', 'Import locations', 'Import customers'],
-  security: ['Password recovery', 'Privacy requests', 'Fraud signals', 'Compliance aggregate'],
-  settings: ['Theme picker', 'Privacy default', 'Operational toggles', 'Local backup tools'],
-}
-
 const modules = [
   { id: 'schedule', label: 'Scheduling', icon: CalendarDays, status: 'Template', owner: 'Front desk', summary: 'Create scheduling work and reminders from the live work queue.' },
   { id: 'answers', label: 'Customer Answers', icon: MessageSquareText, status: 'Template', owner: 'Support', summary: 'Use this as a repeatable support-response and follow-up standard.' },
@@ -166,8 +147,14 @@ function userFacingError(error, fallback) {
   if (/OPERATION_NOT_ALLOWED|BILLING_NOT_ENABLED/i.test(message)) {
     return 'Desktop sign-in is not enabled for this OverHead account yet. Enable Email/Password sign-in in Firebase Authentication, then try again.'
   }
-  if (/EMAIL_NOT_FOUND|INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD/i.test(message)) {
-    return 'That email or password did not match an OverHead account.'
+  if (/USERNAME_NOT_FOUND|EMAIL_NOT_FOUND|USER_NOT_FOUND|No local account exists/i.test(message)) {
+    return 'Username not found. Check the email address and try again.'
+  }
+  if (/PASSWORD_INCORRECT|INVALID_PASSWORD|WRONG_PASSWORD|Invalid desktop password/i.test(message)) {
+    return 'Password is incorrect. Check it and try again.'
+  }
+  if (/INVALID_LOGIN_CREDENTIALS/i.test(message)) {
+    return 'Sign-in failed. Check the username and password. Firebase may hide which one did not match for shared accounts.'
   }
   if (/EMAIL_EXISTS/i.test(message)) {
     return 'An account already exists for that email. Choose Sign in instead.'
@@ -218,7 +205,7 @@ function App() {
     [activeLegal],
   )
   const secureView = session.signedIn && !privacyMode
-  const teamSections = visibleSectionsForRole(session.role)
+  const teamSections = useMemo(() => visibleSectionsForRole(session.role), [session.role])
   function closeWorkspaceTab(sectionId) {
     const next = workspaceTabs.filter((id) => id !== sectionId)
     if (!next.length) next.push('overview')
@@ -227,19 +214,18 @@ function App() {
     if (activeSection === sectionId) setActiveSection(next[next.length - 1])
   }
   const navGroups = useMemo(() => {
-    const visibleSections = visibleSectionsForRole(session.role)
     const groups = { Workspace: [], Operations: [], Administration: [] }
     const administration = ['accounts', 'licenses', 'plans', 'payments', 'security', 'admin-security', 'settings', 'support']
     const operations = ['work-planner', 'scheduling', 'documents', 'collaboration', 'finance', 'people', 'rule-center', 'integrations', 'automations', 'evidence', 'imports', 'work', 'customers', 'square', 'tools']
-    navSections.filter((section) => visibleSections.includes(section.id)).forEach((section) => groups[administration.includes(section.id) ? 'Administration' : operations.includes(section.id) ? 'Operations' : 'Workspace'].push(section))
+    navSections.filter((section) => teamSections.includes(section.id)).forEach((section) => groups[administration.includes(section.id) ? 'Administration' : operations.includes(section.id) ? 'Operations' : 'Workspace'].push(section))
     return Object.entries(groups).filter(([, items]) => items.length)
-  }, [session.role])
+  }, [teamSections])
   useEffect(() => { window.localStorage.setItem('overhead.navLabels.v1', JSON.stringify(navLabels)) }, [navLabels])
   useEffect(() => { window.localStorage.setItem('overhead.favoritePages.v1', JSON.stringify(favoritePages)) }, [favoritePages])
   useEffect(() => { window.localStorage.setItem('overhead.navShortcuts.v1', JSON.stringify(shortcutKeys)) }, [shortcutKeys])
   useEffect(() => { window.localStorage.setItem('overhead.navCollapsed.v1', JSON.stringify(collapsedNavGroups)) }, [collapsedNavGroups])
   useEffect(() => { window.localStorage.setItem('overhead.sidebar.collapsed.v1', String(sidebarCollapsed)) }, [sidebarCollapsed])
-  useEffect(() => { if (session.signedIn) setWorkspaceTabs((current) => { const next = [...new Set([...current.filter((id) => teamSections.includes(id)), activeSection])].slice(-8); window.localStorage.setItem('overhead.workspaceTabs.v1', JSON.stringify(next)); return next }) }, [activeSection, session.signedIn])
+  useEffect(() => { if (session.signedIn) setWorkspaceTabs((current) => { const next = [...new Set([...current.filter((id) => teamSections.includes(id)), activeSection])].slice(-8); window.localStorage.setItem('overhead.workspaceTabs.v1', JSON.stringify(next)); return next }) }, [activeSection, session.signedIn, teamSections])
   useEffect(() => { if (session.signedIn && activeSection !== 'settings') window.localStorage.setItem('overhead.lastSection.v1', activeSection) }, [session.signedIn, activeSection])
   useEffect(() => {
     setRecentWorkspaces((current) => {
@@ -258,13 +244,12 @@ function App() {
       }
       if (!(event.altKey && event.shiftKey) || event.ctrlKey || event.metaKey) return
       const key = event.key.toLowerCase()
-      const visibleSections = visibleSectionsForRole(session.role)
-      const section = navSections.find((item) => visibleSections.includes(item.id) && String(shortcutKeys[item.id] || '').toLowerCase() === key)
+      const section = navSections.find((item) => teamSections.includes(item.id) && String(shortcutKeys[item.id] || '').toLowerCase() === key)
       if (section) { event.preventDefault(); setActiveSection(section.id) }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [session.role, shortcutKeys])
+  }, [session.signedIn, shortcutKeys, teamSections])
   useEffect(() => {
     const onRecentRecordNavigate = (event) => {
       const target = String(event.detail || '')
@@ -401,6 +386,7 @@ function App() {
 
   function updateDraft(key, value) {
     setDraftSession((current) => ({ ...current, [key]: value }))
+    if (key === 'email' || key === 'desktopPassword') setBackendError('')
   }
 
   async function refreshBackend(options = {}) {
@@ -439,7 +425,14 @@ function App() {
       }
       await openSession(authenticated)
     } catch (error) {
-      setBackendError(userFacingError(error, 'Sign-in failed.'))
+      let message = userFacingError(error, 'Sign-in failed.')
+      if (/INVALID_LOGIN_CREDENTIALS/i.test(String(error?.message || error))) {
+        try {
+          const check = await window.overheadBackend?.checkSignInUsername?.({ email: draftSession.email })
+          if (check?.knownOnDevice) message = 'Username recognized. Password is incorrect, or the shared account details have changed. Check the password and username.'
+        } catch { /* Keep Firebase's privacy-preserving message when the local check is unavailable. */ }
+      }
+      setBackendError(message)
     }
   }
 
@@ -577,10 +570,10 @@ function App() {
             </div>
           </div>
 
-          <nav className="nav-list">
+          <nav className="nav-list" aria-label="Primary navigation">
             <button className="ghost-button" type="button" onClick={() => setNavCustomizeOpen((open) => !open)} aria-expanded={navCustomizeOpen}>{navCustomizeOpen ? 'Close navigation editor' : 'Customize navigation'}</button>
-            {recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).length > 0 && <div className="nav-group"><div className="nav-group-heading-row"><strong>Recent workspaces</strong><button className="text-button" type="button" onClick={() => { setRecentWorkspaces([]); window.localStorage.removeItem('overhead.recentWorkspaces.v1') }}>Clear</button></div>{recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; return <button className="nav-item" type="button" key={`recent-${id}`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{navLabels[id] || section.label}</strong><small>Recently opened</small></span></button> })}</div>}
-            {favoritePages.filter((id) => teamSections.includes(id)).length > 0 && <div className="nav-group"><strong>Favorites</strong>{favoritePages.filter((id) => teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; return <button className={section.id === activeSection ? 'nav-item active' : 'nav-item'} type="button" key={`favorite-${id}`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{navLabels[id] || section.label}</strong><small>Favorite page</small></span></button> })}</div>}
+            {recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).length > 0 && <div className="nav-group"><div className="nav-group-heading-row"><strong>Recent workspaces</strong><button className="text-button" type="button" onClick={() => { setRecentWorkspaces([]); window.localStorage.removeItem('overhead.recentWorkspaces.v1') }}>Clear</button></div>{recentWorkspaces.filter((id) => id !== activeSection && teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; const label = navLabels[id] || section.label; return <button className="nav-item" type="button" key={`recent-${id}`} aria-label={`${label}, recently opened`} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{label}</strong><small>Recently opened</small></span></button> })}</div>}
+            {favoritePages.filter((id) => teamSections.includes(id)).length > 0 && <div className="nav-group"><strong>Favorites</strong>{favoritePages.filter((id) => teamSections.includes(id)).map((id) => { const section = navSections.find((item) => item.id === id); if (!section) return null; const Icon = section.icon; const label = navLabels[id] || section.label; return <button className={section.id === activeSection ? 'nav-item active' : 'nav-item'} type="button" key={`favorite-${id}`} aria-label={`${label}, favorite`} aria-current={section.id === activeSection ? 'page' : undefined} onClick={() => setActiveSection(id)}><Icon size={18}/><span><strong>{label}</strong><small>Favorite page</small></span></button> })}</div>}
             {navCustomizeOpen && <details className="nav-customizer" open><summary>Labels, favorites and shortcuts</summary>{navSections.filter((section) => teamSections.includes(section.id)).map((section) => <div key={`pref-${section.id}`}><label>{section.label}<input aria-label={`Custom label for ${section.label}`} maxLength={28} value={navLabels[section.id] || ''} placeholder={section.label} onChange={(event) => setNavLabels((current) => ({ ...current, [section.id]: event.target.value }))}/></label><label><input type="checkbox" checked={favoritePages.includes(section.id)} onChange={(event) => setFavoritePages((current) => event.target.checked ? [...new Set([...current, section.id])] : current.filter((id) => id !== section.id))}/>Favorite</label><label>Alt+Shift+<input aria-label={`Shortcut key for ${section.label}`} maxLength={1} value={shortcutKeys[section.id] || ''} onChange={(event) => setShortcutKeys((current) => { const key = event.target.value.slice(-1); const next = Object.fromEntries(Object.entries(current).filter(([id, assigned]) => id === section.id || !key || String(assigned).toLowerCase() !== key.toLowerCase())); return { ...next, [section.id]: key } })}/></label></div>)}</details>}
             {navGroups.map(([group, groupSections]) => <div className="nav-group" key={group}><button className="nav-group-heading" type="button" aria-expanded={!collapsedNavGroups[group]} onClick={() => setCollapsedNavGroups((current) => ({ ...current, [group]: !current[group] }))}>{group}</button>{!collapsedNavGroups[group] && groupSections.map((section) => {
               const Icon = section.icon
@@ -590,6 +583,8 @@ function App() {
                   className={section.id === activeSection ? 'nav-item active' : 'nav-item'}
                   type="button"
                   key={section.id}
+                  aria-label={`${navLabels[section.id] || section.label}: ${section.detail}`}
+                  aria-current={section.id === activeSection ? 'page' : undefined}
                   title={`${navLabels[section.id] || section.label} · ${section.detail}`}
                   onClick={() => setActiveSection(section.id)}
                 >
@@ -966,33 +961,6 @@ function OperationsDrawer({ backendState, integrity, operationNotice, onClose, s
   )
 }
 
-function FeatureRail({ activeSection, backendState }) {
-  const features = sectionFeatures[activeSection] || []
-  const health = backendState.health || {}
-  const summary = {
-    overview: `${health.taskCount ?? 0} tasks`,
-    work: `${health.queuedJobCount ?? 0} queued`,
-    customers: `${health.customerCount ?? 0} records`,
-    automations: `${health.queuedJobCount ?? 0} jobs`,
-    evidence: `${backendState.auditEvents?.length ?? 0} events`,
-    support: `${backendState.supportTickets?.length ?? 0} tickets`,
-    tools: `${health.pdfCount ?? 0} PDFs`,
-    accounts: `${backendState.userProfiles?.length ?? 0} users`,
-    plans: backendState.entitlements?.activePlan?.name || 'Silver',
-    payments: `${backendState.stripeConnections?.length ?? 0} Stripe`,
-    square: `${backendState.squareConnections?.length ?? 0} Square`,
-    security: `${health.openFraudSignalCount ?? 0} risks`,
-    settings: `${Object.keys(backendState.appToggles || {}).length} toggles`,
-  }[activeSection]
-
-  return (
-    <div className="feature-rail" aria-label="Section features">
-      <strong>{summary}</strong>
-      {features.map((feature) => <span key={feature}>{feature}</span>)}
-    </div>
-  )
-}
-
 function navBadge(section, backendState) {
   const health = backendState.health || {}
   const values = {
@@ -1036,6 +1004,16 @@ function SplashScreen({ theme }) {
 }
 
 function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backendError, authMode, setAuthMode, activePlan, setActivePlan, verification, setVerification, verifyEmail }) {
+  const [loginStep, setLoginStep] = useState('username')
+  const [usernameCheck, setUsernameCheck] = useState(null)
+  const [checkingUsername, setCheckingUsername] = useState(false)
+  const [submittingLogin, setSubmittingLogin] = useState(false)
+  const submittingLoginRef = useRef(false)
+  const usernameRequestRef = useRef(0)
+  const [requestingPasswordReset, setRequestingPasswordReset] = useState(false)
+  const [passwordResetNotice, setPasswordResetNotice] = useState('')
+  const [passwordResetCooldown, setPasswordResetCooldown] = useState({ email: '', until: 0 })
+  const [passwordResetSeconds, setPasswordResetSeconds] = useState(0)
   const isCreate = authMode === 'create'
   const isTeam = authMode === 'team' || authMode === 'manager' || authMode === 'staff' || authMode === 'sign-in'
   const isCustomer = authMode === 'customer' || authMode === 'customer-enroll'
@@ -1043,6 +1021,82 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
   const isPlans = authMode === 'plans'
   const isHelp = authMode === 'help'
   const isVerify = authMode === 'verify'
+  const isExistingAccount = !isCreate && !isCustomerEnroll
+  const resetEmail = String(draftSession.email || '').trim().toLowerCase()
+  const resetCooldownActive = passwordResetCooldown.email === resetEmail && passwordResetSeconds > 0
+  useEffect(() => {
+    usernameRequestRef.current += 1
+    setLoginStep('username')
+    setUsernameCheck(null)
+    setCheckingUsername(false)
+  }, [authMode, draftSession.email])
+  useEffect(() => {
+    if (!passwordResetCooldown.until) return undefined
+    const tick = () => setPasswordResetSeconds(Math.max(0, Math.ceil((passwordResetCooldown.until - Date.now()) / 1000)))
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [passwordResetCooldown.until])
+  async function continueToPassword() {
+    const email = String(draftSession.email || '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setUsernameCheck({ error: 'Enter a valid email address first.' })
+      return
+    }
+    const requestId = ++usernameRequestRef.current
+    setCheckingUsername(true)
+    setUsernameCheck(null)
+    try {
+      const result = await window.overheadBackend?.checkSignInUsername?.({ email })
+      if (requestId !== usernameRequestRef.current) return
+      if (result?.status === 'Suspended') {
+        setUsernameCheck({ error: 'This username belongs to a suspended account. Ask an OverHead Owner to review access.' })
+        return
+      }
+      setUsernameCheck(result?.knownOnDevice
+        ? { message: `Username recognized as a ${result.accountType} OverHead account.` }
+        : { message: 'This username is not saved on this device. Shared accounts will be checked online after you continue.' })
+      setLoginStep('password')
+    } catch (error) {
+      if (requestId === usernameRequestRef.current) setUsernameCheck({ error: userFacingError(error, 'Could not check this username.') })
+    } finally {
+      if (requestId === usernameRequestRef.current) setCheckingUsername(false)
+    }
+  }
+  async function submitLogin() {
+    if (submittingLoginRef.current) return
+    submittingLoginRef.current = true
+    setSubmittingLogin(true)
+    try { await signIn() } finally {
+      submittingLoginRef.current = false
+      setSubmittingLogin(false)
+    }
+  }
+  async function requestPasswordReset() {
+    const email = String(draftSession.email || '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setPasswordResetNotice('Enter your account email address first.')
+      return
+    }
+    if (!window.overheadBackend?.requestPasswordResetEmail) {
+      setPasswordResetNotice('Password recovery is unavailable in this build. Please update OverHead and try again.')
+      return
+    }
+    setRequestingPasswordReset(true)
+    setPasswordResetNotice('')
+    try {
+      const result = await window.overheadBackend.requestPasswordResetEmail({ email })
+      const retryAfterSeconds = Math.max(0, Number(result?.retryAfterSeconds) || 0)
+      if (retryAfterSeconds) setPasswordResetCooldown({ email, until: Date.now() + retryAfterSeconds * 1000 })
+      setPasswordResetNotice(result?.throttled
+        ? 'Recovery requests are temporarily limited. Check your inbox and wait before requesting another link.'
+        : 'If this email belongs to an OverHead account, a password reset link is on its way. Check your inbox and spam folder.')
+    } catch (error) {
+      setPasswordResetNotice(userFacingError(error, 'Could not request a password reset. Check your connection and try again.'))
+    } finally {
+      setRequestingPasswordReset(false)
+    }
+  }
   function choosePlan(planId) {
     setActivePlan(planId)
     setAuthMode('create')
@@ -1106,25 +1160,36 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
           <strong>{isCustomer ? 'Customer account required' : 'Team account required'}</strong>
           <span>{isCustomer ? 'Customer Members can request support without opening the internal office console.' : 'Members use daily work and support tools. Managers add team operations. Administrators control people, plans, billing, and settings.'}</span>
         </div>
-        <FormField label="Email Address" value={draftSession.email} onChange={(value) => updateDraft('email', value)} placeholder={isCustomer ? 'customer@example.com' : 'team@example.com'} />
+        {(!isExistingAccount || loginStep === 'username')
+          ? <FormField label="Username (email address)" type="email" autoComplete="username" required value={draftSession.email} onChange={(value) => { usernameRequestRef.current += 1; setCheckingUsername(false); setUsernameCheck(null); updateDraft('email', value); updateDraft('desktopPassword', '') }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); continueToPassword() } }} placeholder={isCustomer ? 'customer@example.com' : 'team@example.com'} />
+          : <div className="login-username-confirmed"><span>Username checked</span><strong>{draftSession.email}</strong><button className="text-button" type="button" onClick={() => { updateDraft('desktopPassword', ''); setLoginStep('username'); setUsernameCheck(null) }}>Change username</button></div>}
         {isCustomerEnroll && <FormField label="Workspace code" value={draftSession.workspaceId || ''} onChange={(value) => updateDraft('workspaceId', value)} placeholder="Code from your invitation" />}
-        <label>
-          Desktop Password
+        {(!isExistingAccount || loginStep === 'password') && <label>
+          Password
           <input
             type="password"
+            autoComplete={isCreate || isCustomerEnroll ? 'new-password' : 'current-password'}
+            required
             value={draftSession.desktopPassword}
             onChange={(event) => updateDraft('desktopPassword', event.target.value)}
-            placeholder={isCreate ? 'Minimum 12 characters' : isCustomer ? 'Enter customer password' : 'Enter team password'}
-            minLength={isCreate ? 12 : undefined}
+            onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); submitLogin() } }}
+            placeholder={isCreate || isCustomerEnroll ? 'Minimum 12 characters' : isCustomer ? 'Enter customer password' : 'Enter team password'}
+            minLength={isCreate || isCustomerEnroll ? 12 : undefined}
           />
-        </label>
+        </label>}
         {isCreate && <label className="checkbox-line">
           <input type="checkbox" checked={draftSession.acceptedTerms} onChange={(event) => updateDraft('acceptedTerms', event.target.checked)} />
           I accept the Terms of Use and Privacy Notice for this shared workspace.
         </label>}
-        <button className="primary-action full" type="button" onClick={signIn}>{isCreate ? 'Create Workspace' : isCustomerEnroll ? 'Create Customer Account' : isCustomer ? 'Open Customer Support' : 'Open Team Workspace'}</button>
+        {isExistingAccount && loginStep === 'username'
+          ? <button className="primary-action full" type="button" disabled={checkingUsername} onClick={continueToPassword}>{checkingUsername ? 'Checking username…' : 'Check Username'}</button>
+          : <button className="primary-action full" type="button" aria-busy={submittingLogin} onClick={submitLogin}>{isCreate ? 'Create Workspace' : isCustomerEnroll ? 'Create Customer Account' : isCustomer ? 'Open Customer Support' : 'Open Team Workspace'}</button>}
+        {isExistingAccount && <button className="text-button full" type="button" disabled={requestingPasswordReset || resetCooldownActive} onClick={requestPasswordReset}>{requestingPasswordReset ? 'Requesting reset link…' : resetCooldownActive ? `Try again in ${passwordResetSeconds}s` : 'Forgot password?'}</button>}
         {authMode === 'customer' && <button className="ghost-button full" type="button" onClick={() => setAuthMode('customer-enroll')}>Create customer account from invitation</button>}
         {isCustomerEnroll && <button className="ghost-button full" type="button" onClick={() => setAuthMode('customer')}>I already have a customer account</button>}
+        {usernameCheck?.message && loginStep === 'password' && <p className="login-username-check" role="status">{usernameCheck.message}</p>}
+        {usernameCheck?.error && <p className="form-error" role="alert">{usernameCheck.error}</p>}
+        {passwordResetNotice && <p className={passwordResetNotice.startsWith('If this email') ? 'login-username-check' : 'form-error'} role="status">{passwordResetNotice}</p>}
         {backendError && <p className="form-error" role="alert">{backendError}</p>}
         <label className="theme-picker wide">
           Theme
@@ -1675,7 +1740,7 @@ function WorkflowsSection({ activeModule, selectedModule, setActiveModule, refre
 }
 
 function CustomersSection({ secureView, customers, backendState, refreshBackend, setOperationNotice }) {
-  const customerRecords = customers || []
+  const customerRecords = Array.isArray(customers) ? customers : EMPTY_RECORDS
   const [customerQuery, setCustomerQuery] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState(customerRecords[0]?.id || '')
   const matchingCustomers = useMemo(() => {
@@ -3661,7 +3726,15 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
         </div>
         <Settings2 size={20} />
       </div>
-      <UserProfileCenter session={session} backendState={backendState} />
+      <UserProfileCenter
+        session={session}
+        backendState={backendState}
+        onCredentialsChanged={(email) => {
+          setSession((current) => ({ ...current, email }))
+          setDraftSession((current) => ({ ...current, email }))
+          refreshBackend({ signedIn: true })
+        }}
+      />
       <div className="settings-layout">
         <div className="settings-grid">
           {themes.map((item) => (
@@ -3725,13 +3798,13 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
             <small>{updater.configured ? `Installed: ${updater.currentVersion || 'unknown'} - Available: ${updater.version || 'not checked'}${updater.updateKind ? ` - ${updater.updateKind} update` : ''}${updater.source ? ` - Source: ${updater.source === 'github' ? 'GitHub' : 'Firebase'}` : ''} - Channel: ${updater.channel || 'latest'}${updater.checkedAt ? ` - last checked ${new Date(updater.checkedAt).toLocaleString()}` : ''}` : 'Install a packaged release to use the live update service.'}</small>
             <div className="button-row">
               <button className="primary-action" type="button" onClick={checkForUpdates}>Check</button>
-              <button className="ghost-button" type="button" onClick={checkForGitHubUpdates}>Check GitHub</button>
-              {updater.source === 'github' && updater.updateKind === 'major' && updater.installerUrl && <button className="ghost-button" type="button" onClick={downloadGitHubInstaller}>Download full installer</button>}
+              {!updater.managerManaged && <button className="ghost-button" type="button" onClick={checkForGitHubUpdates}>Check GitHub</button>}
+              {!updater.managerManaged && updater.source === 'github' && updater.updateKind === 'major' && updater.installerUrl && <button className="ghost-button" type="button" onClick={downloadGitHubInstaller}>Download full installer</button>}
               <label className="checkbox-line update-auto-check">
                 <input type="checkbox" checked={updater.autoCheck !== false} onChange={(event) => setAutoCheck(event.target.checked)} />
                 Auto-Check
               </label>
-              {updater.status === 'downloaded' && <button className="ghost-button" type="button" onClick={installUpdate}>Install Update</button>}
+              {(updater.status === 'downloaded' || (updater.managerManaged && updater.status === 'available')) && <button className="ghost-button" type="button" onClick={installUpdate}>{updater.managerManaged ? 'Update with Install Manager' : 'Install Update'}</button>}
             </div>
           </div>
           <div className="backend-health">
@@ -3775,11 +3848,11 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
   )
 }
 
-function FormField({ label, value, onChange, placeholder }) {
+function FormField({ label, value, onChange, placeholder, type = 'text', autoComplete, required = false, onKeyDown }) {
   return (
     <label>
       {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+      <input type={type} autoComplete={autoComplete} required={required} value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={onKeyDown} placeholder={placeholder} />
     </label>
   )
 }

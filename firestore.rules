@@ -97,7 +97,15 @@ service cloud.firestore {
           && request.resource.data.role == resource.data.role
           && request.resource.data.status == resource.data.status
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['owner_name', 'business_name', 'updated_at']));
+            .hasOnly(['owner_name', 'business_name', 'updated_at']))
+        || (request.auth.uid == userId
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.email_verified == (request.auth.token.email_verified == true)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['email', 'email_verified', 'updated_at']));
       allow delete: if false;
     }
 
