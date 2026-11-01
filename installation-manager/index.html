@@ -1,0 +1,121 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'" />
+    <title>OverHead Install Manager</title>
+    <link rel="stylesheet" href="manager.css" />
+    <script src="manager.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand-mark">OH</div>
+        <div class="brand-copy"><p class="eyebrow">BLACK LION · DESKTOP TOOLS</p><h1>OverHead Install Manager</h1><p>Install, remove, and manage settings outside the app.</p></div>
+        <div id="edition-badge" class="edition-badge"><span class="status-dot"></span> Detecting edition…</div>
+      </header>
+
+      <nav class="tabs" role="tablist" aria-label="Manager sections">
+        <button class="tab active" role="tab" aria-selected="true" aria-controls="install-panel" data-tab="install-panel">Install &amp; remove</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="config-panel" data-tab="config-panel">Program configuration</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="backup-panel" data-tab="backup-panel">Backups &amp; restore</button>
+      </nav>
+
+      <section id="global-status" class="status-banner" role="status"><span class="status-dot"></span><span>Checking this computer…</span></section>
+      <section id="operation-summary" class="operation-summary hidden" role="status" aria-live="polite"></section>
+
+      <section id="install-panel" class="panel active-panel" role="tabpanel">
+        <div class="section-heading"><div><p class="eyebrow">INSTALLATION</p><h2 id="manage-product-title">Manage OverHead</h2></div><button class="secondary" id="refresh-status">Refresh status</button></div>
+        <label class="product-picker" for="product-select"><span>Product to manage</span><select id="product-select" aria-label="Choose OverHead product"><option value="desktop">OverHead Desktop</option><option value="cylinder-server">OverHead Cylinder Server</option></select></label>
+        <div class="status-grid">
+          <article class="status-card"><span>Installed version</span><strong id="installed-version">Checking…</strong></article>
+          <article class="status-card"><span>Install folder</span><strong id="install-location" class="path-value">—</strong></article>
+          <article class="status-card"><span>System compatibility</span><strong id="windows-status">Checking…</strong></article>
+          <article class="status-card"><span>Publisher check</span><strong id="publisher-status">Checking…</strong></article>
+        </div>
+        <div class="action-card">
+          <div><p class="eyebrow">OFFICIAL RELEASE</p><h3 id="release-title">Check for the latest version</h3><p id="release-detail">The manager checks the official OverHead update feed and verifies the installer before running it.</p></div>
+          <div class="action-buttons"><button class="secondary" id="check-release">Check GitHub release</button><button class="primary" id="install-release" disabled>Install or update</button></div>
+        </div>
+        <div class="action-card uninstall-card">
+          <div><p class="eyebrow">REMOVE</p><h3 id="uninstall-title">Uninstall OverHead</h3><p>Local data is kept by default. The manager creates a verified backup before uninstalling.</p></div>
+          <div class="uninstall-controls"><label class="check-row"><input id="remove-data" type="checkbox" /> Also remove local product data after backup</label><label id="remove-confirm-wrap" class="confirm-field hidden">Type <b>REMOVE MY OVERHEAD DATA</b> to continue<input id="remove-confirm" autocomplete="off" /></label><button class="danger" id="uninstall" disabled>Uninstall OverHead</button></div>
+        </div>
+      </section>
+
+      <section id="config-panel" class="panel" role="tabpanel" hidden>
+        <div class="section-heading"><div><p class="eyebrow">OUTSIDE THE APP</p><h2>Program configuration</h2></div><button class="secondary" id="open-data">Open data folder</button></div>
+        <article class="settings-card">
+          <div class="setting-row"><div><strong>Check for updates automatically</strong><p id="auto-check-description">OverHead checks the selected product's official update feed on its normal schedule. Changes take effect the next time it starts.</p></div><label class="switch"><input id="auto-check" type="checkbox" /><span></span></label></div>
+          <div class="setting-row"><div><strong>Start OverHead when I sign in to Windows</strong><p>Creates or removes a per-user Windows startup entry.</p></div><label class="switch"><input id="launch-at-login" type="checkbox" /><span></span></label></div>
+          <div class="setting-row data-setting"><div><strong>Local data folder</strong><p id="data-folder-description">Workspace database, settings, and app-local browser state. Moving it copies and verifies files first; the app must be closed.</p><code id="data-root">—</code></div><button class="secondary" id="choose-data">Choose folder</button></div>
+          <div class="setting-actions"><button class="primary" id="save-config">Apply configuration</button><span id="config-message" class="inline-message"></span></div>
+        </article>
+      </section>
+
+      <section id="backup-panel" class="panel" role="tabpanel" hidden>
+        <div class="section-heading"><div><p class="eyebrow">DATA SAFETY</p><h2>Backups &amp; restore</h2></div><button class="secondary" id="open-backups">Open backup folder</button></div>
+        <p class="panel-intro">Install and uninstall create full SHA-256 checked backups. Restore creates a safety backup of current data before replacing anything.</p>
+        <div id="backup-list" class="backup-list"><p class="empty-state">Loading backups…</p></div>
+        <div id="restore-confirm-wrap" class="restore-confirm hidden"><label>Type <b>RESTORE OVERHEAD DATA</b> to replace the current data<input id="restore-confirm" autocomplete="off" /></label><button class="danger" id="confirm-restore" disabled>Restore selected backup</button></div>
+      </section>
+
+      <footer class="footer"><div id="progress-line" class="progress-line"><span id="progress-fill"></span></div><div class="footer-row"><span id="progress-message" role="status" aria-live="polite">Ready</span><span>Backups stay on this computer until you remove them.</span></div></footer>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <section id="welcome-screen" class="welcome-screen" aria-modal="true" role="dialog" aria-labelledby="welcome-title">
+        <div class="welcome-card">
+          <div class="welcome-heading"><div class="brand-mark">OH</div><div><p class="eyebrow">BLACK LION DESKTOP TOOLS</p><h1 id="welcome-title">Welcome to OverHead Install Manager</h1></div></div>
+          <div id="welcome-intro">
+            <p id="welcome-lead" class="welcome-lead">One place to install, update, remove, and configure the compatible OverHead product.</p>
+            <div class="welcome-facts">
+              <article><strong>Official GitHub releases</strong><span>For a first install, the Manager contacts GitHub only after you agree to the notices; it checks release metadata, file size, SHA-512, and publisher signature according to this build's policy.</span></article>
+              <article><strong>Your local data</strong><span>Before replacement or removal, the manager creates a local verified backup. Uninstall keeps your data unless you separately request its removal.</span></article>
+              <article><strong>Security and integrity</strong><span>The packaged manager checks its app archive at launch and restricts renderer access. These controls make some tampering detectable, but an unsigned executable can still be replaced or patched by someone with access to this computer.</span></article>
+            </div>
+            <p id="welcome-install-state" class="welcome-status">Checking this computer…</p>
+            <p id="welcome-compatibility-state" class="welcome-status">Checking hardware and required Windows components…</p>
+            <p id="welcome-release-state" class="welcome-status">The GitHub release check runs after you review and agree to the first-install notices.</p>
+            <p id="welcome-trust-state" class="welcome-trust hidden"></p>
+            <p id="welcome-consent-state" class="welcome-status hidden"></p>
+            <div class="welcome-actions"><button class="secondary" id="welcome-legal-center">Read Legal Center drafts</button><button class="primary" id="welcome-continue" disabled>Continue</button></div>
+          </div>
+          <div id="first-install-consent" class="first-install-consent hidden">
+            <p class="eyebrow">FIRST-TIME INSTALLATION</p>
+            <h2>Review the installation and policy notices</h2>
+            <p><button class="text-button" id="consent-open-legal-center" type="button">Open the full Legal Center drafts</button></p>
+            <p class="draft-notice"><strong>Draft status:</strong> OverHead's published Terms and Privacy materials are drafts pending qualified counsel review. This screen gives material product and installation disclosures; it is not a complete legal contract, legal advice, or a promise that consent eliminates liability. Nothing here waives rights that cannot legally be waived.</p>
+            <p id="consent-trust-state" class="welcome-trust hidden"></p>
+            <p class="notice-date">Installation notice last updated <strong id="notice-updated-date">—</strong></p>
+            <div class="notice-scroll" tabindex="0" aria-label="First installation notices">
+              <article><h3>1. Operator, scope, and authorized use</h3><p>The OverHead website identifies Overhead LLC as the product business; the published support contact is solidartentertainment@gmail.com. OverHead Desktop is a Windows workstation business-workflow and recordkeeping tool; OverHead Cylinder Server is the server product selected for supported Windows Server or Windows IoT hosts. Install only the product selected by the Manager on a compatible device you own or are authorized to administer. You are responsible for user permissions, credentials, lawful collection and accuracy of records, customer and employee notices, and reviewing actions before relying on them. Do not use OverHead for fraud, deceptive billing, unlawful messages, unauthorized access, or to evade a provider's rules.</p></article>
+              <article><h3>2. Product, professional advice, and human decisions</h3><p>OverHead does not replace legal, tax, accounting, financial, medical, security, accessibility, or regulatory advice, or your business's compliance duties. AI-assisted content, summaries, reminders, and recommendations are aids that can be wrong; an authorized person must review important decisions, prices, and customer-facing communications. Do not use the product as the sole basis for a regulated or high-impact decision.</p></article>
+              <article><h3>3. Information, purpose, storage, and contact</h3><p>Workspace records and app-local browser state are stored on this Windows computer or in the data folder you configure. The Manager stores configuration and its encrypted first-install consent record under your Windows user profile; verified backup copies are stored locally under the Manager's backup folder. Backups may contain the same business or personal information as the source data, are not a substitute for an independent backup, and are not automatically encrypted by the Manager. This build does not state a complete company-wide retention schedule, privacy legal basis, data-subject request process, or cross-border transfer list. Contact the published support address for privacy questions; do not email passwords, recovery codes, payment credentials, or unredacted customer records.</p></article>
+              <article><h3>4. Network requests and other providers</h3><p>Before a first-time installation, no release request is made until you choose “Yes, I agree”. After that, the Manager requests public release metadata from GitHub and downloads the selected installer from github.com or its GitHub-hosted download domains. GitHub receives ordinary connection data such as your IP address and request headers. The Manager does not upload your workspace records as part of this update check. Separately, Desktop sign-in, shared workspace features, and integrations you configure can send the information needed for those functions to Firebase or the selected provider. Those services have their own terms, privacy notices, processing locations, retention practices, and availability. Review each provider's terms before connecting it.</p></article>
+              <article><h3>5. Compatibility and required software</h3><p>The Manager identifies the Windows product type, edition, build, and architecture. It offers Desktop and Cylinder Server in the product picker, but enforces each product's compatibility rules: Desktop install and update are limited to Windows 10/11 Home, Pro, and Enterprise workstations; Cylinder Server install and update require Windows Server/IoT build 17763 or later. An already-installed product can remain selected for removal on another edition if its registration and uninstaller can be verified. Windows Education and other editions outside those groups are not currently declared supported. Both products currently require native x64 hardware, at least 2 logical processors and 4 GB of physical memory, Windows PowerShell 5.1 with required system inspection/signature commands, package integrity, and enough free space for the verified download, local backup, staged data restore, and installation reserve. The Desktop package bundles Electron, Chromium, and Node.js, so it requires no separate .NET, Visual C++ runtime, WebView2, browser, plug-in, or extension. No external prerequisite is declared for the Server package either. The Manager installs no extra component; if a required check fails or a package later declares a component without an approved, verifiable installer, installation stops with a reason. Native ARM64 is not supported by these x64 releases. Edition detection identifies the target but does not certify every Windows Server/IoT servicing configuration.</p></article>
+              <article><h3>6. Installation, Windows changes, updates, and removal</h3><p>Setup can request administrator approval, install the selected program machine-wide, create Start menu and desktop shortcuts, and register it with Windows for removal. Launch-at-sign-in is optional and changes your Windows user startup setting only when you enable it. The Manager downloads the selected product's release installer over HTTPS and checks release version, product-specific filename, file size, SHA-512, and Authenticode according to this build's policy. A hash confirms a match with release metadata; it does not independently identify the publisher. On replacement, the Manager backs up the selected product's data folder, removes that product's existing program, installs the matching release, and verifies the result. Desktop and Cylinder Server have separate installation and data folders; data is not copied between products. If setup fails after removal, you may need to reinstall; the verified data backup remains available. Uninstall keeps local data by default. Optional data removal requires a separate choice and typed confirmation; the Manager's backup remains until you remove it separately.</p></article>
+              <article><h3>7. Backup, recovery, and security limits</h3><p>SHA-256/SHA-512 checks detect file differences; they do not guarantee data correctness, confidentiality, recoverability, or publisher identity. The Manager compares/restores the configured data folder during replacement, but a power loss, disk failure, malware, filesystem error, inaccessible custom folder, or files stored elsewhere can affect results. Keep separate backups of important records and documents outside OverHead. The Manager's unsigned local build can be replaced or patched by someone with sufficient access to the computer. No security control eliminates all risk. Review exports and support bundles before sharing them.</p></article>
+              <article><h3>8. Payments, license, service, and third-party notices</h3><p>The Install Manager does not collect a payment or start a trial, subscription, renewal, or paid plan. No price, billing interval, refund, cancellation entitlement, support response time, or service-level promise is created by installation. Any applicable product license and commercial terms must be reviewed separately in the Legal Center and at the point of any offer or payment. Windows, GitHub, Firebase, and configured integrations are third-party services subject to their own terms. Product or provider features, network access, release availability, and recovery operations may be unavailable or change. No feature should be treated as guaranteed fit for a particular business or legal requirement.</p></article>
+              <article><h3>9. Topics awaiting counsel and policy completion</h3><p>The published Terms and Privacy materials are drafts, not a final agreement. Counsel and the product operator still need to confirm, as applicable: the contracting entity and required legal address; ownership and software-license grant; complete component and open-source notices; privacy-controller/processor roles, data categories, purposes and legal bases, recipients, retention/deletion, individual rights, international transfers, and incident contacts; eligibility and accessibility obligations; export/sanctions restrictions; suspension and termination; warranties, liability limits, indemnity; governing law, venue and dispute procedures; consumer rights; and final prices, renewals, cancellation, refunds, and support commitments. Do not assume any unresolved term has been settled by this screen.</p></article>
+              <article><h3>10. Consent record and legal effect</h3><p>If you choose “Yes, I agree”, the Manager records that decision, the notice revision, your selected acknowledgements, and the time on this Windows account, encrypted with Windows account protection. It does not record your name or email. Choosing “No, I do not agree” records no consent and cancels this first-install flow. Consent does not make draft policies attorney-approved, waive non-waivable rights, guarantee that a court will enforce a term, or remove the need to obtain any separate notices or permissions required by your business or applicable law.</p></article>
+            </div>
+            <div class="consent-checks">
+              <label><input id="consent-terms" type="checkbox" /> I have read and agree to follow the current OverHead Terms of Use draft while it remains the published terms, understanding that counsel review is pending.</label>
+              <label><input id="consent-privacy" type="checkbox" /> I acknowledge the Privacy and Data-Minimization draft and the data, network, provider, backup, and retention limitations described above.</label>
+              <label><input id="consent-install" type="checkbox" /> I have authority to install OverHead on this device and understand the Windows changes, update, backup, and uninstall behavior described above.</label>
+              <label><input id="consent-draft" type="checkbox" /> I understand these policies are drafts and this screen does not guarantee legal protection or replace counsel's review.</label>
+            </div>
+            <p id="consent-error" class="form-error hidden" role="alert"></p>
+            <p class="notice-contact">Questions or privacy concerns: solidartentertainment@gmail.com</p>
+            <div class="welcome-actions"><button class="secondary" id="welcome-back">Back to Welcome</button><button class="danger" id="decline-first-install">No, I do not agree</button><button class="primary" id="accept-first-install" disabled>Yes, I agree</button></div>
+          </div>
+          <div id="consent-declined" class="consent-declined hidden">
+            <p class="eyebrow">NO CONSENT RECORDED</p><h2>Installation cancelled</h2>
+            <p>You chose “No, I do not agree”. OverHead will not be installed and no consent record was saved. You can review the notices again or exit the Manager. The first-time installation remains blocked unless you later choose “Yes, I agree”.</p>
+            <div class="welcome-actions"><button class="secondary" id="decline-review">Review notices</button><button class="danger" id="decline-exit">Exit Manager</button></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

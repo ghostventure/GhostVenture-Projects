@@ -65,10 +65,10 @@ export function CTA() {
       <div>
         <p className="eyebrow">Download</p>
         <h2>Ready to get organized?</h2>
-        <p>Download OverHead, install it on Windows, and start with one customer or one task.</p>
+        <p>Download the Install Manager to check for and install the latest OverHead Desktop release after you consent.</p>
       </div>
       <div className="cta-actions">
-        <Link className="primary" href={downloadHref}>Get OverHead for Windows</Link>
+        <Link className="primary" href={downloadHref}>Get Install Manager</Link>
         <Link className="secondary" href={cylinderPageHref}>Explore Cylinder for Server / IoT</Link>
         <Link className="secondary" href="/support/">Installation help</Link>
         <Link className="secondary" href={checksumHref}>Verify download</Link>

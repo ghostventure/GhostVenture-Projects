@@ -15,7 +15,7 @@ const targets = [
     installer: `OverHead-Setup-${packageJson.version}-win-x64.exe`,
     zip: `OverHead-Desktop-${packageJson.version}-win-x64.zip`,
     feed: 'latest.yml',
-    args: [],
+    args: ['--config=electron-builder-desktop.cjs'],
   },
   {
     name: 'cylinder-client',
@@ -45,7 +45,7 @@ const targets = [
       '--config.appId=com.blacklion.overhead.cylinder',
       '--config.win.artifactName=OverHead-Cylinder-Setup-${version}-win-x64.${ext}',
       '--config.nsis.shortcutName=OverHead-Cylinder',
-      '--config.nsis.include=build/cylinder-server-installer.nsh',
+      '--config.nsis.include=scripts/cylinder-server-installer.nsh',
     ],
   },
 ]
@@ -111,6 +111,7 @@ function main() {
 
   fs.mkdirSync(releaseRoot, { recursive: true })
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'])
+  run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'install-manager:build'])
   const builder = path.join(root, 'node_modules', 'electron-builder', 'cli.js')
   for (const target of targets) {
     if (target.name === 'cylinder') {

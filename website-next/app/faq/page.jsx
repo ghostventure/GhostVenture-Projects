@@ -5,7 +5,7 @@ import { businessFoundation, businessPrinciples } from "../business-foundation";
 const faqs = [
   [
     "Is OverHead a website or desktop app?",
-    "OverHead is an installed Windows desktop app. This website explains the product and hosts the Windows ZIP, installer checksum, support information, and legal boilerplates.",
+    "OverHead is an installed Windows desktop app. This website explains the product and links to the Desktop Install Manager and the separate Cylinder Server and Cylinder Client packages, along with support information and legal materials.",
   ],
   [
     "Which computers can run OverHead?",
@@ -113,7 +113,7 @@ const faqs = [
   ],
   [
     "Will OverHead update itself?",
-    "Packaged OverHead and Cylinder releases check their separate secure update feeds before opening. When an update is available, the package downloads and installs when the app closes. New installations still begin with the manual Windows ZIP download. Do not mix the standard desktop and Cylinder installers or update channels.",
+    "When OverHead Desktop finds an available update, it notifies you and asks for consent before opening the Install Manager. After you agree, the Manager checks compatibility, verifies the selected package, backs up your Desktop data, replaces the older installation, and verifies the result. Installation does not happen automatically when the app closes. Cylinder Server and Cylinder Client are separate packages with their own installation paths; the Desktop Manager does not install them.",
   ],
   [
     "Does OverHead protect data automatically?",
@@ -133,7 +133,7 @@ const faqs = [
   ],
   [
     "How do I know the download is legitimate?",
-    "Use the official OverHead download link and compare the downloaded ZIP against its published SHA-256 checksum when source confidence matters. For Cylinder, extract the ZIP first, then compare the installer against the separate Cylinder checksum.",
+    "Get the Desktop Install Manager from the official OverHead downloads page and compare its SHA-256 checksum when you want to verify the download. The Manager checks the Desktop package before installation. Cylinder Server and Cylinder Client are separate packages; use the checksum listed with the package you selected.",
   ],
   [
     "What does the investor page prove?",
@@ -145,20 +145,20 @@ const faqs = [
   ],
   [
     "Where are downloads?",
-    "The current 0.3.24 Desktop ZIP and checksum are available from the Download buttons. Cylinder Server has a separate Server/IoT ZIP; Cylinder Client has a separate Windows 10/11 ZIP. Both Cylinder packages and checksums are linked from the Cylinder page.",
+    "Use the Desktop download destination for the Install Manager. Cylinder Server has its own Windows Server/IoT package destination, and Cylinder Client has a separate Windows workstation package destination. Follow the matching download and checksum links for the package you need.",
   ],
 ];
 
 const installSteps = [
   [
     "1. Download",
-    "Get the Windows ZIP from the official OverHead download link.",
+    "Download the Desktop Install Manager from the official OverHead downloads page.",
   ],
   [
     "2. Verify",
     "Compare the package with the published SHA-256 checksum before installation when source confidence matters.",
   ],
-  ["3. Install", "Extract the ZIP locally and run the Windows installer."],
+  ["3. Install or update", "Launch the Manager, review the compatibility and first-install notices, then let it verify and install the selected Desktop release. Existing Desktop data is backed up and preserved during replacement."],
   [
     "4. Start a workspace",
     "Create an owner profile, choose a plan, and begin with the workflow or customer record that matters first.",
@@ -168,7 +168,7 @@ const installSteps = [
 const expectations = [
   [
     "What you get now",
-    "A Windows desktop workspace, customer and task tools, workflow and approval surfaces, support utilities, a manual ZIP installer, and published download verification.",
+    "A Windows desktop workspace, customer and task tools, workflow and approval surfaces, support utilities, a Desktop Install Manager, and separate Cylinder Server and Client package destinations.",
   ],
   [
     "What needs setup",

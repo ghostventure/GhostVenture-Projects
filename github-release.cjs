@@ -15,7 +15,14 @@ function latestCompatibleRelease(releases, deploymentMode = 'desktop') {
   if (!Array.isArray(releases)) return null
   return releases
     .filter((release) => isCompatibleRelease(release, deploymentMode))
-    .sort((a, b) => Date.parse(b.published_at || '') - Date.parse(a.published_at || ''))[0] || null
+    .sort((a, b) => {
+      const left = releaseVersion(a).match(/^(\d+)\.(\d+)\.(\d+)/)?.slice(1).map(Number) || []
+      const right = releaseVersion(b).match(/^(\d+)\.(\d+)\.(\d+)/)?.slice(1).map(Number) || []
+      for (let index = 0; index < 3; index += 1) {
+        if ((left[index] || 0) !== (right[index] || 0)) return (right[index] || 0) - (left[index] || 0)
+      }
+      return Date.parse(b.published_at || '') - Date.parse(a.published_at || '')
+    })[0] || null
 }
 
 function releaseFeedUrl(release) {

@@ -28,10 +28,10 @@ const trustItems = [
 ];
 
 const startSteps = [
-  ["1", "Download", "Get the official Windows ZIP."],
-  ["2", "Install", "Extract it locally, then run the installer."],
-  ["3", "Set up", "Create the owner workspace and sign in."],
-  ["4", "Start small", "Add one customer or task that needs attention."],
+  ["1", "Download", "Get the Desktop Install Manager from the official downloads page."],
+  ["2", "Review", "Check compatibility and review the first-install notices."],
+  ["3", "Install or update", "After you agree, the Manager verifies the Desktop package, preserves your data, and completes installation."],
+  ["4", "Set up", "Create the owner workspace and start with one customer or task."],
 ];
 
 const outcomes = [
@@ -104,7 +104,7 @@ export default function HomePage() {
             </p>
             <div className="hero-actions">
               <Link className="primary" href={downloadHref}>
-                Explore OverHead Desktop
+                Get Install Manager
               </Link>
               <Link
                 className="text-link hero-guide-link"
@@ -296,8 +296,12 @@ export default function HomePage() {
             <div>
               <strong>Before you download</strong>
               <p>
-                OverHead currently runs on Windows. The ZIP is the official
-                manual download; use the checksum if you want to verify it.
+                OverHead Desktop currently runs on Windows. The Desktop
+                download is the Install Manager, which checks compatibility,
+                retrieves and verifies the Desktop package, and preserves
+                existing data during an update. Cylinder Server and Cylinder
+                Client have separate download destinations; the Desktop
+                Manager does not install Cylinder.
               </p>
               <p className="platform-teaser">
                 <strong>In native build:</strong> OverHead for iPhone. Android,
@@ -306,7 +310,7 @@ export default function HomePage() {
             </div>
             <div>
               <Link className="primary" href={downloadHref}>
-                Download for Windows
+                Get Install Manager
               </Link>
               <Link className="text-link" href={checksumHref}>
                 Get the checksum

@@ -663,7 +663,7 @@ export default function DashboardClient() {
           </div>
           <div className="dashboard-welcome-actions">
             <Link className="primary" href={downloadHref}>
-              Get OverHead for Windows
+              Get Install Manager
             </Link>
             <span>Desktop tools are available in the Windows app.</span>
           </div>
@@ -1167,7 +1167,7 @@ export default function DashboardClient() {
               </p>
             </div>
             <Link className="primary" href={downloadHref}>
-              Get Windows package
+              Get Install Manager
             </Link>
           </section>
         )}

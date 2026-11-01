@@ -36,6 +36,14 @@ const passwordResetSchema = z.object({
   newPassword: z.string().min(12),
 })
 
+const passwordResetEmailSchema = z.object({ email: z.string().trim().email() })
+
+const signInCredentialsSchema = z.object({
+  currentPassword: z.string().min(1),
+  newEmail: z.string().trim().email(),
+  newPassword: z.string().min(12),
+})
+
 const userProfileUpdateSchema = z.object({
   email: z.string().trim().email(),
   ownerName: z.string().trim().optional().default(''),
@@ -394,10 +402,12 @@ let legacyDbPath = ''
 let state = null
 let schedulerStarted = false
 let secureStore = null
+let requireEncryptedStorage = false
 let activeSession = null
 let cylinderHeartbeatTimer = null
 let persistenceBatchDepth = 0
 let persistencePending = false
+const passwordResetCooldowns = new Map()
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA2bxXMdNsXVgPaYv3jbWJXGlosVYtBd8U',
@@ -702,6 +712,57 @@ function getRememberedSignIn() {
   }
 }
 
+function checkSignInUsername(payload = {}) {
+  const input = z.object({ email: z.string().trim().email() }).parse(payload || {})
+  const email = input.email.toLowerCase()
+  const user = state.userProfiles.find((item) => item.email?.toLowerCase() === email)
+  return {
+    email,
+    knownOnDevice: Boolean(user),
+    accountType: user ? user.firebase_uid ? 'shared' : 'local' : '',
+    status: user?.status || '',
+  }
+}
+
+function rememberPasswordResetCooldown(email, expiresAt, currentTime) {
+  passwordResetCooldowns.set(email, expiresAt)
+  if (passwordResetCooldowns.size > 1000) {
+    for (const [key, savedExpiry] of passwordResetCooldowns) if (savedExpiry <= currentTime) passwordResetCooldowns.delete(key)
+    if (passwordResetCooldowns.size > 1000) passwordResetCooldowns.delete(passwordResetCooldowns.keys().next().value)
+  }
+}
+
+async function requestPasswordResetEmail(payload = {}) {
+  const input = passwordResetEmailSchema.parse(payload || {})
+  const email = input.email.toLowerCase()
+  const time = Date.now()
+  const cooldownUntil = passwordResetCooldowns.get(email) || 0
+  if (cooldownUntil > time) {
+    return { requested: true, retryAfterSeconds: Math.ceil((cooldownUntil - time) / 1000), throttled: true }
+  }
+  try {
+    await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestType: 'PASSWORD_RESET', email }),
+    })
+  } catch (error) {
+    const code = String(error?.message || '')
+    // Keep account existence private, and avoid exposing Firebase internals.
+    if (/EMAIL_NOT_FOUND|USER_NOT_FOUND/i.test(code)) {
+      rememberPasswordResetCooldown(email, time + 60000, time)
+      return { requested: true, retryAfterSeconds: 60 }
+    }
+    if (/TOO_MANY_ATTEMPTS|RESET_PASSWORD_EXCEED_LIMIT/i.test(code)) {
+      rememberPasswordResetCooldown(email, time + 60000, time)
+      return { requested: true, retryAfterSeconds: 60, throttled: true }
+    }
+    if (/INVALID_EMAIL/i.test(code)) throw new Error('Enter a valid account email address.')
+    throw new Error('We could not contact the password recovery service. Check your connection and try again.')
+  }
+  rememberPasswordResetCooldown(email, time + 60000, time)
+  return { requested: true, retryAfterSeconds: 60 }
+}
+
 async function signInSharedProfile(payload) {
   // The sign-in form can contain a role remembered from the shared workspace
   // (for example, "Administrator"). That workspace role is authoritative only
@@ -957,6 +1018,10 @@ function initBackend(app, options = {}) {
   dbPath = path.join(dataRoot, 'overhead-store.secure')
   legacyDbPath = path.join(dataRoot, 'overhead-store.json')
   secureStore = options.secureStore || null
+  requireEncryptedStorage = options.requireEncryptedStorage === true
+  if (requireEncryptedStorage && (!secureStore?.available || !secureStore.encryptString || !secureStore.decryptString)) {
+    throw new Error('Windows account-protected storage is unavailable. OverHead stopped before opening or changing workspace data.')
+  }
   fs.mkdirSync(dataRoot, { recursive: true })
   state = readState()
   if (isCylinderDeployment()) {
@@ -1034,6 +1099,7 @@ function encryptStore(plainText) {
   if (secureStore?.available && secureStore.encryptString) {
     return `safeStorage:v1:${secureStore.encryptString(plainText)}`
   }
+  if (requireEncryptedStorage) throw new Error('Windows account-protected storage is unavailable. The workspace was not written in plaintext.')
   return `plain:v1:${Buffer.from(plainText, 'utf8').toString('base64')}`
 }
 
@@ -1284,7 +1350,7 @@ function signIn(payload) {
   const user = state.userProfiles.find((item) => item.email === email)
 
   if (!user) {
-    throw new Error('No local account exists for that email. Use Register first.')
+    throw new Error('USERNAME_NOT_FOUND: No local account exists for that email. Use Register first.')
   }
   if (user.status === 'Suspended') throw new Error('This local account is suspended. Ask an active Owner to review access.')
   if (user.email_verified === false) {
@@ -1297,7 +1363,7 @@ function signIn(payload) {
     if (recentFailures.length >= 3) {
       recordFraudSignal('repeated_failed_sign_in', 'High', { email, failures: recentFailures.length }, email)
     }
-    throw new Error('Invalid desktop password.')
+    throw new Error('PASSWORD_INCORRECT: Invalid desktop password.')
   }
   user.last_sign_in = now()
   user.updated_at = now()
@@ -2541,6 +2607,113 @@ function resetPassword(payload) {
   persist()
   recordAudit('auth.password_reset', 'Desktop password reset by recovery phrase', { email: input.email }, input.email)
   return { reset: true }
+}
+
+function updateLocalEmailReferences(user, oldEmail, newEmail) {
+  const replaceOwnedEmail = (record, key) => {
+    if (record?.[key] === oldEmail) record[key] = newEmail
+  }
+  for (const profile of state.userProfiles) if (profile.id !== user.id) replaceOwnedEmail(profile, 'manager_email')
+  for (const manager of state.managerProfiles) replaceOwnedEmail(manager, 'email')
+  for (const subscription of state.subscriptions) replaceOwnedEmail(subscription, 'manager_email')
+  for (const billing of state.billingProfiles) replaceOwnedEmail(billing, 'manager_email')
+  for (const license of state.licenses) replaceOwnedEmail(license, 'email')
+  if (state.rememberedSignIn?.email === oldEmail) state.rememberedSignIn.email = newEmail
+  if (state.savedFormMemory?.profile?.email === oldEmail) state.savedFormMemory.profile.email = newEmail
+}
+
+async function changeSignInCredentials(payload = {}) {
+  requireSession('sign-in credential changes')
+  const input = signInCredentialsSchema.parse(payload)
+  const user = state.userProfiles.find((item) => item.firebase_uid && item.firebase_uid === activeSession.firebaseUid)
+    || state.userProfiles.find((item) => item.email?.toLowerCase() === activeSession.email?.toLowerCase())
+  if (!user || user.status === 'Suspended') throw new Error('The active OverHead account could not be changed.')
+
+  const oldEmail = String(user.email || '').toLowerCase()
+  const newEmail = input.newEmail.toLowerCase()
+  if (state.userProfiles.some((item) => item.id !== user.id && item.email?.toLowerCase() === newEmail)) {
+    throw new Error('That email is already attached to another account on this device.')
+  }
+
+  if (user.firebase_uid) {
+    const authenticated = await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: oldEmail, password: input.currentPassword, returnSecureToken: true }),
+    })
+    if (authenticated.localId !== user.firebase_uid) throw new Error('The password did not authenticate the active OverHead account.')
+    const updated = await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:update?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: authenticated.idToken, email: newEmail, password: input.newPassword, returnSecureToken: true }),
+    })
+    const emailChanged = newEmail !== oldEmail
+    if (emailChanged) {
+      await updateFirestoreDocument(`profiles/${user.firebase_uid}`, { email: newEmail, email_verified: false, updated_at: now() }, updated.idToken)
+    }
+    activeSession.firebaseIdToken = updated.idToken
+    activeSession.firebaseRefreshToken = updated.refreshToken
+    activeSession.firebaseUid = updated.localId
+    user.password_hash = ''
+    if (emailChanged) {
+      user.email = newEmail
+      user.manager_email = user.manager_email === oldEmail ? newEmail : user.manager_email
+      user.email_verified = false
+      user.email_verified_at = ''
+      updateLocalEmailReferences(user, oldEmail, newEmail)
+    }
+    activeSession.email = newEmail
+    state.rememberedSignIn = {
+      ownerName: user.owner_name,
+      businessName: user.business_name,
+      email: newEmail,
+      role: user.shared_role || user.role,
+      lastSuccessfulSignIn: now(),
+    }
+    state.savedFormMemory.profile = { ...state.rememberedSignIn }
+    user.last_sign_in = now()
+    user.updated_at = now()
+    persist()
+    const verificationSent = emailChanged ? await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestType: 'VERIFY_EMAIL', idToken: updated.idToken }),
+    }).then(() => true).catch(() => false) : false
+    recordAudit('auth.credentials_changed', 'Shared account sign-in credentials changed', { emailChanged, email: newEmail }, newEmail)
+    return { email: newEmail, emailChanged, verificationRequired: emailChanged, verificationSent, verificationMethod: emailChanged ? 'link' : '' }
+  }
+
+  if (!user.password_hash || !bcrypt.compareSync(input.currentPassword, user.password_hash)) {
+    recordAudit('auth.credentials_change_failed', 'Local sign-in credential change failed reauthentication', { email: oldEmail }, oldEmail)
+    throw new Error('The current password did not match this OverHead account.')
+  }
+  const emailChanged = newEmail !== oldEmail
+  user.password_hash = bcrypt.hashSync(input.newPassword, 10)
+  if (emailChanged) {
+    user.email = newEmail
+    user.manager_email = user.manager_email === oldEmail ? newEmail : user.manager_email
+    user.email_verified = false
+    user.email_verified_at = ''
+    updateLocalEmailReferences(user, oldEmail, newEmail)
+  }
+  activeSession.email = newEmail
+  state.rememberedSignIn = {
+    ownerName: user.owner_name,
+    businessName: user.business_name,
+    email: newEmail,
+    role: user.shared_role || user.role,
+    lastSuccessfulSignIn: now(),
+  }
+  state.savedFormMemory.profile = { ...state.rememberedSignIn }
+  user.updated_at = now()
+  persist()
+  const delivery = emailChanged ? sendVerificationEmail(user, 'account-email-change') : null
+  recordAudit('auth.credentials_changed', 'Local account sign-in credentials changed', { emailChanged, email: newEmail }, newEmail)
+  return {
+    email: newEmail,
+    emailChanged,
+    verificationRequired: emailChanged,
+    verificationSent: delivery?.status === 'sent',
+    verificationQueued: delivery?.status === 'queued',
+    verificationMethod: emailChanged ? 'code' : '',
+  }
 }
 
 function microsoftScopes(provider) {
@@ -4249,17 +4422,22 @@ function getComplianceSummary() {
   }
 }
 
-function validateRestorePackage(filePath) {
-  requireRole(['Owner'], 'restore validation')
-  requireFeature('restore_validation')
+function readRestorePackage(filePath) {
   if (!filePath || typeof filePath !== 'string') throw new Error('Restore file path is required.')
   const resolved = path.resolve(filePath)
   if (!fs.existsSync(resolved)) throw new Error('Restore file not found.')
   const fileText = fs.readFileSync(resolved, 'utf8')
   const parsed = JSON.parse(decryptStore(fileText))
   const valid = validRestoreState(parsed)
-  recordAudit('restore.validated', valid ? 'Restore package validated' : 'Restore package rejected', { filePath: resolved, valid })
-  return { valid, schema: parsed?.schema || 'unknown', filePath: resolved }
+  return { valid, schema: parsed?.schema || 'unknown', filePath: resolved, parsed }
+}
+
+function validateRestorePackage(filePath) {
+  requireRole(['Owner'], 'restore validation')
+  requireFeature('restore_validation')
+  const validation = readRestorePackage(filePath)
+  recordAudit('restore.validated', validation.valid ? 'Restore package validated' : 'Restore package rejected', { filePath: validation.filePath, valid: validation.valid })
+  return { valid: validation.valid, schema: validation.schema, filePath: validation.filePath }
 }
 
 function validRestoreState(parsed) {
@@ -4278,10 +4456,11 @@ function restoreFromPackage(payload = {}) {
   requireRole(['Owner'], 'restore execution')
   requireFeature('restore_validation')
   const input = restoreSchema.parse(payload)
-  const validation = validateRestorePackage(input.filePath)
+  const validation = readRestorePackage(input.filePath)
+  recordAudit('restore.validated', validation.valid ? 'Restore package validated' : 'Restore package rejected', { filePath: validation.filePath, valid: validation.valid })
   if (!validation.valid) throw new Error('Restore package was rejected.')
   const backup = createBackup()
-  const restored = upgradeState(JSON.parse(decryptStore(fs.readFileSync(validation.filePath, 'utf8'))))
+  const restored = upgradeState(validation.parsed)
   state = restored
   seed()
   recordAudit('restore.completed', 'Local workspace restored from validated package', { filePath: validation.filePath, safetyBackupPath: backup.backupPath })
@@ -4458,6 +4637,8 @@ module.exports = {
   exportDocumentBundle,
   searchStoredDocumentContents,
   getRememberedSignIn,
+  checkSignInUsername,
+  requestPasswordResetEmail,
   resumeRememberedSession,
   getStripeAuthorizationUrl,
   getSquareAuthorizationUrl,
@@ -4512,6 +4693,7 @@ module.exports = {
   applySubscription,
   buildOfficeChecklist,
   resetPassword,
+  changeSignInCredentials,
   updateToggle,
   updateSetting,
   updateTaskStatus,

@@ -26,6 +26,7 @@ const UPDATE_FEED_URL = process.env.OVERHEAD_UPDATE_URL || `https://overhead-off
 const STARTUP_UPDATE_TIMEOUT_MS = 2500
 const GITHUB_UPDATE_TIMEOUT_MS = 10000
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 60 * 1000
+const MANAGER_MANAGED_UPDATES = RELEASE_TARGET === 'desktop'
 let updateCheckInFlight = false
 let pendingUpdateAssessment = null
 const STARTUP_RECOVERY_HTML = 'data:text/html;charset=utf-8,' + encodeURIComponent([
@@ -39,14 +40,24 @@ const STARTUP_RECOVERY_HTML = 'data:text/html;charset=utf-8,' + encodeURICompone
 // CPU avoids a common launch failure on machines with older or unstable drivers.
 app.disableHardwareAcceleration()
 if (process.env.OVERHEAD_SMOKE_DATA) app.setPath('appData', path.resolve(process.env.OVERHEAD_SMOKE_DATA))
-app.setPath('userData', path.join(app.getPath('appData'), RELEASE_TARGET === 'cylinder-client' ? 'OverHead Cylinder Client' : DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead'))
+const defaultUserDataPath = path.join(app.getPath('appData'), RELEASE_TARGET === 'cylinder-client' ? 'OverHead Cylinder Client' : DEPLOYMENT_MODE === 'cylinder' ? 'OverHead Cylinder' : 'OverHead')
+let configuredDesktopDataRoot = ''
+if (RELEASE_TARGET === 'desktop') {
+  try {
+    const managerConfigPath = path.join(app.getPath('appData'), 'OverHead Install Manager', 'manager.json')
+    const managerConfig = JSON.parse(fs.readFileSync(managerConfigPath, 'utf8'))
+    const candidate = String(managerConfig.desktopDataRoot || '').trim()
+    if (path.isAbsolute(candidate)) configuredDesktopDataRoot = path.normalize(candidate)
+  } catch {}
+}
+app.setPath('userData', configuredDesktopDataRoot || defaultUserDataPath)
 const recoveryStatePath = path.join(app.getPath('userData'), 'runtime-recovery.json')
 const updatePreferencesPath = path.join(app.getPath('userData'), 'update-preferences.json')
 log.initialize()
 log.transports.file.level = 'info'
-autoUpdater.autoDownload = true
-autoUpdater.autoInstallOnAppQuit = true
-autoUpdater.autoRunAppAfterInstall = true
+autoUpdater.autoDownload = !MANAGER_MANAGED_UPDATES
+autoUpdater.autoInstallOnAppQuit = !MANAGER_MANAGED_UPDATES
+autoUpdater.autoRunAppAfterInstall = !MANAGER_MANAGED_UPDATES
 let updatePreferences = readUpdatePreferences()
 let updateState = {
   status: 'not-checked',
@@ -378,10 +389,10 @@ function createTray() {
     },
     {
       label: 'Check for Updates',
-      click: () => checkForUpdatesBeforeLaunch(),
+      click: () => checkForUpdatesBeforeLaunch({ force: true }),
     },
     {
-      label: 'Install Downloaded Update',
+      label: MANAGER_MANAGED_UPDATES ? 'Update with Install Manager' : 'Install Downloaded Update',
       click: () => installDownloadedUpdate(),
     },
     {
@@ -398,6 +409,7 @@ function createTray() {
 function updaterStatus() {
   return {
     enabled: true,
+    managerManaged: MANAGER_MANAGED_UPDATES,
     currentVersion: app.getVersion(),
     autoDownload: autoUpdater.autoDownload,
     channel: autoUpdater.channel || 'latest',
@@ -407,7 +419,9 @@ function updaterStatus() {
     nextCheckAt: new Date(nextUpdateCheck(updatePreferences.lastAttemptAt)).toISOString(),
     ...updateState,
     note: app.isPackaged
-      ? (updatePreferences.autoCheck ? 'Checks before opening the workspace when due, at most once every 72 hours. Failed attempts also count. Downloaded updates install when you close the app.' : 'Auto-Check is off. Manual checks also respect the 72-hour interval.')
+      ? (MANAGER_MANAGED_UPDATES
+          ? (updatePreferences.autoCheck ? 'Checks before opening the workspace when due. Updates notify you and start Install Manager after you consent.' : 'Auto-Check is off. Use Check when you want to look for an update; Install Manager handles updates after consent.')
+          : (updatePreferences.autoCheck ? 'Checks before opening the workspace when due, at most once every 72 hours. Failed attempts also count. Downloaded updates install when you close the app.' : 'Auto-Check is off. Manual checks also respect the 72-hour interval.'))
       : 'Source mode skips live update checks. Packaged releases check before the main window opens.',
   }
 }
@@ -428,12 +442,155 @@ function setUpdateState(status, details = {}) {
 }
 
 function installDownloadedUpdate() {
+  if (MANAGER_MANAGED_UPDATES) return askAndLaunchInstallManager()
   if (updateState.status !== 'downloaded') {
     return { installing: false, message: 'No downloaded update is ready to install.' }
   }
   setUpdateState('installing')
   autoUpdater.quitAndInstall(false, true)
   return { installing: true }
+}
+
+function getInstallManagerPath() {
+  const managerName = 'OverHead Install Manager.exe'
+  const embeddedRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'install-manager')
+    : path.join(__dirname, 'build', 'install-manager-companion')
+  const embeddedPath = path.join(embeddedRoot, managerName)
+  const policyPath = path.join(embeddedRoot, 'publisher-policy.json')
+  if (!fs.existsSync(embeddedPath) || !fs.existsSync(policyPath)) return ''
+  const publisherPolicy = JSON.parse(fs.readFileSync(policyPath, 'utf8'))
+  const expectedSigner = String(publisherPolicy.expectedSigner || '').trim()
+  const allowUnsigned = publisherPolicy.allowUnsigned === true
+  const embeddedManager = fs.readFileSync(embeddedPath)
+  const embeddedHash = crypto.createHash('sha256').update(embeddedManager).digest('hex')
+  const localAppData = process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local')
+  const targetDirectory = path.join(localAppData, 'OverHead Install Manager', 'Runners', `${app.getVersion()}-${embeddedHash}`)
+  fs.mkdirSync(targetDirectory, { recursive: true })
+  const targetPath = path.join(targetDirectory, managerName)
+  if (!fs.existsSync(targetPath)) {
+    const temporaryPath = `${targetPath}.${crypto.randomBytes(8).toString('hex')}.tmp`
+    try {
+      fs.writeFileSync(temporaryPath, embeddedManager, { flag: 'wx' })
+      fs.renameSync(temporaryPath, targetPath)
+    } catch (error) {
+      fs.rmSync(temporaryPath, { force: true })
+      throw error
+    }
+  }
+  const cachedHash = crypto.createHash('sha256').update(fs.readFileSync(targetPath)).digest('hex')
+  if (cachedHash !== embeddedHash) throw new Error('The cached Install Manager does not match the copy bundled with this OverHead release.')
+  const encodedPath = Buffer.from(targetPath, 'utf8').toString('base64')
+  const encodedSigner = Buffer.from(expectedSigner, 'utf8').toString('base64')
+  const script = `$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPath}')); $e=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedSigner}')); $s=Get-AuthenticodeSignature -LiteralPath $p; [pscustomobject]@{status=[string]$s.Status;subject=[string]$s.SignerCertificate.Subject;expected=$e}|ConvertTo-Json -Compress`
+  const encodedScript = Buffer.from(script, 'utf16le').toString('base64')
+  const signature = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedScript], { encoding: 'utf8', windowsHide: true, timeout: 30000 })
+  if (signature.error || signature.status !== 0) throw new Error('The Install Manager publisher could not be verified.')
+  const result = JSON.parse(String(signature.stdout || '{}').trim())
+  const approved = expectedSigner
+    ? result.status === 'Valid' && result.subject === expectedSigner
+    : allowUnsigned && ['Valid', 'NotSigned'].includes(result.status)
+  if (!approved) throw new Error('The Install Manager signature does not match this package trust policy.')
+  return targetPath
+}
+
+async function startInstallManager(managerPath = '') {
+  managerPath ||= getInstallManagerPath()
+  if (!managerPath) {
+    const message = 'This OverHead installation does not include the signed Install Manager. Install a manager-enabled release before updating.'
+    setUpdateState('manager-unavailable', { message })
+    return { installing: false, message }
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    const message = 'Windows account protection is unavailable, so the update approval could not be handed securely to Install Manager.'
+    setUpdateState('manager-unavailable', { message })
+    return { installing: false, message }
+  }
+  const consentTicket = crypto.randomBytes(32).toString('hex')
+  const consentDirectory = path.join(process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local'), 'OverHead Install Manager', 'Update Consent')
+  fs.mkdirSync(consentDirectory, { recursive: true })
+  const consentFile = path.join(consentDirectory, `${consentTicket}.consent`)
+  const consentRecord = safeStorage.encryptString(JSON.stringify({
+    productId: RELEASE_TARGET,
+    parentPid: process.pid,
+    consentedAt: Date.now(),
+    affirmative: true,
+  })).toString('base64')
+  fs.writeFileSync(consentFile, consentRecord, { encoding: 'utf8', flag: 'wx' })
+  return new Promise((resolve, reject) => {
+    const child = spawn(managerPath, ['--install-update', `--parent-pid=${process.pid}`, `--consent-ticket=${consentTicket}`], {
+      detached: true, stdio: 'ignore', windowsHide: true,
+    })
+    child.once('error', (error) => {
+      fs.rmSync(consentFile, { force: true })
+      reject(error)
+    })
+    child.once('spawn', () => {
+      child.unref()
+      setUpdateState('manager-starting', { message: 'Install Manager started. It will back up data, replace OverHead, and verify the installation.' })
+      resolve({ installing: true, managerStarted: true })
+      app.quit()
+    })
+  })
+}
+
+async function askAndLaunchInstallManager() {
+  if (!MANAGER_MANAGED_UPDATES || updateState.status !== 'available') {
+    return { installing: false, message: 'No manager-managed update is waiting for consent.' }
+  }
+  let managerPath = ''
+  try { managerPath = getInstallManagerPath() } catch (error) {
+    const message = error?.message || 'The signed Install Manager could not be verified.'
+    setUpdateState('manager-unavailable', { message })
+    return { installing: false, message }
+  }
+  if (!managerPath) {
+    const message = 'This OverHead installation does not include the signed Install Manager. Install a manager-enabled release before updating.'
+    setUpdateState('manager-unavailable', { message })
+    return { installing: false, message }
+  }
+  const releaseDate = formatGitHubPublishedDate(updateState.releasePublishedAt)
+  const consentOptions = {
+    type: 'info', buttons: ['Update with Install Manager', 'Later'], defaultId: 0, cancelId: 1,
+    title: 'OverHead update available',
+    message: `OverHead ${updateState.version} is available. Published ${releaseDate}. Start the Install Manager now?`,
+    detail: 'After you consent, Install Manager backs up your data, removes the current program, installs the update, and verifies the result.',
+  }
+  const result = mainWindow ? await dialog.showMessageBox(mainWindow, consentOptions) : await dialog.showMessageBox(consentOptions)
+  if (result.response !== 0) {
+    setUpdateState('available', { message: `OverHead ${updateState.version} is available. Install Manager will update it after you consent.` })
+    return { installing: false, message: 'Update postponed.' }
+  }
+  return startInstallManager(managerPath)
+}
+
+async function checkDesktopUpdateWithManager() {
+  const release = await verifyGitHubRelease()
+  if (!release) throw new Error('GitHub has no compatible stable OverHead Desktop release.')
+  const assessment = {
+    ...classifyReleaseUpdate(app.getVersion(), release),
+    source: 'github', installerUrl: releaseInstaller(release, RELEASE_TARGET),
+    releaseUrl: release.html_url || '', releaseTag: release.tag_name || '', releasePublishedAt: release.published_at || '', managerManaged: true,
+  }
+  if (!assessment.newer) {
+    setUpdateState('current', { ...assessment, version: assessment.availableVersion, message: 'GitHub reports that this is the latest OverHead version.' })
+    return updaterStatus()
+  }
+  setUpdateState('available', {
+    ...assessment,
+    version: assessment.availableVersion,
+    message: `GitHub release ${release.tag_name}, published ${formatGitHubPublishedDate(release.published_at)}, is available. You will be asked before Install Manager replaces this installation.`,
+  })
+  if (Notification.isSupported()) {
+    new Notification({ title: 'OverHead update available', body: `GitHub release ${assessment.availableVersion} (published ${formatGitHubPublishedDate(release.published_at)}) is ready. Choose whether to start Install Manager.`, icon: iconPath }).show()
+  }
+  await askAndLaunchInstallManager()
+  return updaterStatus()
+}
+
+function formatGitHubPublishedDate(value) {
+  const date = new Date(value || '')
+  return Number.isNaN(date.getTime()) ? 'publication date unavailable' : new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' }).format(date)
 }
 
 async function verifyUpdateFeed() {
@@ -471,14 +628,14 @@ async function verifyGitHubRelease() {
   }
 }
 
-async function checkForUpdatesBeforeLaunch() {
+async function checkForUpdatesBeforeLaunch({ force = false } = {}) {
   if (!app.isPackaged) {
     setUpdateState('source-mode', { message: 'Live update checks are skipped while running from source.' })
     return updaterStatus()
   }
   if (updateCheckInFlight) return updaterStatus()
   const next = nextUpdateCheck(updatePreferences.lastAttemptAt)
-  if (Date.now() < next) {
+  if (!force && Date.now() < next) {
     if (!['downloaded', 'downloading', 'installing'].includes(updateState.status)) {
       setUpdateState('scheduled', { message: `Next update check available ${new Date(next).toLocaleString()}. Checks are limited to once every 72 hours.` })
     }
@@ -488,6 +645,12 @@ async function checkForUpdatesBeforeLaunch() {
   try {
     updatePreferences.lastAttemptAt = new Date().toISOString()
     saveUpdatePreferences()
+    if (MANAGER_MANAGED_UPDATES) {
+      try { return await checkDesktopUpdateWithManager() } catch (error) {
+        setUpdateState('unavailable', { source: 'github', managerManaged: true, message: error?.message || 'GitHub update check failed.' })
+        return updaterStatus()
+      } finally { updateCheckInFlight = false }
+    }
     let githubRelease = null
     let availableVersion
     let activeFeed = 'firebase'
@@ -547,6 +710,16 @@ async function checkForUpdatesFromGitHub() {
   if (!app.isPackaged) {
     setUpdateState('source-mode', { source: 'github', message: 'GitHub update checks require a packaged OverHead installation.' })
     return updaterStatus()
+  }
+  if (MANAGER_MANAGED_UPDATES) {
+    if (updateCheckInFlight) return updaterStatus()
+    updateCheckInFlight = true
+    updatePreferences.lastAttemptAt = new Date().toISOString()
+    saveUpdatePreferences()
+    try { return await checkDesktopUpdateWithManager() } catch (error) {
+      setUpdateState('unavailable', { source: 'github', managerManaged: true, message: error?.message || 'GitHub update check failed.' })
+      return updaterStatus()
+    } finally { updateCheckInFlight = false }
   }
   if (updateCheckInFlight) return updaterStatus()
   updateCheckInFlight = true
@@ -646,11 +819,13 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     }
     if (updatePreferences.autoCheck) {
       await checkForUpdatesBeforeLaunch()
+      if (MANAGER_MANAGED_UPDATES && updateState.status === 'manager-starting') return
     } else {
       setUpdateState('auto-check-disabled', { message: 'Auto-Check is off. Use Check when you want to look for updates.' })
     }
     try {
       backend.initBackend(app, {
+        requireEncryptedStorage: app.isPackaged,
         secureStore: {
           available: safeStorage.isEncryptionAvailable(),
           encryptString: (text) => safeStorage.encryptString(text).toString('base64'),
@@ -674,6 +849,8 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('auth:register', trustedHandler((_event, payload) => backend.registerSharedProfile(payload)))
     ipcMain.handle('auth:register-customer', trustedHandler((_event, payload) => backend.registerCustomerAccess(payload)))
     ipcMain.handle('auth:sign-in', trustedHandler((_event, payload) => backend.signInSharedProfile(payload)))
+    ipcMain.handle('auth:check-username', trustedHandler((_event, payload) => backend.checkSignInUsername(payload)))
+    ipcMain.handle('auth:request-password-reset', trustedHandler((_event, payload) => backend.requestPasswordResetEmail(payload)))
     ipcMain.handle('auth:remembered-sign-in', trustedHandler(() => backend.getRememberedSignIn()))
     ipcMain.handle('auth:resume-session', trustedHandler(() => backend.resumeRememberedSession()))
     ipcMain.handle('auth:verify-email', trustedHandler((_event, payload) => backend.verifyEmail(payload)))
@@ -795,6 +972,7 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('approvals:decide', trustedHandler((_event, payload) => backend.decideApprovalRequest(payload)))
     ipcMain.handle('approvals:list', trustedHandler(() => backend.listApprovalRequests()))
     ipcMain.handle('auth:reset-password', trustedHandler((_event, payload) => backend.resetPassword(payload)))
+    ipcMain.handle('auth:change-credentials', trustedHandler((_event, payload) => backend.changeSignInCredentials(payload)))
     ipcMain.handle('toggles:update', trustedHandler((_event, payload) => backend.updateToggle(payload)))
     ipcMain.handle('support:create-ticket', trustedHandler((_event, payload) => backend.createSupportTicket(payload)))
     ipcMain.handle('support:list-shared-tickets', trustedHandler(() => backend.listSharedSupportTickets()))
@@ -818,7 +996,7 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('restore:execute', trustedHandler((_event, payload) => backend.restoreFromPackage(payload)))
     ipcMain.handle('support:create-bundle', trustedHandler(() => backend.createSupportBundle(integrityReport())))
     ipcMain.handle('updater:status', trustedHandler(() => updaterStatus()))
-    ipcMain.handle('updater:check', trustedHandler(() => checkForUpdatesBeforeLaunch()))
+    ipcMain.handle('updater:check', trustedHandler(() => checkForUpdatesBeforeLaunch({ force: true })))
     ipcMain.handle('updater:check-github', trustedHandler(() => checkForUpdatesFromGitHub()))
     ipcMain.handle('updater:open-github-installer', trustedHandler(() => openGitHubInstaller()))
     ipcMain.handle('updater:set-auto-check', trustedHandler((_event, payload) => setAutoCheck(payload)))

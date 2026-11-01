@@ -57,7 +57,7 @@ export default function CylinderPage() {
         <span>Choose standard OverHead Desktop when</span>
         <strong>One person needs the individual-user edition on a regular Windows 10/11 computer.</strong>
         <p>Desktop has the shared business workflows and current UX without Cylinder's centralized department and device controls.</p>
-        <Link className="text-link" href={downloadHref}>Get OverHead Desktop for Windows</Link>
+        <Link className="text-link" href={downloadHref}>Get the Install Manager for Desktop</Link>
       </article>
     </section>
 
