@@ -47,6 +47,7 @@ const site = 'overhead-office'
 const brochureMode = process.argv.includes('--brochures')
 const guideMode = process.argv.includes('--user-guide')
 const centralMode = process.argv.includes('--central')
+const extrasOnlyMode = process.argv.includes('--extras-only')
 const release = path.join(root, process.env.OVERHEAD_RELEASE_DIR || (centralMode ? 'release/current' : guideMode ? 'release-user-guide' : brochureMode ? 'release-brochures-2026-09-07' : 'release'))
 const version = require('../package.json').version
 const centralManifest = centralMode ? JSON.parse(fs.readFileSync(path.join(release, 'release-manifest.json'), 'utf8')) : null
@@ -130,14 +131,14 @@ async function main() {
   console.log(JSON.stringify({ source, files: Object.keys(files).length, samplePaths: Object.keys(files).slice(0, 6), config: old.config, desktopPaths: Object.keys(files).filter(p => /download|update/.test(p)) }))
   if (!process.argv.includes('--publish')) return
   if (!files['/index.html'] || Object.keys(files).length < 30) throw new Error('Live file inventory is incomplete.')
-  if (centralMode) {
+  if (centralMode && !extrasOnlyMode) {
     assertSignedInstaller(path.join(release, 'desktop', centralManifest.targets.desktop.installer))
     assertSignedInstaller(path.join(release, 'cylinder', centralManifest.targets.cylinder.installer))
     assertSignedInstaller(path.join(release, 'cylinder-client', centralManifest.targets['cylinder-client'].installer))
-  } else if (!brochureMode && !guideMode && billing.billingEnabled) {
+  } else if (!centralMode && !extrasOnlyMode && !brochureMode && !guideMode && billing.billingEnabled) {
     assertSignedInstaller(path.join(release, `OverHead-Setup-${version}-win-x64.exe`))
   }
-  const artifacts = guideMode ? await require('./prepare-user-guide-deploy.cjs')(root, files) : brochureMode ? [
+  const artifacts = extrasOnlyMode ? [] : guideMode ? await require('./prepare-user-guide-deploy.cjs')(root, files) : brochureMode ? [
     ['/downloads/OverHead-Business-Office-Guide.pdf', '../website-next/public/downloads/OverHead-Business-Office-Guide.pdf'],
     ['/downloads/OverHead-Investor-Brochure.pdf', '../website-next/public/downloads/OverHead-Investor-Brochure.pdf'],
   ] : centralMode ? [
@@ -224,7 +225,7 @@ async function main() {
     ...(centralMode ? Object.keys(files).filter(p => /^\/downloads\/OverHead-Cylinder-.*-win-x64\.zip$/.test(p) && ![`/downloads/${cylinderZip}`, `/downloads/${cylinderClientZip}`].includes(p)) : []),
     ...['0.1.0','0.2.1','0.3.10','0.3.11'].map(v => `/downloads/OverHead-Desktop-${v}-win-x64.zip`),
   ])]
-  if (!brochureMode && !guideMode) {
+  if (!brochureMode && !guideMode && !extrasOnlyMode) {
     config.redirects = (config.redirects || []).filter(r => !oldPaths.includes(r.glob) && !oldPaths.includes(r.source))
     for (const oldPath of oldPaths) {
       const destination = centralMode && oldPath.includes('Cylinder-Client-')
@@ -259,7 +260,7 @@ async function main() {
   }
   await api.patch(`/${created.name}`, {status:'FINALIZED'}, {queryParams:{updateMask:'status'}})
   if ((await liveRelease()).version.name !== source) throw new Error('The live site changed during upload. Re-run to preserve the newer site.')
-  const message = guideMode ? 'Publish illustrated desktop user guide and PDF with site navigation' : brochureMode ? 'Updated customer and investor brochures' : centralMode ? `OverHead central release: Desktop ${centralManifest.targets.desktop.version}, Cylinder ${centralManifest.targets.cylinder.version}` : `OverHead Desktop ${version}: local workflow and account controls`
+  const message = guideMode ? 'Publish illustrated desktop user guide and PDF with site navigation' : brochureMode ? 'Updated customer and investor brochures' : extrasOnlyMode ? 'OverHead Install Manager and user guides update' : centralMode ? `OverHead central release: Desktop ${centralManifest.targets.desktop.version}, Cylinder ${centralManifest.targets.cylinder.version}` : `OverHead Desktop ${version}: local workflow and account controls`
   const result = (await api.post(`/sites/${site}/releases`, {message}, {queryParams:{versionName:created.name}})).body
   fs.writeFileSync(path.join(release, 'hosting-release.json'), JSON.stringify(result, null, 2))
   fs.rmSync(uploadDirectory, { recursive: true, force: true })
