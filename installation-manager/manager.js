@@ -166,6 +166,7 @@ async function refreshSnapshot() {
     const products = Array.isArray(s.products) && s.products.length ? s.products : [
       { id: 'desktop', productName: 'OverHead Desktop' },
       { id: 'cylinder-server', productName: 'OverHead Cylinder Server' },
+      { id: 'cylinder-client', productName: 'OverHead Cylinder Client' },
     ]
     productPicker.replaceChildren(...products.map((product) => {
       const option = document.createElement('option')

@@ -81,23 +81,31 @@ function classifyWindowsProduct(system = {}, preferredTargetId = '') {
           : ''
   const isIotHost = /iot/i.test(`${editionId} ${productName} ${caption}`)
   const isServer = [2, 3].includes(productType) || /Windows\s+Server/i.test(`${productName} ${caption}`)
-  if (preferredTargetId === 'desktop' || preferredTargetId === 'cylinder-server') {
+  if (preferredTargetId === 'desktop' || preferredTargetId === 'cylinder-server' || preferredTargetId === 'cylinder-client') {
     const automatic = classifyWindowsProduct(system)
-    const canInstall = automatic.id === preferredTargetId
     const isDesktop = preferredTargetId === 'desktop'
-    const targetName = isDesktop ? 'OverHead Desktop' : 'OverHead Cylinder Server'
+    const isCylinderClient = preferredTargetId === 'cylinder-client'
+    const isWindowsClient = /Windows\s+(10|11)\b/i.test(caption)
+    const clientEditionSupported = ['Home', 'Pro', 'Enterprise', 'Education'].includes(edition)
+    const canInstall = isCylinderClient
+      ? system.available && productType === 1 && isWindowsClient && clientEditionSupported
+      : automatic.id === preferredTargetId
+    const targetName = isDesktop ? 'OverHead Desktop' : isCylinderClient ? 'OverHead Cylinder Client' : 'OverHead Cylinder Server'
+    const role = isDesktop || isCylinderClient ? 'workstation' : 'server'
     return {
       ...automatic,
       id: preferredTargetId,
       productName: targetName,
-      role: isDesktop ? 'workstation' : 'server',
+      role,
       releaseCheckAllowed: canInstall,
       installAllowed: canInstall,
       reason: canInstall
-        ? (isDesktop ? `${edition} Windows workstation selected for OverHead Desktop.` : 'This Windows Server or IoT host is selected for OverHead Cylinder Server.')
+        ? (isDesktop ? edition + ' Windows workstation selected for OverHead Desktop.' : isCylinderClient ? edition + ' Windows workstation selected for OverHead Cylinder Client.' : 'This Windows Server or IoT host is selected for OverHead Cylinder Server.')
         : (isDesktop
             ? 'OverHead Desktop can be installed only on a supported Windows 10/11 Home, Pro, or Enterprise workstation.'
-            : 'OverHead Cylinder Server can be installed only on a supported Windows Server or Windows IoT host.'),
+            : isCylinderClient
+              ? 'OverHead Cylinder Client requires a supported Windows 10/11 workstation edition.'
+              : 'OverHead Cylinder Server can be installed only on a supported Windows Server or Windows IoT host.'),
     }
   }
   if (isServer || isIotHost) {
@@ -317,6 +325,9 @@ function assessCompatibility(options = {}) {
   } : null
   const powerShellVersion = system.powershellVersion || ''
   const isSupportedWindowsName = selection.id === 'desktop' && /Windows\s+(10|11)\b/i.test(windows?.caption || '')
+  const isSupportedCylinderClient = selection.id === 'cylinder-client'
+    && /Windows\s+(10|11)\b/i.test(windows?.caption || '')
+    && ['Home', 'Pro', 'Enterprise', 'Education'].includes(selection.edition)
   const isServerProductType = [2, 3].includes(Number(windows?.productType)) || /iot/i.test(`${system.editionID || ''} ${system.productName || ''} ${windows?.caption || ''}`)
   const isCompatibleBuild = Boolean(windows && Number(windows.build) >= MIN_WINDOWS_10_BUILD)
   const reportsNativeX64 = String(windows?.systemType || '').trim().toLowerCase() === 'x64-based pc'
@@ -334,6 +345,9 @@ function assessCompatibility(options = {}) {
     if (selection.id === 'cylinder-server') {
       if (!isServerProductType) blockers.push('OverHead Cylinder Server requires Windows Server or Windows IoT, but the system product type could not be verified.')
       if (!isCompatibleBuild) blockers.push(`OverHead Cylinder Server requires Windows Server 2019/Windows IoT build ${MIN_WINDOWS_10_BUILD} or later.`)
+    } else if (selection.id === 'cylinder-client') {
+      if (!isSupportedCylinderClient || Number(windows?.productType) !== 1) blockers.push('OverHead Cylinder Client requires a Windows 10/11 Home, Pro, Enterprise, or Education workstation.')
+      if (!isCompatibleBuild) blockers.push('OverHead Cylinder Client requires Windows build ' + MIN_WINDOWS_10_BUILD + ' or later.')
     } else if (selection.id !== 'desktop') blockers.push(selection.reason)
     else if (!isSupportedWindowsName || !['Home', 'Pro', 'Enterprise'].includes(selection.edition) || !isCompatibleBuild) blockers.push(`OverHead Desktop requires a Windows 10/11 Home, Pro, or Enterprise workstation at build ${MIN_WINDOWS_10_BUILD} or later.`)
     if (!isNativeX64 || process.arch !== 'x64') blockers.push('This release requires native x64 Windows hardware; ARM64 and emulated x64 systems are not enabled for this build.')

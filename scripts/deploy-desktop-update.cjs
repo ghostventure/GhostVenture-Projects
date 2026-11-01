@@ -4,6 +4,9 @@ const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 const crypto = require('node:crypto')
 const zlib = require('node:zlib')
+const os = require('node:os')
+const { Transform } = require('node:stream')
+const { pipeline } = require('node:stream/promises')
 const root = path.resolve(__dirname, '..')
 function resolveFirebaseTools() {
   const explicit = process.env.OVERHEAD_FIREBASE_TOOLS
@@ -184,15 +187,35 @@ async function main() {
       }
     }
   }
+  const uploadDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'overhead-hosting-upload-'))
   const contents = new Map()
   for (const [url, filename] of artifacts) {
     const sourcePath = path.isAbsolute(filename) ? filename : path.join(release, filename)
-    const compressed = zlib.gzipSync(fs.readFileSync(sourcePath), {level:9})
-    const hash = crypto.createHash('sha256').update(compressed).digest('hex')
+    const digest = crypto.createHash('sha256')
+    const meter = new Transform({ transform(chunk, encoding, callback) { digest.update(chunk); callback(null, chunk) } })
+    const stagedPath = path.join(uploadDirectory, `${crypto.randomUUID()}.gz`)
+    await pipeline(fs.createReadStream(sourcePath), zlib.createGzip({ level: 9 }), meter, fs.createWriteStream(stagedPath))
+    const hash = digest.digest('hex')
     files[url] = hash
-    contents.set(hash, compressed)
+    contents.set(hash, stagedPath)
   }
   const config = structuredClone(old.config || {})
+  const protectedHeaderGlobs = new Set(['**', '**/*.html', '/_next/static/**', '/updates/**', '/downloads/**'])
+  const preservedHeaders = (config.headers || []).filter(header => !protectedHeaderGlobs.has(header.glob))
+  config.headers = [
+    ...preservedHeaders,
+    { glob: '**', headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      'Strict-Transport-Security': 'max-age=31536000',
+    } },
+    { glob: '**/*.html', headers: { 'Cache-Control': 'no-cache, max-age=0, must-revalidate' } },
+    { glob: '/_next/static/**', headers: { 'Cache-Control': 'public, max-age=31536000, immutable' } },
+    { glob: '/updates/**', headers: { 'Cache-Control': 'no-store, no-cache, max-age=0, must-revalidate' } },
+    { glob: '/downloads/**', headers: { 'Cache-Control': 'public, max-age=300' } },
+  ]
   const desktopZip = centralMode ? centralManifest.targets.desktop.zip : `OverHead-Desktop-${version}-win-x64.zip`
   const cylinderZip = centralMode ? centralManifest.targets.cylinder.zip : null
   const cylinderClientZip = centralMode ? centralManifest.targets['cylinder-client'].zip : null
@@ -217,10 +240,21 @@ async function main() {
   const upload = new Client({urlPrefix:populated.uploadUrl, auth:true})
   for (const hash of populated.uploadRequiredHashes || []) {
     if (!contents.has(hash)) throw new Error('Hosting requested an unchanged live file; stopping before release.')
-    console.log(`Uploading ${contents.get(hash).length} bytes`)
-    const content = contents.get(hash)
-    const response = await upload.request({method:'POST', path:`/${hash}`, body:content, headers:{'content-length':String(content.length)}, responseType:'stream', resolveOnHTTPError:true, signal:AbortSignal.timeout(1200000), retries:3, retryMinTimeout:2500, retryMaxTimeout:10000, skipLog:{body:true}})
-    if (response.status >= 400) throw new Error(`Artifact upload failed: HTTP ${response.status}`)
+    const stagedPath = contents.get(hash)
+    const contentLength = fs.statSync(stagedPath).size
+    console.log(`Uploading ${contentLength} bytes`)
+    let response
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        response = await upload.request({method:'POST', path:`/${hash}`, body:fs.createReadStream(stagedPath), headers:{'content-length':String(contentLength)}, responseType:'stream', resolveOnHTTPError:true, signal:AbortSignal.timeout(1200000), retries:0, skipLog:{body:true}})
+        if (response.status >= 500 && attempt < 3) { response.body.resume(); await new Promise(resolve => setTimeout(resolve, attempt * 2500)); continue }
+        break
+      } catch (error) {
+        if (attempt === 3) throw error
+        await new Promise(resolve => setTimeout(resolve, attempt * 2500))
+      }
+    }
+    if (response.status >= 400) { response.body.resume(); throw new Error(`Artifact upload failed: HTTP ${response.status}`) }
     response.body.resume()
   }
   await api.patch(`/${created.name}`, {status:'FINALIZED'}, {queryParams:{updateMask:'status'}})
@@ -228,6 +262,7 @@ async function main() {
   const message = guideMode ? 'Publish illustrated desktop user guide and PDF with site navigation' : brochureMode ? 'Updated customer and investor brochures' : centralMode ? `OverHead central release: Desktop ${centralManifest.targets.desktop.version}, Cylinder ${centralManifest.targets.cylinder.version}` : `OverHead Desktop ${version}: local workflow and account controls`
   const result = (await api.post(`/sites/${site}/releases`, {message}, {queryParams:{versionName:created.name}})).body
   fs.writeFileSync(path.join(release, 'hosting-release.json'), JSON.stringify(result, null, 2))
+  fs.rmSync(uploadDirectory, { recursive: true, force: true })
   console.log(`Released ${result.name}`)
 }
 main().catch(error => { console.error(error.stack || error.message); process.exitCode = 1 })

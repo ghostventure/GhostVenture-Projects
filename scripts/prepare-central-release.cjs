@@ -6,7 +6,8 @@ const AdmZip = require('adm-zip')
 
 const root = path.resolve(__dirname, '..')
 const packageJson = require('../package.json')
-const releaseRoot = path.join(root, 'release', 'current')
+const releaseRoot = path.resolve(root, process.env.OVERHEAD_RELEASE_DIR || 'release/current')
+if (!releaseRoot.startsWith(root + path.sep)) throw new Error('OVERHEAD_RELEASE_DIR must stay inside the repository.')
 const targets = [
   {
     name: 'desktop',
@@ -25,6 +26,7 @@ const targets = [
     zip: `OverHead-Cylinder-Client-${packageJson.version}-win-x64.zip`,
     feed: 'latest.yml',
     args: [
+      '--config=electron-builder-desktop.cjs',
       '--config.extraMetadata.main=electron-cylinder-client-main.cjs',
       '--config.productName=OverHead-Cylinder-Client',
       '--config.appId=com.blacklion.overhead.cylinder.client',
@@ -40,6 +42,7 @@ const targets = [
     zip: `OverHead-Cylinder-${packageJson.version}-win-x64.zip`,
     feed: 'latest.yml',
     args: [
+      '--config=electron-builder-desktop.cjs',
       '--config.extraMetadata.main=electron-server-main.cjs',
       '--config.productName=OverHead-Cylinder',
       '--config.appId=com.blacklion.overhead.cylinder',
@@ -96,6 +99,48 @@ function stageCylinderClientPackage(target, output) {
   console.log(`Staged optional Cylinder workstation client package at ${packageDirectory}`)
 }
 
+function stagePublicReleaseExtras() {
+  const date = new Date().toISOString()
+  const extraFiles = []
+  const publicManifest = { date, manager: {}, userGuides: {} }
+  const managerSource = path.join(root, 'release', 'install-manager', 'OverHead-Install-Manager-' + packageJson.version + '-win-x64.exe')
+  const guideSources = [
+    ['desktop', 'OverHead-Desktop-User-Guide.pdf'],
+    ['cylinder', 'OverHead-Cylinder-User-Guide.pdf'],
+  ]
+  if (!fs.existsSync(managerSource)) throw new Error('The standalone OverHead Install Manager package is missing.')
+
+  const managerSignature = spawnSync('powershell.exe', ['-NoProfile', '-Command', `Get-AuthenticodeSignature -LiteralPath '${managerSource.replaceAll("'", "''")}' | Select-Object -ExpandProperty Status`], { encoding: 'utf8', windowsHide: true })
+  if (managerSignature.error || managerSignature.status !== 0) throw new Error((managerSignature.stderr || managerSignature.stdout || managerSignature.error?.message || 'Manager Authenticode check failed').trim())
+  const managerStatus = managerSignature.stdout.trim()
+  if (allowUnsignedRelease() && managerStatus !== 'NotSigned') throw new Error(`Manager was expected to be unsigned, got: ${managerStatus}`)
+  if (!allowUnsignedRelease() && managerStatus !== 'Valid') throw new Error(`Manager signature is not valid: ${managerStatus}`)
+
+  function stageFile(sourcePath, section, destinationName, downloadPath) {
+    if (!fs.existsSync(sourcePath)) throw new Error('Required public release file is missing: ' + path.relative(root, sourcePath))
+    const directory = path.join(releaseRoot, section)
+    fs.mkdirSync(directory, { recursive: true })
+    const destination = path.join(directory, destinationName)
+    fs.copyFileSync(sourcePath, destination)
+    const digest = require('node:crypto').createHash('sha256').update(fs.readFileSync(destination)).digest('hex')
+    const checksumName = destinationName.replace(/\.pdf$/i, '-SHA256.txt').replace(/\.exe$/i, '-SHA256.txt')
+    const checksumPath = path.join(directory, checksumName)
+    fs.writeFileSync(checksumPath, digest + '  ' + destinationName + '\n', 'ascii')
+    const relativeFile = path.relative(root, destination).split(path.sep).join('/')
+    const relativeChecksum = path.relative(root, checksumPath).split(path.sep).join('/')
+    extraFiles.push({ url: downloadPath, source: relativeFile }, { url: downloadPath.replace(/\.pdf$|\.exe$/i, '-SHA256.txt'), source: relativeChecksum })
+    return { file: destinationName, sha256: digest, signature: destinationName.endsWith('.exe') ? managerStatus : 'NotApplicable' }
+  }
+
+  publicManifest.manager = stageFile(managerSource, 'manager', 'OverHead-Install-Manager.exe', '/downloads/OverHead-Install-Manager.exe')
+  for (const [key, fileName] of guideSources) {
+    const sourcePath = path.join(root, 'output', 'pdf', fileName)
+    publicManifest.userGuides[key] = stageFile(sourcePath, 'guides', fileName, '/downloads/' + fileName)
+  }
+  fs.writeFileSync(path.join(releaseRoot, 'hosting-extra-files.json'), JSON.stringify(extraFiles, null, 2) + '\n')
+  return publicManifest
+}
+
 function main() {
   parseVersion(packageJson.version, 'package.json version')
   if (process.argv.includes('--plan')) {
@@ -117,7 +162,7 @@ function main() {
     if (target.name === 'cylinder') {
       const stagedPackage = path.join(root, 'build', 'cylinder-client-package')
       if (!fs.existsSync(path.join(stagedPackage, 'OverHead-Cylinder-Client-Setup.exe')) || !fs.existsSync(path.join(stagedPackage, 'SHA256SUMS.txt'))) {
-        throw new Error('The signed standalone Cylinder Client package must be staged before building the Cylinder Server installer.')
+        throw new Error('The standalone Cylinder Client package must be staged before building the Cylinder Server installer.')
       }
     }
     const output = path.join(releaseRoot, target.name)
@@ -156,11 +201,13 @@ function main() {
     if (target.name === 'cylinder-client') stageCylinderClientPackage(target, output)
   }
 
+  const publicRelease = stagePublicReleaseExtras()
   const manifest = {
     schema: 'overhead-central-release-v1',
     preparedAt: new Date().toISOString(),
     distribution: 'Firebase Hosting: overhead-office.web.app',
     targets: Object.fromEntries(targets.map(({ name, version, installer, zip, feed }) => [name, { version, installer, zip, feed, directory: name }])),
+    publicRelease,
   }
   fs.writeFileSync(path.join(releaseRoot, 'release-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   console.log(`Prepared central release at ${releaseRoot}`)

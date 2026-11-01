@@ -4,8 +4,9 @@
   "version": "0.2.1",
   "type": "module",
   "scripts": {
-    "build": "next build",
-    "start": "next start"
+    "build": "next build && node scripts/verify-static-export.cjs",
+    "start": "next start",
+    "verify:export": "node scripts/verify-static-export.cjs"
   },
   "dependencies": {
     "firebase": "11.0.0",

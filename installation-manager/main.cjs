@@ -41,9 +41,18 @@ const PRODUCT_TARGETS = {
     installerName: (version) => `OverHead-Cylinder-Setup-${version}-win-x64.exe`,
     installerPattern: /^OverHead-Cylinder-Setup-\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?-win-x64\.exe$/,
   },
+  'cylinder-client': {
+    id: 'cylinder-client', productName: 'OverHead Cylinder Client', shortName: 'OverHead Cylinder Client',
+    displayNamePattern: '^OverHead(?:-|\\s+)Cylinder(?:-|\\s+)Client(?:\\s+\\d[\\w.-]*)?$', processName: 'OverHead-Cylinder-Client.exe', executableName: 'OverHead-Cylinder-Client.exe',
+    uninstallerName: 'Uninstall OverHead-Cylinder-Client.exe', installDirectoryName: 'OverHead-Cylinder-Client', dataPath: path.join(APPDATA, 'OverHead Cylinder Client'),
+    backupRoot: path.join(BACKUP_ROOT, 'Cylinder Client'), backupPrefix: 'OverHead-Cylinder-Client', startupValue: 'OverHead-Cylinder-Client',
+    configDataKey: '', supportsCustomDataRoot: false,
+    installerName: (version) => 'OverHead-Cylinder-Client-Setup-' + version + '-win-x64.exe',
+    installerPattern: /^OverHead-Cylinder-Client-Setup-\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?-win-x64\.exe$/,
+  },
 }
 const FIRST_INSTALL_NOTICE_UPDATED_AT = '2026-11-01'
-const FIRST_INSTALL_NOTICE_REVISION = 'overhead-first-install-legal-notice-2026-11-01-v3'
+const FIRST_INSTALL_NOTICE_REVISION = 'overhead-first-install-legal-notice-2026-11-01-v4'
 const POLICY = require('./signer-policy.json')
 const RELEASE_FEED_CACHE_MS = 30000
 const MAX_DIAGNOSTIC_LOG_BYTES = 256 * 1024
@@ -798,7 +807,7 @@ function setAutoCheck(enabled) {
 
 function selectProduct(targetId) {
   if (operationRunning) throw new Error('Wait for the current manager operation to finish before changing products.')
-  if (typeof targetId !== 'string' || !PRODUCT_TARGETS[targetId]) throw new Error('Choose OverHead Desktop or OverHead Cylinder Server.')
+  if (typeof targetId !== 'string' || !PRODUCT_TARGETS[targetId]) throw new Error('Choose OverHead Desktop, OverHead Cylinder Server, or OverHead Cylinder Client.')
   const config = readManagerConfig()
   config.selectedProductId = targetId
   writeJsonAtomically(MANAGER_CONFIG, config, 'The selected product could not be saved.')

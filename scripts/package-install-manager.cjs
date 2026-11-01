@@ -22,7 +22,7 @@ fs.copyFileSync(path.join(root, 'public', 'overhead.ico'), path.join(stage, 'ove
 fs.writeFileSync(path.join(stage, 'package.json'), JSON.stringify({
   name: 'overhead-install-manager',
   version: pkg.version,
-  description: 'Signed installation and configuration manager for OverHead Desktop.',
+  description: 'Installation and configuration manager for OverHead Desktop and Cylinder.',
   author: pkg.author,
   private: true,
   main: 'main.cjs',
@@ -71,7 +71,7 @@ try {
 if (result.error) throw result.error
 if (result.status !== 0) process.exit(result.status || 1)
 const managerArtifact = path.join(output, `OverHead-Install-Manager-${pkg.version}-win-x64.exe`)
-if (!fs.existsSync(managerArtifact)) throw new Error(`The signed manager artifact was not created: ${managerArtifact}`)
+if (!fs.existsSync(managerArtifact)) throw new Error(`The expected manager artifact was not created: ${managerArtifact}`)
 const companionDirectory = path.join(root, 'build', 'install-manager-companion')
 fs.mkdirSync(companionDirectory, { recursive: true })
 fs.copyFileSync(managerArtifact, path.join(companionDirectory, 'OverHead Install Manager.exe'))

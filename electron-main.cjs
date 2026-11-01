@@ -513,7 +513,7 @@ function getInstallManagerPath() {
 async function startInstallManager(managerPath = '') {
   managerPath ||= getInstallManagerPath()
   if (!managerPath) {
-    const message = 'This OverHead installation does not include the signed Install Manager. Install a manager-enabled release before updating.'
+    const message = 'This OverHead installation does not include an Install Manager permitted by this release policy. Install a manager-enabled release before updating.'
     setUpdateState('manager-unavailable', { message })
     return { installing: false, message }
   }
@@ -556,12 +556,12 @@ async function askAndLaunchInstallManager() {
   }
   let managerPath = ''
   try { managerPath = getInstallManagerPath() } catch (error) {
-    const message = error?.message || 'The signed Install Manager could not be verified.'
+    const message = error?.message || 'The Install Manager could not be verified against this release policy.'
     setUpdateState('manager-unavailable', { message })
     return { installing: false, message }
   }
   if (!managerPath) {
-    const message = 'This OverHead installation does not include the signed Install Manager. Install a manager-enabled release before updating.'
+    const message = 'This OverHead installation does not include an Install Manager permitted by this release policy. Install a manager-enabled release before updating.'
     setUpdateState('manager-unavailable', { message })
     return { installing: false, message }
   }
