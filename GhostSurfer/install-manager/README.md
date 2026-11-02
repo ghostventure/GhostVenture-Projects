@@ -20,7 +20,7 @@ The manager checks whether Ghost Surfer is installed in `%LOCALAPPDATA%\Programs
 
 Ghost Surfer also has a separate GitHub release checker in **General → Ghost Surfer Updates**. That browser control looks for a compatible release package and asks before applying an update that closes and restarts the browser.
 
-If Ghost Surfer is open during a manager install or update, the manager queues the operation and waits for the user to close the browser; it does not force-close it. A queued operation can be canceled. Program files are staged and checked before they replace the installed app.
+If Ghost Surfer is open during a manager install or update, the manager queues the operation and waits for the user to close the browser; it does not force-close it. A queued operation can be canceled. Program files are staged and checked before they replace the installed app, including a post-copy check that the required Qt WebEngine runtime files are present and non-empty. Encrypted ZIP packages are rejected before extraction.
 
 Uninstall removes the application and its Ghost Surfer shortcuts. Bookmarks, history, website profile, and other browser data remain under `%LOCALAPPDATA%\GhostSurferLocal\Ghost Surfer`.
 
@@ -57,6 +57,6 @@ The output is `install-manager/distribution/GS Install Manager for Ghost Surfer/
 
 ## Website and release assets
 
-The current browser release is **0.2.2** at [ghost-surfer-browser.web.app](https://ghost-surfer-browser.web.app/). Large ZIPs are hosted on Firebase Hosting rather than committed to GitHub. `site/downloads/SHA256SUMS.txt` records the published asset hashes.
+The current browser release is **0.2.6** at [ghost-surfer-browser.web.app](https://ghost-surfer-browser.web.app/). Large ZIPs are hosted on Firebase Hosting rather than committed to GitHub. `site/downloads/SHA256SUMS.txt` records the published asset hashes.
 
 From the project root, `npm run deploy` runs `scripts/prepare-release-assets.ps1` first. That script downloads the ZIPs named in its asset list from the live Hosting site and verifies their SHA-256 values; the Firebase CLI then deploys the website. This step preserves already-published packages and does not create or upload a new package. Update the release asset, checksum manifest, and preparation list together when preparing a new release.

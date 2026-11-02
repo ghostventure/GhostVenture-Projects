@@ -1,5 +1,18 @@
 Ghost Surfer Browser
-Release: 2026-10-31
+Release: 2026-11-02
+Version: 0.2.6
+Package: Ghost-Surfer-Setup-Windows-0.2.6.zip
+GitHub update package: GhostSurfer-Setup-v0.2.6.zip
+
+2026-11-02
+- Added searchable open-tab management with pinned, muted, and grouped filters.
+- Added configurable new-tab destinations and bookmark drag reordering.
+- Added review prompts for suspicious URL patterns and runnable or misleading download filenames.
+- Expanded the local extension manager with search, package detail and access review, options-page access, and stricter ZIP validation.
+- Strengthened GS Install Manager staging checks for required Qt WebEngine files and rejected encrypted package archives.
+- Preserved the separate persistent extension profile and disabled-by-default extension behavior.
+
+Previous release: 2026-10-31
 Version: 0.2.2
 Package: Ghost-Surfer-Setup-Windows-0.2.2.zip
 GitHub update package: GhostSurfer-Setup-v0.2.2.zip

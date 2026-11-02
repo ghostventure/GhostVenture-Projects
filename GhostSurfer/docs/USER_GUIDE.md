@@ -1,6 +1,6 @@
 # Ghost Surfer User Guide
 
-This guide describes the Windows browser in release 0.2.2. Use the contents list to jump to a task.
+This guide describes the Windows browser in release 0.2.6. Use the contents list to jump to a task.
 
 ## Contents
 
@@ -40,13 +40,17 @@ In Find in Page, Enter goes to the next match and Shift+Enter goes to the previo
 
 Right-click a tab for actions such as duplicate, pin, group, mute, split view, and **Keep active in Speed Mode**. Pinned tabs must be unpinned before they can be closed. Speed Mode pauses inactive tabs; selecting a paused tab resumes it. The exemption keeps a selected tab active. **Tabs & Data > Tab Actions** also opens named sessions and recently closed tabs.
 
+Press **Ctrl+Shift+A** or choose **Search open tabs** from a tab's context menu to filter tabs by title, address, or group. The filter can narrow results to all, pinned, muted, or grouped tabs. Select a result and press Enter or double-click to switch to it.
+
+Under **Ghost Control > General > New Tabs**, choose whether newly created tabs open your saved home page or the Ghost Surfer dashboard. This preference is separate from **Search & Startup > On launch**, which controls startup behavior.
+
 Use **Manage saved sessions** to preview a session and replace the current tabs, merge the saved tabs, or open only selected tabs. Replacing removes the current tab set. Split view opens two selected pages in a separate workspace; it loads their addresses in new views and does not preserve the exact scroll position or live page state.
 
 Ghost Surfer restores the previous session at startup by default. Change this under **General > Search & Startup**. After an unclean exit, a recovery dialog lets you choose tabs to reopen. Exact duplicate URLs are listed once. URLs with query or fragment data start unchecked, and those values are not shown in the dialog. You can later choose **Restore previous session** from Quick Access to restore unchecked tabs.
 
 ## Bookmarks and history
 
-Open **Tabs & Data > Library Tools** to search, rename, delete, and organize bookmarks, or import/export Netscape-format bookmark HTML. Unfiled bookmarks appear on the bookmarks toolbar; bookmarks in folders are grouped into menus. Address suggestions can match bookmark and history titles or addresses.
+Open **Tabs & Data > Library Tools** to search, rename, delete, and organize bookmarks, or import/export Netscape-format bookmark HTML. In **Manage bookmarks**, drag entries to change their order. If you filter the list, only visible matching bookmarks move; hidden entries keep their positions. Unfiled bookmarks appear on the bookmarks toolbar; bookmarks in folders are grouped into menus. Address suggestions can match bookmark and history titles or addresses.
 
 History is searchable and grouped by visit date. Select entries and choose **Remove selected history entries** to delete them. Under **Tabs & Data > Browser Data**, choose a retention period: Forever, 30 days, 90 days, or 1 year. The selected limit applies when history is recorded and when you change the setting.
 
@@ -72,6 +76,10 @@ Use **Tabs & Data > Maintenance > Clear cookies & cache** to remove website cook
 
 The IP tripwire reports certain recognized public-IP echo and IP-geolocation requests and allows them to continue. It cannot identify every lookup service, custom endpoint, server-side logging, or other way a site may infer location. A site reached directly sees the public IP used for the connection. Tor, a VPN, or a proxy changes the network route; Ghost Surfer's privacy settings do not make browsing anonymous.
 
+Before navigating to an HTTP(S) page, Ghost Surfer may show an offline warning for URL patterns such as embedded credentials, IP-address hosts, punycode, or a spelling close to selected familiar domains. The check does not use a threat feed and cannot verify whether a site is safe or malicious. Review the address carefully before continuing.
+
+When a proposed download filename has a runnable extension, a familiar suffix before a runnable extension, or display-order characters, Ghost Surfer asks before saving. This is a filename-only hint; it does not scan file contents or verify the publisher. Review downloaded files before opening them.
+
 ### Personal information submission review
 
 Under **Ghost Control > Privacy > Personal Data Requests & Site Checks**, Ghost Surfer can pause HTML form submissions that contain recognizable name, email, phone, address, username, password, date-of-birth, government-identifier, or payment-card fields. The review lists up to 100 detected fields, whether the page marks each one required, and whether it currently contains a value. Nothing is selected by default. Select only the fields you choose to send; Ghost Surfer temporarily excludes the other detected controls from that form submission. **Deny all and stop** leaves the form unsubmitted.
@@ -84,7 +92,7 @@ These checks cannot prove that a company is real or that a site is honest. HTTPS
 
 Open **Ghost Control > Extensions**. Extension support starts off. Turn it on and restart Ghost Surfer to use its separate persistent profile; cookies and website storage in that profile remain on this device between runs. Your temporary profile is kept separate and unchanged. Turn extension support off and restart to return to the temporary profile. Installed extensions and the extension profile remain on disk when extension support is off.
 
-Choose **Import package** to select a local Manifest V3 ZIP or an unpacked folder. Ghost Surfer displays the local source, declared permissions, and host access in a confirmation before installation. ZIPs are limited to 2,048 entries and 100 MiB uncompressed and are rejected if they contain absolute or parent-traversal paths or symbolic links. The extension is installed disabled. Select it and choose **Enable / Disable** to review its permissions again and explicitly enable it. Choose **Remove** to uninstall its files. An enabled extension may read or change pages covered by its declared access.
+Choose **Import ZIP** or **Import folder** to select a local Manifest V3 package. Ghost Surfer displays the local source, declared permissions, and host access in a confirmation before installation. ZIPs are limited to 2,048 entries and 100 MiB uncompressed; duplicate paths, encrypted files, absolute or parent-traversal paths, and symbolic links are rejected. The extension is installed disabled. Search installed extensions by name or ID, select one to inspect its description, version, requested access, and load errors, then choose **Enable / Disable** to review its permissions again before enabling it. **Open** opens the extension popup, and **Options** opens its options page when the extension declares one. Choose **Remove** to uninstall its files. An enabled extension may read or change pages covered by its declared access.
 
 This provides local Qt WebEngine Manifest V3 support. Chrome Web Store integration and native messaging are not supported; an extension that depends on either may not work. Ghost Surfer does not fetch extension code from the network.
 

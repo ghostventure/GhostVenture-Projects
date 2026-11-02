@@ -18,11 +18,13 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
@@ -84,32 +86,26 @@ class TabFeatures:
         self.next_tab_shortcut.activated.connect(lambda: self.cycle_tabs(1))
         self.previous_tab_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Tab"), self.window)
         self.previous_tab_shortcut.activated.connect(lambda: self.cycle_tabs(-1))
+        self.search_tabs_shortcut = QShortcut(QKeySequence("Ctrl+Shift+A"), self.window)
+        self.search_tabs_shortcut.setObjectName("searchOpenTabsShortcut")
+        self.search_tabs_shortcut.setToolTip("Search open tabs")
+        self.search_tabs_shortcut.activated.connect(self.show_tab_search)
 
-        # BrowserWindow creates tabs through add_tab; observing on currentChanged
-        # covers selected tabs, while a short timer catches background tabs too.
-        self.observe_timer = QTimer(self.window)
-        self.observe_timer.setInterval(350)
-        self.observe_timer.timeout.connect(self.observe_tabs)
-        self.observe_timer.start()
         QTimer.singleShot(0, self.restore_previous_session)
 
-    def observe_tabs(self) -> None:
-        found_new_tab = False
-        for index in range(self.tabs.count()):
-            tab = self.tabs.widget(index)
-            if tab is None or id(tab) in self._observed:
-                continue
-            found_new_tab = True
-            self._observed.add(id(tab))
-            tab.titleChanged.connect(lambda _title, t=tab: self.refresh_tab_presentation(t))
-            tab.urlChanged.connect(lambda _url, t=tab: self.refresh_tab_presentation(t))
-            page = tab.page()
-            if hasattr(page, "audioMutedChanged"):
-                page.audioMutedChanged.connect(lambda _muted, t=tab: self.refresh_tab_presentation(t))
-            self.refresh_tab_presentation(tab)
-            self._install_close_button(tab)
-        if found_new_tab:
-            self.schedule_session_checkpoint()
+    def observe_tab(self, tab) -> None:
+        """Attach tab presentation handlers once when a tab enters the tab widget."""
+        if tab is None or self.tabs.indexOf(tab) < 0 or id(tab) in self._observed:
+            return
+        self._observed.add(id(tab))
+        tab.titleChanged.connect(lambda _title, t=tab: self.refresh_tab_presentation(t))
+        tab.urlChanged.connect(lambda _url, t=tab: self.refresh_tab_presentation(t))
+        page = tab.page()
+        if hasattr(page, "audioMutedChanged"):
+            page.audioMutedChanged.connect(lambda _muted, t=tab: self.refresh_tab_presentation(t))
+        self.refresh_tab_presentation(tab)
+        self._install_close_button(tab)
+        self.schedule_session_checkpoint()
 
     def _install_close_button(self, tab) -> None:
         index = self.tabs.indexOf(tab)
@@ -133,8 +129,8 @@ class TabFeatures:
         if button is not None:
             button.setVisible(not bool(tab.property("ghost_pinned")))
 
-    def _current_changed(self, _index: int) -> None:
-        self.observe_tabs()
+    def _current_changed(self, index: int) -> None:
+        self.observe_tab(self.tabs.widget(index))
         self.window.update_session_ui()
         self.schedule_session_checkpoint()
 
@@ -285,7 +281,6 @@ class TabFeatures:
             tab = self.window.add_tab(entry.get("url", "about:blank"), switch=False)
             self._apply_tab_metadata(tab, entry)
         self.tabs.setCurrentIndex(max(0, min(int(active_index), self.tabs.count() - 1)))
-        self.observe_tabs()
         self.window.update_session_ui()
 
     def restore_previous_session_now(self) -> None:
@@ -475,6 +470,159 @@ class TabFeatures:
             return
         self.tabs.setCurrentIndex((self.tabs.currentIndex() + direction) % count)
 
+    def show_tab_search(self) -> None:
+        """Show a searchable switcher for the currently open tabs."""
+        dialog = QDialog(self.window)
+        dialog.setWindowTitle("Search open tabs")
+        dialog.setAccessibleName("Search open tabs")
+        dialog.setMinimumSize(520, 380)
+        layout = QVBoxLayout(dialog)
+        prompt = QLabel("Search tab titles, addresses, and groups. Press Enter to switch.", dialog)
+        prompt.setWordWrap(True)
+        layout.addWidget(prompt)
+
+        query = QLineEdit(dialog)
+        query.setPlaceholderText("Search open tabs…")
+        query.setAccessibleName("Search open tabs")
+        query.setClearButtonEnabled(True)
+        layout.addWidget(query)
+
+        filter_row = QHBoxLayout()
+        filter_label = QLabel("Show", dialog)
+        filter_combo = QComboBox(dialog)
+        filter_combo.setAccessibleName("Filter open tabs")
+        filter_combo.addItem("All tabs", "all")
+        filter_combo.addItem("Pinned", "pinned")
+        filter_combo.addItem("Muted", "muted")
+        filter_combo.addItem("Grouped", "grouped")
+        filter_label.setBuddy(filter_combo)
+        filter_row.addWidget(filter_label)
+        filter_row.addWidget(filter_combo)
+        filter_row.addStretch(1)
+        result_count = QLabel(dialog)
+        result_count.setAccessibleName("Matching tab count")
+        filter_row.addWidget(result_count)
+        layout.addLayout(filter_row)
+
+        listing = QListWidget(dialog)
+        listing.setAccessibleName("Matching open tabs")
+        listing.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        listing.setUniformItemSizes(True)
+        layout.addWidget(listing, 1)
+        close_button = QPushButton("Close", dialog)
+        close_button.setAccessibleName("Close tab search")
+        close_button.clicked.connect(dialog.reject)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(close_button)
+        layout.addLayout(buttons)
+
+        # Keep tab metadata in a dialog-local snapshot. Page signals refresh
+        # changed fields, avoiding repeated Qt title/URL lookups while typing.
+        tabs = [self.tabs.widget(i) for i in range(self.tabs.count())]
+        tabs = [tab for tab in tabs if tab is not None]
+        records = []
+        for tab in tabs:
+            record = {
+                "tab": tab,
+                "title": tab.title().strip() or "New tab",
+                "url": tab.url().toString(),
+                "group": str(tab.property("ghost_group") or ""),
+                "pinned": bool(tab.property("ghost_pinned")),
+                "muted": bool(tab.page().isAudioMuted()),
+            }
+            records.append(record)
+        matches: list[object] = []
+
+        def refresh(text: str = "", preserve_tab=None) -> None:
+            needle = (text or "").strip().casefold()
+            mode = str(filter_combo.currentData() or "all")
+            current = self.window.current_tab()
+            listing.clear()
+            matches.clear()
+            for record in records:
+                tab = record["tab"]
+                if self.tabs.indexOf(tab) < 0:
+                    continue
+                title, url, group = record["title"], record["url"], record["group"]
+                if mode == "pinned" and not record["pinned"]:
+                    continue
+                if mode == "muted" and not record["muted"]:
+                    continue
+                if mode == "grouped" and not group:
+                    continue
+                searchable = " ".join((title, url, group)).casefold()
+                if needle and needle not in searchable:
+                    continue
+                matches.append(tab)
+                prefix = "Current tab · " if tab is current else ""
+                suffix = f"  ·  Group: {group}" if group else ""
+                item = QListWidgetItem(f"{prefix}{title}{suffix}\n{url}")
+                item.setData(Qt.ItemDataRole.UserRole, len(matches) - 1)
+                item.setToolTip(url)
+                listing.addItem(item)
+            if listing.count():
+                selected_row = next((row for row, tab in enumerate(matches) if tab is preserve_tab), None)
+                if selected_row is None:
+                    selected_row = next((row for row, tab in enumerate(matches) if tab is current), 0)
+                listing.setCurrentRow(selected_row)
+            else:
+                listing.addItem("No matching tabs")
+                listing.item(0).setFlags(Qt.ItemFlag.NoItemFlags)
+            result_count.setText(f"{len(matches)} tab{'s' if len(matches) != 1 else ''}")
+
+        def activate_selected() -> None:
+            item = listing.currentItem()
+            if item is None or not matches:
+                return
+            match_index = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(match_index, int) or not 0 <= match_index < len(matches):
+                return
+            index = self.tabs.indexOf(matches[match_index])
+            if index >= 0:
+                self.tabs.setCurrentIndex(index)
+                dialog.accept()
+
+        filter_timer = QTimer(dialog)
+        filter_timer.setSingleShot(True)
+        filter_timer.setInterval(100)
+        filter_timer.timeout.connect(lambda: refresh(query.text()))
+        query.textChanged.connect(lambda _text: filter_timer.start())
+        filter_combo.currentIndexChanged.connect(lambda _index: filter_timer.start())
+
+        def update_record(record: dict, key: str, value) -> None:
+            record[key] = value
+            filter_timer.start()
+
+        for record in records:
+            tab = record["tab"]
+            tab.titleChanged.connect(
+                lambda title, item=record: update_record(item, "title", (title or "New tab").strip())
+            )
+            tab.urlChanged.connect(
+                lambda url, item=record: update_record(item, "url", url.toString())
+            )
+            page = tab.page()
+            if hasattr(page, "audioMutedChanged"):
+                page.audioMutedChanged.connect(
+                    lambda muted, item=record: update_record(item, "muted", bool(muted))
+                )
+
+        def activate_after_refresh() -> None:
+            if filter_timer.isActive():
+                selected = listing.currentItem()
+                match_index = selected.data(Qt.ItemDataRole.UserRole) if selected is not None else None
+                selected_tab = matches[match_index] if isinstance(match_index, int) and 0 <= match_index < len(matches) else None
+                filter_timer.stop()
+                refresh(query.text(), preserve_tab=selected_tab)
+            activate_selected()
+        query.returnPressed.connect(activate_after_refresh)
+        listing.itemDoubleClicked.connect(lambda _item: activate_after_refresh())
+        listing.itemActivated.connect(lambda _item: activate_after_refresh())
+        refresh()
+        query.setFocus()
+        dialog.exec()
+
     def toggle_pin_current(self, tab=None) -> bool:
         tab = tab or self.window.current_tab()
         if tab is None:
@@ -635,7 +783,9 @@ class TabFeatures:
         index = self.tabs.tabBar().tabAt(position)
         tab = self.tabs.widget(index) if index >= 0 else None
         menu = QMenu(self.window)
-        menu.addAction("New tab", lambda: self.window.add_tab("https://www.startpage.com/", True))
+        menu.addAction("Search open tabs…", self.show_tab_search)
+        menu.addSeparator()
+        menu.addAction("New tab", lambda: self.window.add_tab(self.window.new_tab_destination(), True))
         menu.addAction("Duplicate tab", lambda: self.window.add_tab(tab.url().toString(), True) if tab else None).setEnabled(tab is not None)
         menu.addSeparator()
         if tab:

@@ -1,11 +1,15 @@
 # Ghost Surfer
 
-Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. The current browser release is **0.2.2**. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
+Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. The current browser release is **0.2.6**. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
 
 ## What it includes
 
 - **Browsing and tabs:** bookmarks, history, named sessions, split view, tab groups, reader view, PDF export, page search, and a searchable shortcuts guide.
+- **New-tab choice:** open your home page or the Ghost Surfer dashboard in newly created tabs; the startup-page setting remains separate.
+- **Bookmark organization:** reorder bookmarks by drag-and-drop in Manage Bookmarks, including filtered results while keeping hidden entries in place.
 - **Privacy controls:** first-party cookie choices, third-party cookie blocking, permission restrictions, tracker alerts, and an alert-only IP tripwire for a limited set of known lookup services.
+- **Risk review:** offline heuristic prompts for suspicious URL patterns and potentially runnable or misleading download filenames. These checks are review hints, not reputation lookups, malware scans, or safety guarantees.
+- **Tab search:** filter open tabs by title or address and narrow results to all, pinned, muted, or grouped tabs with **Ctrl+Shift+A**.
 - **Compatibility and accessibility:** temporary per-site JavaScript and image overrides, interface text sizing, high contrast, reduced browser-scroll motion, and visible keyboard focus.
 - **Recovery and cleanup:** crash-session recovery, browser-data backup and restore, profile reset with an optional bookmark keep, cookie/cache controls, and download management.
 - **Optional Personal Data Vault:** store names, addresses, phone numbers, usernames, and passwords in a Windows account-encrypted module. It can be selected during install or toggled in Settings; credit cards are not stored.

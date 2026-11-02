@@ -7,6 +7,10 @@ does not block them.
 
 from __future__ import annotations
 
+import ipaddress
+from functools import lru_cache
+from urllib.parse import urlsplit
+
 from PySide6.QtCore import QUrl
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineUrlRequestInterceptor
 
@@ -27,6 +31,99 @@ TRACKER_HOST_PARTS = (
     "ads-twitter.com", "scorecardresearch.com", "quantserve.com", "hotjar.com",
     "segment.io", "mixpanel.com", "adnxs.com", "taboola.com", "outbrain.com",
 )
+
+# A small, deliberately conservative list for local lookalike checks. This is
+# not a threat-intelligence feed; add entries only when the browser UI explains
+# that the result is a heuristic warning.
+_FAMILIAR_DOMAIN_LABELS = (
+    "amazon", "apple", "facebook", "google", "instagram", "microsoft",
+    "netflix", "paypal", "spotify", "whatsapp",
+)
+_OFFICIAL_DOMAIN_ROOTS = {
+    "amazon": {"amazon.com", "amazon.co.uk", "amazon.ca", "amazon.de", "amazon.co.jp"},
+    "apple": {"apple.com"},
+    "facebook": {"facebook.com"},
+    "google": {"google.com", "google.co.uk", "google.ca", "google.de", "google.fr", "google.co.jp"},
+    "instagram": {"instagram.com"},
+    "microsoft": {"microsoft.com"},
+    "netflix": {"netflix.com"},
+    "paypal": {"paypal.com", "paypal.co.uk", "paypal.ca", "paypal.de"},
+    "spotify": {"spotify.com"},
+    "whatsapp": {"whatsapp.com"},
+}
+
+
+def suspicious_url_reason(url: str) -> str:
+    """Return one concise local URL-risk signal, or an empty string.
+
+    This helper performs no network lookup and cannot determine whether a site
+    is safe or malicious. It checks URL credentials, IP-literal hosts, IDN
+    punycode labels, and close spellings of a short list of familiar domains.
+    Examples: ``https://paypal.com`` returns ``""``; ``https://paypa1.com``
+    reports a possible lookalike; ``https://user@example.com`` reports embedded
+    credentials. Treat a returned reason as a prompt for user review only.
+    """
+    try:
+        parsed = urlsplit((url or "").strip())
+        host = (parsed.hostname or "").rstrip(".").lower()
+        if not host:
+            return ""
+        if parsed.username is not None or parsed.password is not None:
+            return "This URL contains embedded login information"
+        return _suspicious_host_reason(host)
+    except (TypeError, ValueError):
+        return ""
+
+
+def _one_typo_apart(candidate: str, expected: str) -> bool:
+    """Match a single insertion, deletion, substitution, or adjacent swap."""
+    if candidate == expected or abs(len(candidate) - len(expected)) > 1:
+        return False
+    if len(candidate) == len(expected):
+        differences = [index for index, (left, right) in enumerate(zip(candidate, expected)) if left != right]
+        if len(differences) == 1:
+            return True
+        return (
+            len(differences) == 2
+            and differences[1] == differences[0] + 1
+            and candidate[differences[0]] == expected[differences[1]]
+            and candidate[differences[1]] == expected[differences[0]]
+        )
+    longer, shorter = (candidate, expected) if len(candidate) > len(expected) else (expected, candidate)
+    left = right = skipped = 0
+    while left < len(longer) and right < len(shorter):
+        if longer[left] == shorter[right]:
+            left += 1
+            right += 1
+        elif skipped:
+            return False
+        else:
+            skipped = 1
+            left += 1
+    return True
+
+
+@lru_cache(maxsize=512)
+def _suspicious_host_reason(host: str) -> str:
+    """Cache the small offline host-only check without retaining full URLs."""
+    try:
+        ipaddress.ip_address(host.strip("[]"))
+        return "This site uses an IP address instead of a domain name"
+    except ValueError:
+        pass
+    if any(label.startswith("xn--") for label in host.split(".")):
+        return "This domain contains an encoded internationalized name (punycode)"
+
+    root = registrable_domain(host)
+    root_label = root.split(".", 1)[0]
+    for familiar in _FAMILIAR_DOMAIN_LABELS:
+        if root in _OFFICIAL_DOMAIN_ROOTS[familiar]:
+            continue
+        if root_label == familiar:
+            return f"This domain uses the familiar name {familiar.title()} with a different ending"
+        if len(familiar) >= 6 and _one_typo_apart(root_label, familiar):
+            return f"This domain spelling resembles {familiar.title()}"
+    return ""
 
 
 def registrable_domain(host: str) -> str:

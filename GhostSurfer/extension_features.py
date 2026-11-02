@@ -1,6 +1,7 @@
 """Local Manifest V3 extension management for Ghost Surfer's Qt WebEngine profile."""
 
 import json
+import html
 import re
 import stat
 import zipfile
@@ -8,7 +9,7 @@ from pathlib import Path
 from pathlib import PurePosixPath
 
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QDialog, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QMessageBox, QPushButton, QVBoxLayout,
 )
 from PySide6.QtWebEngineCore import QWebEnginePage
@@ -31,6 +32,7 @@ def _manifest_from_source(source: Path) -> dict:
             if len(entries) > MAX_ARCHIVE_ENTRIES:
                 raise ValueError(f"The ZIP exceeds the {MAX_ARCHIVE_ENTRIES}-entry safety limit.")
             total_unpacked = 0
+            seen_names = set()
             for entry in entries:
                 normalized = entry.filename.replace("\\", "/")
                 path = PurePosixPath(normalized)
@@ -40,6 +42,12 @@ def _manifest_from_source(source: Path) -> dict:
                         or any(part == ".." for part in path.parts)
                         or stat.S_ISLNK(mode)):
                     raise ValueError("The ZIP contains an unsafe path or symbolic link.")
+                folded = normalized.rstrip("/").casefold()
+                if folded in seen_names:
+                    raise ValueError("The ZIP contains duplicate file paths, which can make its contents ambiguous.")
+                seen_names.add(folded)
+                if entry.flag_bits & 0x1:
+                    raise ValueError("Password-protected ZIP packages are not supported.")
                 total_unpacked += entry.file_size
                 if total_unpacked > MAX_ARCHIVE_UNPACKED_BYTES:
                     raise ValueError("The ZIP exceeds the 100 MiB uncompressed-size safety limit.")
@@ -97,14 +105,24 @@ class ExtensionFeatures:
         self.status_label = QLabel()
         self.status_label.setWordWrap(True)
         box.addWidget(self.status_label)
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Search installed extensions")
+        self.search_box.textChanged.connect(self._filter_extensions)
+        box.addWidget(self.search_box)
         self.extension_list = QListWidget()
         self.extension_list.setMinimumHeight(140)
-        self.extension_list.currentItemChanged.connect(lambda *_: self._update_actions())
+        self.extension_list.currentItemChanged.connect(lambda *_: self._update_details())
         box.addWidget(self.extension_list)
+        self.details_label = QLabel("Select an extension to view its details and access requests.")
+        self.details_label.setWordWrap(True)
+        box.addWidget(self.details_label)
         actions = QHBoxLayout()
-        self.import_button = QPushButton("Import package")
+        self.import_button = QPushButton("Import ZIP…")
         self.import_button.setObjectName("panelButton")
-        self.import_button.clicked.connect(self.import_package)
+        self.import_button.clicked.connect(self.import_zip)
+        self.import_folder_button = QPushButton("Import folder…")
+        self.import_folder_button.setObjectName("panelButton")
+        self.import_folder_button.clicked.connect(self.import_folder)
         self.toggle_button = QPushButton("Enable / Disable")
         self.toggle_button.setObjectName("panelButton")
         self.toggle_button.clicked.connect(self.toggle_selected)
@@ -114,8 +132,13 @@ class ExtensionFeatures:
         self.open_button = QPushButton("Open")
         self.open_button.setObjectName("panelButton")
         self.open_button.clicked.connect(self.open_selected)
+        self.options_button = QPushButton("Options")
+        self.options_button.setObjectName("panelButton")
+        self.options_button.clicked.connect(self.open_options)
+        actions.addWidget(self.options_button)
         actions.addWidget(self.open_button)
         actions.addWidget(self.import_button)
+        actions.addWidget(self.import_folder_button)
         actions.addWidget(self.toggle_button)
         actions.addWidget(self.remove_button)
         box.addLayout(actions)
@@ -155,15 +178,19 @@ class ExtensionFeatures:
             return False
         return True
 
-    def import_package(self) -> None:
+    def import_zip(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self.window, "Import extension ZIP", "", "Extension package (*.zip)")
+        if path:
+            self._review_and_install(Path(path))
+
+    def import_folder(self) -> None:
+        path = QFileDialog.getExistingDirectory(self.window, "Select unpacked extension folder")
+        if path:
+            self._review_and_install(Path(path))
+
+    def _review_and_install(self, source: Path) -> None:
         if not self._require_manager():
             return
-        path, _ = QFileDialog.getOpenFileName(self.window, "Import extension package", "", "Extension package (*.zip);;All files (*)")
-        if not path:
-            path = QFileDialog.getExistingDirectory(self.window, "Select unpacked extension folder")
-        if not path:
-            return
-        source = Path(path)
         try:
             manifest = _manifest_from_source(source)
         except (OSError, ValueError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
@@ -192,9 +219,14 @@ class ExtensionFeatures:
                                 "Extensions are off. The browser continues to use its temporary profile.")
         self.mode_button.setText("Turn extensions off and restart" if active else "Turn extensions on and restart")
         self.import_button.setEnabled(active)
+        self.import_folder_button.setEnabled(active)
+        self.search_box.setEnabled(active)
         self.toggle_button.setEnabled(active)
         self.remove_button.setEnabled(active)
         self.open_button.setEnabled(False)
+        self.options_button.setEnabled(False)
+        self.toggle_button.setEnabled(False)
+        self.remove_button.setEnabled(False)
         self.extension_list.clear()
         if not active:
             self.status_label.setText("Enable the separate persistent profile to manage extensions.")
@@ -211,11 +243,42 @@ class ExtensionFeatures:
             item.setData(256, info.id())
             item.setToolTip(f"{info.name()}\nID: {info.id()}\nPath: {info.path()}\n{state}" + (f"\nError: {error}" if error else ""))
             self.extension_list.addItem(item)
-        self._update_actions()
+        self._filter_extensions(self.search_box.text())
+        self._update_details()
 
-    def _update_actions(self) -> None:
+    def _filter_extensions(self, query: str) -> None:
+        folded = query.strip().casefold()
+        for index in range(self.extension_list.count()):
+            item = self.extension_list.item(index)
+            text = f"{item.text()} {item.toolTip()}".casefold()
+            item.setHidden(bool(folded and folded not in text))
+
+    def _update_details(self) -> None:
         info = self._selected_info()
         self.open_button.setEnabled(bool(info and info.isEnabled() and not info.actionPopupUrl().isEmpty()))
+        manifest = {}
+        if info:
+            try:
+                manifest = json.loads((Path(info.path()) / "manifest.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                pass
+        options = manifest.get("options_page") or (manifest.get("options_ui") or {}).get("page")
+        self.options_button.setEnabled(bool(info and info.isEnabled() and isinstance(options, str) and options.strip()))
+        if not info:
+            self.details_label.setText("Select an extension to view its details and access requests.")
+            self.toggle_button.setEnabled(False)
+            self.remove_button.setEnabled(False)
+            return
+        self.toggle_button.setEnabled(True)
+        self.remove_button.setEnabled(True)
+        description = html.escape(str(manifest.get("description", "No description provided.")))
+        access = html.escape(_permission_summary(manifest)).replace("\n", "<br>")
+        error = html.escape(info.error())
+        self.details_label.setText(
+            f"<b>{info.name()}</b> · Version {manifest.get('version', 'unknown')} · {'Enabled' if info.isEnabled() else 'Disabled'}"
+            f"<br>{description}<br><br><b>Requested access</b><br>{access}"
+            + (f"<br><br><b>Load status</b><br>{error}" if error else "")
+        )
 
     def _selected_info(self):
         item = self.extension_list.currentItem()
@@ -263,6 +326,29 @@ class ExtensionFeatures:
         view = QWebEngineView(dialog)
         view.setPage(QWebEnginePage(self.window.profile, view))
         view.setUrl(info.actionPopupUrl())
+        layout.addWidget(view)
+        dialog.exec()
+
+    def open_options(self) -> None:
+        info = self._selected_info()
+        if info is None or not info.isEnabled():
+            return
+        try:
+            manifest = json.loads((Path(info.path()) / "manifest.json").read_text(encoding="utf-8"))
+            page = manifest.get("options_page") or (manifest.get("options_ui") or {}).get("page")
+            if not isinstance(page, str) or not page.strip():
+                return
+            from PySide6.QtCore import QUrl
+            url = QUrl(f"chrome-extension://{info.id()}/{page.lstrip('/')}")
+        except (OSError, ValueError, TypeError):
+            return
+        dialog = QDialog(self.window)
+        dialog.setWindowTitle(f"{info.name()} options")
+        dialog.resize(720, 600)
+        layout = QVBoxLayout(dialog)
+        view = QWebEngineView(dialog)
+        view.setPage(QWebEnginePage(self.window.profile, view))
+        view.setUrl(url)
         layout.addWidget(view)
         dialog.exec()
 

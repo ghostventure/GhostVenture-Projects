@@ -19,6 +19,7 @@ from urllib.parse import quote_plus
 from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QAction, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCompleter,
     QComboBox,
     QFileDialog,
@@ -40,6 +41,7 @@ from PySide6.QtWidgets import (
 
 URL_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 KIND_ROLE = int(Qt.ItemDataRole.UserRole) + 2
+BOOKMARK_ORDER_ROLE = int(Qt.ItemDataRole.UserRole) + 4
 DAY_ROLE = int(Qt.ItemDataRole.UserRole) + 3
 
 SEARCH_ENGINES = {
@@ -504,7 +506,19 @@ class LibraryFeatures:
         search = QLineEdit()
         search.setPlaceholderText("Search bookmarks by title, folder, or URL")
         left.addWidget(search)
+        reorder_hint = QLabel("Drag a bookmark up or down to change its order. With a search filter, only matching bookmarks move.")
+        reorder_hint.setWordWrap(True)
+        left.addWidget(reorder_hint)
         listing = QListWidget()
+        listing.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        listing.setDefaultDropAction(Qt.DropAction.MoveAction)
+        listing.setDropIndicatorShown(True)
+        listing.setDragEnabled(True)
+        listing.setAcceptDrops(True)
+        listing.setAccessibleName("Bookmarks, draggable to reorder")
+        listing.setAccessibleDescription(
+            "Bookmarks can be reordered by dragging. If a search filter is active, hidden bookmarks keep their positions."
+        )
         left.addWidget(listing, 1)
         title_edit = QLineEdit()
         folder_combo = QComboBox()
@@ -540,7 +554,7 @@ class LibraryFeatures:
         def populate(_query=""):
             needle = search.text().strip().casefold()
             listing.clear()
-            for row in self.store.data.get("bookmarks", []):
+            for source_index, row in enumerate(self.store.data.get("bookmarks", [])):
                 title = row.get("title") or row.get("url", "Bookmark")
                 folder = row.get("folder", "")
                 label = f"{folder}  /  {title}" if folder else title
@@ -548,7 +562,34 @@ class LibraryFeatures:
                     continue
                 item = QListWidgetItem(label)
                 item.setData(Qt.ItemDataRole.UserRole, row.get("url", ""))
+                item.setData(BOOKMARK_ORDER_ROLE, source_index)
                 listing.addItem(item)
+
+        def persist_reorder(*_args):
+            bookmarks = self.store.data.get("bookmarks", [])
+            current_items = [listing.item(index) for index in range(listing.count())]
+            positions = [item.data(BOOKMARK_ORDER_ROLE) for item in current_items]
+            if not positions or any(not isinstance(position, int) or position < 0 or position >= len(bookmarks) for position in positions):
+                return
+            slots = sorted(positions)
+            if len(set(positions)) != len(positions):
+                return
+            old_bookmarks = list(bookmarks)
+            source_rows = {position: bookmarks[position] for position in slots}
+            reordered_rows = [source_rows[position] for position in positions]
+            if all(bookmarks[slot] is row for slot, row in zip(slots, reordered_rows)):
+                return
+            for slot, row in zip(slots, reordered_rows):
+                bookmarks[slot] = row
+            if not self.store.save():
+                self.store.data["bookmarks"] = old_bookmarks
+                QMessageBox.warning(dialog, "Could not reorder bookmarks", "The bookmark order could not be saved. The previous order was restored.")
+                populate()
+                return
+            for item, slot in zip(current_items, slots):
+                item.setData(BOOKMARK_ORDER_ROLE, slot)
+            self.refresh_views()
+            self.window.status.showMessage("Bookmark order saved", 2500)
 
         def select_item(item):
             url = item.data(Qt.ItemDataRole.UserRole) if item else ""
@@ -604,6 +645,7 @@ class LibraryFeatures:
         search.textChanged.connect(populate)
         listing.currentItemChanged.connect(lambda item, _previous: select_item(item))
         listing.itemDoubleClicked.connect(lambda item: self._open_url(item.data(Qt.ItemDataRole.UserRole)))
+        listing.model().rowsMoved.connect(persist_reorder)
         save_button.clicked.connect(save_selected)
         delete_button.clicked.connect(delete_selected)
         new_folder_button.clicked.connect(new_folder)

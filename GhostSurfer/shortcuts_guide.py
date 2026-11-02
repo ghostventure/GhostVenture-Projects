@@ -25,6 +25,7 @@ SHORTCUTS = (
     ("Navigation", "Stop loading", "Esc"),
     ("Tabs", "Next tab", "Ctrl+Tab"),
     ("Tabs", "Previous tab", "Ctrl+Shift+Tab"),
+    ("Tabs", "Search open tabs", "Ctrl+Shift+A"),
     ("Tabs", "Open a new tab", "Ctrl+T"),
     ("Tabs", "Close current tab", "Ctrl+W"),
     ("Tabs", "Reopen the last closed tab", "Ctrl+Shift+T"),

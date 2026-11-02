@@ -133,13 +133,18 @@ def inspect_install_location(target: Path) -> dict:
 
 def _required_webengine_files_present(payload: Path) -> tuple[list[str], int]:
     internal = payload / "_internal"
-    missing = [relative for relative in WEBENGINE_FILES if not (internal / Path(relative)).is_file()]
-    runtime_dlls = (internal / "VCRUNTIME140.dll").is_file() or (internal / "PySide6" / "VCRUNTIME140.dll").is_file()
-    msvcp_dll = (internal / "PySide6" / "MSVCP140.dll").is_file()
+    required = [internal / Path(relative) for relative in WEBENGINE_FILES]
+    missing = [str(path.relative_to(internal)) for path in required if not path.is_file()]
+    empty = [str(path.relative_to(internal)) for path in required if path.is_file() and path.stat().st_size == 0]
+    runtime_candidates = (internal / "VCRUNTIME140.dll", internal / "PySide6" / "VCRUNTIME140.dll")
+    runtime_dlls = any(path.is_file() and path.stat().st_size > 0 for path in runtime_candidates)
+    msvcp_dll = (internal / "PySide6" / "MSVCP140.dll").is_file() and (internal / "PySide6" / "MSVCP140.dll").stat().st_size > 0
     if not runtime_dlls:
         missing.append("VCRUNTIME140.dll (app-local)")
     if not msvcp_dll:
         missing.append("PySide6/MSVCP140.dll (app-local)")
+    if empty:
+        missing.extend(f"{relative} (empty)" for relative in empty)
     size, _count = _source_size_and_validate(payload)
     return missing, size
 
@@ -206,6 +211,8 @@ def _validate_archive(archive: zipfile.ZipFile) -> tuple[list[zipfile.ZipInfo], 
         seen.add(key)
         if stat.S_ISLNK(entry.external_attr >> 16):
             raise ValueError("The package contains a symbolic link.")
+        if entry.flag_bits & 0x1:
+            raise ValueError("Password-protected packages are not supported.")
         if entry.file_size < 0:
             raise ValueError("The package contains an invalid file size.")
         expanded += entry.file_size
@@ -597,6 +604,9 @@ class OperationWorker(QObject):
             _copy_payload(payload, stage, self.progress.emit)
             if not (stage / APP_EXE_NAME).is_file() or not (stage / "_internal").is_dir():
                 raise ValueError("The staged payload is incomplete.")
+            missing, _size = _required_webengine_files_present(stage)
+            if missing:
+                raise ValueError("The staged payload failed its WebEngine runtime check: " + ", ".join(missing))
             vault_marker = stage / "personal-vault.enabled"
             if personal_vault_enabled is True:
                 vault_marker.write_text("enabled\n", encoding="ascii")

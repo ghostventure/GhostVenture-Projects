@@ -64,7 +64,9 @@ from ghost_guard import (
     apply_web_engine_security,
     handle_permission_request,
     registrable_domain,
+    suspicious_url_reason,
 )
+from download_safety import inspect_download_name
 from personal_data_vault import PersonalDataVaultDialog
 from personal_data_guard import PersonalDataRequestDialog, SiteRecognitionStore, SiteVerificationWorker, install_personal_data_monitor
 from extension_features import ExtensionFeatures
@@ -72,7 +74,7 @@ from chatgpt_bridge import ChatGPTBridgeSettings
 
 
 APP_NAME = "Ghost Surfer"
-APP_VERSION = "0.2.2"
+APP_VERSION = "0.2.6"
 GITHUB_REPOSITORY_URL = "https://github.com/ghostventure/GhostVenture-Projects"
 GITHUB_RELEASES_URL = f"{GITHUB_REPOSITORY_URL}/releases"
 HOME_URL = "https://duckduckgo.com/"
@@ -211,6 +213,7 @@ class BrowserStore:
                 "theme": "Ghost Blue",
                 "zoom": 100,
                 "home_page_url": "https://duckduckgo.com/",
+                "new_tab_page": "home_page",
                 "home_page_default_migrated": True,
                 "reduce_motion": False,
                 "personal_vault_enabled": personal_vault_install_default(),
@@ -281,6 +284,7 @@ class BrowserStore:
                 "zoom": 100,
                 "history_retention_days": 0,
                 "home_page_url": "https://duckduckgo.com/",
+                "new_tab_page": "home_page",
                 "reduce_motion": False,
                 "personal_vault_enabled": personal_vault_install_default(),
                 "data_request_guard_enabled": True,
@@ -335,6 +339,8 @@ class BrowserStore:
                 settings["search_engine"] = "Startpage"
             if not isinstance(settings.get("home_page_url"), str):
                 settings["home_page_url"] = "https://duckduckgo.com/"
+            if not isinstance(settings.get("new_tab_page"), str) or settings["new_tab_page"] not in {"home_page", "dashboard"}:
+                settings["new_tab_page"] = "home_page"
             if not isinstance(settings.get("startup_page"), str) or settings["startup_page"] not in {"restore_session", "start_page", "home_page", "blank"}:
                 settings["startup_page"] = "restore_session"
             try:
@@ -550,6 +556,24 @@ class BrowserPage(QWebEnginePage):
 
     def handle_permission_request(self, origin: QUrl, feature: QWebEnginePage.Feature) -> None:
         handle_permission_request(self.window, self, origin, feature)
+
+    def acceptNavigationRequest(self, url: QUrl, navigation_type: QWebEnginePage.NavigationType, is_main_frame: bool) -> bool:
+        if is_main_frame and url.scheme().lower() in {"http", "https"}:
+            reason = suspicious_url_reason(url.toString())
+            if reason:
+                box = QMessageBox(self.window)
+                box.setIcon(QMessageBox.Icon.Warning)
+                box.setWindowTitle("Review this link")
+                box.setText("Ghost Surfer found a URL pattern that may deserve a closer look.")
+                box.setInformativeText(
+                    f"{reason}\n\nThis offline heuristic cannot verify whether a site is safe or malicious.\n\n{url.toString()}"
+                )
+                proceed = box.addButton("Continue anyway", QMessageBox.ButtonRole.AcceptRole)
+                box.addButton("Cancel navigation", QMessageBox.ButtonRole.RejectRole)
+                box.setDefaultButton(box.buttons()[-1])
+                box.exec()
+                return box.clickedButton() is proceed
+        return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
 
 
 class BrowserTab(QWebEngineView):
@@ -835,7 +859,7 @@ class BrowserWindow(QMainWindow):
         self.forward_btn = self.rail_button("Forward", self.style().standardIcon(self.style().StandardPixmap.SP_ArrowForward), self.go_forward)
         self.reload_btn = self.rail_button("Reload", self.style().standardIcon(self.style().StandardPixmap.SP_BrowserReload), self.reload_page)
         self.home_btn = self.rail_button("Home", self.style().standardIcon(self.style().StandardPixmap.SP_DesktopIcon), lambda: self.go_home())
-        self.new_btn = self.rail_button("New tab", self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogNewFolder), lambda: self.add_tab(HOME_URL, True))
+        self.new_btn = self.rail_button("New tab", self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogNewFolder), lambda: self.add_tab(self.new_tab_destination(), True))
         self.bookmark_btn = self.rail_button("Bookmark", self.style().standardIcon(self.style().StandardPixmap.SP_DialogSaveButton), self.bookmark_current)
         self.clear_cache_btn = self.rail_button("Clear cookies & cache", self.style().standardIcon(self.style().StandardPixmap.SP_DialogResetButton), self.clear_cookies_and_cache)
         self.library_btn = self.rail_button("Library", self.style().standardIcon(self.style().StandardPixmap.SP_DirOpenIcon), self.open_library_menu)
@@ -942,7 +966,7 @@ class BrowserWindow(QMainWindow):
             ("F1", self.show_shortcuts_guide),
             ("F11", self.toggle_distraction_free),
             ("Ctrl+L", self.focus_address),
-            ("Ctrl+T", lambda: self.add_tab(HOME_URL, switch=True)),
+            ("Ctrl+T", lambda: self.add_tab(self.new_tab_destination(), switch=True)),
             ("Ctrl+W", lambda: self.close_tab(self.tabs.currentIndex())),
             ("Ctrl+Shift+T", self.reopen_closed_tab),
             ("Ctrl+R", self.reload_page),
@@ -1064,7 +1088,7 @@ class BrowserWindow(QMainWindow):
             kind, value = item.data(Qt.ItemDataRole.UserRole)
             if kind == "action":
                 callbacks = {
-                    "new_tab": lambda: self.add_tab(HOME_URL, True),
+                    "new_tab": lambda: self.add_tab(self.new_tab_destination(), True),
                     "address": self.focus_address,
                     "reload": self.reload_page,
                     "bookmark": self.bookmark_current,
@@ -1226,6 +1250,19 @@ class BrowserWindow(QMainWindow):
             "Tabs & Data": workspace_layout,
             "Extensions": extensions_layout,
         }
+        new_tab_group = QGroupBox("New Tabs")
+        new_tab_layout = QVBoxLayout(new_tab_group)
+        self.new_tab_combo = QComboBox()
+        self.new_tab_combo.setAccessibleName("New tab page")
+        self.new_tab_combo.addItem("Home page", "home_page")
+        self.new_tab_combo.addItem("Ghost Surfer dashboard", "dashboard")
+        saved_new_tab_page = str(self.settings_data.get("new_tab_page", "home_page"))
+        saved_new_tab_index = self.new_tab_combo.findData(saved_new_tab_page)
+        self.new_tab_combo.setCurrentIndex(max(0, saved_new_tab_index))
+        self.new_tab_combo.currentIndexChanged.connect(self.set_new_tab_page)
+        new_tab_layout.addWidget(QLabel("Open this page when you create a new tab"))
+        new_tab_layout.addWidget(self.new_tab_combo)
+        general_layout.addWidget(new_tab_group)
         saved_page = str(self.settings_data.get("control_last_page", "General"))
         saved_page_index = 0
         for page_index in range(self.control_category.count()):
@@ -1827,6 +1864,21 @@ class BrowserWindow(QMainWindow):
         self.apply_engine_settings()
         self.update_security_chips()
 
+    def set_new_tab_page(self, _index: int = -1) -> None:
+        if not hasattr(self, "new_tab_combo"):
+            return
+        value = self.new_tab_combo.currentData()
+        self.settings_data["new_tab_page"] = value if value in {"home_page", "dashboard"} else "home_page"
+        self.store.save()
+        self.status.showMessage("New tab page preference saved", 2200)
+
+    def new_tab_destination(self) -> str:
+        """Return the user's separate preference for tabs created on demand."""
+        if self.settings_data.get("new_tab_page", "home_page") == "dashboard":
+            return DASHBOARD_URL
+        home = str(self.settings_data.get("home_page_url", HOME_URL) or HOME_URL).strip()
+        return home if home.startswith(("http://", "https://")) else HOME_URL
+
     def set_personal_vault_enabled(self, enabled: bool) -> None:
         self.settings_data["personal_vault_enabled"] = bool(enabled)
         self.store.save()
@@ -2070,11 +2122,13 @@ class BrowserWindow(QMainWindow):
         if hasattr(self, "page_ux"):
             self.page_ux.attach_tab(tab)
         index = self.tabs.addTab(tab, "New")
+        if hasattr(self, "tab_features"):
+            self.tab_features.observe_tab(tab)
         self.tabs.setTabToolTip(index, url)
         if switch:
             self.tabs.setCurrentIndex(index)
         self.navigate(tab, url)
-        self.apply_engine_settings()
+        self.apply_tab_settings(tab)
         self.update_session_ui()
         return tab
 
@@ -2084,7 +2138,7 @@ class BrowserWindow(QMainWindow):
 
     def close_tab(self, index: int) -> None:
         if self.tabs.count() == 1:
-            self.add_tab(HOME_URL, switch=True)
+            self.add_tab(self.new_tab_destination(), switch=True)
         widget = self.tabs.widget(index)
         if isinstance(widget, BrowserTab):
             url = self.display_url(widget.url())
@@ -2556,7 +2610,7 @@ class BrowserWindow(QMainWindow):
     def open_tor_check(self) -> None:
         tab = self.current_tab()
         if not tab:
-            tab = self.add_tab(HOME_URL, switch=True)
+            tab = self.add_tab(self.new_tab_destination(), switch=True)
         self.navigate(tab, TOR_CHECK_URL)
         if TOR_ENDPOINT:
             self.tor_chip.setText(f"Tor: {TOR_ENDPOINT[1]}")
@@ -2639,6 +2693,23 @@ class BrowserWindow(QMainWindow):
         if not target:
             download.cancel()
             return
+        assessment = inspect_download_name(Path(target).name)
+        if assessment.risky:
+            reasons = "\n".join(f"• {reason}" for reason in assessment.reasons)
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("Review download filename")
+            box.setText(f"{assessment.label}: {assessment.filename}")
+            box.setInformativeText(
+                f"{reasons}\n\nGhost Surfer checks the filename only. It does not scan the file or verify its publisher. Save this file anyway?"
+            )
+            proceed = box.addButton("Save anyway", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton("Cancel download", QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(box.buttons()[-1])
+            box.exec()
+            if box.clickedButton() is not proceed:
+                download.cancel()
+                return
         download.setDownloadDirectory(str(Path(target).parent))
         download.setDownloadFileName(Path(target).name)
         entry = {"request": download, "path": target, "state": "Queued", "item": None,
@@ -2834,6 +2905,7 @@ class BrowserWindow(QMainWindow):
             "speed_mode": True, "block_images": False, "ghost_cleanup_on_close": False,
             "allow_javascript": True, "allow_webgl": False, "cookie_policy": "ask",
             "theme": "Ghost Blue", "zoom": 100, "home_page_url": "https://duckduckgo.com/",
+            "new_tab_page": "home_page",
             "home_page_default_migrated": True, "reduce_motion": False,
             "history_retention_days": 0, "interface_text_size": 100,
             "startup_page": "restore_session", "search_engine": "DuckDuckGo",
@@ -2853,7 +2925,7 @@ class BrowserWindow(QMainWindow):
             self.tabs.removeTab(self.tabs.count() - 1)
             if old_tab is not None:
                 old_tab.deleteLater()
-        self.add_tab(HOME_URL, switch=True)
+        self.add_tab(self.new_tab_destination(), switch=True)
         self.profile.cookieStore().deleteAllCookies()
         self.profile.clearHttpCache()
         self.store.save()
