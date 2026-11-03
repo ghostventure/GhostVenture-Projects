@@ -41,3 +41,7 @@ The Desktop app reads `desktopDataRoot` from `%APPDATA%\OverHead Install Manager
 The checked-in GitHub update workflow depends on compatible release metadata (`latest.yml`) and the matching `OverHead-Setup-<version>-win-x64.exe` asset. This local Manager build does not publish or update GitHub releases, and a successful local build does not mean the hosted Manager or Desktop installer has changed. Firebase hosting publication alone does not publish a GitHub release.
 
 The local unsigned utility can be built and run as a development/testing package. Do not present it as a verified publisher release.
+
+## Publish the standalone Manager to Firebase
+
+Build the site into `website-next/out`, build the version-matched Manager with `npm run install-manager:build`, and update `website-next/public/downloads/SHA256SUMS.txt` and `website-next/public/downloads/OverHead-Install-Manager-SHA256.txt` with its SHA-256. To update only the Manager and its checksum routes, run `npm run deploy:manager -- --manager-only --plan` and review `release/install-manager/firebase-route-plan.json`; publish with `npm run deploy:manager -- --manager-only --publish`. The Manager-only plan preserves every other live route and Hosting redirect. The script checks the Manager checksum and signature status and verifies the site has not changed while files upload. An unsigned Manager is disclosed on the download page and must not be described as publisher-trusted.

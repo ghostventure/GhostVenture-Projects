@@ -1,7 +1,7 @@
 {
   "name": "overhead",
   "private": true,
-  "version": "0.3.27",
+  "version": "0.3.29",
   "description": "Installed desktop console for reducing small-business admin overload.",
   "author": "Black Lion Media Studio",
   "main": "electron-main.cjs",
@@ -12,6 +12,7 @@
     "desktop": "cmd /c npm run build && electron .",
     "dist:win": "cmd /c npm run build && npm run install-manager:build && electron-builder --win nsis --x64 --config electron-builder-desktop.cjs",
     "install-manager:build": "node scripts/package-install-manager.cjs",
+    "deploy:manager": "node scripts/deploy-install-manager.cjs",
     "dist:cylinder": "cmd /c npm run build && npm run install-manager:build && electron-builder --win nsis --x64 --config electron-builder-desktop.cjs --config.extraMetadata.main=electron-server-main.cjs --config.productName=OverHead-Cylinder --config.appId=com.blacklion.overhead.cylinder --config.win.artifactName=OverHead-Cylinder-Setup-${version}-win-x64.${ext} --config.nsis.shortcutName=OverHead-Cylinder --config.nsis.include=scripts/cylinder-server-installer.nsh",
     "dist:cylinder-client": "cmd /c npm run build && npm run install-manager:build && electron-builder --win nsis --x64 --config electron-builder-desktop.cjs --config.directories.output=release/cylinder-client --config.extraMetadata.main=electron-cylinder-client-main.cjs --config.productName=OverHead-Cylinder-Client --config.appId=com.blacklion.overhead.cylinder.client --config.win.artifactName=OverHead-Cylinder-Client-Setup-${version}-win-x64.${ext} --config.nsis.shortcutName=OverHead-Cylinder",
     "release:prepare": "node scripts/prepare-central-release.cjs",

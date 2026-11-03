@@ -7,9 +7,11 @@ const zlib = require('node:zlib')
 const root = path.resolve(__dirname, '..')
 const site = 'overhead-office'
 const websiteRoot = path.join(root, 'website-next', 'out')
-const managerFile = path.join(root, 'release', 'install-manager', 'OverHead-Install-Manager-0.3.25-win-x64.exe')
+const packageJson = require('../package.json')
+const managerFile = path.join(root, 'release', 'install-manager', `OverHead-Install-Manager-${packageJson.version}-win-x64.exe`)
 const managerRoute = '/downloads/OverHead-Install-Manager.exe'
 const planFile = path.join(root, 'release', 'install-manager', 'firebase-route-plan.json')
+const managerOnly = process.argv.includes('--manager-only')
 
 function resolveFirebaseTools() {
   const explicit = process.env.OVERHEAD_FIREBASE_TOOLS
@@ -105,8 +107,8 @@ async function buildPlan() {
   const liveFiles = await readLiveFiles(current.version.name)
   if (!liveFiles['/index.html'] || Object.keys(liveFiles).length < 30) throw new Error('Live Firebase file inventory is incomplete; refusing to deploy.')
 
-  const removedProgramRoutes = Object.keys(liveFiles).filter(isProgramRoute).sort()
-  const remaining = new Map(Object.entries(liveFiles).filter(([route]) => !isProgramRoute(route)))
+  const removedProgramRoutes = managerOnly ? [] : Object.keys(liveFiles).filter(isProgramRoute).sort()
+  const remaining = new Map(Object.entries(liveFiles).filter(([route]) => managerOnly || !isProgramRoute(route)))
   const localContents = new Map()
   const addedRoutes = []
   const changedRoutes = []
@@ -114,6 +116,7 @@ async function buildPlan() {
   for (const localFile of walkFiles(websiteRoot)) {
     const relative = path.relative(websiteRoot, localFile).split(path.sep).join('/')
     const route = `/${relative}`
+    if (managerOnly && !['/downloads/SHA256SUMS.txt', '/downloads/OverHead-Install-Manager-SHA256.txt'].includes(route)) continue
     if (isProgramRoute(route)) continue
     localRoutes.push(route)
     const bytes = fs.readFileSync(localFile)
@@ -130,12 +133,12 @@ async function buildPlan() {
   else if (remaining.get(managerRoute) !== managerCompressedHash) changedRoutes.push(managerRoute)
   remaining.set(managerRoute, managerCompressedHash)
 
-  if (remaining.has('/updates/latest.yml') || remaining.has('/updates/SHA256SUMS.txt') || [...remaining.keys()].some(isProgramRoute)) {
+  if (!managerOnly && (remaining.has('/updates/latest.yml') || remaining.has('/updates/SHA256SUMS.txt') || [...remaining.keys()].some(isProgramRoute))) {
     throw new Error('Staged Hosting map still contains a Desktop or Cylinder binary/feed route.')
   }
   const config = structuredClone(oldRelease.config || {})
-  const removedRedirects = (config.redirects || []).filter(isProgramRedirect)
-  config.redirects = (config.redirects || []).filter((item) => !isProgramRedirect(item))
+  const removedRedirects = managerOnly ? [] : (config.redirects || []).filter(isProgramRedirect)
+  if (!managerOnly) config.redirects = (config.redirects || []).filter((item) => !isProgramRedirect(item))
   const changedRouteSet = new Set(changedRoutes)
   const removedProgramRouteSet = new Set(removedProgramRoutes)
   const preservedLiveRoutes = Object.keys(liveFiles)
@@ -188,7 +191,8 @@ async function main() {
   await api.patch(`/${created.name}`, { status: 'FINALIZED' }, { queryParams: { updateMask: 'status' } })
   const latestBeforeRelease = await liveRelease()
   if (latestBeforeRelease?.version?.name !== plan.current.version.name) throw new Error('Live site changed during upload. The prepared version remains unreleased.')
-  const result = (await api.post(`/sites/${site}/releases`, { message: 'Move Desktop and Cylinder installers off Hosting; publish the standalone Install Manager' }, { queryParams: { versionName: created.name } })).body
+  const releaseMessage = managerOnly ? 'Update the standalone OverHead Install Manager' : 'Move Desktop and Cylinder installers off Hosting; publish the standalone Install Manager'
+  const result = (await api.post(`/sites/${site}/releases`, { message: releaseMessage }, { queryParams: { versionName: created.name } })).body
   fs.writeFileSync(path.join(path.dirname(planFile), 'firebase-release.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8')
   console.log(`Released ${result.name}`)
 }

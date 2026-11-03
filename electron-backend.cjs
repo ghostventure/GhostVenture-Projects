@@ -107,7 +107,7 @@ const taskStatusSchema = z.object({
 const featureCollectionSchema = z.enum([
   'dashboard', 'tasks', 'projects', 'customers', 'sales', 'finance', 'people', 'scheduling',
   'documents', 'communications', 'reporting', 'automation', 'integrations', 'search', 'security',
-  'account', 'accessibility', 'mobile', 'support', 'ai_knowledge',
+  'account', 'accessibility', 'mobile', 'support', 'ai_knowledge', 'inventory',
 ])
 const featureRecordSchema = z.object({
   collection: featureCollectionSchema,
@@ -127,6 +127,7 @@ const featureCollectionRoles = {
   projects: ['Owner', 'Front Desk', 'Bookkeeper'],
   customers: ['Owner', 'Front Desk', 'Bookkeeper'],
   sales: ['Owner', 'Front Desk', 'Bookkeeper'],
+  inventory: ['Owner', 'Front Desk', 'Bookkeeper'],
   finance: ['Owner', 'Bookkeeper'],
   people: ['Owner'],
   scheduling: ['Owner', 'Front Desk', 'Bookkeeper', 'Support'],

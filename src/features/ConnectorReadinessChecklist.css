@@ -1,0 +1,21 @@
+.connector-readiness { margin: 14px 0; padding: 16px; border: 1px solid var(--line, #d8e3dc); border-radius: 12px; background: var(--panel, #fff); color: var(--ink, #182a22); }
+.cr-heading { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.cr-heading .eyebrow { margin: 0 0 5px; color: var(--accent, #277b5d); font-size: .72rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.cr-heading h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.05rem; }
+.cr-heading p:last-child { max-width: 700px; margin: 7px 0 0; color: var(--ink-muted, #64756b); font-size: .84rem; line-height: 1.5; }
+.cr-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.cr-card { min-width: 0; padding: 12px; border: 1px solid var(--line, #d8e3dc); border-radius: 9px; background: var(--panel, #fff); }
+.cr-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.cr-card h4 { margin: 0; font-size: .9rem; }
+.cr-card-head > div > span { display: block; margin-top: 3px; color: var(--ink-muted, #64756b); font-size: .76rem; }
+.cr-state { max-width: 50%; padding: 4px 7px; border: 1px solid #e8c58f; border-radius: 999px; color: #805017; background: #fff8e9; font-size: .7rem; font-weight: 700; text-align: center; }
+.cr-state.is-planned { border-color: #b6d8c1; color: #17623c; background: #edf8f0; }
+.cr-card > p { min-height: 42px; margin: 10px 0; color: var(--ink-muted, #53645b); font-size: .81rem; line-height: 1.45; }
+.cr-card details { border-top: 1px solid var(--line, #e3e9e5); padding-top: 8px; }
+.cr-card summary { cursor: pointer; color: var(--accent, #277b5d); font-size: .8rem; font-weight: 700; }
+.cr-card ul { display: grid; gap: 7px; margin: 9px 0 2px; padding: 0; list-style: none; }
+.cr-card li label { display: flex; align-items: flex-start; gap: 8px; color: var(--ink, #24362d); font-size: .79rem; line-height: 1.4; cursor: pointer; }
+.cr-card li input { flex: 0 0 auto; margin: 2px 0 0; accent-color: var(--accent, #277b5d); }
+.cr-note { display: flex; align-items: flex-start; gap: 7px; margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line, #e3e9e5); color: var(--ink-muted, #64756b); font-size: .76rem; line-height: 1.4; }
+.cr-note svg { flex: 0 0 auto; margin-top: 1px; color: #9b5b16; }
+@media (max-width: 700px) { .cr-heading { grid-template-columns: 1fr; } .cr-cards { grid-template-columns: 1fr; } .cr-card > p { min-height: 0; } }

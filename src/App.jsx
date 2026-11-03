@@ -47,6 +47,12 @@ const CustomerManagementWorkspace = lazy(() => import('./features/CustomerManage
 const CustomerFinanceWorkspace = lazy(() => import('./features/CustomerFinanceWorkspace'))
 const PeopleOperationsWorkspace = lazy(() => import('./features/PeopleOperationsWorkspace'))
 const SchedulingWorkspace = lazy(() => import('./features/SchedulingWorkspace'))
+const FieldOperationsWorkspace = lazy(() => import('./features/FieldOperationsWorkspace'))
+const CustomerJourneyWorkspace = lazy(() => import('./features/CustomerJourneyWorkspace'))
+const InventoryReorderWorkspace = lazy(() => import('./features/InventoryReorderWorkspace'))
+const TimeApprovalPayrollWorkspace = lazy(() => import('./features/TimeApprovalPayrollWorkspace'))
+const BusinessInsightsWorkspace = lazy(() => import('./features/BusinessInsightsWorkspace'))
+const FieldCompanionMobile = lazy(() => import('./features/FieldCompanionMobile'))
 const DocumentControlWorkspace = lazy(() => import('./features/DocumentControlWorkspace'))
 const CollaborationWorkspace = lazy(() => import('./features/CollaborationWorkspace'))
 const ControlCenter = lazy(() => import('./features/ControlCenter'))
@@ -69,12 +75,18 @@ import './App.css'
 const navSections = [
   { id: 'overview', label: 'Team Dashboard', detail: 'Priorities, ownership, readiness', icon: Gauge },
   { id: 'reports', label: 'Reports', detail: 'Activity, revenue, and work summaries', icon: BarChart3 },
+  { id: 'business-insights', label: 'Business Insights', detail: 'Operational KPIs and next actions', icon: Gauge },
   { id: 'growth', label: 'Growth & Work', detail: 'Dashboards, tasks, projects, sales', icon: BriefcaseBusiness },
   { id: 'work-planner', label: 'Work Planner', detail: 'Capacity, timers, and handoffs', icon: CalendarDays },
   { id: 'sales-growth', label: 'Sales Studio', detail: 'Forecasts, qualification, and deal workflow', icon: BarChart3 },
+  { id: 'customer-journey', label: 'Customer Journey', detail: 'Lead to booked work and follow-up', icon: Users },
   { id: 'customer-management', label: 'Customer Management', detail: 'Segments, care, consent, and ownership', icon: Users },
   { id: 'field-assist', label: 'Field & Assist', detail: 'Offline capture and reviewed local help', icon: Sparkles },
+  { id: 'field-companion', label: 'Field Companion', detail: 'Mobile visit agenda, checklist, and notes', icon: BriefcaseBusiness },
   { id: 'scheduling', label: 'Scheduling', detail: 'Bookings, capacity, time and reminders', icon: CalendarDays },
+  { id: 'field-operations', label: 'Field Operations', detail: 'Dispatch queue and on-site handoff', icon: BriefcaseBusiness },
+  { id: 'inventory', label: 'Inventory', detail: 'Stock levels, movements, reorder needs', icon: Database },
+  { id: 'time-approvals', label: 'Time Approvals', detail: 'Review hours and prepare payroll export', icon: CheckCircle2 },
   { id: 'documents', label: 'Documents', detail: 'Records, retention and review control', icon: FileText },
   { id: 'collaboration', label: 'Team & Comms', detail: 'Shared notes, contacts and preferences', icon: MessageSquareText },
   { id: 'finance', label: 'Finance', detail: 'Invoices, expenses and close workflow', icon: ReceiptText },
@@ -216,7 +228,7 @@ function App() {
   const navGroups = useMemo(() => {
     const groups = { Workspace: [], Operations: [], Administration: [] }
     const administration = ['accounts', 'licenses', 'plans', 'payments', 'security', 'admin-security', 'settings', 'support']
-    const operations = ['work-planner', 'scheduling', 'documents', 'collaboration', 'finance', 'people', 'rule-center', 'integrations', 'automations', 'evidence', 'imports', 'work', 'customers', 'square', 'tools']
+    const operations = ['work-planner', 'scheduling', 'field-operations', 'field-companion', 'customer-journey', 'inventory', 'time-approvals', 'business-insights', 'documents', 'collaboration', 'finance', 'people', 'rule-center', 'integrations', 'automations', 'evidence', 'imports', 'work', 'customers', 'square', 'tools']
     navSections.filter((section) => teamSections.includes(section.id)).forEach((section) => groups[administration.includes(section.id) ? 'Administration' : operations.includes(section.id) ? 'Operations' : 'Workspace'].push(section))
     return Object.entries(groups).filter(([, items]) => items.length)
   }, [teamSections])
@@ -685,6 +697,12 @@ function App() {
             {activeSection === 'customer-management' && <CustomerManagementWorkspace backendState={backendState} secureView={secureView} refreshBackend={refreshBackend} sessionRole={session.role} />}
             {activeSection === 'field-assist' && <FieldAssistSection backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'scheduling' && <SchedulingWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'field-operations' && <FieldOperationsWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'field-companion' && <FieldCompanionMobile backendState={backendState} />}
+            {activeSection === 'customer-journey' && <CustomerJourneyWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
+            {activeSection === 'inventory' && <InventoryReorderWorkspace setOperationNotice={setOperationNotice} />}
+            {activeSection === 'time-approvals' && <TimeApprovalPayrollWorkspace setOperationNotice={setOperationNotice} />}
+            {activeSection === 'business-insights' && <BusinessInsightsWorkspace backendState={backendState} />}
             {activeSection === 'documents' && <DocumentControlWorkspace backendState={backendState} setOperationNotice={setOperationNotice} refreshBackend={refreshBackend} />}
             {activeSection === 'collaboration' && <CollaborationWorkspace backendState={backendState} session={session} setOperationNotice={setOperationNotice} />}
             {activeSection === 'finance' && <CustomerFinanceWorkspace backendState={backendState} setOperationNotice={setOperationNotice} />}
@@ -1627,6 +1645,12 @@ function sectionTitle(section) {
     reports: 'Workspace Reports',
     growth: 'Growth & Work Suite',
     'work-planner': 'Work Planner',
+    'customer-journey': 'Customer Journey',
+    'field-operations': 'Field Operations',
+    'field-companion': 'Field Companion',
+    inventory: 'Inventory & Reorder',
+    'time-approvals': 'Time Approvals & Payroll Prep',
+    'business-insights': 'Business Insights',
     'sales-growth': 'Sales Studio',
     'customer-management': 'Customer Management',
     'field-assist': 'Field & Assist',
@@ -1661,9 +1685,9 @@ function displayRole(role) {
 }
 
 function allowedSectionsForRole(role) {
-  const member = ['overview', 'field-assist', 'work-planner', 'scheduling', 'collaboration', 'search', 'work', 'customers', 'support', 'tools', 'security']
+  const member = ['overview', 'field-assist', 'field-companion', 'work-planner', 'scheduling', 'field-operations', 'customer-journey', 'collaboration', 'search', 'work', 'customers', 'support', 'tools', 'security']
   if (role === 'Owner') return navSections.map((section) => section.id)
-  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'sales-growth', 'customer-management', 'documents', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
+  if (role === 'Front Desk' || role === 'Bookkeeper') return [...member, 'growth', 'sales-growth', 'inventory', 'time-approvals', 'business-insights', 'customer-management', 'documents', ...(role === 'Bookkeeper' ? ['reports', 'finance'] : []), 'imports', 'automations', 'evidence', 'accounts', 'licenses']
   return member
 }
 
