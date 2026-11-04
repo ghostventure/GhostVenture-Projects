@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    // Printful sync uses the Admin SDK. A synced item remains invisible until an
+    // owner explicitly approves it and assigns a launch timestamp.
+    match /products/{productId} {
+      allow read: if isOwner() || (
+        resource.data.active == true &&
+        resource.data.approved == true &&
+        resource.data.launchAt is timestamp &&
+        resource.data.launchAt <= request.time
+      );
+      // Every launch-state change is made by the authenticated server function,
+      // which also writes an immutable audit record. Browsers never write product data.
+      allow create, update, delete: if false;
+    }
+
+    // Accounts can read only their own profile; all writes remain server/admin controlled.
+    // This includes saved pieces and optional delivery addresses, which are written
+    // only by the authenticated callable function above.
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+    match /syncHealth/{healthId} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+    match /syncHealth/{healthId}/{document=**} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+    match /auditLogs/{auditId} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+    // Marketing, creator, and support submissions are accepted only through a
+    // callable server function and are visible only to the owner dashboard.
+    match /communityInbox/{messageId} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+    // Referral attribution and pending early-access rewards are server-written.
+    // Only the owner can inspect the complete referral graph.
+    match /signalReferrals/{referralId} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+    // Public editorial cards are published only through the owner callable.
+    match /publicContent/{contentId} {
+      allow read: if resource.data.published == true || isOwner();
+      allow write: if false;
+    }
+    match /orders/{orderId} {
+      allow read: if request.auth != null && resource.data.customerUid == request.auth.uid;
+      allow write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
