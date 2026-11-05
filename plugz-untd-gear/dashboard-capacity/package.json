@@ -1,0 +1,19 @@
+{
+  "name": "plugz-dashboard-source",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reconstructed Plugz customer Dashboard with paginated Firebase order history.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "functions:check": "node --check functions/index.js"
+  },
+  "dependencies": {
+    "firebase": "12.11.0",
+    "next": "16.0.11",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  }
+}
