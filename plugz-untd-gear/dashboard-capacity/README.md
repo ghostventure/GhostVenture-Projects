@@ -5,8 +5,10 @@ This is a new, standalone Next.js setup assembled on 2026-11-04 from the Firebas
 ## What is included
 
 - Customer account dashboard with the live site's email/password sign-in, account creation, password reset, profile summary, saved-piece count, preference status, and links to existing storefront account/support routes.
+- In-app `/account/settings` center for profile details, notification choices, saved addresses, email verification, password reset, and account-data export.
 - Paginated order history with test/production filters, cursor-based load-more, explicit loading/error/retry/empty states, and accessible status announcements.
 - `getCustomerOrderPage` callable in `functions/index.js`, which returns at most 20 customer-scoped orders and excludes unnecessary/private fields from the response.
+- `updateCustomerAccountSettings` callable, which validates and saves profile, communication preferences, and addresses in one authenticated transaction.
 - Active Firestore and Storage rule snapshots and the required customer-order composite index.
 - Recovered deployed backend baseline. Compiled reference assets are kept in the local recovery artifacts and are excluded from this source project.
 
@@ -25,7 +27,8 @@ Start the local app with `npm run dev`, then open `http://localhost:3000/dashboa
 Deployment status on 2026-11-04:
 
 - `getCustomerOrderPage` is deployed to `plugz-untd-gear` in `us-east4` as a Node.js 22 callable.
-- The `orders` composite index (`customerUid` ascending, `createdAt` descending) was deployed and last reported `CREATING`. It must reach `READY` before order queries can use it reliably.
+- `updateCustomerAccountSettings` is deployed to `plugz-untd-gear` in `us-east4` as a Node.js 22 callable.
+- The `orders` composite index (`customerUid` ascending, `createdAt` descending) is `READY`.
 - No Firestore rules, Storage rules, or Hosting deployment was made from this setup. The existing production Dashboard remains unchanged.
 
 See [`docs/DEPLOYMENT_HANDOFF_2026-11-04.md`](docs/DEPLOYMENT_HANDOFF_2026-11-04.md) for the current state and resume steps.

@@ -439,6 +439,107 @@ exports.updateCustomerAccountData = onCall({
   return { ok: true, savedPieces, addresses };
 });
 
+// Account settings are saved as one authenticated transaction so profile,
+// communication choices, and delivery addresses cannot partially diverge.
+// This also avoids a separate callable round trip for each settings section.
+exports.updateCustomerAccountSettings = onCall({
+  region: REGION,
+  timeoutSeconds: 30,
+  memory: "256MiB",
+}, async (request) => {
+  if (!request.auth?.uid) throw new HttpsError("unauthenticated", "Sign-in required.");
+  const clean = (value, max) => typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
+  const profileInput = request.data?.profile;
+  const preferencesInput = request.data?.preferences;
+  const addressInput = request.data?.addresses;
+  if (!profileInput || typeof profileInput !== "object" || Array.isArray(profileInput) ||
+      !preferencesInput || typeof preferencesInput !== "object" || Array.isArray(preferencesInput) ||
+      !Array.isArray(addressInput)) {
+    throw new HttpsError("invalid-argument", "Account settings are incomplete.");
+  }
+  const allowedProfileFields = new Set(["displayName", "handle", "city", "favoriteSound", "bio", "socialHandle", "preferredSize", "styleFocus"]);
+  if (Object.keys(profileInput).some((key) => !allowedProfileFields.has(key)) ||
+      Object.values(profileInput).some((value) => typeof value !== "string")) {
+    throw new HttpsError("invalid-argument", "Unsupported profile setting.");
+  }
+  const profile = {
+    displayName: clean(profileInput.displayName, 48),
+    handle: clean(profileInput.handle, 28).toLowerCase().replace(/[^a-z0-9_.-]/g, ""),
+    city: clean(profileInput.city, 64),
+    favoriteSound: clean(profileInput.favoriteSound, 64),
+    bio: clean(profileInput.bio, 240),
+    socialHandle: clean(profileInput.socialHandle, 48).replace(/^@/, ""),
+    preferredSize: clean(profileInput.preferredSize, 4).toUpperCase(),
+    styleFocus: clean(profileInput.styleFocus, 20),
+  };
+  if (profile.handle && (profile.handle.length < 3 || !/^[a-z0-9][a-z0-9_.-]*$/.test(profile.handle))) {
+    throw new HttpsError("invalid-argument", "Use 3-28 letters, numbers, dots, dashes, or underscores for your handle.");
+  }
+  if (profile.socialHandle && !/^[a-zA-Z0-9_.-]{1,48}$/.test(profile.socialHandle)) {
+    throw new HttpsError("invalid-argument", "Your social handle can use only letters, numbers, dots, dashes, and underscores.");
+  }
+  if (profile.preferredSize && !["XS", "S", "M", "L", "XL", "2XL", "3XL"].includes(profile.preferredSize)) {
+    throw new HttpsError("invalid-argument", "Choose a valid preferred size.");
+  }
+  if (profile.styleFocus && !["Streetwear", "Music", "Skate", "Minimal", "Vintage", "Custom"].includes(profile.styleFocus)) {
+    throw new HttpsError("invalid-argument", "Choose a valid style focus.");
+  }
+  const preferenceKeys = new Set(["dropAlerts", "restockAlerts", "newsletterOptIn"]);
+  if (Object.keys(preferencesInput).some((key) => !preferenceKeys.has(key)) ||
+      [...preferenceKeys].some((key) => typeof preferencesInput[key] !== "boolean")) {
+    throw new HttpsError("invalid-argument", "Choose valid communication preferences.");
+  }
+  const preferences = {
+    dropAlerts: preferencesInput.dropAlerts,
+    restockAlerts: preferencesInput.restockAlerts,
+    newsletterOptIn: preferencesInput.newsletterOptIn,
+  };
+  if (addressInput.length > 5) throw new HttpsError("invalid-argument", "You can save up to five addresses.");
+  const addresses = addressInput.map((entry, index) => {
+    const label = clean(entry?.label, 30) || `Address ${index + 1}`;
+    const recipient = clean(entry?.recipient, 80);
+    const line1 = clean(entry?.line1, 100);
+    const line2 = clean(entry?.line2, 100);
+    const city = clean(entry?.city, 64);
+    const region = clean(entry?.region, 64);
+    const postalCode = clean(entry?.postalCode, 20);
+    const country = clean(entry?.country, 2).toUpperCase() || "US";
+    if (!recipient || !line1 || !city || !region || !postalCode || !/^[A-Z]{2}$/.test(country)) {
+      throw new HttpsError("invalid-argument", "Each saved address needs a recipient, street, city, state or region, postal code, and two-letter country code.");
+    }
+    return { label, recipient, line1, line2: line2 || null, city, region, postalCode, country };
+  });
+
+  const db = getFirestore();
+  const profileRef = db.collection("users").doc(request.auth.uid);
+  const auditRef = db.collection(AUDIT_COLLECTION).doc();
+  const updatedAt = FieldValue.serverTimestamp();
+  const values = { ...profile, ...preferences, addresses, accountSettingsUpdatedAt: updatedAt };
+  await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(profileRef);
+    if (existing.exists) {
+      transaction.set(profileRef, values, { merge: true });
+    } else {
+      transaction.create(profileRef, {
+        ...values,
+        role: "customer",
+        email: typeof request.auth.token.email === "string" ? request.auth.token.email : null,
+        referralCode: signalCodeForUid(request.auth.uid),
+        referralJoins: 0,
+        accountActivatedAt: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+    transaction.create(auditRef, {
+      action: "customer_account_settings_updated",
+      actorUid: request.auth.uid,
+      savedAddressCount: addresses.length,
+      occurredAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { ok: true, profile, preferences, addresses };
+});
+
 // Pass the Signal is a customer-to-customer attribution loop. The browser never
 // writes attribution itself: a verified account can claim one valid code once,
 // cannot use its own code, and the immutable referral record is owner-visible.

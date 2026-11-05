@@ -120,6 +120,7 @@ export default function DashboardClient() {
         <nav aria-label="Account navigation">
           <a href="https://plugz-untd-gear.web.app/#shop">Shop</a>
           <a className="current-link" href="/dashboard" aria-current="page">Dashboard</a>
+          {user && <a href="/account/settings">Settings</a>}
           {user && <button className="quiet-button" type="button" onClick={handleSignOut} disabled={busy}>Sign out</button>}
         </nav>
       </header>
@@ -160,7 +161,7 @@ export default function DashboardClient() {
               <h1>Welcome back, {name.split(" ")[0]}.</h1>
               <p>{profile?.bio || "Your Plugz account, saved rotation, and order history."}</p>
             </div>
-            <a className="outline-button" href="https://plugz-untd-gear.web.app/profile">Edit profile</a>
+            <a className="outline-button" href="/account/settings">Account settings</a>
           </section>
 
           <section className="metrics" aria-label="Account summary">
@@ -176,7 +177,7 @@ export default function DashboardClient() {
 
           <section className="quick-links" aria-labelledby="account-links-title">
             <div><p className="eyebrow">Account center</p><h2 id="account-links-title">Keep your account in sync.</h2></div>
-            <a href="https://plugz-untd-gear.web.app/profile">Profile and preferences <span aria-hidden="true">↗</span></a>
+            <a href="/account/settings">Profile and preferences <span aria-hidden="true">↗</span></a>
             <a href="https://plugz-untd-gear.web.app/rotation">Your saved rotation <span aria-hidden="true">↗</span></a>
             <a href="https://plugz-untd-gear.web.app/support">Contact Plugz support <span aria-hidden="true">↗</span></a>
           </section>
