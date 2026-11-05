@@ -147,6 +147,7 @@ export default function DashboardClient() {
               {busy ? "Please wait…" : authMode === "signup" ? "Create account" : "Sign in"}
             </button>
           </form>
+          <p className="account-terms">By continuing, you agree to the Plugz <a href="https://plugz-untd-gear.web.app/legal.html">Terms</a> and <a href="https://plugz-untd-gear.web.app/privacy.html">Privacy Policy</a>.</p>
           {message && <p className="notice" role="alert">{message}</p>}
           <p className="fine-print">Your account information and order history are private to you.</p>
         </section>

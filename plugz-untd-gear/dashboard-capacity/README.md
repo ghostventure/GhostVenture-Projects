@@ -8,7 +8,7 @@ This is a new, standalone Next.js setup assembled on 2026-11-04 from the Firebas
 - Paginated order history with test/production filters, cursor-based load-more, explicit loading/error/retry/empty states, and accessible status announcements.
 - `getCustomerOrderPage` callable in `functions/index.js`, which returns at most 20 customer-scoped orders and excludes unnecessary/private fields from the response.
 - Active Firestore and Storage rule snapshots and the required customer-order composite index.
-- Recovered deployed backend baseline; compiled reference assets remain in the sibling recovery folder.
+- Recovered deployed backend baseline. Compiled reference assets are kept in the local recovery artifacts and are excluded from this source project.
 
 The original Next.js frontend source and source maps were not present in the deployment. This new app reconstructs the customer Dashboard flow; it does not reproduce every route or the storefront.
 

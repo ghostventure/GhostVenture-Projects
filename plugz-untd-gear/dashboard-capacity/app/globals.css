@@ -51,6 +51,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--gold); outline-
 .text-button { border: 0; background: none; color: var(--gold); text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
 .text-button:disabled { opacity: .65; cursor: wait; }
 .account-form .primary-button { justify-self: start; }
+.account-terms { margin: .9rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.account-terms a { color: var(--gold); text-underline-offset: .2em; }
 .fine-print { margin: 1.6rem 0 0; color: var(--muted); font-size: .84rem; }
 .loading-line { width: 100%; height: .45rem; margin-top: 2rem; overflow: hidden; border-radius: 9px; background: linear-gradient(90deg, #191712, #6f6040, #191712); background-size: 200% 100%; animation: load 1.6s linear infinite; }
 .quick-links { display: grid; gap: .7rem; margin: 2.5rem 0; }
