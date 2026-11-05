@@ -16,10 +16,18 @@ The original Next.js frontend source and source maps were not present in the dep
 
 Use Node.js 22 or later. Install dependencies with `npm ci`. Copy `.env.example` to `.env.local` and fill the six `NEXT_PUBLIC_FIREBASE_*` values from the Firebase Web app configuration for `plugz-untd-gear`. These are public client configuration values; do not place service account credentials or Secret Manager values in this app.
 
-Start the local app with `npm run dev`, then open `http://localhost:3000/dashboard`. Email/password Authentication must be enabled for the Firebase project, and the current hostname must be an authorized Authentication domain. The order page calls `getCustomerOrderPage`; the candidate callable and its Firestore index must be deployed before order data will load from the live project.
+Start the local app with `npm run dev`, then open `http://localhost:3000/dashboard`. Email/password Authentication must be enabled for the Firebase project, and the current hostname must be an authorized Authentication domain. The order page calls `getCustomerOrderPage`.
 
 ## Firebase deployment boundaries
 
-`firebase.json` defines only Cloud Functions, Firestore rules/indexes, and Storage rules. It contains no Hosting target or Hosting configuration. The source project cannot deploy or overwrite the live storefront's Hosting build. For a targeted backend rollout, review the code, secrets, index status, account, and project, then deploy only the new callable and Firestore index with the intended project explicitly selected. No production deployment has been made from this setup.
+`firebase.json` defines only Cloud Functions, Firestore rules/indexes, and Storage rules. It contains no Hosting target or Hosting configuration. The source project cannot deploy or overwrite the live storefront's Hosting build.
+
+Deployment status on 2026-11-04:
+
+- `getCustomerOrderPage` is deployed to `plugz-untd-gear` in `us-east4` as a Node.js 22 callable.
+- The `orders` composite index (`customerUid` ascending, `createdAt` descending) was deployed and last reported `CREATING`. It must reach `READY` before order queries can use it reliably.
+- No Firestore rules, Storage rules, or Hosting deployment was made from this setup. The existing production Dashboard remains unchanged.
+
+See [`docs/DEPLOYMENT_HANDOFF_2026-11-04.md`](docs/DEPLOYMENT_HANDOFF_2026-11-04.md) for the current state and resume steps.
 
 The existing production Dashboard remains unchanged until this reconstructed app is integrated into a deliberate Hosting rollout. Do not deploy this app to `plugz-untd-gear` Hosting as a standalone replacement for the full site.
