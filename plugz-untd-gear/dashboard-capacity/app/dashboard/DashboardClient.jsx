@@ -154,20 +154,21 @@ export default function DashboardClient() {
         </section>
       ) : (
         <>
-          <section className="welcome-panel">
+          <section className="welcome-panel dashboard-hero">
+            <div className="hero-glow" aria-hidden="true" />
             <div className="avatar" aria-hidden="true">{initials}</div>
             <div className="welcome-copy">
-              <p className="eyebrow">Member briefing</p>
+              <p className="eyebrow">Your Plugz space</p>
               <h1>Welcome back, {name.split(" ")[0]}.</h1>
               <p>{profile?.bio || "Your Plugz account, saved rotation, and order history."}</p>
             </div>
-            <a className="outline-button" href="/account/settings">Account settings</a>
+            <div className="hero-actions"><span className="member-chip"><span aria-hidden="true" /> MEMBER ACCOUNT</span><a className="outline-button" href="/account/settings">Account settings <span aria-hidden="true">↗</span></a></div>
           </section>
 
           <section className="metrics" aria-label="Account summary">
-            <article><span className="metric-value">{savedCount}</span><span>Saved pieces</span></article>
-            <article><span className="metric-value">{profilePercent}%</span><span>Profile signal</span></article>
-            <article><span className="metric-value">{profile?.dropAlerts || profile?.restockAlerts ? "On" : "Off"}</span><span>Drop alerts</span></article>
+            <article className="metric-card"><span className="metric-icon" aria-hidden="true">♡</span><span className="metric-value">{savedCount}</span><span className="metric-label">Saved pieces</span><span className="metric-footnote">Your personal rotation</span></article>
+            <article className="metric-card"><span className="metric-icon" aria-hidden="true">◌</span><span className="metric-value">{profilePercent}%</span><span className="metric-label">Profile signal</span><span className="metric-footnote">Complete your account details</span></article>
+            <article className="metric-card"><span className="metric-icon" aria-hidden="true">⌁</span><span className="metric-value">{profile?.dropAlerts || profile?.restockAlerts ? "On" : "Off"}</span><span className="metric-label">Drop alerts</span><span className="metric-footnote">Your notification preference</span></article>
           </section>
 
           {profileState === "error" && <p className="notice" role="status">We couldn’t load your profile details. Your order history can still load below.</p>}
@@ -176,10 +177,10 @@ export default function DashboardClient() {
           <CustomerOrderHistory functions={clients.functions} uid={user.uid} />
 
           <section className="quick-links" aria-labelledby="account-links-title">
-            <div><p className="eyebrow">Account center</p><h2 id="account-links-title">Keep your account in sync.</h2></div>
-            <a href="/account/settings">Profile and preferences <span aria-hidden="true">↗</span></a>
-            <a href="https://plugz-untd-gear.web.app/rotation">Your saved rotation <span aria-hidden="true">↗</span></a>
-            <a href="https://plugz-untd-gear.web.app/support">Contact Plugz support <span aria-hidden="true">↗</span></a>
+            <div className="quick-links-heading"><p className="eyebrow">Made for you</p><h2 id="account-links-title">Your account shortcuts</h2><p>Pick up where you left off.</p></div>
+            <a className="shortcut-card" href="/account/settings"><span className="shortcut-icon" aria-hidden="true">01</span><span className="shortcut-copy"><strong>Profile & settings</strong><small>Personalize your details and updates.</small></span><span className="shortcut-arrow" aria-hidden="true">↗</span></a>
+            <a className="shortcut-card" href="https://plugz-untd-gear.web.app/rotation"><span className="shortcut-icon" aria-hidden="true">02</span><span className="shortcut-copy"><strong>Saved rotation</strong><small>Revisit the pieces you’ve kept.</small></span><span className="shortcut-arrow" aria-hidden="true">↗</span></a>
+            <a className="shortcut-card" href="https://plugz-untd-gear.web.app/support"><span className="shortcut-icon" aria-hidden="true">03</span><span className="shortcut-copy"><strong>Member support</strong><small>Get help with an order or account.</small></span><span className="shortcut-arrow" aria-hidden="true">↗</span></a>
           </section>
         </>
       )}

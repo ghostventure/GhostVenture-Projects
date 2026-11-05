@@ -294,6 +294,14 @@ export default function AccountSettingsClient() {
             </span>
           </section>
 
+          <nav className="settings-jump-nav" aria-label="Settings sections">
+            <a href="#profile-settings-title"><span>01</span> Profile</a>
+            <a href="#communication-title"><span>02</span> Updates</a>
+            <a href="#address-title"><span>03</span> Addresses</a>
+            <a href="#security-title"><span>04</span> Security</a>
+            <a href="#data-title"><span>05</span> Your data</a>
+          </nav>
+
           {notice && <p className={`notice settings-notice ${noticeKind === "alert" ? "notice-error" : ""}`} role={noticeKind} aria-live={noticeKind === "alert" ? "assertive" : "polite"}>{notice}</p>}
 
           <form className="settings-form" onSubmit={saveSettings}>
