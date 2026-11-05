@@ -20,17 +20,20 @@ Use Node.js 22 or later. Install dependencies with `npm ci`. Copy `.env.example`
 
 Start the local app with `npm run dev`, then open `http://localhost:3000/dashboard`. Email/password Authentication must be enabled for the Firebase project, and the current hostname must be an authorized Authentication domain. The order page calls `getCustomerOrderPage`.
 
+The static production build is available at [https://plugz-dashboard-capacity.web.app](https://plugz-dashboard-capacity.web.app). The dashboard and account settings paths are `/dashboard/` and `/account/settings/`.
+
 ## Firebase deployment boundaries
 
-`firebase.json` defines only Cloud Functions, Firestore rules/indexes, and Storage rules. It contains no Hosting target or Hosting configuration. The source project cannot deploy or overwrite the live storefront's Hosting build.
+`firebase.json` targets the separate Firebase Hosting site `plugz-dashboard-capacity` and publishes the static export from `out/`. It does not target the storefront Hosting site `plugz-untd-gear`.
 
 Deployment status on 2026-11-04:
 
 - `getCustomerOrderPage` is deployed to `plugz-untd-gear` in `us-east4` as a Node.js 22 callable.
 - `updateCustomerAccountSettings` is deployed to `plugz-untd-gear` in `us-east4` as a Node.js 22 callable.
 - The `orders` composite index (`customerUid` ascending, `createdAt` descending) is `READY`.
-- No Firestore rules, Storage rules, or Hosting deployment was made from this setup. The existing production Dashboard remains unchanged.
+- The standalone app was deployed to the separate Hosting site `plugz-dashboard-capacity` at `https://plugz-dashboard-capacity.web.app`. `/`, `/dashboard/`, and `/account/settings/` returned HTTP 200.
+- No Firestore rules or Storage rules were deployed. The main storefront site `plugz-untd-gear.web.app` and its existing Dashboard remain unchanged.
 
 See [`docs/DEPLOYMENT_HANDOFF_2026-11-04.md`](docs/DEPLOYMENT_HANDOFF_2026-11-04.md) for the current state and resume steps.
 
-The existing production Dashboard remains unchanged until this reconstructed app is integrated into a deliberate Hosting rollout. Do not deploy this app to `plugz-untd-gear` Hosting as a standalone replacement for the full site.
+The main storefront remains unchanged. This account app is hosted separately; do not change its Hosting target to `plugz-untd-gear` as a standalone replacement for the full site.
