@@ -1,0 +1,90 @@
+.section {
+  display: grid;
+  gap: 1rem;
+  color: #f5f1e9;
+}
+.header,
+.cardTop,
+.cardMeta,
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.header { align-items: end; }
+.eyebrow {
+  margin: 0 0 .35rem;
+  color: #b9a578;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.header h2,
+.card h3,
+.message h3 { margin: 0; }
+.header h2 { font-size: clamp(1.5rem, 3vw, 2.25rem); }
+.description,
+.note,
+.footer { color: #b9b4a9; }
+.description { margin: .4rem 0 0; }
+.filterLabel { display: grid; gap: .35rem; color: #d6d0c5; font-size: .8rem; }
+.filterLabel select {
+  min-height: 2.75rem;
+  padding: 0 2.25rem 0 .8rem;
+  border: 1px solid #514b41;
+  border-radius: .65rem;
+  background: #181715;
+  color: inherit;
+  font: inherit;
+}
+.status { min-height: 1.25rem; margin: 0; color: #a7a196; font-size: .85rem; }
+.list { display: grid; gap: .85rem; margin: 0; padding: 0; list-style: none; }
+.card,
+.message {
+  padding: clamp(1rem, 3vw, 1.4rem);
+  border: 1px solid #393630;
+  border-radius: 1rem;
+  background: #151412;
+}
+.card h3 { overflow-wrap: anywhere; font-size: 1rem; }
+.cardMeta { margin: 1.15rem 0 .8rem; color: #c9c2b7; font-size: .9rem; }
+.cardMeta strong { color: #f5f1e9; font-size: 1.05rem; }
+.statusBadge,
+.testBadge { padding: .35rem .6rem; border-radius: 99px; font-size: .75rem; text-transform: capitalize; }
+.statusBadge { background: #26372e; color: #b9e0c6; }
+.testBadge { background: #3b3427; color: #e7cf96; }
+.items { display: grid; gap: .45rem; margin: .5rem 0 .9rem; padding: 0; list-style: none; color: #e3ddd2; }
+.items li { display: flex; justify-content: space-between; gap: 1rem; }
+.items li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.note { margin: .8rem 0 0; font-size: .82rem; line-height: 1.5; }
+.link { color: #e9c977; text-underline-offset: .2em; }
+.link:focus-visible,
+.secondaryButton:focus-visible,
+.filterLabel select:focus-visible { outline: 3px solid #f0cf78; outline-offset: 3px; }
+.secondaryButton {
+  justify-self: start;
+  min-height: 2.75rem;
+  padding: .65rem 1rem;
+  border: 1px solid #6d6149;
+  border-radius: .65rem;
+  background: #211e18;
+  color: #f5f1e9;
+  font: inherit;
+  cursor: pointer;
+}
+.secondaryButton:disabled { cursor: wait; opacity: .65; }
+.message { display: grid; justify-items: start; gap: .75rem; }
+.message p { margin: 0; color: #c9c2b7; }
+.skeletonList { display: grid; gap: .8rem; }
+.skeleton { height: 9rem; border-radius: 1rem; background: linear-gradient(100deg,#171614 30%,#24211c 50%,#171614 70%); background-size: 220% 100%; animation: shimmer 1.5s ease-in-out infinite; }
+.footer { flex-wrap: wrap; border-top: 1px solid #393630; padding-top: 1rem; font-size: .82rem; }
+@keyframes shimmer { to { background-position-x: -220%; } }
+@media (max-width: 600px) {
+  .header { align-items: stretch; flex-direction: column; }
+  .filterLabel { align-self: start; }
+  .cardTop { align-items: start; }
+  .cardMeta { align-items: start; flex-direction: column; gap: .35rem; }
+}
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

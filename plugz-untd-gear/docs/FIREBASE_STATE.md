@@ -37,3 +37,7 @@ Firebase Remote Config has no parameters or parameter groups deployed, so there 
 `fallback-upgrades/` contains the functional changes made in the small local static fallback: a persistent bag with quantity and currency totals, validated local storage and cross-tab updates; semantic labels, skip navigation, product button labels and live bag status; and Hosting cache/security headers. These changes are not part of production version `5239836fb199d578`; they are recorded here as fallback-only code and must be ported to the actual Next.js source before they can affect production.
 
 The fallback Hosting configuration is intentionally kept separate from the rules-only Firebase config in this directory. Do not use the fallback's `firebase.json` to deploy the production site.
+
+## Dashboard capacity candidate
+
+`../dashboard-capacity/` contains recovered Functions source plus a candidate `getCustomerOrderPage` callable and reconstructed order-history UI section. It replaces the current unbounded customer order listener with 20-record cursor pages and sanitized fields. The candidate has not been deployed or integrated into the original Next.js page source; production still runs the previously deployed Dashboard. Its composite index is included alongside the candidate code.
