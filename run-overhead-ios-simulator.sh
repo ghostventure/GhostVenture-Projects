@@ -56,8 +56,9 @@ target = os.environ.get("SIMULATOR_NAME", "").strip().lower()
 devices = [d for group in json.load(sys.stdin)["devices"].values() for d in group
            if d.get("isAvailable") and "iphone" in d.get("name", "").lower()
            and (not target or target in d["name"].lower())]
+exact = [d for d in devices if d["name"].lower() == target] if target else []
 booted = [d for d in devices if d.get("state") == "Booted"]
-choices = booted or devices
+choices = exact or booted or devices
 if choices:
     print(choices[0]["udid"])
 ')"
