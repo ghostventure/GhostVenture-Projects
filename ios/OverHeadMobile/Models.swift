@@ -7,15 +7,17 @@ struct QuickTask: Identifiable {
     var customerId: String?
     var customerName: String?
     var dueLabel: String
+    var dueDate: Date?
     var done: Bool
     var kind: TaskKind
 
-    init(id: String, title: String, customerId: String? = nil, customerName: String? = nil, dueLabel: String = "", done: Bool = false, kind: TaskKind = .task) {
+    init(id: String, title: String, customerId: String? = nil, customerName: String? = nil, dueLabel: String = "", dueDate: Date? = nil, done: Bool = false, kind: TaskKind = .task) {
         self.id = id
         self.title = title
         self.customerId = customerId
         self.customerName = customerName
         self.dueLabel = dueLabel
+        self.dueDate = dueDate
         self.done = done
         self.kind = kind
     }
@@ -26,6 +28,7 @@ struct QuickTask: Identifiable {
         title = data["title"] as? String ?? "Untitled task"
         customerId = data["customer_id"] as? String
         customerName = customerId.flatMap { customersById[$0]?.name }
+        dueDate = (data["due_at"] as? Timestamp)?.dateValue()
         dueLabel = Self.dueLabel(from: data["due_at"])
         done = data["done"] as? Bool ?? (data["status"] as? String == "Complete")
         kind = TaskKind.from(data["kind"] as? String ?? "")

@@ -159,12 +159,34 @@ private struct TodayView: View {
     @Environment(OverHeadStore.self) private var store
     @Binding var activeSheet: QuickSheet?
     @State private var taskFilter: TaskFilter = .open
+    @State private var taskSearch = ""
+    @State private var taskSort: TaskSort = .dueDate
 
     private var visibleTasks: [QuickTask] {
+        let filtered: [QuickTask]
         switch taskFilter {
-        case .open: store.tasks.filter { !$0.done }
-        case .completed: store.tasks.filter(\.done)
-        case .all: store.tasks
+        case .open: filtered = store.tasks.filter { !$0.done }
+        case .completed: filtered = store.tasks.filter(\.done)
+        case .all: filtered = store.tasks
+        }
+        let matching = taskSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? filtered
+            : filtered.filter { task in
+                task.title.localizedCaseInsensitiveContains(taskSearch)
+                    || (task.customerName?.localizedCaseInsensitiveContains(taskSearch) ?? false)
+            }
+        return matching.sorted { lhs, rhs in
+            switch taskSort {
+            case .dueDate:
+                switch (lhs.dueDate, rhs.dueDate) {
+                case let (left?, right?) where left != right: return left < right
+                case (_?, nil): return true
+                case (nil, _?): return false
+                default: return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                }
+            case .title:
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
         }
     }
 
@@ -244,13 +266,60 @@ private struct TodayView: View {
                         }
                         .pickerStyle(.segmented)
 
+                        HStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass").foregroundStyle(OverHeadStyle.muted)
+                            TextField("Search tasks or customers", text: $taskSearch)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .accessibilityLabel("Search tasks and customers")
+                            if !taskSearch.isEmpty {
+                                Button { taskSearch = "" } label: {
+                                    Image(systemName: "xmark.circle.fill").foregroundStyle(OverHeadStyle.muted)
+                                }
+                                .accessibilityLabel("Clear task search")
+                            }
+                            Menu {
+                                Picker("Sort tasks", selection: $taskSort) {
+                                    ForEach(TaskSort.allCases) { sort in Text(sort.title).tag(sort) }
+                                }
+                            } label: {
+                                Label("Sort", systemImage: "arrow.up.arrow.down")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(OverHeadStyle.blue)
+                            }
+                            .accessibilityLabel("Sort tasks by \(taskSort.title.lowercased())")
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 13))
+                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(OverHeadStyle.line, lineWidth: 1))
+
                         if visibleTasks.isEmpty {
-                            EmptyState(
-                                icon: taskFilter == .completed ? "checkmark.circle" : "sparkles",
-                                title: taskFilter == .completed ? "Nothing completed yet" : "You’re all caught up",
-                                detail: taskFilter == .completed ? "Finished tasks will show here." : "Add a task when something needs your attention."
-                            )
-                            .frame(minHeight: 150)
+                            if !taskSearch.isEmpty {
+                                VStack(spacing: 10) {
+                                    EmptyState(icon: "magnifyingglass", title: "No matching tasks", detail: "Try another task or customer name.")
+                                    Button("Clear search") { taskSearch = "" }
+                                        .buttonStyle(.bordered)
+                                }
+                                .frame(minHeight: 150)
+                            } else {
+                                VStack(spacing: 8) {
+                                    EmptyState(
+                                        icon: taskFilter == .completed ? "checkmark.circle" : "sparkles",
+                                        title: taskFilter == .completed ? "Nothing completed yet" : "You’re all caught up",
+                                        detail: taskFilter == .completed ? "Finished tasks will show here." : "Add a task when something needs your attention."
+                                    )
+                                    .frame(minHeight: 135)
+                                    if taskFilter != .completed {
+                                        Button { activeSheet = .task } label: {
+                                            Label("Add a task", systemImage: "plus")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(OverHeadStyle.blue)
+                                    }
+                                }
+                            }
                         } else {
                             ForEach(visibleTasks) { task in
                                 TaskRow(task: task, isUpdating: store.updatingTaskIds.contains(task.id)) { Task { await store.toggle(task) } }
@@ -286,6 +355,12 @@ private enum TaskFilter: String, CaseIterable, Identifiable {
         case .all: "All"
         }
     }
+}
+
+private enum TaskSort: String, CaseIterable, Identifiable {
+    case dueDate, title
+    var id: String { rawValue }
+    var title: String { self == .dueDate ? "Due date" : "Task name" }
 }
 
 private struct MetricCard: View {
@@ -367,6 +442,8 @@ private struct TaskRow: View {
             }
             .buttonStyle(.plain)
             .disabled(isUpdating)
+            .accessibilityLabel(task.done ? "Mark \(task.title) as open" : "Mark \(task.title) complete")
+            .accessibilityHint("Updates this task for the shared workspace")
             VStack(alignment: .leading, spacing: 5) {
                 Text(kindLabel)
                     .font(.system(size: 10, weight: .bold, design: .rounded))

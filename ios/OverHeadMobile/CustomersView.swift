@@ -95,6 +95,7 @@ private struct CustomerRow: View {
 
 private struct CustomerDetailView: View {
     let customer: Customer
+    @State private var activeAction: CustomerAction?
 
     var body: some View {
         List {
@@ -115,8 +116,15 @@ private struct CustomerDetailView: View {
                     Link(destination: url) { Label(customer.email, systemImage: "envelope") }
                 }
                 if !customer.phone.isEmpty, let url = URL(string: "tel:\(customer.phone.filter { $0.isNumber || $0 == "+" })") {
-                    Link(destination: url) { Label(customer.phone, systemImage: "phone") }
+                    Link(destination: url) { Label("Call \(customer.phone)", systemImage: "phone") }
+                    if let messageURL = URL(string: "sms:\(customer.phone.filter { $0.isNumber || $0 == "+" })") {
+                        Link(destination: messageURL) { Label("Message \(customer.name)", systemImage: "message") }
+                    }
                 }
+            }
+            Section("Quick actions") {
+                Button { activeAction = .task } label: { Label("Add a task for \(customer.name)", systemImage: "plus.circle") }
+                Button { activeAction = .update } label: { Label("Log an update", systemImage: "square.and.pencil") }
             }
             Section {
                 Label("Customer details are shared with your OverHead workspace.", systemImage: "person.2")
@@ -127,7 +135,18 @@ private struct CustomerDetailView: View {
         .background(OverHeadStyle.canvas)
         .navigationTitle("Customer")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $activeAction) { action in
+            switch action {
+            case .task: AddTaskSheet(customerId: customer.id)
+            case .update: QuickNoteSheet(customerId: customer.id)
+            }
+        }
     }
+}
+
+private enum CustomerAction: String, Identifiable {
+    case task, update
+    var id: String { rawValue }
 }
 
 private struct AddCustomerSheet: View {

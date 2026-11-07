@@ -129,7 +129,7 @@ final class OverHeadStore {
         do {
             let document = try await database.collection("workspaces").document(workspaceId).collection("tasks").addDocument(data: data)
             let customer = customerId.flatMap { id in customers.first(where: { $0.id == id }) }
-            tasks.insert(QuickTask(id: document.documentID, title: cleanTitle, customerId: customerId, customerName: customer?.name, dueLabel: dueAt?.formatted(date: .abbreviated, time: .shortened) ?? "", kind: kind), at: 0)
+            tasks.insert(QuickTask(id: document.documentID, title: cleanTitle, customerId: customerId, customerName: customer?.name, dueLabel: dueAt?.formatted(date: .abbreviated, time: .shortened) ?? "", dueDate: dueAt, kind: kind), at: 0)
             return true
         } catch {
             errorMessage = readable(error)

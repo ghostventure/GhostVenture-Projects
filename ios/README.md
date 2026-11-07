@@ -2,9 +2,10 @@
 
 This native SwiftUI app is a quick-action companion for the OverHead desktop product. It is intentionally limited to short mobile workflows:
 
-- Review open, completed, and all workspace tasks; mark work complete with one tap.
+- Search and sort open, completed, and all workspace tasks; mark work complete with one tap.
 - Add tasks with a type, optional customer, and due date.
-- Search customers by name, email, or phone; create records and start an email or phone call.
+- Search customers by name, email, or phone; create records and start an email, phone call, or text.
+- From a customer record, start a linked task or log a customer update without reselecting the customer.
 - Request an approval and let workspace managers approve or decline it from mobile or web.
 - Log quick customer updates and view the shared manager activity feed.
 

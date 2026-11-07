@@ -9,6 +9,10 @@ struct AddTaskSheet: View {
     @State private var includesDueDate = false
     @State private var dueAt = Date.now
 
+    init(customerId: String? = nil) {
+        _customerId = State(initialValue: customerId ?? "")
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -67,6 +71,10 @@ struct QuickNoteSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var customerId = ""
+
+    init(customerId: String? = nil) {
+        _customerId = State(initialValue: customerId ?? "")
+    }
 
     var body: some View {
         NavigationStack {
