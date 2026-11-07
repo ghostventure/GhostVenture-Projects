@@ -2339,36 +2339,42 @@ async function syncCylinderMembersWithWorkspace() {
     user.email !== activeSession.email && ['Front Desk', 'Bookkeeper', 'Support'].includes(user.role)
   )
   let synchronized = 0
+  const failures = []
   for (const user of candidates) {
-    const sharedRole = user.role === 'Front Desk' ? 'Manager' : 'Staff'
-    const sharedAccess = await cylinderMembersApiRequest('provision_member', {
-      email: user.email,
-      owner_name: user.owner_name,
-      role: sharedRole,
-    })
-    user.firebase_uid = sharedAccess.uid
-    user.workspace_id = activeWorkspaceId()
-    user.shared_role = sharedRole
-    if (user.status === 'Suspended') {
-      await cylinderMembersApiRequest('set_member_status', { uid: sharedAccess.uid, status: 'Suspended' })
-      user.shared_sync_status = 'Synchronized - suspended'
-    } else {
-      user.shared_sync_status = sharedAccess.email_verified ? 'Synchronized' : 'Pending email verification'
-      if (sharedAccess.verificationUrl || sharedAccess.passwordResetUrl) {
-        user.shared_sync_status = 'Verification email sent'
-        sendVerificationEmail(user, 'staff-invite', sharedAccess)
+    try {
+      const sharedRole = user.role === 'Front Desk' ? 'Manager' : 'Staff'
+      const sharedAccess = await cylinderMembersApiRequest('provision_member', {
+        email: user.email,
+        owner_name: user.owner_name,
+        role: sharedRole,
+        status: user.status === 'Suspended' ? 'Suspended' : 'Active',
+      })
+      user.firebase_uid = sharedAccess.uid
+      user.workspace_id = activeWorkspaceId()
+      user.shared_role = sharedRole
+      if (user.status === 'Suspended') {
+        user.shared_sync_status = 'Synchronized - suspended'
+      } else {
+        user.shared_sync_status = sharedAccess.email_verified ? 'Synchronized' : 'Pending email verification'
+        if (sharedAccess.verificationUrl || sharedAccess.passwordResetUrl) {
+          user.shared_sync_status = 'Verification email sent'
+          sendVerificationEmail(user, 'staff-invite', sharedAccess)
+        }
       }
+      user.shared_synced_at = now()
+      synchronized += 1
+    } catch (error) {
+      user.shared_sync_status = `Needs attention: ${error.message || 'Synchronization failed.'}`
+      failures.push(user.email)
     }
-    user.shared_synced_at = now()
     user.updated_at = now()
-    synchronized += 1
     persist()
   }
-  const message = synchronized
-    ? `${synchronized} Cylinder team account${synchronized === 1 ? '' : 's'} synchronized with mobile sign-in.`
+  const message = candidates.length
+    ? `${synchronized} of ${candidates.length} Cylinder team account${candidates.length === 1 ? '' : 's'} synchronized with mobile sign-in.${failures.length ? ` ${failures.length} need attention; review their account status and retry.` : ''}`
     : 'No Cylinder staff accounts needed synchronization.'
-  recordAudit('cylinder.members_synchronized', 'Cylinder team account synchronization completed', { count: synchronized }, activeSession.email)
-  return { synchronized, message, users: listUserProfiles() }
+  recordAudit('cylinder.members_synchronized', 'Cylinder team account synchronization completed', { count: synchronized, failures: failures.length }, activeSession.email)
+  return { synchronized, failed: failures.length, message, users: listUserProfiles() }
 }
 
 async function synchronizeCustomersAfterSignIn(session) {

@@ -164,9 +164,11 @@ async function provisionCylinderMember({ user, profile, workspaceId }, input) {
   const email = String(input.email || '').trim().toLowerCase()
   const ownerName = String(input.owner_name || '').trim()
   const role = String(input.role || '')
+  const status = String(input.status || 'Active')
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Enter a valid team member email address.')
   if (!ownerName) throw new Error('A team member name is required.')
   if (!['Manager', 'Staff'].includes(role)) throw new Error('Cylinder team members can be assigned Manager or Staff access.')
+  if (!['Active', 'Suspended'].includes(status)) throw new Error('Choose a valid team account status.')
   if (email === String(user.email || '').toLowerCase()) throw new Error('Use the existing administrator profile for your own account.')
 
   const auth = getAuth()
@@ -191,22 +193,27 @@ async function provisionCylinderMember({ user, profile, workspaceId }, input) {
     if (!existingProfile || existingProfile.workspace_id !== workspaceId || existingProfile.role === 'Administrator') {
       throw new Error('An account with this email already exists and cannot be linked to this Cylinder workspace.')
     }
-    member = await auth.updateUser(member.uid, { displayName: ownerName, disabled: false })
+    member = await auth.updateUser(member.uid, { displayName: ownerName, disabled: status === 'Suspended' })
     await profileRef.set({
       owner_name: ownerName,
       business_name: profile.business_name || 'Cylinder workspace',
       role,
-      status: 'Active',
+      status,
       updated_at: FieldValue.serverTimestamp(),
     }, { merge: true })
-    if (!member.emailVerified) verificationUrl = await auth.generateEmailVerificationLink(email)
+    if (!member.emailVerified) {
+      verificationUrl = await auth.generateEmailVerificationLink(email)
+      // Existing local profiles may have been provisioned in an earlier run
+      // whose invitation email failed. Keep setup repeatable and recoverable.
+      passwordResetUrl = await auth.generatePasswordResetLink(email)
+    }
   } else {
     member = await auth.createUser({
       email,
       password: crypto.randomBytes(32).toString('base64url'),
       emailVerified: false,
       displayName: ownerName,
-      disabled: false,
+      disabled: status === 'Suspended',
     })
     const createdAt = FieldValue.serverTimestamp()
     const newProfileRef = db.doc(`profiles/${member.uid}`)
@@ -222,10 +229,10 @@ async function provisionCylinderMember({ user, profile, workspaceId }, input) {
         email,
         workspace_id: workspaceId,
         role,
-        status: 'Active',
+        status,
         email_verified: false,
-        terms_accepted_at: createdAt,
-        last_sign_in: createdAt,
+        terms_accepted_at: '',
+        last_sign_in: '',
         created_at: createdAt,
         updated_at: createdAt,
       })
@@ -255,7 +262,7 @@ async function provisionCylinderMember({ user, profile, workspaceId }, input) {
     target_uid: member.uid,
     created_at: FieldValue.serverTimestamp(),
   }).catch((error) => console.error('Cylinder account audit write failed', error.message))
-  return { uid: member.uid, email, role, status: 'Active', email_verified: member.emailVerified, verificationUrl, passwordResetUrl }
+  return { uid: member.uid, email, role, status, email_verified: member.emailVerified, verificationUrl, passwordResetUrl }
 }
 
 exports.cylinderMembersApi = onRequest({
