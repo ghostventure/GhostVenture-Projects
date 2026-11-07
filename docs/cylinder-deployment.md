@@ -39,4 +39,5 @@ Publish the Cylinder installer, blockmap, and matching `latest.yml` together und
 - Customer support tickets can be shared through the Firebase workspace record path when the user is signed in with a Firebase-backed account.
 - Cylinder owners can enable shared mobile task sync. It copies task title/status and task metadata to the workspace Firestore task collection; disabling the setting stops future synchronization but does not delete shared task records. This does not copy customer documents or local backups.
 - Cylinder team accounts remain organization-managed. Cylinder Desktop provisions their Firebase sign-in profile and sends email-verification/password-setup links; the iOS app has no self-registration flow.
+- The `cylinder` Firebase Functions codebase isolates the member-management endpoint from Stripe billing secrets. Deploy the Cylinder endpoint with `firebase deploy --only functions:cylinder:cylinderMembersApi --config firebase.overhead.json --project overhead-office`.
 - SMTP, Microsoft Entra registration/consent, payment providers, and code-signing credentials remain external configuration requirements.
