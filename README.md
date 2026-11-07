@@ -4,6 +4,14 @@
 
 From the repository root on the Mac, run `./run-overhead-ios-simulator.sh` to fast-forward pull the latest GitHub code, build the `OverHeadMobile` Xcode scheme, install it on a booted or available iPhone simulator, and launch it. The helper stops if the working tree has uncommitted changes. To pick a particular available iPhone, run `SIMULATOR_NAME="iPhone 16 Pro" ./run-overhead-ios-simulator.sh`. This iOS helper does not alter the existing Windows desktop or Cylinder products.
 
+### Firebase App Distribution (iOS)
+
+The native OverHead iOS app is registered in the `overhead-office` Firebase project, but no iOS release has been uploaded. Firebase Hosting serves web content; it does not install a native iOS app. For pre-release testing, create a signed IPA in Xcode and upload it through Firebase App Distribution.
+
+Signing is managed by Apple, not Firebase. Sign into an Apple Developer account in Xcode, choose the appropriate team under **Signing & Capabilities**, and let Xcode manage or install the certificate and provisioning profile. Ad Hoc distribution requires the testers' device IDs to be included in the provisioning profile. Then upload the IPA and select the Firebase tester group or email addresses.
+
+As of 2026-11-07, this Mac has no installed Apple code-signing identities and the Xcode target has no team configured, so a distributable IPA cannot yet be produced. Firebase App Distribution is no-cost; distributing to outside testers or the App Store requires Apple Developer Program membership (currently US$99/year in the US; regional pricing may vary). A free Apple developer account can still be used to build and test on your own device with Xcode.
+
 Current packaged release: **0.3.2** for standard desktop and **0.3.4** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
 
 OverHead is a desktop-first admin cleanup framework for small businesses. It focuses on admin-overload pain points that happen after the customer reaches the business:
