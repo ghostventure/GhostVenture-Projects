@@ -73,8 +73,18 @@ fi
 if ! "$SIMCTL" list devices | grep -F "$SIMULATOR_ID" | grep -q '(Booted)'; then
     "$SIMCTL" boot "$SIMULATOR_ID"
 fi
-"$SIMCTL" bootstatus "$SIMULATOR_ID" -b
 open -a "$DEVELOPER_DIR/Applications/Simulator.app" --args -CurrentDeviceUDID "$SIMULATOR_ID"
+SIMULATOR_BOOT_TIMEOUT="${SIMULATOR_BOOT_TIMEOUT:-180}"
+python3 - "$SIMCTL" "$SIMULATOR_ID" "$SIMULATOR_BOOT_TIMEOUT" <<'PY'
+import subprocess
+import sys
+
+try:
+    subprocess.run([sys.argv[1], "bootstatus", sys.argv[2], "-b"], check=True, timeout=int(sys.argv[3]))
+except subprocess.TimeoutExpired:
+    print(f"Simulator startup exceeded {sys.argv[3]} seconds. Open Simulator, let its first-time setup finish, then run this command again.", file=sys.stderr)
+    sys.exit(1)
+PY
 
 DERIVED_DATA="${DERIVED_DATA:-$HOME/Library/Developer/Xcode/DerivedData/${SCHEME}-Simulator}"
 "$XCODEBUILD" \
