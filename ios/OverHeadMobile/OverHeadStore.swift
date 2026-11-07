@@ -20,6 +20,7 @@ final class OverHeadStore {
     var displayName = ""
     var businessName = ""
     var role = ""
+    var deploymentMode = "desktop"
     var workspaceId = ""
     var userId = ""
     var tasks: [QuickTask] = []
@@ -268,10 +269,12 @@ final class OverHeadStore {
         guard let workspaceId = profile["workspace_id"] as? String, !workspaceId.isEmpty else {
             throw AppError.message("Your account doesn’t have a workspace assigned yet.")
         }
+        let workspace = try await database.collection("workspaces").document(workspaceId).getDocument()
 
         userId = user.uid
         self.workspaceId = workspaceId
         self.role = role
+        deploymentMode = workspace.data()?["deployment_mode"] as? String == "cylinder" ? "cylinder" : "desktop"
         email = user.email ?? (profile["email"] as? String ?? "")
         displayName = profile["owner_name"] as? String ?? email
         businessName = profile["business_name"] as? String ?? "OverHead workspace"
@@ -410,6 +413,7 @@ final class OverHeadStore {
         displayName = ""
         businessName = ""
         role = ""
+        deploymentMode = "desktop"
         tasks = []
         updatingTaskIds = []
         customers = []

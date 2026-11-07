@@ -621,6 +621,15 @@ async function signInSharedProfile(payload) {
     recordAudit('auth.access_lane_denied', 'Team account attempted customer access', { email, sharedRole, accessLane }, email)
     throw new Error('This is a staff or manager account. Use Team Access to sign in.')
   }
+  // Publish the deployment identity so mobile clients can follow the
+  // organization’s Cylinder or standard desktop experience. Existing Cylinder
+  // workspaces are marked when their Administrator next signs in.
+  if (isCylinderDeployment() && sharedRole === 'Administrator') {
+    await updateFirestoreDocument(`workspaces/${encodeURIComponent(sharedProfile.workspace_id)}`, {
+      deployment_mode: 'cylinder',
+      updated_at: now(),
+    }, session.idToken)
+  }
   const user = syncSharedProfile(sharedProfile, session.localId, emailVerified)
   recordAudit('auth.shared_sign_in', 'Shared Firebase desktop sign-in completed', { email, workspaceId: user.workspace_id, accessLane: accessLane || 'standard' }, email)
   return synchronizeCustomersAfterSignIn(startSession(user, { firebaseIdToken: session.idToken, firebaseUid: session.localId }))
@@ -636,7 +645,9 @@ async function registerSharedProfile(payload) {
   const createdAt = now()
   try {
     await writeFirestoreDocument(`workspaces/${session.localId}`, {
-      owner_uid: session.localId, business_name: profile.businessName, created_at: createdAt, updated_at: createdAt,
+      owner_uid: session.localId, business_name: profile.businessName,
+      deployment_mode: isCylinderDeployment() ? 'cylinder' : 'desktop',
+      created_at: createdAt, updated_at: createdAt,
     }, session.idToken)
     const sharedProfile = {
       uid: session.localId, owner_name: profile.ownerName, business_name: profile.businessName, email,

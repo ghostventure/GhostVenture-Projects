@@ -178,7 +178,7 @@ private struct TodayView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     HStack(spacing: 8) {
                         Circle().fill(OverHeadStyle.green).frame(width: 8, height: 8)
-                        Text(store.businessName.uppercased())
+                        Text("\(store.deploymentMode == "cylinder" ? "CYLINDER" : "OVERHEAD") · \(store.businessName.uppercased())")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .tracking(1.15)
                             .foregroundStyle(OverHeadStyle.muted)
@@ -187,6 +187,7 @@ private struct TodayView: View {
                         Menu {
                             Text(store.displayName)
                             Text(store.role)
+                            Text(store.deploymentMode == "cylinder" ? "Cylinder workspace" : "OverHead desktop workspace")
                             Divider()
                             Button("Refresh workspace", systemImage: "arrow.clockwise") { Task { await store.refresh() } }
                             Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { store.signOut() }
@@ -257,7 +258,7 @@ private struct TodayView: View {
                         }
                     }
 
-                    Text("CONNECTED TO \(store.businessName.uppercased())")
+                    Text("\(store.deploymentMode == "cylinder" ? "CYLINDER SERVER" : "OVERHEAD WORKSPACE") · \(store.businessName.uppercased())")
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .tracking(0.5)
                         .foregroundStyle(OverHeadStyle.muted)
