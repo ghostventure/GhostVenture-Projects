@@ -37,4 +37,6 @@ Publish the Cylinder installer, blockmap, and matching `latest.yml` together und
 
 - Customer documents are copied into the local Cylinder data directory and indexed in the local record store. They are not automatically stored in Firebase Storage or replicated to other hosts.
 - Customer support tickets can be shared through the Firebase workspace record path when the user is signed in with a Firebase-backed account.
+- Cylinder owners can enable shared mobile task sync. It copies task title/status and task metadata to the workspace Firestore task collection; disabling the setting stops future synchronization but does not delete shared task records. This does not copy customer documents or local backups.
+- Cylinder team accounts remain organization-managed. Cylinder Desktop provisions their Firebase sign-in profile and sends email-verification/password-setup links; the iOS app has no self-registration flow.
 - SMTP, Microsoft Entra registration/consent, payment providers, and code-signing credentials remain external configuration requirements.

@@ -23,13 +23,29 @@ struct CustomersView: View {
                 } else {
                     List {
                         if !filteredCustomers.isEmpty {
-                            Section("\(filteredCustomers.count) customers") {
+                            Section(store.hasMoreCustomers ? "Customers loaded" : "\(filteredCustomers.count) customers") {
                                 ForEach(filteredCustomers) { customer in
                                     NavigationLink(value: customer) {
                                         CustomerRow(customer: customer)
                                     }
                                     .listRowBackground(Color.white)
                                 }
+                            }
+                        }
+                        if store.hasMoreCustomers {
+                            Section {
+                                Button {
+                                    Task { await store.loadMoreCustomers() }
+                                } label: {
+                                    HStack {
+                                        Spacer()
+                                        if store.isLoadingMoreCustomers { ProgressView().controlSize(.small) }
+                                        Text(store.isLoadingMoreCustomers ? "Loading…" : "Load more customers")
+                                        Spacer()
+                                    }
+                                }
+                                .disabled(store.isLoadingMoreCustomers)
+                                .listRowBackground(Color.clear)
                             }
                         }
                     }
@@ -39,8 +55,16 @@ struct CustomersView: View {
                         if store.isLoading && store.customers.isEmpty {
                             ProgressView("Loading customers…")
                         } else if !searchText.isEmpty && filteredCustomers.isEmpty {
-                            EmptyState(icon: "magnifyingglass", title: "No matches", detail: "Try a different name, email, or phone number.")
-                                .padding(.horizontal, 34)
+                            VStack(spacing: 0) {
+                                EmptyState(icon: "magnifyingglass", title: "No matches yet", detail: store.hasMoreCustomers ? "Try a different search or load more workspace customers." : "Try a different name, email, or phone number.")
+                                if store.hasMoreCustomers {
+                                    Button("Load more customers") { Task { await store.loadMoreCustomers() } }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(OverHeadStyle.blue)
+                                        .disabled(store.isLoadingMoreCustomers)
+                                }
+                            }
+                            .padding(.horizontal, 34)
                         }
                     }
                 }

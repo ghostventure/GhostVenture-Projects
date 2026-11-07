@@ -354,6 +354,7 @@ const firebaseConfig = {
   apiKey: 'AIzaSyA2bxXMdNsXVgPaYv3jbWJXGlosVYtBd8U',
   projectId: 'overhead-office',
   billingApiUrl: 'https://us-central1-overhead-office.cloudfunctions.net/billingApi',
+  cylinderMembersApiUrl: 'https://us-central1-overhead-office.cloudfunctions.net/cylinderMembersApi',
 }
 
 function firebaseError(body, fallback) {
@@ -380,6 +381,23 @@ async function billingApiRequest(action, payload = {}) {
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error([401, 403, 404].includes(response.status) ? billingErrorMessage(response.status) : body.error || billingErrorMessage(response.status))
+  return body
+}
+
+async function cylinderMembersApiRequest(action, payload = {}) {
+  requireRole(['Owner'], 'Cylinder team account management')
+  if (!isCylinderDeployment()) throw new Error('Cylinder team account management is available only in Cylinder.')
+  if (!activeSession?.firebaseIdToken || !activeSession?.firebaseUid) {
+    throw new Error('Sign in with your verified shared Administrator account before connecting Cylinder team accounts to mobile.')
+  }
+  const response = await fetch(firebaseConfig.cylinderMembersApiUrl, {
+    signal: AbortSignal.timeout(25000),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeSession.firebaseIdToken}` },
+    body: JSON.stringify({ action, ...payload }),
+  })
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error || `Cylinder account service failed (${response.status}).`)
   return body
 }
 
@@ -749,12 +767,14 @@ function defaultState() {
       desktopNotifications: true,
       autoProcessDueJobs: true,
       autoSyncCustomers: true,
+      autoSyncTasks: true,
       stripeLiveMode: false,
       supportBundleIncludesStore: true,
       fillablePdfTools: true,
     },
     customers: [],
     customerSync: { status: 'Not synchronized', last_synced_at: '', message: 'Automatic customer sync will begin after a shared sign-in.' },
+    taskSync: { status: 'Not synchronized', last_synced_at: '', message: 'Cylinder task sync will begin after a verified shared sign-in.' },
     appointments: [],
     quotes: [],
     invoices: [],
@@ -949,6 +969,7 @@ function seed() {
   if (!Array.isArray(state.entitlements)) state.entitlements = []
   state.appToggles = { ...defaultState().appToggles, ...(state.appToggles || {}) }
   state.customerSync = { ...defaultState().customerSync, ...(state.customerSync || {}) }
+  state.taskSync = { ...defaultState().taskSync, ...(state.taskSync || {}) }
 }
 
 function startScheduler() {
@@ -962,6 +983,12 @@ function startScheduler() {
       if (state.appToggles.autoSyncCustomers && activeSession.firebaseIdToken && activeSession.role !== 'Customer') {
         syncCustomersWithWorkspace().catch((error) => {
           recordAudit('customer.sync_failed', 'Automatic customer sync failed', { message: error.message || String(error) })
+        })
+      }
+      if (isCylinderDeployment() && state.appToggles.autoSyncTasks && activeSession.firebaseIdToken && activeSession.role !== 'Customer') {
+        syncTasksWithWorkspace().catch((error) => {
+          state.taskSync = { status: 'Needs attention', last_synced_at: state.taskSync?.last_synced_at || '', message: error.message || 'Cylinder task sync could not finish.' }
+          persist()
         })
       }
     } catch (error) {
@@ -1085,7 +1112,7 @@ function registerProfile(payload) {
   }
 }
 
-function createStaffAccount(payload = {}) {
+async function createStaffAccount(payload = {}) {
   requireRole(['Owner'], 'staff account creation')
   requireFeature('roles')
   const input = staffInviteSchema.parse(payload)
@@ -1112,6 +1139,21 @@ function createStaffAccount(payload = {}) {
     created_at: createdAt,
     updated_at: createdAt,
   }
+  let sharedAccess = null
+  if (isCylinderDeployment() && activeSession.firebaseIdToken && activeSession.firebaseUid) {
+    const sharedRole = input.role === 'Front Desk' ? 'Manager' : 'Staff'
+    sharedAccess = await cylinderMembersApiRequest('provision_member', {
+      email,
+      owner_name: user.owner_name,
+      role: sharedRole,
+    })
+    user.firebase_uid = sharedAccess.uid
+    user.workspace_id = activeWorkspaceId()
+    user.shared_role = sharedRole
+    user.shared_sync_status = 'Pending email verification'
+  } else if (isCylinderDeployment()) {
+    user.shared_sync_status = 'Pending shared sign-in'
+  }
   state.userProfiles.push(user)
   state.savedFormMemory.profile = {
     ownerName: user.owner_name,
@@ -1121,12 +1163,12 @@ function createStaffAccount(payload = {}) {
   }
   ensureUserLicense(user)
   persist()
-  const delivery = sendVerificationEmail(user, 'staff-invite')
+  const delivery = sendVerificationEmail(user, 'staff-invite', sharedAccess)
   recordAudit('staff.invited', 'Staff account created pending email verification', { email, role: input.role }, activeSession.email)
   return { users: listUserProfiles(), delivery }
 }
 
-function sendVerificationEmail(user, purpose) {
+function sendVerificationEmail(user, purpose, sharedAccess = null) {
   const code = String(crypto.randomInt(100000, 999999))
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
   const verification = {
@@ -1147,6 +1189,8 @@ function sendVerificationEmail(user, purpose) {
   const body = [
     `Your OverHead verification code is ${code}.`,
     `It expires at ${expiresAt}.`,
+    ...(sharedAccess?.verificationUrl ? ['For iOS and shared workspace access, verify your shared account: ' + sharedAccess.verificationUrl] : []),
+    ...(sharedAccess?.passwordResetUrl ? ['Set a password for iOS and shared workspace sign-in: ' + sharedAccess.passwordResetUrl] : []),
     'If you did not request this, do not share the code.',
   ].join('\n')
 
@@ -1496,6 +1540,7 @@ function getBootstrap() {
     savedFormMemory: state.savedFormMemory,
     appToggles: state.appToggles,
     customerSync: state.customerSync,
+    taskSync: state.taskSync,
     stripeConnector: getStripeConnectorStatus(),
     complianceSummary: getComplianceSummary(),
     dataRequests: listDataRequests(),
@@ -1776,6 +1821,9 @@ async function updateUserProfile(payload) {
   const sharedRole = input.role === 'Owner' ? 'Administrator' : input.role === 'Front Desk' ? 'Manager' : 'Staff'
   let sharedSync = 'Local only'
   if (user.firebase_uid && activeSession.firebaseIdToken) {
+    if (isCylinderDeployment() && user.status !== input.status) {
+      await cylinderMembersApiRequest('set_member_status', { uid: user.firebase_uid, status: input.status })
+    }
     await updateFirestoreDocument(`profiles/${user.firebase_uid}`, {
       owner_name: input.ownerName || user.owner_name,
       business_name: input.businessName || user.business_name,
@@ -1801,13 +1849,21 @@ async function updateUserProfile(payload) {
   return listUserProfiles()
 }
 
-function updateToggle(payload = {}) {
+async function updateToggle(payload = {}) {
   requireRole(['Owner'], 'settings toggle changes')
   const key = String(payload.key || '')
   if (!Object.prototype.hasOwnProperty.call(state.appToggles, key)) throw new Error('Unknown toggle.')
   state.appToggles[key] = Boolean(payload.value)
   persist()
   recordAudit('toggle.updated', 'Application toggle updated', { key, value: state.appToggles[key] })
+  if (key === 'autoSyncTasks' && state.appToggles.autoSyncTasks && isCylinderDeployment() && activeSession?.firebaseIdToken) {
+    try {
+      await syncTasksWithWorkspace()
+    } catch (error) {
+      state.taskSync = { status: 'Needs attention', last_synced_at: state.taskSync?.last_synced_at || '', message: error.message || 'Cylinder task sync could not finish.' }
+      persist()
+    }
+  }
   return state.appToggles
 }
 
@@ -2148,16 +2204,195 @@ async function performCustomerSync() {
   return state.customerSync
 }
 
+let taskSyncInFlight = null
+
+function taskFieldsForWorkspace(task, workspaceId) {
+  const customer = state.customers.find((item) => item.id === task.customer_id || item.shared_customer_id === task.customer_id)
+  return {
+    workspace_id: workspaceId,
+    created_by: task.shared_created_by || activeSession.firebaseUid,
+    desktop_task_id: task.id,
+    title: task.title || 'Untitled task',
+    done: task.status === 'Complete',
+    status: task.status || 'Open',
+    area: task.area || 'General',
+    priority: task.priority || 'Normal',
+    customer_id: customer?.shared_customer_id || customer?.id || '',
+    due_at: task.due_at || '',
+    created_at: task.created_at || now(),
+    updated_at: task.updated_at || now(),
+  }
+}
+
+function applySharedTask(remoteTask) {
+  const localId = remoteTask.desktop_task_id || remoteTask.id
+  let task = state.adminTasks.find((item) => item.id === localId || item.shared_task_id === remoteTask.id)
+  if (!task) {
+    task = { id: localId, created_at: remoteTask.created_at || now() }
+    state.adminTasks.push(task)
+  }
+  const customer = state.customers.find((item) => item.shared_customer_id === remoteTask.customer_id || item.id === remoteTask.customer_id)
+  const remoteStatus = ['Open', 'Queued', 'Blocked', 'Complete'].includes(remoteTask.status) ? remoteTask.status : 'Open'
+  Object.assign(task, {
+    id: localId,
+    shared_task_id: remoteTask.id,
+    shared_created_by: remoteTask.created_by || activeSession.firebaseUid,
+    title: remoteTask.title || 'Untitled task',
+    status: typeof remoteTask.done === 'boolean' ? (remoteTask.done ? 'Complete' : (remoteStatus === 'Complete' ? 'Open' : remoteStatus)) : remoteStatus,
+    area: remoteTask.area || 'Mobile',
+    priority: remoteTask.priority || 'Normal',
+    customer_id: customer?.id || remoteTask.customer_id || '',
+    due_at: remoteTask.due_at || '',
+    created_at: remoteTask.created_at || task.created_at || now(),
+    updated_at: remoteTask.updated_at || task.updated_at || now(),
+    protected: 0,
+  })
+  return task
+}
+
+async function syncTasksWithWorkspace() {
+  if (taskSyncInFlight) throw new Error('Cylinder task synchronization is already running. Please wait for it to finish.')
+  taskSyncInFlight = performTaskSync()
+  try { return await taskSyncInFlight } finally { taskSyncInFlight = null }
+}
+
+async function performTaskSync() {
+  requireSession('task synchronization')
+  if (!isCylinderDeployment()) throw new Error('Cylinder task synchronization is available only in the Cylinder deployment.')
+  if (activeSession.role === 'Customer') throw new Error('Customer accounts cannot synchronize the Cylinder task board.')
+  if (!activeSession.firebaseIdToken || !activeSession.firebaseUid) {
+    state.taskSync = { status: 'Waiting for shared sign-in', last_synced_at: state.taskSync?.last_synced_at || '', message: 'Sign in with a verified shared workspace account to synchronize Cylinder tasks.' }
+    persist()
+    return state.taskSync
+  }
+  const workspaceId = activeWorkspaceId()
+  if (!workspaceId) throw new Error('The shared workspace ID is unavailable for task synchronization.')
+  const session = activeSession, store = state, token = session.firebaseIdToken
+  const checkSession = () => { if (activeSession !== session || state !== store) throw new Error('The account changed during task synchronization. Sign in and retry.') }
+  const remoteTasks = await listFirestoreDocuments(`workspaces/${workspaceId}/tasks`, token)
+  checkSession()
+  const remoteById = new Map(remoteTasks.map((task) => [task.id, task]))
+  const remoteByDesktopId = new Map(remoteTasks.filter((task) => task.desktop_task_id).map((task) => [task.desktop_task_id, task]))
+  const sampleCustomerIds = new Set(state.customers.filter(isSampleCustomer).map((customer) => customer.id))
+  const localTasks = state.adminTasks.filter((task) => !sampleCustomerIds.has(task.customer_id))
+  let uploaded = 0, downloaded = 0
+
+  for (const localTask of localTasks) {
+    const remoteTask = remoteById.get(localTask.shared_task_id || localTask.id) || remoteByDesktopId.get(localTask.id)
+    if (!remoteTask) {
+      const remoteId = localTask.shared_task_id || localTask.id
+      const data = taskFieldsForWorkspace(localTask, workspaceId)
+      checkSession()
+      await writeFirestoreDocument(`workspaces/${workspaceId}/tasks/${encodeURIComponent(remoteId)}`, data, token)
+      checkSession()
+      localTask.shared_task_id = remoteId
+      localTask.shared_created_by = data.created_by
+      uploaded += 1
+      continue
+    }
+
+    localTask.shared_task_id = remoteTask.id
+    localTask.shared_created_by = remoteTask.created_by || localTask.shared_created_by || activeSession.firebaseUid
+    const remoteTime = customerTime(remoteTask.updated_at)
+    const localTime = customerTime(localTask.updated_at)
+    if (remoteTime > localTime) {
+      applySharedTask(remoteTask)
+      downloaded += 1
+    } else if (localTime > remoteTime) {
+      checkSession()
+      await updateFirestoreDocument(`workspaces/${workspaceId}/tasks/${encodeURIComponent(remoteTask.id)}`, {
+        title: localTask.title || 'Untitled task',
+        done: localTask.status === 'Complete',
+        status: localTask.status || 'Open',
+        area: localTask.area || 'General',
+        priority: localTask.priority || 'Normal',
+        customer_id: taskFieldsForWorkspace(localTask, workspaceId).customer_id,
+        due_at: localTask.due_at || '',
+        updated_at: localTask.updated_at || now(),
+      }, token)
+      checkSession()
+      uploaded += 1
+    }
+    remoteById.delete(remoteTask.id)
+  }
+
+  for (const remoteTask of remoteById.values()) {
+    applySharedTask(remoteTask)
+    downloaded += 1
+  }
+  state.taskSync = {
+    status: 'Synchronized',
+    last_synced_at: now(),
+    message: `Cylinder tasks are up to date. ${uploaded} uploaded, ${downloaded} downloaded. Task titles and status are copied to the shared Firebase workspace; deleting local tasks does not delete shared records.`,
+  }
+  persist()
+  return state.taskSync
+}
+
+async function syncCylinderMembersWithWorkspace() {
+  requireRole(['Owner'], 'Cylinder mobile account synchronization')
+  if (!isCylinderDeployment()) throw new Error('Cylinder account synchronization is available only in Cylinder.')
+  if (!activeSession.firebaseIdToken || !activeSession.firebaseUid) {
+    throw new Error('Sign in with your verified shared Administrator account before synchronizing Cylinder team accounts.')
+  }
+  const candidates = state.userProfiles.filter((user) =>
+    user.email !== activeSession.email && ['Front Desk', 'Bookkeeper', 'Support'].includes(user.role)
+  )
+  let synchronized = 0
+  for (const user of candidates) {
+    const sharedRole = user.role === 'Front Desk' ? 'Manager' : 'Staff'
+    const sharedAccess = await cylinderMembersApiRequest('provision_member', {
+      email: user.email,
+      owner_name: user.owner_name,
+      role: sharedRole,
+    })
+    user.firebase_uid = sharedAccess.uid
+    user.workspace_id = activeWorkspaceId()
+    user.shared_role = sharedRole
+    if (user.status === 'Suspended') {
+      await cylinderMembersApiRequest('set_member_status', { uid: sharedAccess.uid, status: 'Suspended' })
+      user.shared_sync_status = 'Synchronized - suspended'
+    } else {
+      user.shared_sync_status = sharedAccess.email_verified ? 'Synchronized' : 'Pending email verification'
+      if (sharedAccess.verificationUrl || sharedAccess.passwordResetUrl) {
+        user.shared_sync_status = 'Verification email sent'
+        sendVerificationEmail(user, 'staff-invite', sharedAccess)
+      }
+    }
+    user.shared_synced_at = now()
+    user.updated_at = now()
+    synchronized += 1
+    persist()
+  }
+  const message = synchronized
+    ? `${synchronized} Cylinder team account${synchronized === 1 ? '' : 's'} synchronized with mobile sign-in.`
+    : 'No Cylinder staff accounts needed synchronization.'
+  recordAudit('cylinder.members_synchronized', 'Cylinder team account synchronization completed', { count: synchronized }, activeSession.email)
+  return { synchronized, message, users: listUserProfiles() }
+}
+
 async function synchronizeCustomersAfterSignIn(session) {
   if (activeSession.role !== 'Customer' && !isCylinderDeployment()) await syncStripeBilling().catch(() => {})
-  if (activeSession.role === 'Customer' || !state.appToggles.autoSyncCustomers) return { ...session, customerSync: state.customerSync }
-  try {
-    return { ...session, customerSync: await syncCustomersWithWorkspace() }
-  } catch (error) {
-    state.customerSync = { status: 'Needs attention', last_synced_at: state.customerSync?.last_synced_at || '', message: error.message || 'Customer synchronization could not finish.' }
-    persist()
-    return { ...session, customerSync: state.customerSync }
+  if (activeSession.role === 'Customer') return { ...session, customerSync: state.customerSync, taskSync: state.taskSync }
+  let customerSync = state.customerSync
+  let taskSync = state.taskSync
+  if (state.appToggles.autoSyncCustomers) {
+    try {
+      customerSync = await syncCustomersWithWorkspace()
+    } catch (error) {
+      state.customerSync = { status: 'Needs attention', last_synced_at: state.customerSync?.last_synced_at || '', message: error.message || 'Customer synchronization could not finish.' }
+      customerSync = state.customerSync
+      persist()
+    }
   }
+  if (isCylinderDeployment() && state.appToggles.autoSyncTasks) {
+    taskSync = await syncTasksWithWorkspace().catch((error) => {
+        state.taskSync = { status: 'Needs attention', last_synced_at: state.taskSync?.last_synced_at || '', message: error.message || 'Cylinder task sync could not finish.' }
+        persist()
+        return state.taskSync
+      })
+  }
+  return { ...session, customerSync, taskSync }
 }
 
 function listTasks() {
@@ -2178,6 +2413,12 @@ function updateTaskStatus(payload) {
   task.updated_at = now()
   persist()
   recordAudit('task.updated', 'Task status updated', input)
+  if (isCylinderDeployment() && state.appToggles.autoSyncTasks && activeSession.firebaseIdToken) {
+    syncTasksWithWorkspace().catch((error) => {
+      state.taskSync = { status: 'Needs attention', last_synced_at: state.taskSync?.last_synced_at || '', message: error.message || 'Cylinder task sync could not finish.' }
+      persist()
+    })
+  }
   return listTasks()
 }
 
@@ -3259,6 +3500,8 @@ module.exports = {
   listBillingProfiles,
   listCustomers,
   syncCustomersWithWorkspace,
+  syncTasksWithWorkspace,
+  syncCylinderMembersWithWorkspace,
   listDataRequests,
   listDocuments,
   listFraudSignals,

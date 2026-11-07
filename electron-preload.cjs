@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('overheadBackend', {
   listCustomers: () => ipcRenderer.invoke('customers:list'),
   listTasks: () => ipcRenderer.invoke('tasks:list'),
   updateTaskStatus: (payload) => ipcRenderer.invoke('tasks:update-status', payload),
+  syncTasksWithWorkspace: () => ipcRenderer.invoke('tasks:sync-workspace'),
+  syncCylinderMembersWithWorkspace: () => ipcRenderer.invoke('users:sync-cylinder-members'),
   queueWorkflowJob: (payload) => ipcRenderer.invoke('jobs:queue', payload),
   processDueJobs: () => ipcRenderer.invoke('jobs:process-due'),
   listWorkflowJobs: () => ipcRenderer.invoke('jobs:list'),

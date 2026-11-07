@@ -12,6 +12,8 @@ final class OverHeadStore {
     private var customerListener: ListenerRegistration?
     private var activityListener: ListenerRegistration?
     private var approvalListener: ListenerRegistration?
+    private var profileListener: ListenerRegistration?
+    private var customerPageCursor: DocumentSnapshot?
 
     var isRestoring = true
     var isLoading = false
@@ -26,6 +28,8 @@ final class OverHeadStore {
     var tasks: [QuickTask] = []
     var updatingTaskIds: Set<String> = []
     var customers: [Customer] = []
+    var hasMoreCustomers = false
+    var isLoadingMoreCustomers = false
     var notes: [QuickNote] = []
     var approvals: [Approval] = []
     var errorMessage: String?
@@ -102,6 +106,26 @@ final class OverHeadStore {
         defer { isLoading = false }
         do {
             try await loadWorkspaceData()
+        } catch {
+            errorMessage = readable(error)
+        }
+    }
+
+    func loadMoreCustomers() async {
+        guard isSignedIn, hasMoreCustomers, !isLoadingMoreCustomers, let cursor = customerPageCursor else { return }
+        isLoadingMoreCustomers = true
+        defer { isLoadingMoreCustomers = false }
+        do {
+            let page = try await database.collection("workspaces").document(workspaceId)
+                .collection("customers")
+                .order(by: "name")
+                .limit(to: 50)
+                .start(afterDocument: cursor)
+                .getDocuments()
+            let existingIds = Set(customers.map(\.id))
+            customers.append(contentsOf: page.documents.map(Customer.init(document:)).filter { !existingIds.contains($0.id) })
+            customerPageCursor = page.documents.last ?? cursor
+            hasMoreCustomers = page.documents.count == 50
         } catch {
             errorMessage = readable(error)
         }
@@ -291,9 +315,11 @@ final class OverHeadStore {
 
     private func loadWorkspaceData() async throws {
         async let taskSnapshot = database.collection("workspaces").document(workspaceId).collection("tasks").limit(to: 200).getDocuments()
-        async let customerSnapshot = database.collection("workspaces").document(workspaceId).collection("customers").limit(to: 500).getDocuments()
+        async let customerSnapshot = database.collection("workspaces").document(workspaceId).collection("customers").order(by: "name").limit(to: 50).getDocuments()
         let (taskResult, customerResult) = try await (taskSnapshot, customerSnapshot)
         customers = customerResult.documents.map(Customer.init(document:)).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        customerPageCursor = customerResult.documents.last
+        hasMoreCustomers = customerResult.documents.count == 50
         let customersById = Dictionary(uniqueKeysWithValues: customers.map { ($0.id, $0) })
         tasks = taskResult.documents
             .map { QuickTask(document: $0, customersById: customersById) }
@@ -323,7 +349,7 @@ final class OverHeadStore {
                 )
             }
         }
-        let approvalResult = try await database.collection("workspaces").document(workspaceId).collection("approvals").limit(to: 100).getDocuments()
+        let approvalResult = try await database.collection("workspaces").document(workspaceId).collection("approvals").order(by: "created_at", descending: true).limit(to: 100).getDocuments()
         approvals = approvalResult.documents.map(Approval.init(document:)).sorted { lhs, rhs in
             if (lhs.status == "Pending") != (rhs.status == "Pending") { return lhs.status == "Pending" }
             return (lhs.createdAt ?? .distantPast) > (rhs.createdAt ?? .distantPast)
@@ -334,7 +360,33 @@ final class OverHeadStore {
     private func startRealtimeUpdates() {
         stopRealtimeUpdates()
         let workspace = database.collection("workspaces").document(workspaceId)
-        taskListener = workspace.collection("tasks").addSnapshotListener { [weak self] snapshot, error in
+        profileListener = database.collection("profiles").document(userId).addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    self.errorMessage = "Workspace access could not be refreshed: \(error.localizedDescription)"
+                    return
+                }
+                guard let profile = snapshot?.data(), profile["status"] as? String == "Active" else {
+                    try? Auth.auth().signOut()
+                    self.clearSession()
+                    self.errorMessage = "Your OverHead team access changed. Contact your workspace administrator."
+                    return
+                }
+                let updatedRole = profile["role"] as? String ?? ""
+                guard ["Administrator", "Manager", "Staff"].contains(updatedRole) else {
+                    try? Auth.auth().signOut()
+                    self.clearSession()
+                    self.errorMessage = "This OverHead account no longer has mobile team access."
+                    return
+                }
+                if updatedRole != self.role {
+                    self.role = updatedRole
+                    self.startRealtimeUpdates()
+                }
+            }
+        }
+        taskListener = workspace.collection("tasks").limit(to: 200).addSnapshotListener { [weak self] snapshot, error in
             guard let snapshot else {
                 if let error { Task { @MainActor [weak self] in self?.errorMessage = error.localizedDescription } }
                 return
@@ -350,14 +402,21 @@ final class OverHeadStore {
                     }
             }
         }
-        customerListener = workspace.collection("customers").addSnapshotListener { [weak self] snapshot, error in
+        customerListener = workspace.collection("customers").order(by: "name").limit(to: 50).addSnapshotListener { [weak self] snapshot, error in
             guard let snapshot else {
                 if let error { Task { @MainActor [weak self] in self?.errorMessage = error.localizedDescription } }
                 return
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.customers = snapshot.documents.map(Customer.init(document:)).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                let firstPage = snapshot.documents.map(Customer.init(document:)).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                let firstPageIds = Set(firstPage.map(\.id))
+                let previouslyLoaded = self.customers.filter { !firstPageIds.contains($0.id) }
+                self.customers = (firstPage + previouslyLoaded).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                if previouslyLoaded.isEmpty {
+                    self.customerPageCursor = snapshot.documents.last
+                    self.hasMoreCustomers = snapshot.documents.count == 50
+                }
                 let customersById = Dictionary(uniqueKeysWithValues: self.customers.map { ($0.id, $0) })
                 self.tasks = self.tasks.map { task in
                     var updated = task
@@ -387,7 +446,7 @@ final class OverHeadStore {
                     }
                 }
         }
-        approvalListener = workspace.collection("approvals").addSnapshotListener { [weak self] snapshot, error in
+        approvalListener = workspace.collection("approvals").order(by: "created_at", descending: true).limit(to: 100).addSnapshotListener { [weak self] snapshot, error in
             guard let snapshot else {
                 if let error { Task { @MainActor [weak self] in self?.errorMessage = error.localizedDescription } }
                 return
@@ -406,10 +465,13 @@ final class OverHeadStore {
         customerListener?.remove()
         activityListener?.remove()
         approvalListener?.remove()
+        profileListener?.remove()
         taskListener = nil
         customerListener = nil
         activityListener = nil
         approvalListener = nil
+        profileListener = nil
+        customerPageCursor = nil
     }
 
     private func clearSession() {
@@ -424,6 +486,8 @@ final class OverHeadStore {
         tasks = []
         updatingTaskIds = []
         customers = []
+        hasMoreCustomers = false
+        isLoadingMoreCustomers = false
         notes = []
         approvals = []
         isSignedIn = false

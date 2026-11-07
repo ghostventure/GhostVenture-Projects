@@ -2813,6 +2813,26 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
     await refreshBackend()
   }
 
+  async function syncCylinderTasks() {
+    try {
+      const status = await window.overheadBackend?.syncTasksWithWorkspace?.()
+      if (status) setOperationNotice(status.message || 'Cylinder task synchronization completed.')
+      await refreshBackend()
+    } catch (error) {
+      setOperationNotice(userFacingError(error, 'Cylinder task synchronization could not finish.'))
+    }
+  }
+
+  async function syncCylinderMembers() {
+    try {
+      const result = await window.overheadBackend?.syncCylinderMembersWithWorkspace?.()
+      if (result) setOperationNotice(result.message || 'Cylinder team account synchronization completed.')
+      await refreshBackend()
+    } catch (error) {
+      setOperationNotice(userFacingError(error, 'Cylinder team accounts could not be synchronized.'))
+    }
+  }
+
   async function chooseDeveloperWorkspace() {
     try {
       const workspace = await window.overheadBackend?.chooseDeveloperWorkspace?.()
@@ -2903,6 +2923,18 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
             <small>Status: {backendState.customerSync?.status || 'Not synchronized'}{backendState.customerSync?.last_synced_at ? ` - ${new Date(backendState.customerSync.last_synced_at).toLocaleString()}` : ''}</small>
             <div className="button-row"><button className="ghost-button" type="button" onClick={syncCustomers}>Sync Now</button></div>
           </div>
+          {backendState.health?.deploymentMode === 'cylinder' && <div className="backend-health">
+            <strong>Cylinder mobile task synchronization</strong>
+            <span>{backendState.taskSync?.message || 'Cylinder tasks will sync after a verified shared sign-in.'}</span>
+            <small>Status: {backendState.taskSync?.status || 'Not synchronized'}{backendState.taskSync?.last_synced_at ? ` - ${new Date(backendState.taskSync.last_synced_at).toLocaleString()}` : ''}</small>
+            <p>Task titles and statuses are copied to the shared Firebase workspace for mobile access. Turning sync off stops future updates; it does not delete shared records.</p>
+            <div className="button-row"><button className="ghost-button" type="button" onClick={syncCylinderTasks}>Sync Now</button></div>
+          </div>}
+          {backendState.health?.deploymentMode === 'cylinder' && <div className="backend-health">
+            <strong>Cylinder team accounts</strong>
+            <span>Team accounts remain organization-managed in Desktop. This connects eligible team profiles to shared mobile sign-in and sends verification/password setup links where needed. Mobile has no sign-up flow.</span>
+            <div className="button-row"><button className="ghost-button" type="button" onClick={syncCylinderMembers}>Sync Team Accounts</button></div>
+          </div>}
           {session.role === 'Owner' && <div className="backend-health">
             <strong>Developer hot-fix workspace</strong>
             <span>Open only the selected OverHead source folder in Visual Studio Code or Code - OSS. A fresh verified OverHead staff sign-in with an active Management or Administrator credential is required. Customer records, backups, exports, and support bundles are never opened by this tool.</span>
@@ -2924,7 +2956,9 @@ function SettingsSection({ theme, setTheme, privacyMode, setPrivacyMode, session
             <strong>Operational controls</strong>
             <span>Controls that change how the workspace behaves. Change one intentionally, then check the current work queue and audit record.</span>
             <div className="toggle-list">
-              {Object.entries(backendState.appToggles || {}).map(([key, value]) => (
+              {Object.entries(backendState.appToggles || {})
+                .filter(([key]) => key !== 'autoSyncTasks' || backendState.health?.deploymentMode === 'cylinder')
+                .map(([key, value]) => (
                 <label className="checkbox-line" key={key}>
                   <input type="checkbox" checked={Boolean(value)} onChange={(event) => updateToggle(key, event.target.checked)} />
                   {formatToggleName(key)}

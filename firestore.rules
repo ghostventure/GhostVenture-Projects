@@ -6,14 +6,19 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
     function selfProfile() {
       return get(/databases/$(database)/documents/profiles/$(request.auth.uid));
     }
 
     function hasRole(workspaceId, roles) {
-      return signedIn()
+      return verifiedEmail()
         && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
         && selfProfile().data.workspace_id == workspaceId
+        && selfProfile().data.email == request.auth.token.email
         && selfProfile().data.status == 'Active'
         && selfProfile().data.role in roles;
     }
@@ -99,7 +104,7 @@ service cloud.firestore {
           && request.resource.data.workspace_id == resource.data.workspace_id
           && request.resource.data.created_by == resource.data.created_by
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['title', 'done', 'updated_at']);
+            .hasOnly(['title', 'done', 'status', 'area', 'priority', 'customer_id', 'due_at', 'updated_at']);
         allow delete: if isManager(workspaceId);
       }
 
