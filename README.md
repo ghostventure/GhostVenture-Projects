@@ -1,5 +1,9 @@
 # OverHead
 
+## iOS Simulator
+
+From the repository root on the Mac, run `./run-overhead-ios-simulator.sh` to fast-forward pull the latest GitHub code, build the `OverHeadMobile` Xcode scheme, install it on a booted or available iPhone simulator, and launch it. The helper stops if the working tree has uncommitted changes. To pick a particular available iPhone, run `SIMULATOR_NAME="iPhone 16 Pro" ./run-overhead-ios-simulator.sh`. This iOS helper does not alter the existing Windows desktop or Cylinder products.
+
 Current packaged release: **0.3.2** for standard desktop and **0.3.4** for the Windows Server/Windows IoT-only Cylinder deployment. See `docs/current-handoff-2026-08-21.md`, `docs/cylinder-deployment.md`, and `docs/production-readiness.md` for shared browser/desktop billing, deployment, evaluation, and release requirements.
 
 OverHead is a desktop-first admin cleanup framework for small businesses. It focuses on admin-overload pain points that happen after the customer reaches the business:
