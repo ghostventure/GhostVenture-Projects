@@ -94,6 +94,8 @@ DERIVED_DATA="${DERIVED_DATA:-$HOME/Library/Developer/Xcode/DerivedData/${SCHEME
     -sdk iphonesimulator \
     -destination "id=$SIMULATOR_ID" \
     -derivedDataPath "$DERIVED_DATA" \
+    -quiet \
+    ONLY_ACTIVE_ARCH=YES \
     CODE_SIGNING_ALLOWED=NO \
     build
 
