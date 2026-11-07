@@ -254,6 +254,13 @@ final class OverHeadStore {
     }
 
     private func loadProfile(for user: FirebaseAuth.User) async throws {
+        if !user.isEmailVerified {
+            try await user.reload()
+        }
+        guard user.isEmailVerified else {
+            throw AppError.message("Verify this email through your organization’s Desktop onboarding process, then sign in here.")
+        }
+
         let snapshot = try await database.collection("profiles").document(user.uid).getDocument()
         guard let profile = snapshot.data() else {
             throw AppError.message("This account doesn’t have an OverHead workspace profile yet.")
