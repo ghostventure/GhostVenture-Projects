@@ -74,7 +74,12 @@ a {
 }
 
 .brand strong {
+  color: #e7edff;
+  font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 1.08rem;
   font-weight: 900;
+  letter-spacing: .045em;
+  text-shadow: 0 0 10px rgba(99, 191, 255, .38), 1px 1px 0 rgba(157, 115, 255, .72);
 }
 
 .brand small {
