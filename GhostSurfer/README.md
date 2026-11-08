@@ -19,6 +19,10 @@ The desktop app is built with Python, PySide6, and QtWebEngine. It includes a la
 
 The Mac installer stays on Firebase Hosting. Windows and Linux desktop packages are published on the GitHub v0.2.6 release. Current filenames and hashes are listed in `site/downloads/SHA256SUMS.txt`.
 
+## Website presentation
+
+The site-wide Ghost Surfer name uses a spectral serif, icy gradient, and blue-purple glow across visible page copy. This is a CSS treatment on the existing static HTML/CSS site; it does not add a framework or change the site's runtime.
+
 ## Run and build the desktop app
 
 Install Python 3.13 and build dependencies:
