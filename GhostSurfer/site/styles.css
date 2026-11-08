@@ -978,6 +978,78 @@ code {
   margin: 0;
 }
 
+.reading-page {
+  max-width: 1080px;
+}
+
+.reading-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.reading-card {
+  min-width: 0;
+  padding: 21px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--blue);
+  border-radius: 10px;
+  background: rgba(13, 20, 32, .86);
+}
+
+.reading-card .eyebrow {
+  margin: 0 0 12px;
+}
+
+.reading-card h3 {
+  margin: 0 0 7px;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+.reading-card h3 a {
+  color: var(--text);
+  text-decoration-color: var(--blue);
+  text-underline-offset: 4px;
+}
+
+.reading-card h3 a:hover,
+.reading-card h3 a:focus-visible {
+  color: var(--blue-soft);
+}
+
+.reading-card p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.reading-card p:last-child {
+  margin-bottom: 0;
+}
+
+.reading-author {
+  font-size: .95rem;
+}
+
+.reading-note {
+  margin: 30px 0;
+  color: var(--muted);
+  font-size: .95rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .reading-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 540px) {
+  .reading-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
