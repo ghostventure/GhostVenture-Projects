@@ -7,4 +7,6 @@ release-*/
 node_modules/
 .firebase/
 site/downloads/*.zip
+installer/macos/*.pkg
+site/downloads/*.pkg
 *.download
