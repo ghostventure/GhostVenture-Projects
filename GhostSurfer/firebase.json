@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "ghost-surfer-browser",
     "public": "site",
     "ignore": [
       "firebase.json",

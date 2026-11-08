@@ -143,6 +143,14 @@ h2 {
   margin: 14px 0 0;
 }
 
+.slogan {
+  margin: 16px 0 0;
+  color: var(--blue-soft);
+  font-size: clamp(1.35rem, 2.6vw, 1.8rem);
+  font-weight: 900;
+  line-height: 1.2;
+}
+
 .rival-line {
   max-width: 680px;
   margin: 16px 0 0;
