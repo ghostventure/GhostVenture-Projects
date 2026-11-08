@@ -6,6 +6,22 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Ghost Surfer</title>
         <item>
+            <title>0.2.4</title>
+            <pubDate>Sun, 08 Nov 2026 17:45:42 -0500</pubDate>
+            <link>https://ghost-surfer-browser.web.app/</link>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>0.2.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink sparkle:edSignature="KAjN4bMwchwUxb/qQE9KgEwfXkx5aqP6fdAQ0j2ofGprp38YcgO54nGZ+7/PvybZ7oiW/yq2KxGD5tpZGLrxDQ==" sparkle:length="355">https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.4.md</sparkle:releaseNotesLink>
+            <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.4.zip" length="2519976" type="application/octet-stream" sparkle:edSignature="nsFjuZbA35e77XFOXf2EaU9r4SJdjzX5zwhHHQJ06X4tGkfkApFbgJtpEbbHlnh8G81EsIClEIpqhWAigU7JAA=="/>
+            <sparkle:deltas>
+                <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer6-5.delta" sparkle:deltaFrom="5" length="930834" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="LnO+Z3FpGwqvw6WHvZaYz9+tGbTyLJ4AGcKeVf7imK09dNBUqf2UNJciAo7u6rWKtC/RiR7q4c6fBSAMMrocCA=="/>
+                <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer6-4.delta" sparkle:deltaFrom="4" length="934122" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="DHLdR7u9YcylCW5HUYt2gkKXCxNCL3hV8ZPVUphBrze8hmF9m07rL2y+dpSDLpr1CWhN/AGWPXXeSYL2e3GuDQ=="/>
+                <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer6-3.delta" sparkle:deltaFrom="3" length="951702" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="2t7hw6CmlmbsaGu/EtKaTL/IlbKzSvgJ6mnM9hf0sDllo8M4jVmDTSxLjQ7Ui1cLUyCoat6BxAreVrO5E0IuCg=="/>
+                <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer6-2.delta" sparkle:deltaFrom="2" length="1003442" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="TDVclqprywBkMUZdFvlXg7u6YPkf9NJ66HL2y5UxqFGcQ7gvW5m+1dm96IKCom+l1Nlf6M2T4XwgoWfm7/2PAg=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.2.3</title>
             <pubDate>Sun, 08 Nov 2026 15:25:05 -0500</pubDate>
             <link>https://ghost-surfer-browser.web.app/</link>
@@ -34,22 +50,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
                 <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer4-2.delta" sparkle:deltaFrom="2" length="998050" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="H76Whn6hWzC7xbj92APkGKTIgbBRM9pOnX5fcNhjXpMSc5hbhyM/S8aIh/YFjP1K3V+pZejMeG+a6/zcuIzuBw=="/>
             </sparkle:deltas>
         </item>
-        <item>
-            <title>0.2.1</title>
-            <pubDate>Sun, 08 Nov 2026 15:04:18 -0500</pubDate>
-            <link>https://ghost-surfer-browser.web.app/</link>
-            <sparkle:version>3</sparkle:version>
-            <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink sparkle:edSignature="r+JVqXCj6x/d21jSJDvMKIDMgvNV1HMTTRrommH/BtHVz52Uikbo8Gz6fJPQdhU5IZGLY7B3W9gdRHYTyls9Dw==" sparkle:length="415">https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.1.md</sparkle:releaseNotesLink>
-            <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.1.zip" length="2511625" type="application/octet-stream" sparkle:edSignature="NlJkrWkGx4kZ71Tgri6gLUMBPktKGcMSixMUZ4suPyHG7okR9jEVmfXVdQlg7lm8SRwOXzPIF69Vv6yalV96BA=="/>
-            <sparkle:deltas>
-                <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer3-2.delta" sparkle:deltaFrom="2" length="980218" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="J/+5M6eyhgMFmVn0TKedzo/iixyL1DmRKOfGLEaVZJhDkY//XPEX0hWBm8V0qPTOcc9BtlQftTmvSBqdD0W5Dg=="/>
-            </sparkle:deltas>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: WmVF1IXGEfrIJVGDDtkr4gaspXKB2tt8tY4jWmykzT7XSKLcV6G5Ls4SsUiiiAfJD5xDXSWt/L80+ry0RJBaAA==
-length: 5722
+edSignature: jOR8Cd+EMdEj1789Up65VOdSB9gOrEkkySPFX7JPA8Mpz3iyYMsFq7Uw+jLkUr5wa52q3L2hUzSvmjT+9GosCw==
+length: 6887
 -->
