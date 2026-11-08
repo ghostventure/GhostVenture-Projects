@@ -38,6 +38,18 @@ if [[ ! -d "$app_path" ]]; then
   exit 1
 fi
 
+codesign --verify --deep --strict "$app_path"
+app_arches="$(lipo -archs "$app_path/Contents/MacOS/Ghost Surfer")"
+if [[ "$app_arches" != *arm64* || "$app_arches" != *x86_64* ]]; then
+  echo "Expected a universal arm64 and x86_64 app; found: $app_arches" >&2
+  exit 1
+fi
+if [[ "$(/usr/libexec/PlistBuddy -c 'Print :SURequireSignedFeed' "$app_path/Contents/Info.plist")" != "true" || \
+      "$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$app_path/Contents/Info.plist")" != "true" ]]; then
+  echo "Sparkle signed-feed and pre-extraction verification must remain enabled." >&2
+  exit 1
+fi
+
 mkdir -p "$(dirname "$output_package")"
 rm -f "$output_package"
 pkg_args=(
@@ -76,12 +88,65 @@ if [[ ! -x "$generate_appcast" ]]; then
   echo "Sparkle generate_appcast tool was not built." >&2
   exit 1
 fi
+DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}" xcodebuild \
+  -project "$sparkle_project" \
+  -scheme sign_update \
+  -configuration Release \
+  -derivedDataPath "$tools_derived_data" \
+  -packageAuthorizationProvider netrc \
+  -skipPackageUpdates build
+sign_update="$tools_derived_data/Build/Products/Release/sign_update"
+if [[ ! -x "$sign_update" ]]; then
+  echo "Sparkle sign_update tool was not built." >&2
+  exit 1
+fi
 "$generate_appcast" \
   --download-url-prefix "https://ghost-surfer-browser.web.app/updates/" \
   --release-notes-url-prefix "https://ghost-surfer-browser.web.app/updates/" \
   --link "https://ghost-surfer-browser.web.app/" \
   -o "$project_root/site/appcast-macos.xml" \
   "$updates_dir"
+
+appcast_path="$project_root/site/appcast-macos.xml"
+"$sign_update" --verify "$appcast_path"
+archive_signature="$(python3 - "$appcast_path" "$version" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+feed_path, version = sys.argv[1:]
+sparkle = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+root = ET.parse(feed_path).getroot()
+for item in root.findall(".//item"):
+    if item.findtext(f"{{{sparkle}}}shortVersionString") == version:
+        enclosure = item.find("enclosure")
+        if enclosure is None:
+            break
+        print(enclosure.attrib[f"{{{sparkle}}}edSignature"])
+        break
+else:
+    raise SystemExit(f"No signed appcast entry found for version {version}")
+PY
+)"
+notes_signature="$(python3 - "$appcast_path" "$version" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+feed_path, version = sys.argv[1:]
+sparkle = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+root = ET.parse(feed_path).getroot()
+for item in root.findall(".//item"):
+    if item.findtext(f"{{{sparkle}}}shortVersionString") == version:
+        notes = item.find(f"{{{sparkle}}}releaseNotesLink")
+        if notes is None:
+            break
+        print(notes.attrib[f"{{{sparkle}}}edSignature"])
+        break
+else:
+    raise SystemExit(f"No signed release notes found for version {version}")
+PY
+)"
+"$sign_update" --verify "$update_archive" "$archive_signature"
+"$sign_update" --verify "$updates_dir/Ghost-Surfer-macOS-${version}.md" "$notes_signature"
 
 if [[ -n "${NOTARY_PROFILE:-}" ]]; then
   if [[ -z "${APP_SIGN_IDENTITY:-}" || -z "${INSTALLER_SIGN_IDENTITY:-}" ]]; then

@@ -1,6 +1,6 @@
 # Ghost Surfer macOS installer and updater
 
-`build-installer.sh` builds a universal Apple silicon and Intel macOS app, creates an installer package, makes a Sparkle update ZIP, and signs `site/appcast-macos.xml` using Sparkle's `generate_appcast` tool. The default version is 0.2.0. Set `VERSION`, `OUTPUT_PACKAGE`, `DERIVED_DATA_PATH`, or `UPDATES_DIR` to customize the build.
+`build-installer.sh` builds a universal Apple silicon and Intel macOS app, verifies its code signature and architecture, creates an installer package and Sparkle update ZIP, signs `site/appcast-macos.xml`, then verifies the feed, archive, and release notes before finishing. The default version is 0.2.0. Set `VERSION`, `OUTPUT_PACKAGE`, `DERIVED_DATA_PATH`, or `UPDATES_DIR` to customize the build.
 
 The updater uses Sparkle 2 and the EdDSA public key embedded in `macOS/Info.plist`. The matching private key must remain in the release maintainer's macOS login Keychain. Do not export or commit that private key. `generate_appcast` must be run with access to that same key whenever the feed is changed.
 

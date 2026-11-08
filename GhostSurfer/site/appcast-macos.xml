@@ -12,12 +12,12 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <sparkle:version>2</sparkle:version>
             <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.0.zip" length="1332772" type="application/octet-stream" sparkle:edSignature="IDvdzjam4mt4yvwSDmeE6Y2gfj3zic6mQDWs4FcT2ajN4qvVddUHnylqe2tTSFzEowuDw3WlTmQHDPrbiTtuBg=="/>
+            <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.0.zip" length="1332772" type="application/octet-stream" sparkle:edSignature="OwbV7bNmZ/nNzho4siksC5tghQZkgnT3wRdFkbh+UZVAjvbZErqdOEyBzBmOb7GX+pV6v8daMcI6gwDEGhPIAw=="/>
             <sparkle:releaseNotesLink sparkle:edSignature="UVF5765pAzGsbNSpkliYZm/Ct3OhvAKDzn6o0zDvxgjSxwTHUD6PPktvmA2RG6oAr042tsepfpv348GhHjQQDA==" sparkle:length="656">https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.0.md</sparkle:releaseNotesLink>
         </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 8H98V75NBLNhXmjiUmjVTaa3Lhgk63918AryAJhisHQLegacFuiJEUuIQw0sGgOjA/BxbVr+5L8uHde1p9qpBw==
+edSignature: fGFUshlaFQqRGldpQkqacNfnTUC8cAmnKmIDmsbbUcpLiieG+j+IP7LP7frx0LJ5y6CZrehwgfk/YJb10VHoAA==
 length: 1363
 -->

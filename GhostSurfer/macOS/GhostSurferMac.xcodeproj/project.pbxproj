@@ -59,7 +59,7 @@
 /* Begin XCConfigurationList section */
 		F10000000000000000000022 /* Project configurations */ = {isa = XCConfigurationList; buildConfigurations = (F30000000000000000000031, F30000000000000000000032); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		F10000000000000000000042 /* Target configurations */ = {isa = XCConfigurationList; buildConfigurations = (F30000000000000000000033, F30000000000000000000034); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		A30000000000000000000015 /* XCRemoteSwiftPackageReference Sparkle */ = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/sparkle-project/Sparkle"; requirement = {kind = upToNextMajorVersion; minimumVersion = 2.9.6; }; };
+		A30000000000000000000015 /* XCRemoteSwiftPackageReference Sparkle */ = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/sparkle-project/Sparkle"; requirement = {kind = exactVersion; version = 2.10.1; }; };
 		A20000000000000000000015 /* Sparkle */ = {isa = XCSwiftPackageProductDependency; package = A30000000000000000000015 /* XCRemoteSwiftPackageReference Sparkle */; productName = Sparkle; };
 /* End XCConfigurationList section */
 
