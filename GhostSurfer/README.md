@@ -23,6 +23,10 @@ The current native Mac app installer stays on Firebase Hosting. Windows and Linu
 
 The site-wide Ghost Surfer name uses a spectral serif, icy gradient, and blue-purple glow across visible page copy. This is a CSS treatment on the existing static HTML/CSS site; it does not add a framework or change the site's runtime.
 
+## Production Homepage Recovery
+
+The current consolidated homepage baseline and exact Firebase recovery commands are recorded in [docs/HOMEPAGE_RECOVERY_2026-11-08.md](docs/HOMEPAGE_RECOVERY_2026-11-08.md). Keep that record updated after any Hosting release so the last known-good page can be restored without reconstructing it from memory.
+
 ## Run and build the desktop app
 
 Install Python 3.13 and build dependencies:
