@@ -1,0 +1,23 @@
+<?xml version="1.0" standalone="yes"?>
+<!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Ghost Surfer</title>
+        <item>
+            <title>0.2.0</title>
+            <pubDate>Sun, 08 Nov 2026 10:51:27 -0500</pubDate>
+            <link>https://ghost-surfer-browser.web.app/</link>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.0.zip" length="1332772" type="application/octet-stream" sparkle:edSignature="IDvdzjam4mt4yvwSDmeE6Y2gfj3zic6mQDWs4FcT2ajN4qvVddUHnylqe2tTSFzEowuDw3WlTmQHDPrbiTtuBg=="/>
+            <sparkle:releaseNotesLink sparkle:edSignature="UVF5765pAzGsbNSpkliYZm/Ct3OhvAKDzn6o0zDvxgjSxwTHUD6PPktvmA2RG6oAr042tsepfpv348GhHjQQDA==" sparkle:length="656">https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.0.md</sparkle:releaseNotesLink>
+        </item>
+    </channel>
+</rss>
+<!-- sparkle-signatures:
+edSignature: 8H98V75NBLNhXmjiUmjVTaa3Lhgk63918AryAJhisHQLegacFuiJEUuIQw0sGgOjA/BxbVr+5L8uHde1p9qpBw==
+length: 1363
+-->

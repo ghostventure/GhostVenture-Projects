@@ -42,7 +42,7 @@ npm run build:desktop
 
 Open `iOS/GhostSurfer.xcodeproj` to build the iPhone and iPad app, or `macOS/GhostSurferMac.xcodeproj` to build the Mac app. Both targets use SwiftUI and WebKit and support macOS 14 or iOS 17 and later.
 
-To create the universal Mac package, run `installer/macos/build-installer.sh` from this folder. It creates `installer/macos/Ghost-Surfer-macOS-0.1.0.pkg` for `/Applications`. A signed and notarized public release requires Apple Developer ID Application and Installer identities.
+To create the universal Mac package, run `installer/macos/build-installer.sh` from this folder. It creates `installer/macos/Ghost-Surfer-macOS-0.2.0.pkg`, a Sparkle update ZIP, and a signed appcast under `site/`. The package is unsigned and unnotarized; the app bundle is ad-hoc signed. A Developer ID Application and Installer identity is recommended for Gatekeeper-friendly distribution. Existing 0.1.0 installs need a one-time reinstall before in-app updates are available.
 
 ## Deploy the website
 

@@ -9,6 +9,23 @@
     ],
     "headers": [
       {
+        "source": "**/*.xml",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/rss+xml; charset=utf-8"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          }
+        ]
+      },
+      {
         "source": "**/*.zip",
         "headers": [
           {

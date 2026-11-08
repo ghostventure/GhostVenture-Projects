@@ -9,15 +9,20 @@ SHA-256: B6BF707DEB45ED99DB0609AEF58B4A3E0DED34C4E63DE736E99FA391FD8C0839
 - Improved the extension manager and GS Install Manager.
 - The browser updater verifies the release asset before staging; Windows binaries are not Authenticode-signed.
 
-Current macOS preview: 0.1.0
-Package: Ghost-Surfer-macOS-0.1.0.pkg
+Current macOS release: 0.2.0
+Package: Ghost-Surfer-macOS-0.2.0.pkg
+SHA-256: 0CC9E9786CCC1EA803FAEA3929F4208E3A9BF9A4576D00484AF50CC774B05DB6
 
 2026-11-08
+- Added opt-in automatic update checks, background downloads, and installation using Sparkle.
+- Added signed appcast and update archives, plus a failure alert with a manual installer link.
+- Added first-run consent with Privacy Policy and Terms links; automatic updates can be disabled from the app menu.
+- Existing 0.1.0 installs need a one-time reinstall to enable app updates.
+- The package is unsigned and unnotarized; Gatekeeper may require manual approval. The app bundle uses an ad-hoc code signature.
+- macOS WebKit manages cookies; per-site cookie interception and optional Tor routing remain Windows-only.
 - Added Ghost Surfer for macOS 14 and later as a native SwiftUI and WebKit app.
 - Added universal support for Apple silicon and Intel Macs.
 - Added tabs, private tabs, bookmarks, history, tracker blocking, and HTTPS upgrades.
-- The first Mac package is unsigned and unnotarized; Gatekeeper requires manual approval.
-- macOS WebKit manages cookies; per-site cookie interception and optional Tor routing remain Windows-only.
 
 Previous Windows release: 2026-10-17
 

@@ -25,7 +25,7 @@
         <a href="legal.html">Legal</a>
         <a href="compliance.html">Compliance</a>
       </nav>
-      <a class="button secondary compact" href="downloads/Ghost-Surfer-macOS-0.1.0.pkg" download>Get Ghost Surfer for Mac</a>
+      <a class="button secondary compact" href="downloads/Ghost-Surfer-macOS-0.2.0.pkg" download>Get Ghost Surfer for Mac</a>
     </header>
 
     <main id="top">
@@ -41,12 +41,12 @@
           <p class="maker">Developed by Black Lion Studios.</p>
           <div class="actions">
             <a class="button primary" href="https://github.com/ghostventure/GhostVenture-Projects/releases/download/v0.2.6/GhostSurfer-Setup-v0.2.6.zip">Download for Windows</a>
-            <a class="button secondary" href="downloads/Ghost-Surfer-macOS-0.1.0.pkg" download>Download for Mac</a>
+            <a class="button secondary" href="downloads/Ghost-Surfer-macOS-0.2.0.pkg" download>Download for Mac</a>
             <a class="button secondary" href="#interface">See the browser</a>
           </div>
           <div class="hero-facts" aria-label="Release facts">
             <span>Windows app</span>
-            <span>Native Mac preview</span>
+            <span>Native Mac app</span>
             <span>Windows cookie approval</span>
             <span>Spy alerts</span>
             <span>12 theme colors</span>
@@ -104,7 +104,7 @@
             <span>Private tabs use temporary WebKit storage</span>
             <span>Known tracker blocking and HTTPS upgrades</span>
             <span>Windows release retains per-site cookie controls</span>
-            <span>Unsigned preview; manual Gatekeeper approval required</span>
+            <span>Automatic signed update archives; installer remains unsigned and requires Gatekeeper approval</span>
           </div>
         </div>
       </section>
@@ -166,13 +166,13 @@
           <div>
             <p class="eyebrow">Install</p>
             <h2>Choose your platform.</h2>
-            <p>Windows has a per-user setup package. Mac has a universal installer for Apple silicon and Intel, currently offered as an unsigned preview.</p>
+            <p>Windows has a per-user setup package. Mac has a universal installer for Apple silicon and Intel, offered with consent-based automatic updates.</p>
           </div>
           <ol class="steps">
             <li><strong>Download and extract</strong><span>Download the current setup ZIP and choose Extract All.</span></li>
             <li><strong>Run GS Install Manager</strong><span>Open the included manager and follow its setup flow. It validates the staged Qt WebEngine runtime before replacing program files.</span></li>
-            <li><strong>Mac: open the package</strong><span>Open Ghost-Surfer-macOS-0.1.0.pkg and follow Installer. It places Ghost Surfer in Applications. Requires macOS 14 or later.</span></li>
-            <li><strong>Mac: approve the preview</strong><span>This package is not signed or notarized. Gatekeeper may require manual approval before Installer and the app can open.</span></li>
+            <li><strong>Mac: open the package</strong><span>Open Ghost-Surfer-macOS-0.2.0.pkg and follow Installer. It places Ghost Surfer in Applications. Requires macOS 14 or later.</span></li>
+            <li><strong>Mac: approve the installer</strong><span>This package is not signed or notarized. Gatekeeper may require manual approval before Installer and the app can open. Version 0.2.0 adds an in-app updater; existing 0.1.0 installs need this one-time reinstall first.</span></li>
           </ol>
         </div>
       </section>
@@ -180,18 +180,18 @@
       <section id="download" class="section shell">
         <div class="download-card">
           <div>
-            <p class="eyebrow">Mac Preview · Version 0.1.0</p>
-            <h2>Ghost-Surfer-macOS-0.1.0.pkg</h2>
+            <p class="eyebrow">Mac · Version 0.2.0</p>
+            <h2>Ghost-Surfer-macOS-0.2.0.pkg</h2>
             <p>Universal installer for Apple silicon and Intel Macs running macOS 14 or later. Installs Ghost Surfer.app into Applications. Includes private tabs, WebKit tracking protections, known tracker blocking, HTTPS upgrades, bookmarks, and history. The Mac preview uses WebKit cookie handling and does not include the Windows app's per-site cookie approval or local Tor routing.</p>
-            <p><strong>Unsigned preview:</strong> this package is not signed or notarized. Gatekeeper will require manual approval, and first-run steps may vary with your macOS settings. Only install it if you trust the source.</p>
+            <p><strong>Installer status:</strong> the package is not signed or notarized, so Gatekeeper may require manual approval. The app bundle is ad-hoc signed for Sparkle updates. Existing version 0.1.0 installs need this one-time reinstall to enable future in-app updates.</p>
             <details class="hash">
               <summary>Verify the Mac package</summary>
-              <p>Package SHA-256: <code>7CF848D133C314959371E12680E9DF5DA63F1F07D7722AD6411F1BB2BB433F43</code></p>
+              <p>Package SHA-256: <code>0CC9E9786CCC1EA803FAEA3929F4208E3A9BF9A4576D00484AF50CC774B05DB6</code></p>
               <p>The complete checksum list is available in <a href="downloads/SHA256SUMS.txt">SHA256SUMS.txt</a>.</p>
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary" href="downloads/Ghost-Surfer-macOS-0.1.0.pkg" download>Download Mac installer</a>
+            <a class="button primary" href="downloads/Ghost-Surfer-macOS-0.2.0.pkg" download>Download Mac installer</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
           </div>
