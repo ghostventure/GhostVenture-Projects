@@ -17,7 +17,7 @@ The desktop app is built with Python, PySide6, and QtWebEngine. It includes a la
 - `macOS/`: native SwiftUI and WebKit app for Mac, reusing the iOS browser state and privacy rules.
 - `installer/macos/`: universal `.pkg` build script and installer notes.
 
-The Mac installer stays on Firebase Hosting. Windows and Linux desktop packages are published on the GitHub v0.2.6 release. Current filenames and hashes are listed in `site/downloads/SHA256SUMS.txt`.
+The current native Mac app installer stays on Firebase Hosting. Windows and Linux desktop packages are published on the GitHub v0.2.6 release. Current filenames and hashes are listed in `site/downloads/SHA256SUMS.txt`.
 
 ## Website presentation
 
@@ -55,7 +55,7 @@ Build on x86_64 Linux with glibc using the pinned dependencies in `requirements-
 
 ## Deploy the website
 
-Use the GitHub [`codex/ghost-surfer-site-linux-20261108`](https://github.com/ghostventure/GhostVenture-Projects/tree/codex/ghost-surfer-site-linux-20261108) site source. Before deploying, restore `site/downloads/Ghost-Surfer-macOS-0.2.0.pkg` from `https://ghost-surfer-browser.web.app/downloads/Ghost-Surfer-macOS-0.2.0.pkg`; `.gitignore` excludes it. Verify the package against `site/downloads/SHA256SUMS.txt`, then deploy **Hosting only** (`firebase deploy --only hosting --project ghost-surfer-browser`).
+Use the GitHub [`codex/ghost-surfer-site-linux-20261108`](https://github.com/ghostventure/GhostVenture-Projects/tree/codex/ghost-surfer-site-linux-20261108) site source. Before deploying, restore `site/downloads/Ghost-Surfer-macOS-0.2.3.pkg` from `https://ghost-surfer-browser.web.app/downloads/Ghost-Surfer-macOS-0.2.3.pkg`; `.gitignore` excludes it. Restore the signed `appcast-macos.xml` and referenced update archives without editing their contents. Verify the installer against `site/downloads/SHA256SUMS.txt`, then deploy **Hosting only** (`firebase deploy --only hosting --project ghost-surfer-browser`).
 
 Install Node.js, then run these commands from this folder:
 

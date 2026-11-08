@@ -9,4 +9,5 @@ node_modules/
 site/downloads/*.zip
 installer/macos/*.pkg
 site/downloads/*.pkg
+site/updates/*.delta
 *.download

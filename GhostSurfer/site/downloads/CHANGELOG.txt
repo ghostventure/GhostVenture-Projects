@@ -9,7 +9,23 @@ SHA-256: B6BF707DEB45ED99DB0609AEF58B4A3E0DED34C4E63DE736E99FA391FD8C0839
 - Improved the extension manager and GS Install Manager.
 - The browser updater verifies the release asset before staging; Windows binaries are not Authenticode-signed.
 
-Current macOS release: 0.2.0
+Current Linux release: 0.2.6
+Package: GhostSurfer-Linux-x86_64-v0.2.6.tar.gz
+SHA-256: D282375058005AE63C1F9C7791ABE1201E195D8334E127768CD1D08F8C4A6A52
+- Linux release includes Ghost Guard, cookie controls, tabs, bookmarks, history, downloads, and optional extensions.
+- Linux checks for newer releases at startup; downloading and applying an update require confirmation.
+- Built and smoke-checked on Kali Linux with glibc 2.43; older distributions are not yet verified.
+
+Current macOS release: 0.2.3
+Package: Ghost-Surfer-macOS-0.2.3.pkg
+SHA-256: 85C0D9C9CFA0CB659EBAA94A47564B010C6C730C72AE8525D125E6103B817C96
+- Updated the outline around the ghost in the native app icon.
+- The Mac app includes private tabs, WebKit tracking protection, HTTPS upgrades, bookmarks, and history.
+- Optional automatic update checks and signed update archives are available with user consent.
+- The installer package is unsigned and unnotarized; Gatekeeper may require manual approval.
+- Per-site cookie controls and optional local Tor routing are currently Windows and Linux features.
+
+Previous macOS release: 0.2.0
 Package: Ghost-Surfer-macOS-0.2.0.pkg
 SHA-256: 0CD412737072D1C567AECD4B2A47364F4496E0FEF713292C8FB65CEB5CD6BD9E
 
