@@ -44,6 +44,8 @@ Open `iOS/GhostSurfer.xcodeproj` to build the iPhone and iPad app, or `macOS/Gho
 
 To create the universal Mac package, run `installer/macos/build-installer.sh` from this folder. It creates `installer/macos/Ghost-Surfer-macOS-0.2.4.pkg`, a Sparkle update ZIP, and a signed appcast under `site/`. The app bundle is ad-hoc signed; the installer itself has no Apple Developer ID signature, so macOS may ask for one-time approval. The site documents that step. Existing 0.1.0 installs need a one-time reinstall before in-app updates are available.
 
+The Mac app includes its own Ghost Surfer icon for Finder, the Dock while the app is open, and the app switcher; it does not need to be pinned to the Dock. Version 0.2.4 keeps the ghost's black outline visible around its full shape, including beneath the glossy highlight. See the [Mac documentation](macOS/README.md) for update behavior and platform details.
+
 ## Deploy the website
 
 Install Node.js, then run these commands from this folder:

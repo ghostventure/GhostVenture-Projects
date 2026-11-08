@@ -5,6 +5,7 @@ dist/
 release-*/
 *.zip
 site/updates/*.delta
+site/updates/old_updates/
 node_modules/
 .firebase/
 site/downloads/*.zip

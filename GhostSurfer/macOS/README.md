@@ -6,6 +6,8 @@ Native macOS browser client built with SwiftUI and WebKit. It shares the browser
 
 Open `GhostSurferMac.xcodeproj` in Xcode and run the `GhostSurferMac` scheme on macOS 14 or later. The target uses Apple's WebKit and SwiftUI frameworks plus Sparkle 2 for opt-in automatic updates. The first launch asks whether to enable automatic checks and background downloads. The choice is stored locally; automatic updates can be disabled from the Ghost Surfer menu. Manual update checks remain available.
 
+Ghost Surfer uses its bundled app icon in Finder, the Dock while it is running, and the app switcher. Dock pinning is optional. The current icon uses a black outline around the ghost, drawn above its glossy highlight so the outline stays visible.
+
 From the `GhostSurfer` project folder, run `./installer/macos/build-installer.sh` to create the universal installer package. The `.pkg` installs into `/Applications`; Sparkle update archives and the appcast are signed with the private EdDSA key in the macOS login Keychain; only the public key is embedded in `Info.plist`. Never export or commit the private key. Existing 0.1.0 installs require a one-time reinstall. Installer signing and notarization requirements are described in `../installer/macos/README.md`.
 
 Keyboard shortcuts include Command-T for a new tab, Command-Shift-N for a private tab, Command-L to focus the address bar, Command-D to bookmark the current page, and Command-[ / Command-] for back and forward navigation.

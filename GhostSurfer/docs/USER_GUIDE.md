@@ -29,3 +29,9 @@ Downloads show progress and completion state. Select a completed item to open it
 ## Scope of privacy controls
 
 Ghost Surfer's controls describe browser behavior; they cannot guarantee that a site will not identify a user through its own account, content, or other browser signals. Allowing first-party cookies may be needed for sign-in, carts, and preferences. Tor routing is available only when a local Tor service is listening on the supported port when Ghost Surfer starts.
+
+## Mac app and updates
+
+The native Mac app requires macOS 14 or later and supports Apple silicon and Intel Macs. Its bundled Ghost Surfer icon appears in Finder, the Dock while the app is running, and the app switcher; you do not need to pin it to the Dock. The current icon draws a black outline over the glossy highlight around the ghost.
+
+On first launch, choose whether to enable automatic update checks and background downloads. If you agree, Ghost Surfer checks its signed update feed and prompts before installing an update. If an update cannot be installed automatically, the app shows an alert with a link to the installer. You can turn automatic updates off from the Ghost Surfer menu or check manually there. Existing 0.1.0 installs need one manual reinstall before in-app updates are available.
