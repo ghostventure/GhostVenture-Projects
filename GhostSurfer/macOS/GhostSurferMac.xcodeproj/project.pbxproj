@@ -1,0 +1,63 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000011 /* GhostSurferMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* GhostSurferMacApp.swift */; };
+		A10000000000000000000012 /* MacBrowserRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* MacBrowserRootView.swift */; };
+		A10000000000000000000013 /* MacWebBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* MacWebBrowserView.swift */; };
+		A10000000000000000000014 /* BrowserStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* BrowserStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B10000000000000000000011 /* GhostSurferMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostSurferMacApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000012 /* MacBrowserRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBrowserRootView.swift; sourceTree = "<group>"; };
+		B10000000000000000000013 /* MacWebBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWebBrowserView.swift; sourceTree = "<group>"; };
+		B10000000000000000000014 /* BrowserStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../iOS/BrowserStore.swift; sourceTree = "<group>"; };
+		C10000000000000000000011 /* GhostSurfer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GhostSurfer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D10000000000000000000011 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E10000000000000000000011 = {isa = PBXGroup; children = (E10000000000000000000012 /* macOS */, E10000000000000000000013 /* Products */); sourceTree = "<group>"; };
+		E10000000000000000000012 /* macOS */ = {isa = PBXGroup; path = .; sourceTree = "<group>"; children = (B10000000000000000000011, B10000000000000000000012, B10000000000000000000013, B10000000000000000000014); };
+		E10000000000000000000013 /* Products */ = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (C10000000000000000000011); };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F10000000000000000000011 /* GhostSurferMac */ = {isa = PBXNativeTarget; buildConfigurationList = F10000000000000000000042; buildPhases = (F20000000000000000000012, D10000000000000000000011, F20000000000000000000013); buildRules = (); dependencies = (); name = GhostSurferMac; productName = GhostSurferMac; productReference = C10000000000000000000011; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F10000000000000000000021 /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastUpgradeCheck = 1640; TargetAttributes = {F10000000000000000000011 = {CreatedOnToolsVersion = 16.4; }; }; }; buildConfigurationList = F10000000000000000000022; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = E10000000000000000000011; productRefGroup = E10000000000000000000013; projectDirPath = ""; projectRoot = ""; targets = (F10000000000000000000011); };
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F20000000000000000000012 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000011, A10000000000000000000012, A10000000000000000000013, A10000000000000000000014); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F20000000000000000000013 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		F30000000000000000000031 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Debug; };
+		F30000000000000000000032 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Release; };
+		F30000000000000000000033 /* Target Debug */ = {isa = XCBuildConfiguration; buildSettings = {CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "Ghost Surfer"; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities"; MACOSX_DEPLOYMENT_TARGET = 14.0; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.blacklion.ghostsurfer.mac; PRODUCT_NAME = "Ghost Surfer"; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; }; name = Debug; };
+		F30000000000000000000034 /* Target Release */ = {isa = XCBuildConfiguration; buildSettings = {CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "Ghost Surfer"; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities"; MACOSX_DEPLOYMENT_TARGET = 14.0; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.blacklion.ghostsurfer.mac; PRODUCT_NAME = "Ghost Surfer"; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F10000000000000000000022 /* Project configurations */ = {isa = XCConfigurationList; buildConfigurations = (F30000000000000000000031, F30000000000000000000032); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		F10000000000000000000042 /* Target configurations */ = {isa = XCConfigurationList; buildConfigurations = (F30000000000000000000033, F30000000000000000000034); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+
+	};
+	rootObject = F10000000000000000000021;
+}
