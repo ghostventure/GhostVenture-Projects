@@ -9,11 +9,12 @@ SHA-256: B6BF707DEB45ED99DB0609AEF58B4A3E0DED34C4E63DE736E99FA391FD8C0839
 - Improved the extension manager and GS Install Manager.
 - The browser updater verifies the release asset before staging; Windows binaries are not Authenticode-signed.
 
-Current macOS release: 0.2.2
-Package: Ghost-Surfer-macOS-0.2.2.pkg
-SHA-256: 356303EB37DFA70B06EB07CF14AEB2F18A2D6D6B3F9CBC3697EA1B80785849F3
+Current macOS release: 0.2.3
+Package: Ghost-Surfer-macOS-0.2.3.pkg
+SHA-256: 85C0D9C9CFA0CB659EBAA94A47564B010C6C730C72AE8525D125E6103B817C96
 
 2026-11-08
+- Changed the outline around the ghost to black.
 - Added the native Ghost Surfer icon for the Dock, Finder, and app switcher.
 - Corrected the runtime framework path so Sparkle loads when Ghost Surfer opens.
 - Added opt-in automatic update checks, background downloads, and installation using Sparkle.

@@ -6,6 +6,21 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Ghost Surfer</title>
         <item>
+            <title>0.2.3</title>
+            <pubDate>Sun, 08 Nov 2026 15:25:05 -0500</pubDate>
+            <link>https://ghost-surfer-browser.web.app/</link>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>0.2.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink sparkle:edSignature="TBnPZGsOO0sDDZ6AnAFJh3Yo2Z2S72md3U/W9T8oRZVM7KNzPJqWwqiBJiBd49ahw4hvhkCIRJ2fueZkH0hiDw==" sparkle:length="323">https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.3.md</sparkle:releaseNotesLink>
+            <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.3.zip" length="2523523" type="application/octet-stream" sparkle:edSignature="6uWQj3HMJWI3wtZG3j6bRkI1kRatMtjBS27znaFFnyTMOEu7cKot/FFeMyPCmX1IHb9//WLLQUdfzdI06iXWCg=="/>
+            <sparkle:deltas>
+                <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer5-4.delta" sparkle:deltaFrom="4" length="943486" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="XMXkdfAlK4plgGg0ez9fOvfOatRddmdEvmvmwmpGjLac39o8ppZe0TrEUVUZyogR/nTzQKWtrGAS9f9Zk50SDQ=="/>
+                <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer5-3.delta" sparkle:deltaFrom="3" length="960846" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="6Z8V1dorJI2dMGeyAQkJn7yYlcGtgdV+frUFbly6P4O6SnUTX3Lh0HGFn/O0j71iYFVMnp87da/f8PKnbvPuDw=="/>
+                <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer5-2.delta" sparkle:deltaFrom="2" length="1006422" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="ydZY8POQCULQTgh0qwOC/9VxAGLecaeAcOeiwfSCCS7xTZwNv57ttuXTN++yatuuLmYmNaglqoDR72bo1BCdBw=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.2.2</title>
             <pubDate>Sun, 08 Nov 2026 15:08:29 -0500</pubDate>
             <link>https://ghost-surfer-browser.web.app/</link>
@@ -32,19 +47,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
                 <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost%20Surfer3-2.delta" sparkle:deltaFrom="2" length="980218" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="978864" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="J/+5M6eyhgMFmVn0TKedzo/iixyL1DmRKOfGLEaVZJhDkY//XPEX0hWBm8V0qPTOcc9BtlQftTmvSBqdD0W5Dg=="/>
             </sparkle:deltas>
         </item>
-        <item>
-            <title>0.2.0</title>
-            <pubDate>Sun, 08 Nov 2026 10:51:27 -0500</pubDate>
-            <link>https://ghost-surfer-browser.web.app/</link>
-            <sparkle:version>2</sparkle:version>
-            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.0.zip" length="1332772" type="application/octet-stream" sparkle:edSignature="OwbV7bNmZ/nNzho4siksC5tghQZkgnT3wRdFkbh+UZVAjvbZErqdOEyBzBmOb7GX+pV6v8daMcI6gwDEGhPIAw=="/>
-            <sparkle:releaseNotesLink sparkle:edSignature="UVF5765pAzGsbNSpkliYZm/Ct3OhvAKDzn6o0zDvxgjSxwTHUD6PPktvmA2RG6oAr042tsepfpv348GhHjQQDA==" sparkle:length="656">https://ghost-surfer-browser.web.app/updates/Ghost-Surfer-macOS-0.2.0.md</sparkle:releaseNotesLink>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: NhRkUCvqgK5MVOuJN+tEGoEZwgAe4Js/qcBMnoxuCJThZStyaOPJDmQP8Lqb+odW1VMVTyFguhGtrKaKgnkeAQ==
-length: 4498
+edSignature: WmVF1IXGEfrIJVGDDtkr4gaspXKB2tt8tY4jWmykzT7XSKLcV6G5Ls4SsUiiiAfJD5xDXSWt/L80+ry0RJBaAA==
+length: 5722
 -->

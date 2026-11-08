@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 project_root="$(cd "$script_dir/../.." && pwd)"
-version="${VERSION:-0.2.2}"
+version="${VERSION:-0.2.3}"
 derived_data="${DERIVED_DATA_PATH:-${TMPDIR:-/tmp}/GhostSurferMacInstallerDerivedData}"
 output_package="${OUTPUT_PACKAGE:-$script_dir/Ghost-Surfer-macOS-${version}.pkg}"
 updates_dir="${UPDATES_DIR:-$project_root/site/updates}"

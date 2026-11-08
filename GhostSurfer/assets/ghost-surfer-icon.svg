@@ -11,7 +11,7 @@
     </linearGradient>
   </defs>
   <rect x="8" y="8" width="240" height="240" rx="34" fill="url(#bg)" stroke="#38a9e6" stroke-width="8"/>
-  <path d="M62 210c12-14 23-14 35 0 9 10 20 10 30 0 12-13 24-13 36 0 9 10 20 10 31 0V92c0-40-27-70-65-70S62 52 62 92v118Z" fill="url(#sheet)" stroke="#ffffff" stroke-width="3"/>
+  <path d="M62 210c12-14 23-14 35 0 9 10 20 10 30 0 12-13 24-13 36 0 9 10 20 10 31 0V92c0-40-27-70-65-70S62 52 62 92v118Z" fill="url(#sheet)" stroke="#000000" stroke-width="3"/>
   <path d="M62 96c12-39 37-58 74-58 27 0 48 11 63 33-9-30-34-49-70-49-38 0-67 30-67 70v4Z" fill="#ffffff" opacity=".72"/>
   <ellipse cx="109" cy="103" rx="11" ry="16" fill="#07111c"/>
   <ellipse cx="151" cy="103" rx="11" ry="16" fill="#07111c"/>
