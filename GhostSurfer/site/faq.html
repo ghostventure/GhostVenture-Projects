@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#05080d">
+    <link rel="icon" type="image/svg+xml" href="/assets/ghost-surfer-icon.svg">
+    <title>FAQ | Ghost Surfer Browser</title>
+    <meta name="description" content="Answers about Ghost Surfer privacy features, Windows and Linux builds, the Mac preview, updates, and downloads.">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Ghost Surfer home">
+        <img src="/assets/ghost-surfer-icon.svg" alt="">
+        <span><strong>Ghost Surfer</strong><small>Frequently asked questions</small></span>
+      </a>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="/">Home</a>
+        <a href="/#download">Downloads</a>
+        <a href="/faq.html" aria-current="page">FAQ</a>
+        <a href="/legal.html">Legal</a>
+        <a href="/support.html">Support</a>
+      </nav>
+    </header>
+
+    <main class="shell legal-page faq-page">
+      <section class="legal-hero">
+        <p class="eyebrow">Ghost Surfer help</p>
+        <h1>Frequently asked questions</h1>
+        <p class="lead">Straightforward answers about privacy, platform differences, updates, and downloads.</p>
+      </section>
+
+      <p class="notice faq-notice">Features and requirements differ by platform. The <a href="/#download">Downloads page</a> lists the current versions, package details, and checksums.</p>
+
+      <section class="faq-group" aria-labelledby="faq-basics">
+        <h2 id="faq-basics">Privacy and browsing</h2>
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>What is Ghost Surfer?</summary>
+            <div class="faq-answer"><p>Ghost Surfer is a privacy-focused desktop browser. The Windows and Linux editions use Qt WebEngine; the Mac edition is a separate native WebKit app. Each platform's current features are listed on the <a href="/#download">Downloads page</a>.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Does Ghost Surfer make me anonymous?</summary>
+            <div class="faq-answer"><p>No. Ghost Surfer adds privacy controls, but websites and network providers can still see the network connection used to reach them. Windows and Linux can use a compatible Tor service already running on your computer; Tor is not included. The Mac app does not include Tor routing.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>What does Ghost Guard block?</summary>
+            <div class="faq-answer"><p>On Windows and Linux, Ghost Guard filters a built-in list of known tracker hosts and denies sensitive website permissions by default. Cookie controls let you choose how first-party cookies are handled. These protections do not catch every tracker or prevent every form of identification.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Does private browsing hide my activity?</summary>
+            <div class="faq-answer"><p>The Mac app includes private tabs that use a temporary WebKit data store and do not add pages to browsing history. Websites and network providers may still observe activity. The Windows and Linux 0.2.6 releases do not advertise a separate private-tab mode; clearing cookies, cache, and history is available in their browser controls.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Is my browsing data sent to Ghost Surfer?</summary>
+            <div class="faq-answer"><p>The website has no account system or analytics. Browser profiles are stored locally. Update checks can contact third-party release services: Linux checks GitHub at startup by default, while Mac checks begin only if you opt in to Sparkle. Those requests include ordinary connection metadata such as your IP address, but do not send browsing history, bookmarks, or page contents. See the <a href="/privacy.html">Privacy Policy</a> for details.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Does Ghost Surfer sync bookmarks or history between devices?</summary>
+            <div class="faq-answer"><p>No. Ghost Surfer does not provide cloud sync. Browser data is kept in the local profile on each device.</p></div>
+          </details>
+        </div>
+      </section>
+
+      <section class="faq-group" aria-labelledby="faq-platforms">
+        <h2 id="faq-platforms">Platforms and features</h2>
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>What is different between Windows, Linux, and Mac?</summary>
+            <div class="faq-answer"><p>Windows and Linux share Ghost Control, cookie choices, tracker filtering, permission restrictions, and the main tab and library tools. The Mac app uses Apple's WebKit and includes private tabs, bookmarks, history, tracker protections, and HTTPS upgrades; it does not include the desktop apps' per-site cookie controls or Tor routing. Check each download card for the exact scope.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Which Mac computers can run Ghost Surfer?</summary>
+            <div class="faq-answer"><p>The current Mac package is universal for Apple silicon and Intel Macs running macOS 14 or later. It installs Ghost Surfer in Applications.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Which Linux computers can run this release?</summary>
+            <div class="faq-answer"><p>The current Linux archive targets x86_64 systems using glibc. It was built and smoke-checked on Kali Linux with glibc 2.43; older distributions have not been verified. ARM, 32-bit Linux, and musl-based systems such as Alpine are not supported by this archive.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Does Linux installation need sudo?</summary>
+            <div class="faq-answer"><p>No. Extract the downloaded archive, open its folder, and run <code>./install-linux.sh</code>. It installs for your user account. See <a href="/support.html">Support</a> for the steps.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Does Ghost Surfer include a password manager?</summary>
+            <div class="faq-answer"><p>The optional Personal Data Vault is available only in the Windows build and uses Windows account encryption. It can store selected personal information, including usernames and passwords. It is not available in the Linux or Mac builds.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Can I install browser extensions?</summary>
+            <div class="faq-answer"><p>The Windows and Linux builds support optional local extension imports. Imported extensions start disabled until you review and enable them in Ghost Control. This does not provide Chrome Web Store compatibility. The Mac preview does not include the desktop extensions feature.</p></div>
+          </details>
+        </div>
+      </section>
+
+      <section class="faq-group" aria-labelledby="faq-downloads">
+        <h2 id="faq-downloads">Downloads, updates, and support</h2>
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>Are the current downloads free?</summary>
+            <div class="faq-answer"><p>Yes. The current Windows, Linux, and Mac downloads are offered free of charge. The website does not require an account or collect payment.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>How do updates work?</summary>
+            <div class="faq-answer"><p>Windows updates are available through the browser's update controls and official releases. Linux checks for a newer release at startup by default; you can turn off automatic checks in app settings, and downloads and installation always require confirmation. On Mac, Sparkle update checks and background downloads start only if you choose “Agree and Enable.”</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Why does macOS warn me about the installer?</summary>
+            <div class="faq-answer"><p>The current Mac installer package does not have an Apple Developer ID signature. If macOS blocks it, follow the “Open Anyway” instructions on the Mac download card. The package's SHA-256 is listed there too. Only install it if you trust the official source.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>How do I verify a download?</summary>
+            <div class="faq-answer"><p>Open the <a href="/downloads/SHA256SUMS.txt">SHA256SUMS.txt</a> file and compare the hash for your exact filename with the SHA-256 calculated on your device. If the values differ, do not run the file; download it again from the official link.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Where can I get help or report a security issue?</summary>
+            <div class="faq-answer"><p>Visit the <a href="/support.html">Support page</a> or email <a href="mailto:solidartentertainment@gmail.com">solidartentertainment@gmail.com</a>. For a security report, include the app version, operating system, and steps to reproduce the issue. Do not email passwords or private files.</p></div>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer"><div class="shell footer-grid"><span>Ghost Surfer Browser</span><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/#download">Downloads</a><a href="/faq.html" aria-current="page">FAQ</a><a href="/legal.html">Legal and policies</a><a href="/support.html">Support</a></nav></div></footer>
+  </body>
+</html>
