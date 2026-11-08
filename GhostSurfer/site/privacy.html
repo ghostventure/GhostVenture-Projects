@@ -2,33 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <link rel="icon" type="image/svg+xml" href="/assets/ghost-surfer-icon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#05080d">
+    <meta name="theme-color" content="#05080d">
+    <link rel="icon" type="image/svg+xml" href="/assets/ghost-surfer-icon.svg">
     <title>Privacy Policy | Ghost Surfer Browser</title>
     <meta name="description" content="Privacy Policy for Ghost Surfer Browser.">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="/"><img src="assets/ghost-surfer-icon.svg" alt=""><span><strong>Ghost Surfer</strong><small>Privacy</small></span></a>
-      <nav><a href="legal.html">Legal</a><a href="terms.html">Terms</a><a href="cookies.html">Cookies</a><a href="compliance.html">Compliance</a><a href="support.html">Support</a></nav>
-      <a class="button secondary compact" href="https://github.com/ghostventure/GhostVenture-Projects/releases/download/v0.2.6/GhostSurfer-Setup-v0.2.6.zip">Download Ghost Surfer for Windows</a>
+      <a class="brand" href="/" aria-label="Ghost Surfer home">
+        <img src="/assets/ghost-surfer-icon.svg" alt="">
+        <span><strong>Ghost Surfer</strong><small>Privacy</small></span>
+      </a>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="/">Home</a>
+        <a href="/#download">Downloads</a>
+        <a href="/legal.html">Legal</a>
+        <a href="/support.html">Support</a>
+      </nav>
     </header>
     <main class="shell legal-page">
       <section class="legal-hero">
         <p class="eyebrow">Effective July 9, 2026</p>
         <h1>Privacy Policy</h1>
-        <p class="lead">This policy explains the privacy posture for the Ghost Surfer Browser website and Windows browser package.</p>
+        <p class="lead">This policy describes data handling for the website and the Windows, Linux, and macOS apps.</p>
       </section>
       <div class="legal-layout">
         <article class="legal-doc">
           <p class="notice">This policy is a practical operating document, not legal advice. Final compliance review should be done by a qualified professional if Ghost Surfer becomes a commercial product or collects user accounts, payments, analytics, or support tickets.</p>
           <h2>Summary</h2>
-          <p>Ghost Surfer is a local-first browser for Windows and macOS. The website is a static Firebase Hosting site that provides information, checksums, downloads, and the macOS update feed. The current website does not include account registration, payment forms, newsletter signup, analytics scripts, advertising pixels, or contact forms.</p>
+          <p>Ghost Surfer provides local-first desktop apps for Windows, Linux, and macOS. The static Firebase Hosting site provides information, checksums, platform downloads, and the macOS update feed. The current website does not include account registration, payment forms, newsletter signup, analytics scripts, advertising pixels, or contact forms.</p>
           <h2>Information We Collect</h2>
           <p>The website does not intentionally collect personal information directly from visitors. Firebase Hosting and internet infrastructure may process routine technical information such as IP address, request headers, browser type, URL requested, timestamps, and security logs as part of delivering the site.</p>
-          <p>The Ghost Surfer app stores browser data locally on the user's computer. On macOS, if you choose “Agree and Enable,” Sparkle periodically contacts the update feed to check for releases and may download signed app updates in the background. The request necessarily exposes an IP address and ordinary connection metadata to the hosting provider. Sparkle's request user-agent includes Ghost Surfer and Sparkle version information; anonymous system profiling is disabled. Sparkle does not send browser history, bookmarks, or page contents. If you decline, automatic checks and downloads stay off. You can enable or disable them from the Ghost Surfer menu. A user can still manually check for updates.</p>
+          <p>The Ghost Surfer apps store browser data locally on the user's computer. On Linux, automatic update checks are enabled by default and contact GitHub's release API at startup. These requests expose an IP address and ordinary connection metadata to GitHub; the updater does not send browsing data. You can disable automatic checks in the app settings. Downloading and applying an update always require confirmation.</p>
+          <p>On macOS, if you choose “Agree and Enable,” Sparkle periodically contacts the update feed to check for releases and may download signed app updates in the background. The request necessarily exposes an IP address and ordinary connection metadata to the hosting provider. Sparkle's request user-agent includes Ghost Surfer and Sparkle version information; anonymous system profiling is disabled. Sparkle does not send browser history, bookmarks, or page contents. If you decline, automatic checks and downloads stay off. You can enable or disable them from the Ghost Surfer menu. You can still check for updates manually.</p>
           <h2>Notice at Collection</h2>
           <p>The current site does not ask visitors to submit personal information. If support email or another contact route is used outside the static website, any information sent by the user may be used to respond to that request, maintain records, and protect the service from abuse.</p>
           <h2>How Information Is Used</h2>
@@ -36,16 +44,17 @@
             <li>To deliver the website and download files.</li>
             <li>To maintain security, abuse prevention, and hosting reliability.</li>
             <li>To allow the browser app to remember local bookmarks, settings, and recent browsing state.</li>
+            <li>On Linux, to check for newer releases at startup by default (unless disabled in app settings); downloading and applying an update require confirmation.</li>
             <li>On macOS, to deliver update checks and signed update downloads when automatic updates are enabled.</li>
           </ul>
           <h2>Sharing</h2>
-          <p>We do not sell personal information. The site is hosted through Firebase/Google infrastructure, which may process technical hosting data under its service terms. No third-party analytics or ad networks are intentionally installed on the current site.</p>
+          <p>We do not sell personal information. Firebase/Google infrastructure serves the website; Linux update checks use GitHub's release API, which receives the connection metadata described above. No third-party analytics or ad networks are intentionally installed on the current site.</p>
           <h2>Retention</h2>
           <p>Local browser data remains on the user's device until cleared by the user or by Ghost Surfer's cleanup controls. Hosting logs and infrastructure records are handled by the hosting provider according to their operational policies.</p>
           <h2>Your Choices</h2>
           <ul>
             <li>Use Ghost Surfer's clear data controls to remove local cookies, cache, history, saved cookie choices, and Ghost Guard alerts.</li>
-            <li>Delete the app folder to remove the portable application files.</li>
+            <li>Remove the installed app using your platform’s normal process; clearing browser data is a separate action.</li>
             <li>Do not download or use the software if you do not agree with this policy.</li>
           </ul>
           <h2>Privacy Rights</h2>
@@ -59,9 +68,9 @@
           <h2>Contact</h2>
           <p>For privacy questions, email <a href="mailto:solidartentertainment@gmail.com">solidartentertainment@gmail.com</a>.</p>
         </article>
-        <aside class="legal-nav"><strong>Legal Pages</strong><a href="terms.html">Terms</a><a href="license.html">License</a><a href="cookies.html">Cookies</a><a href="security.html">Security</a><a href="compliance.html">Compliance</a><a href="support.html">Support</a></aside>
+        <aside class="legal-nav" aria-label="Related pages"><strong>Legal and support</strong><a href="/legal.html">All legal documents</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/support.html">Support</a></aside>
       </div>
     </main>
-    <footer class="site-footer"><div class="shell footer-grid"><span>Ghost Surfer Browser</span><span class="footer-links"><a href="legal.html">Legal</a><a href="terms.html">Terms</a><a href="cookies.html">Cookies</a></span></div></footer>
+    <footer class="site-footer"><div class="shell footer-grid"><span>Ghost Surfer Browser</span><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/#download">Downloads</a><a href="/legal.html">Legal and policies</a><a href="/support.html">Support</a></nav></div></footer>
   </body>
 </html>
