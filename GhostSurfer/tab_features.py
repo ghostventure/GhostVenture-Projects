@@ -88,7 +88,6 @@ class TabFeatures:
         self.previous_tab_shortcut.activated.connect(lambda: self.cycle_tabs(-1))
         self.search_tabs_shortcut = QShortcut(QKeySequence("Ctrl+Shift+A"), self.window)
         self.search_tabs_shortcut.setObjectName("searchOpenTabsShortcut")
-        self.search_tabs_shortcut.setToolTip("Search open tabs")
         self.search_tabs_shortcut.activated.connect(self.show_tab_search)
 
         QTimer.singleShot(0, self.restore_previous_session)

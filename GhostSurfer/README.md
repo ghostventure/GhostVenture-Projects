@@ -1,6 +1,6 @@
 # Ghost Surfer
 
-Ghost Surfer is a Windows browser built with Python, PySide6, and Qt WebEngine. The current browser release is **0.2.6**. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
+Ghost Surfer is a desktop browser built with Python, PySide6, and Qt WebEngine. Version **0.2.6** has Windows and Linux builds; Mac is a separate native preview. DuckDuckGo is the default home page; the address-bar search provider is a separate setting and defaults to Startpage.
 
 ## What it includes
 
@@ -31,6 +31,10 @@ For operating instructions, see the [Ghost Surfer User Guide](docs/USER_GUIDE.md
 Download the current Windows ZIP from the [Ghost Surfer website](https://ghost-surfer-browser.web.app/), extract it, and run **GS Install Manager.exe**. Choose **Install**. The manager checks the Windows version, architecture, package files, disk space, and Microsoft Visual C++ runtime. It asks for consent before downloading a required Visual C++ component. Ghost Surfer installs per user under `%LOCALAPPDATA%\Programs\Ghost Surfer`; browser profile data stays under `%LOCALAPPDATA%\GhostSurferLocal\Ghost Surfer`.
 
 The manager's **Update** action uses the bundled or selected local package. The browser's **General → Ghost Surfer Updates** control checks GitHub releases. A release must contain a compatible Ghost Surfer package with verifiable integrity data before the browser will stage it.
+
+### Linux x86_64
+
+Download `GhostSurfer-Linux-x86_64-v0.2.6.tar.gz` from the [Ghost Surfer website](https://ghost-surfer-browser.web.app/) or the GitHub v0.2.6 release. The build was smoke-checked on Kali Linux with glibc 2.43; older Linux distributions are not yet verified. Extract it, enter the package folder, and run `./install-linux.sh`. It installs for the current user and does not require `sudo`. The app checks for newer Linux releases at startup and asks before downloading or applying them. Personal Data Vault is currently Windows-only. See [Linux build and install details](docs/LINUX.md).
 
 ## Project layout
 

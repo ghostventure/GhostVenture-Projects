@@ -4,14 +4,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import QThread, Signal
 
-from github_updater import GitHubReleasesUpdater
-
-
 class UpdateWorker(QThread):
     completed = Signal(object, str)
     progress = Signal(object, object)
 
-    def __init__(self, updater: GitHubReleasesUpdater, operation: str, candidate=None, parent=None) -> None:
+    def __init__(self, updater, operation: str, candidate=None, parent=None) -> None:
         super().__init__(parent)
         self.updater = updater
         self.operation = operation

@@ -2,6 +2,9 @@ __pycache__/
 *.py[cod]
 build/
 dist/
+venv/
+.venv/
+.venv-linux/
 release-*/
 *.zip
 node_modules/

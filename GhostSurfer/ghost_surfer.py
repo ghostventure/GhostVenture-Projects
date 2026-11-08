@@ -5,6 +5,9 @@ import shutil
 import sys
 import hashlib
 import hmac
+import secrets
+import stat
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -58,6 +61,7 @@ from page_ux_features import PageUxFeatures
 from library_features import LibraryFeatures
 from browser_update import UpdateWorker
 from github_updater import GitHubReleasesUpdater
+from linux_updater import LinuxGitHubReleasesUpdater
 from ghost_guard import (
     FirstPartyCookiePolicy,
     GhostGuardRequestInterceptor,
@@ -85,6 +89,8 @@ STORE_SEAL_KEY = b"GhostSurfer.BlackLionStudios.local-state.v2"
 
 
 def personal_vault_install_default() -> bool:
+    if os.name != "nt":
+        return False
     marker = Path(sys.executable).resolve().parent / "personal-vault.enabled"
     return marker.exists() if getattr(sys, "frozen", False) else True
 
@@ -106,10 +112,41 @@ THEMES = {
 def app_data_dir() -> Path:
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
     if not base:
-        base = str(Path.home() / "AppData" / "Local" / "GhostSurfer")
+        base = str(Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "GhostSurfer")
     path = Path(base)
+    if sys.platform.startswith("linux") and path.is_symlink():
+        raise OSError("Ghost Surfer data directory must not be a symbolic link.")
     path.mkdir(parents=True, exist_ok=True)
+    if sys.platform.startswith("linux"):
+        info = path.stat(follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise OSError("Ghost Surfer data directory must be owned by the current user.")
+        os.chmod(path, 0o700)
     return path
+
+
+def atomic_write_private_json(destination: Path, payload: dict) -> None:
+    """Write browser state atomically and keep Linux profile data owner-only."""
+    content = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
+    temporary = Path(temporary_name)
+    try:
+        if sys.platform.startswith("linux"):
+            os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+        if sys.platform.startswith("linux"):
+            os.chmod(destination, 0o600)
+    except Exception:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def ghost_icon_pixmap(size: int = 256) -> QPixmap:
@@ -189,11 +226,22 @@ class BrowserStore:
 
     def __init__(self) -> None:
         self.path = app_data_dir() / "browser-data.json"
+        self.seal_key = STORE_SEAL_KEY
+        self.legacy_seal_allowed = False
+        self.seal_key_migration_required = False
         self.tamper_detected = False
         self.tamper_message = ""
         self.last_error = ""
         self.recovery_backup: Path | None = None
         self.write_protected = False
+        if sys.platform.startswith("linux"):
+            try:
+                self.seal_key, self.legacy_seal_allowed = self._load_linux_seal_key()
+            except OSError:
+                self.seal_key = secrets.token_bytes(32)
+                self.tamper_detected = True
+                self.write_protected = True
+                self.tamper_message = "Ghost Surfer could not safely access its private integrity key. Browser settings are read-only until the key file permissions are repaired."
         self.previous_session_was_clean = True
         self.data = {
             "schema_version": 2,
@@ -222,6 +270,7 @@ class BrowserStore:
                 "extensions_profile_enabled": False,
                 "enabled_extensions": {},
                 "chatgpt_bridge_enabled": False,
+                "auto_check_updates": True,
             },
         }
         self.load()
@@ -292,15 +341,18 @@ class BrowserStore:
                 "extensions_profile_enabled": False,
                 "enabled_extensions": {},
                 "chatgpt_bridge_enabled": False,
+                "auto_check_updates": True,
             }.items():
                 self.data["settings"].setdefault(key, value)
             settings = self.data["settings"]
+            if os.name != "nt":
+                settings["personal_vault_enabled"] = False
             if not settings.get("home_page_default_migrated", False):
                 legacy_home = settings.get("home_page_url")
                 if legacy_home is None or legacy_home == "https://www.startpage.com/":
                     settings["home_page_url"] = "https://duckduckgo.com/"
                 settings["home_page_default_migrated"] = True
-            for key in ("speed_mode", "block_images", "ghost_cleanup_on_close", "allow_javascript", "allow_webgl", "high_contrast", "reduce_motion", "personal_vault_enabled", "data_request_guard_enabled", "site_verification_enabled"):
+            for key in ("speed_mode", "block_images", "ghost_cleanup_on_close", "allow_javascript", "allow_webgl", "high_contrast", "reduce_motion", "personal_vault_enabled", "data_request_guard_enabled", "site_verification_enabled", "auto_check_updates"):
                 settings[key] = bool(settings.get(key, key == "speed_mode"))
             settings["extensions_profile_enabled"] = bool(settings.get("extensions_profile_enabled", False))
             settings["chatgpt_bridge_enabled"] = bool(settings.get("chatgpt_bridge_enabled", False))
@@ -389,6 +441,8 @@ class BrowserStore:
         backup = self.path.with_name(f"browser-data-{reason}-{stamp}.json")
         try:
             shutil.copy2(self.path, backup)
+            if sys.platform.startswith("linux"):
+                os.chmod(backup, 0o600)
             self.recovery_backup = backup
         except OSError as exc:
             self.last_error = f"Could not preserve the previous browser data: {exc}"
@@ -399,34 +453,75 @@ class BrowserStore:
         payload.pop("_seal", None)
         return payload
 
+    def _load_linux_seal_key(self) -> tuple[bytes, bool]:
+        """Load a per-user integrity key without following a hostile link."""
+        directory = self.path.parent
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        directory_stat = directory.stat(follow_symlinks=False)
+        if not stat.S_ISDIR(directory_stat.st_mode) or directory_stat.st_uid != os.getuid():
+            raise OSError("browser data directory is not owned by this user")
+        os.chmod(directory, 0o700)
+        key_path = directory / ".browser-data-integrity-key"
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        flags = os.O_RDONLY | nofollow
+        created = False
+        try:
+            descriptor = os.open(key_path, flags)
+        except FileNotFoundError:
+            key = secrets.token_bytes(32)
+            try:
+                descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow, 0o600)
+                created = True
+                with os.fdopen(descriptor, "wb", closefd=True) as handle:
+                    handle.write(key)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                descriptor = os.open(key_path, flags)
+            except FileExistsError:
+                descriptor = os.open(key_path, flags)
+        try:
+            key_stat = os.fstat(descriptor)
+            if (not stat.S_ISREG(key_stat.st_mode) or key_stat.st_uid != os.getuid()
+                    or key_stat.st_size != 32):
+                raise OSError("integrity key is not a valid private file")
+            os.fchmod(descriptor, 0o600)
+            key = os.read(descriptor, 33)
+            if len(key) != 32:
+                raise OSError("integrity key has an invalid length")
+        finally:
+            os.close(descriptor)
+        return key, created
+
     def seal_for(self, data: dict | None = None) -> str:
         raw = json.dumps(self.sealed_payload(data), sort_keys=True, separators=(",", ":")).encode("utf-8")
-        return hmac.new(STORE_SEAL_KEY, raw, hashlib.sha256).hexdigest()
+        return hmac.new(self.seal_key, raw, hashlib.sha256).hexdigest()
 
     def verify_seal(self, data: dict) -> bool:
         expected = data.get("_seal", "")
-        return bool(expected) and hmac.compare_digest(str(expected), self.seal_for(data))
+        if not expected:
+            return False
+        expected = str(expected)
+        if hmac.compare_digest(expected, self.seal_for(data)):
+            return True
+        if self.legacy_seal_allowed:
+            raw = json.dumps(self.sealed_payload(data), sort_keys=True, separators=(",", ":")).encode("utf-8")
+            legacy = hmac.new(STORE_SEAL_KEY, raw, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, legacy):
+                self.seal_key_migration_required = True
+                return True
+        return False
 
     def save(self) -> bool:
         if self.write_protected:
             return False
-        temporary = self.path.with_name(f".{self.path.name}.{os.getpid()}.tmp")
         try:
             self.data["schema_version"] = 2
             self.data["_seal"] = self.seal_for()
-            with temporary.open("w", encoding="utf-8", newline="\n") as handle:
-                handle.write(json.dumps(self.data, indent=2, ensure_ascii=False))
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, self.path)
+            atomic_write_private_json(self.path, self.data)
             self.last_error = ""
             return True
         except (OSError, TypeError, ValueError) as exc:
             self.last_error = str(exc)
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError:
-                pass
             return False
 
     def export_backup(self, destination: Path) -> None:
@@ -436,18 +531,9 @@ class BrowserStore:
             "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "data": {key: self.data.get(key) for key in self.BACKUP_KEYS},
         }
-        temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
         try:
-            with temporary.open("w", encoding="utf-8", newline="\n") as handle:
-                handle.write(json.dumps(payload, indent=2, ensure_ascii=False))
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, destination)
+            atomic_write_private_json(destination, payload)
         except (OSError, TypeError, ValueError):
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError:
-                pass
             raise
 
     def restore_backup(self, source: Path) -> None:
@@ -692,6 +778,7 @@ class BrowserWindow(QMainWindow):
         self._update_candidate = None
         self._staged_update = None
         self._update_progress_dialog: QProgressDialog | None = None
+        self._automatic_update_check = False
         self.blocked_count = 0
         self.tracker_blocked_count = 0
         self.downloads = [
@@ -1279,10 +1366,20 @@ class BrowserWindow(QMainWindow):
         update_source = QLabel(f"Installed version: {APP_VERSION}\nUpdate source: GitHub releases for ghostventure/GhostVenture-Projects")
         update_source.setWordWrap(True)
         update_layout.addWidget(update_source)
-        self.update_status_label = QLabel("Updates are checked only when you ask.")
+        linux_build = sys.platform.startswith("linux")
+        self.update_status_label = QLabel(
+            "Linux updates are checked at startup; downloading and applying always need your confirmation."
+            if linux_build else "Updates are checked only when you ask."
+        )
         self.update_status_label.setWordWrap(True)
         self.update_status_label.setAccessibleName("Update status")
         update_layout.addWidget(self.update_status_label)
+        self.auto_update_check = None
+        if linux_build:
+            self.auto_update_check = QCheckBox("Check for Linux updates automatically at startup")
+            self.auto_update_check.setChecked(bool(self.settings_data.get("auto_check_updates", True)))
+            self.auto_update_check.toggled.connect(lambda enabled: self.update_setting("auto_check_updates", enabled))
+            update_layout.addWidget(self.auto_update_check)
         self.check_updates_btn = QPushButton("Check for updates")
         self.check_updates_btn.setObjectName("panelButton")
         self.check_updates_btn.setAccessibleName("Check Ghost Surfer updates on GitHub")
@@ -1438,11 +1535,17 @@ class BrowserWindow(QMainWindow):
         self.personal_vault_check = QCheckBox("Enable names, addresses, phone numbers, usernames, and passwords")
         self.personal_vault_check.setChecked(bool(self.settings_data.get("personal_vault_enabled", False)))
         self.personal_vault_check.toggled.connect(self.set_personal_vault_enabled)
+        self.personal_vault_check.setEnabled(os.name == "nt")
         vault_layout.addWidget(self.personal_vault_check)
-        vault_layout.addWidget(QLabel("Saved information is encrypted for this Windows account and kept outside browser history and backups. Credit cards are not stored. Login autofill is manual and limited to the exact HTTPS site."))
+        vault_help = (
+            "Saved information is encrypted for this Windows account and kept outside browser history and backups. Credit cards are not stored. Login autofill is manual and limited to the exact HTTPS site."
+            if os.name == "nt" else "The optional vault currently uses Windows account encryption and is disabled in this Linux build."
+        )
+        vault_layout.addWidget(QLabel(vault_help))
         open_vault_btn = QPushButton("Open Personal Vault")
         open_vault_btn.setObjectName("panelButton")
         open_vault_btn.setEnabled(bool(self.settings_data.get("personal_vault_enabled", False)))
+        open_vault_btn.setEnabled(os.name == "nt" and bool(self.settings_data.get("personal_vault_enabled", False)))
         open_vault_btn.clicked.connect(self.open_personal_vault)
         self.personal_vault_open_btn = open_vault_btn
         self.personal_vault_check.toggled.connect(open_vault_btn.setEnabled)
@@ -1479,7 +1582,7 @@ class BrowserWindow(QMainWindow):
         split_view_btn = QPushButton("Open split view")
         split_view_btn.clicked.connect(lambda: self.tab_features.show_split_view())
         bulk_tabs_btn = QPushButton("Select tabs for bulk actions")
-        bulk_tabs_btn.clicked.connect(self.tab_features.show_bulk_tab_actions)
+        bulk_tabs_btn.clicked.connect(lambda: self.tab_features.show_bulk_tab_actions())
         for widget in (duplicate_btn, close_others_btn, reopen_btn, suspend_btn, recent_tabs_btn,
                        save_session_btn, manage_sessions_btn, pin_tab_btn, group_tab_btn, mute_tab_btn, split_view_btn, bulk_tabs_btn):
             widget.setObjectName("panelButton")
@@ -1880,6 +1983,12 @@ class BrowserWindow(QMainWindow):
         return home if home.startswith(("http://", "https://")) else HOME_URL
 
     def set_personal_vault_enabled(self, enabled: bool) -> None:
+        if os.name != "nt" and enabled:
+            enabled = False
+            if hasattr(self, "personal_vault_check"):
+                self.personal_vault_check.blockSignals(True)
+                self.personal_vault_check.setChecked(False)
+                self.personal_vault_check.blockSignals(False)
         self.settings_data["personal_vault_enabled"] = bool(enabled)
         self.store.save()
         if hasattr(self, "personal_vault_btn"):
@@ -1888,7 +1997,7 @@ class BrowserWindow(QMainWindow):
             self.personal_vault_open_btn.setEnabled(bool(enabled))
 
     def open_personal_vault(self) -> None:
-        if not bool(self.settings_data.get("personal_vault_enabled", False)):
+        if os.name != "nt" or not bool(self.settings_data.get("personal_vault_enabled", False)):
             return
         try:
             PersonalDataVaultDialog(self, app_data_dir() / "personal-vault.dpapi").exec()
@@ -2914,6 +3023,7 @@ class BrowserWindow(QMainWindow):
             "extensions_profile_enabled": self.extensions_profile_enabled,
             "enabled_extensions": dict(extension_enabled_states),
             "chatgpt_bridge_enabled": chatgpt_bridge_enabled,
+            "auto_check_updates": True,
         }
         self.settings_data = self.store.data["settings"]
         self.speed_mode = True
@@ -2943,6 +3053,8 @@ class BrowserWindow(QMainWindow):
         self.personal_vault_check.setChecked(bool(self.settings_data["personal_vault_enabled"]))
         self.personal_vault_check.blockSignals(False)
         self.set_personal_vault_enabled(bool(self.settings_data["personal_vault_enabled"]))
+        if self.auto_update_check is not None:
+            self.auto_update_check.setChecked(bool(self.settings_data.get("auto_check_updates", True)))
         for control, value in ((self.data_request_guard_check, True), (self.site_verification_check, True)):
             control.blockSignals(True)
             control.setChecked(value)
@@ -2957,12 +3069,29 @@ class BrowserWindow(QMainWindow):
         self.status.showMessage(f"Profile reset complete. Safety copy: {backup}", 8000)
 
     def _updater_install_directory(self) -> Path | None:
+        if sys.platform.startswith("linux"):
+            target = Path.home() / ".local" / "opt" / "ghost-surfer"
+            if target.is_symlink() or not (target / ".ghost-surfer-install").is_file():
+                return None
+            return target if (target / "ghost-surfer").is_file() else None
         running_exe = Path(sys.executable)
         if getattr(sys, "frozen", False) and (running_exe.parent / "Ghost Surfer.exe").is_file():
             return running_exe.parent
         local = os.environ.get("LOCALAPPDATA")
         target = Path(local) / "Programs" / "Ghost Surfer" if local else None
         return target if target and (target / "Ghost Surfer.exe").is_file() else None
+
+    def _make_updater(self):
+        args = ("ghostventure", "GhostVenture-Projects", APP_VERSION, self._updater_install_directory())
+        if sys.platform.startswith("linux"):
+            return LinuxGitHubReleasesUpdater(*args)
+        return GitHubReleasesUpdater(*args)
+
+    def auto_check_for_updates(self) -> None:
+        if not self.isVisible() or not bool(self.settings_data.get("auto_check_updates", True)):
+            return
+        self._automatic_update_check = True
+        self.check_for_updates()
 
     def check_for_updates(self) -> None:
         if self._update_worker and self._update_worker.isRunning():
@@ -2972,8 +3101,7 @@ class BrowserWindow(QMainWindow):
         self.check_updates_btn.setEnabled(False)
         self.check_updates_btn.setText("Checking GitHub…")
         self.update_status_label.setText("Checking compatible Ghost Surfer packages on GitHub. Other products in the shared release list are ignored.")
-        updater = GitHubReleasesUpdater("ghostventure", "GhostVenture-Projects", APP_VERSION,
-                                        self._updater_install_directory())
+        updater = self._make_updater()
         self._start_update_worker(updater, "check")
 
     def _start_update_worker(self, updater, operation: str, candidate=None) -> None:
@@ -3019,6 +3147,7 @@ class BrowserWindow(QMainWindow):
         elif operation == "check" and result is None:
             self.update_status_label.setText("No newer compatible Ghost Surfer release package was found on GitHub.")
             self.check_updates_btn.setText("Check again")
+            self._automatic_update_check = False
         elif operation == "check":
             self._update_candidate = result
             self.update_status_label.setText(f"Version {result.version} is available: {result.release_name or result.tag}")
@@ -3028,7 +3157,18 @@ class BrowserWindow(QMainWindow):
             except (RuntimeError, TypeError):
                 pass
             self.check_updates_btn.clicked.connect(self.download_update)
-            if result.release_notes:
+            if self._automatic_update_check:
+                self._automatic_update_check = False
+                self.status.showMessage(f"Ghost Surfer {result.version} is available. Review it in Ghost Surfer Updates.", 9000)
+                answer = QMessageBox.question(
+                    self, "Ghost Surfer update available",
+                    f"Ghost Surfer {result.version} is available. Download and verify the Linux update now?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if answer == QMessageBox.StandardButton.Yes:
+                    self.download_update()
+            elif result.release_notes:
                 QMessageBox.information(self, f"Ghost Surfer {result.version} release notes", result.release_notes[:12000])
         elif operation == "download":
             self._staged_update = result
@@ -3049,8 +3189,7 @@ class BrowserWindow(QMainWindow):
             )
             if answer == QMessageBox.StandardButton.Yes:
                 try:
-                    updater = GitHubReleasesUpdater("ghostventure", "GhostVenture-Projects", APP_VERSION,
-                                                    self._updater_install_directory())
+                    updater = self._make_updater()
                     updater.launch_apply(result, current_pid=os.getpid(), install_directory=self._updater_install_directory())
                     self.close()
                 except Exception as exc:
@@ -3068,8 +3207,7 @@ class BrowserWindow(QMainWindow):
         self.check_updates_btn.setEnabled(False)
         self.check_updates_btn.setText("Downloading…")
         self.update_status_label.setText("Downloading and checking GitHub-provided package integrity data.")
-        updater = GitHubReleasesUpdater("ghostventure", "GhostVenture-Projects", APP_VERSION,
-                                        self._updater_install_directory())
+        updater = self._make_updater()
         self._start_update_worker(updater, "download", self._update_candidate)
 
     def open_selected_download(self) -> None:
@@ -3081,7 +3219,7 @@ class BrowserWindow(QMainWindow):
             self.status.showMessage("That download is not complete or the file has moved", 3500)
             return
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
-            self.status.showMessage("Windows could not open this downloaded file", 3500)
+            self.status.showMessage("The desktop environment could not open this downloaded file", 3500)
 
     def show_selected_download(self) -> None:
         entry = self.selected_download()
@@ -3738,6 +3876,8 @@ def main() -> int:
     window = BrowserWindow()
     window.show()
     splash.finish(window)
+    if sys.platform.startswith("linux") and bool(window.settings_data.get("auto_check_updates", True)):
+        QTimer.singleShot(12_000, window.auto_check_for_updates)
     return app.exec()
 
 
