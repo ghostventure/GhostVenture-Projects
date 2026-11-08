@@ -22,6 +22,19 @@
         ]
       },
       {
+        "source": "**/*.pkg",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          }
+        ]
+      },
+      {
         "source": "**/*.@(svg|png|jpg|jpeg|webp|css|js)",
         "headers": [
           {

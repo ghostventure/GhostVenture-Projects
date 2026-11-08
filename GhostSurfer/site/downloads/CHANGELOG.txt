@@ -1,6 +1,25 @@
 Ghost Surfer Browser
-Release: 2026-10-17
-Package: Ghost-Surfer-Setup-Windows-2026-10-17.zip
+Current Windows release: 0.2.6
+Package: GhostSurfer-Setup-v0.2.6.zip
+SHA-256: B6BF707DEB45ED99DB0609AEF58B4A3E0DED34C4E63DE736E99FA391FD8C0839
+
+2026-11-02
+- Added searchable tab management and new-tab preferences.
+- Added bookmark reordering and URL and download filename review prompts.
+- Improved the extension manager and GS Install Manager.
+- The browser updater verifies the release asset before staging; Windows binaries are not Authenticode-signed.
+
+Current macOS preview: 0.1.0
+Package: Ghost-Surfer-macOS-0.1.0.pkg
+
+2026-11-08
+- Added Ghost Surfer for macOS 14 and later as a native SwiftUI and WebKit app.
+- Added universal support for Apple silicon and Intel Macs.
+- Added tabs, private tabs, bookmarks, history, tracker blocking, and HTTPS upgrades.
+- The first Mac package is unsigned and unnotarized; Gatekeeper requires manual approval.
+- macOS WebKit manages cookies; per-site cookie interception and optional Tor routing remain Windows-only.
+
+Previous Windows release: 2026-10-17
 
 2026-10-17
 - Added a per-user Windows installer, Start Menu shortcut, and included uninstaller.
@@ -10,10 +29,9 @@ Package: Ghost-Surfer-Setup-Windows-2026-10-17.zip
 - Third-party cookies and sensitive site permissions remain blocked.
 - Improved downloads with progress, cancel, open, and show-folder actions.
 - Added Ctrl+D bookmark and Ctrl+J downloads shortcuts.
-- Kept the previous portable ZIP available for existing users.
+- Retained support for portable Windows installs.
 
-Previous release: 2026-08-14
-Package: Ghost-Surfer-Browser-Windows.zip
+Previous Windows release: 2026-08-14
 
 Previous release contents:
 - Dark Ghost Surfer browser shell

@@ -1,5 +1,5 @@
 param(
-    [string]$HostingRoot = 'https://ghost-surfer-browser.web.app/downloads'
+    [string]$ReleaseRoot = 'https://github.com/ghostventure/GhostVenture-Projects/releases/download/v0.2.6'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,12 +8,8 @@ New-Item -ItemType Directory -Path $downloadDirectory -Force | Out-Null
 
 $assets = @(
     @{
-        Name = 'Ghost-Surfer-Setup-Windows-2026-10-17.zip'
-        Sha256 = 'D76640BACDD20D2F8E3BB13FD8638970F683962A95B9920118BF2A3E0D851595'
-    },
-    @{
-        Name = 'Ghost-Surfer-Browser-Windows.zip'
-        Sha256 = '149617247AE51B518BB750AB4772577E74BBAEE34D9A9BB7FB6C52BF5A69B0FD'
+        Name = 'GhostSurfer-Setup-v0.2.6.zip'
+        Sha256 = 'B6BF707DEB45ED99DB0609AEF58B4A3E0DED34C4E63DE736E99FA391FD8C0839'
     }
 )
 
@@ -28,7 +24,7 @@ foreach ($asset in $assets) {
     }
 
     $temporaryPath = "$destination.download"
-    $assetUrl = "$($HostingRoot.TrimEnd('/'))/$($asset.Name)"
+    $assetUrl = "$($ReleaseRoot.TrimEnd('/'))/$($asset.Name)"
     & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output $temporaryPath $assetUrl
     if ($LASTEXITCODE -ne 0) {
         throw "Download failed for $($asset.Name) with curl exit code $LASTEXITCODE."
