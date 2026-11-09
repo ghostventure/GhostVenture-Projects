@@ -26,16 +26,18 @@
     <main id="top">
       <section class="hero shell">
         <div class="hero-copy">
-          <p class="eyebrow">A fresh approach to everyday browsing</p>
+          <p class="eyebrow">An Encouraging Approach to Everyday Browsing</p>
           <h1><span class="ghost-wordmark">Ghost Surfer</span></h1>
           <p class="lead">A desktop browser for Windows, Linux, and Mac. Helpful controls, a distinctive look, and the everyday tools you need, all in one place.</p>
           <p class="slogan">Don&apos;t Be Exposed.</p>
           <p class="rival-line">Browse your way, with more say over how your browser behaves.</p>
           <p class="maker">Developed by Black Lion Studios.</p>
           <div class="actions">
-            <a class="button primary" href="#download">Choose your platform</a>
+            <a class="button primary" id="recommended-download" href="#download">Choose your platform</a>
+            <a class="button secondary" href="#download">See all platforms</a>
             <a class="button secondary" href="#interface">See the browser</a>
           </div>
+          <p id="download-route-status" class="route-status" aria-live="polite">Choose a platform below to get its installer.</p>
         </div>
 
         <aside class="browser-preview" aria-label="Ghost Surfer browser preview">
@@ -94,10 +96,10 @@
       </section>
 
       <section id="download" class="section shell">
-        <div class="download-card">
+        <div class="download-card" data-platform="linux">
           <div>
-            <p class="eyebrow">Current Linux Build · Version 0.2.6</p>
-            <h2>GhostSurfer-Linux-x86_64-v0.2.6.tar.gz</h2>
+            <p class="eyebrow">Latest Linux release · Version 0.2.6</p>
+            <h2>Ghost Surfer for Linux</h2>
             <p>For 64-bit x86 Linux. Download the archive and run the installer for your user; no administrator password is needed. Includes privacy controls, tabs, bookmarks, downloads, and optional extensions. <span class="ghost-wordmark">Ghost Surfer</span> can let you know when an update is available; you choose whether to download and install it.</p>
             <details class="hash">
               <summary>Linux compatibility and feature details</summary>
@@ -110,16 +112,16 @@
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary" href="https://github.com/ghostventure/GhostVenture-Projects/releases/download/v0.2.6/GhostSurfer-Linux-x86_64-v0.2.6.tar.gz">Download Linux archive</a>
+            <a class="button primary platform-download" data-manager-platform="linux" href="downloads/managers/linux/ghost-surfer-manager-linux-x86_64.tar.gz">Download Linux Manager</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="support.html">Install help</a>
           </div>
         </div>
 
-        <div class="download-card">
+        <div class="download-card" data-platform="macos">
           <div>
-            <p class="eyebrow">Mac app · Version 0.2.3</p>
-            <h2>Ghost-Surfer-macOS-0.2.3.pkg</h2>
+            <p class="eyebrow">Latest Mac release · Version 0.2.3</p>
+            <h2>Ghost Surfer for Mac</h2>
             <p>A native browser app for Apple silicon and Intel Macs running macOS 14 or later. Browse with private tabs, WebKit tracking protection, HTTPS upgrades, bookmarks, and history.</p>
             <details class="hash">
               <summary>Mac app details and installation help</summary>
@@ -132,17 +134,17 @@
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary" href="downloads/Ghost-Surfer-macOS-0.2.3.pkg" download>Download Mac app</a>
+            <a class="button primary platform-download" data-manager-platform="macos" href="downloads/managers/macos/ghost-surfer-manager-macos-universal.zip">Download Mac Manager</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
             <a class="button secondary" href="support.html">Install help</a>
           </div>
         </div>
 
-        <div class="download-card">
+        <div class="download-card" data-platform="windows">
           <div>
-            <p class="eyebrow">Current Windows Build · Version 0.2.6</p>
-            <h2>GhostSurfer-Setup-v0.2.6.zip</h2>
+            <p class="eyebrow">Latest Windows release · Version 0.2.6</p>
+            <h2>Ghost Surfer for Windows</h2>
             <p>Version 0.2.6 makes everyday tasks easier with searchable tabs, new-tab choices, bookmark reordering, improved extension tools, and a chance to review links and download names before proceeding.</p>
             <details class="hash">
               <summary>Package, updater, and security details</summary>
@@ -151,7 +153,7 @@
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary" href="https://github.com/ghostventure/GhostVenture-Projects/releases/download/v0.2.6/GhostSurfer-Setup-v0.2.6.zip">Download Windows release ZIP</a>
+            <a class="button primary platform-download" data-manager-platform="windows" href="downloads/managers/windows/ghost-surfer-manager-windows-x86_64.zip">Download Windows Manager</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
             <a class="button secondary" href="support.html">Install help</a>
@@ -161,5 +163,6 @@
     </main>
 
     <footer class="site-footer"><div class="shell footer-grid"><span><span class="ghost-wordmark">Ghost Surfer</span> Browser</span><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/#download">Downloads</a><a href="/faq.html">FAQ</a><a href="/reading.html">Reading Room</a><a href="/legal.html">Legal and policies</a><a href="/support.html">Support</a></nav></div></footer>
+  <script src="download-router.js" defer></script>
   </body>
 </html>
