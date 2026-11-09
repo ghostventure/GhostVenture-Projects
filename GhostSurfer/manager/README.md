@@ -1,65 +1,69 @@
-# Ghost Surfer Installation Manager
+# Ghost Surfer Installation Managers
 
-The installer manifest at `site/downloads/installer-manifest.json` is the shared
-release-routing contract. The website detects the OS family and architecture,
-then routes the visitor to that platform's manager package. The manager reads
-the same manifest, checks the exact OS version and architecture, then chooses
-the newest compatible Ghost Surfer release.
+The website and platform managers share one release-routing contract:
+[`site/downloads/installer-manifest.json`](../site/downloads/installer-manifest.json).
+The website identifies the visitor's OS family and architecture, then offers a
+manager package only when its manifest entry is ready and the same-origin
+archive is present. A downloaded manager makes the detailed compatibility
+decision and selects an app release from the catalog.
 
-## Manager artifact handoff
+## Current manager packages
 
-Platform teams publish manager-only bundles at these Hosting paths:
+| Platform | Manager package | Status |
+| --- | --- | --- |
+| Linux x86_64 | [`ghost-surfer-manager-linux-x86_64.tar.gz`](../site/downloads/managers/linux/ghost-surfer-manager-linux-x86_64.tar.gz) | Ready; SHA-256 is in the manifest |
+| Windows x86_64 | `downloads/managers/windows/ghost-surfer-manager-windows-x86_64.zip` | Awaiting platform manager upload |
+| Mac universal | `downloads/managers/macos/ghost-surfer-manager-macos-universal.zip` | Awaiting platform manager upload |
 
-- `site/downloads/managers/windows/ghost-surfer-manager-windows-x86_64.zip`
-- `site/downloads/managers/linux/ghost-surfer-manager-linux-x86_64.tar.gz`
-- `site/downloads/managers/macos/ghost-surfer-manager-macos-universal.zip`
+Do not mark an entry `ready` until its package exists at the declared path and
+its SHA-256 has been checked. Managers fetch the catalog at install time; they
+must not pin an app payload in the manager archive.
 
-The Linux x86_64 manager bundle is built and included at its Hosting path; its
-manifest checksum is set and the route is enabled. Windows and Mac remain
-disabled until their platform manager bundles are built and uploaded.
-Manager bundles must not include a pinned browser build; they fetch the catalog
-and select a compatible release at install time.
+## Linux manager
 
-The shared implementation in `platform_selector.py` detects the target and
-chooses the newest compatible release. On Linux it reads `/etc/os-release` as
-data to identify the exact distro ID, version, pretty name, and `ID_LIKE`
-derivative family; it also checks architecture and libc. A release can list
-multiple distro IDs or derivative families in one `compatibleTargets` group
-when they share a verified runtime. Family membership alone is not considered
-proof of compatibility. `release_workflow.py` loads the catalog
-over HTTPS, resolves the selected app URL, downloads into a private cache, and
-checks SHA-256 before returning a package path to the OS-specific install
-adapter. It rejects non-HTTPS package URLs, unsafe filenames, oversized files,
-and mismatched checksums. Local manifests are supported for development with
-`--manifest site/downloads/installer-manifest.json --select-only`.
+The standalone Go manager source is in `linux/`. The compiled x86_64 binary is
+bundled on the site in the Linux tar.gz manager package. Extract it and run it
+as the regular desktop user, without `sudo`:
 
-The manager reads
-`https://ghost-surfer-browser.web.app/downloads/installer-manifest.json`.
-Each app release entry supplies OS constraints, architecture, package URL, and
-SHA-256. The selected manager must finish its install/update/reinstall adapter
-only after `release_workflow.py` has verified the package.
+```bash
+tar -xzf ghost-surfer-manager-linux-x86_64.tar.gz
+./ghost-surfer-manager
+```
 
-## Lifecycle contract
+With no action, it installs Ghost Surfer. It installs its reusable command at
+`~/.local/bin/ghost-surfer-manager` and keeps its executable under
+`~/.local/opt/ghost-surfer-manager`.
 
-Each platform manager must provide install, update, reinstall, and uninstall
-actions. Reinstall uses the same compatibility checks and verified package
-download as install. Complete uninstall removes the manager, Ghost Surfer
-program files, and shortcuts. Browser profile data is kept unless the user
-explicitly chooses to remove it.
+Supported actions:
 
-## Current release routing
+- `install` (default), `update`, and `reinstall`
+- `status`, `launch`, and `plan`
+- `uninstall`, which removes the app and manager but preserves the browser
+  profile; pass `--remove-profile` only when the profile should also be deleted
 
-- Windows: Windows 10 build 17763 or newer, or Windows 11; x86_64. The package
-  includes GS Install Manager and the browser payload.
-- Linux: x86_64 glibc package. The manager identifies the distro derivative
-  and version, then matches an explicit compatible target group. Kali Linux
-  with glibc 2.43 is the verified current target; other derivatives use the
-  generic fallback with a compatibility warning until grouped and verified.
-- Mac: macOS 14 or newer, Apple silicon or Intel. The universal package uses
-  the macOS Installer; the app's Sparkle updater manages later updates.
+The manager reads `/etc/os-release` (or `/usr/lib/os-release`) as data, checks
+the distro ID, version, `ID_LIKE`, architecture, and glibc version, then reads
+the catalog over HTTPS. It checks the downloaded app archive against the
+catalog's SHA-256 before handing it to `install-linux.sh`. It installs for the
+current user and does not need administrator privileges.
 
-The selector reports an unverified Linux baseline as a warning. A platform
-manager must show that warning before installation and must not silently choose
-an incompatible release. If no release supports the detected system, it must
-stop and explain why. The manager artifacts are not yet present in this source
-checkout; the routes remain disabled until platform teams upload them.
+Kali Linux with glibc 2.43 is the currently verified target. Other glibc
+derivatives use an explicitly unverified fallback and require the user to
+review the warning and opt in with `--allow-unverified`. Add distributions to
+a shared verified group only after confirming their runtime compatibility.
+Alpine/musl, ARM, and 32-bit systems are not supported by this manager build.
+
+Build and check the Linux manager from `manager/linux/`:
+
+```bash
+GO111MODULE=off go test ./...
+GO111MODULE=off CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ghost-surfer-manager .
+```
+
+## Other platform managers
+
+The catalog currently describes Windows 10 build 17763 or newer / Windows 11
+on x86_64, and Mac on macOS 14 or newer for Apple silicon or Intel. Their app
+release entries do not make their manager routes available: Windows and Mac
+manager packages are still awaiting upload. The Mac app uses its native
+installer and optional signed Sparkle updates once a Mac manager is supplied.
