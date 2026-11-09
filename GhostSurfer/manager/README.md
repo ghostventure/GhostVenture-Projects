@@ -14,14 +14,19 @@ Platform teams publish manager-only bundles at these Hosting paths:
 - `site/downloads/managers/linux/ghost-surfer-manager-linux-x86_64.tar.gz`
 - `site/downloads/managers/macos/ghost-surfer-manager-macos-universal.zip`
 
-Set the matching `managerPackages` entry's `sha256` and change its status to
-`ready` only after the manager bundle is built, validated, and present at that
-path. The website keeps the route disabled until both conditions are met.
+The Linux x86_64 manager bundle is built and included at its Hosting path; its
+manifest checksum is set and the route is enabled. Windows and Mac remain
+disabled until their platform manager bundles are built and uploaded.
 Manager bundles must not include a pinned browser build; they fetch the catalog
 and select a compatible release at install time.
 
 The shared implementation in `platform_selector.py` detects the target and
-chooses the newest compatible release. `release_workflow.py` loads the catalog
+chooses the newest compatible release. On Linux it reads `/etc/os-release` as
+data to identify the exact distro ID, version, pretty name, and `ID_LIKE`
+derivative family; it also checks architecture and libc. A release can list
+multiple distro IDs or derivative families in one `compatibleTargets` group
+when they share a verified runtime. Family membership alone is not considered
+proof of compatibility. `release_workflow.py` loads the catalog
 over HTTPS, resolves the selected app URL, downloads into a private cache, and
 checks SHA-256 before returning a package path to the OS-specific install
 adapter. It rejects non-HTTPS package URLs, unsafe filenames, oversized files,
@@ -46,9 +51,10 @@ explicitly chooses to remove it.
 
 - Windows: Windows 10 build 17763 or newer, or Windows 11; x86_64. The package
   includes GS Install Manager and the browser payload.
-- Linux: x86_64 glibc package. Kali Linux with glibc 2.43 is the verified
-  baseline; older glibc versions are unverified. The archive includes the
-  per-user installer and management commands.
+- Linux: x86_64 glibc package. The manager identifies the distro derivative
+  and version, then matches an explicit compatible target group. Kali Linux
+  with glibc 2.43 is the verified current target; other derivatives use the
+  generic fallback with a compatibility warning until grouped and verified.
 - Mac: macOS 14 or newer, Apple silicon or Intel. The universal package uses
   the macOS Installer; the app's Sparkle updater manages later updates.
 

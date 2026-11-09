@@ -39,8 +39,8 @@
           "name": "Ghost Surfer Installation Manager for Linux",
           "url": "downloads/managers/linux/ghost-surfer-manager-linux-x86_64.tar.gz",
           "format": "tar.gz",
-          "sha256": null,
-          "status": "awaiting-platform-manager-upload"
+          "sha256": "adeb74aa8ac3a01ecf8bfa3dc3120d553dfe61fdab8a5f015179618c3595a3a2",
+          "status": "ready"
         }
       },
       "architectures": ["x86_64"],
@@ -48,8 +48,12 @@
         {
           "version": "0.2.6",
           "minimum": { "architecture": "x86_64" },
-          "tested": { "distribution": "Kali Linux", "glibc": "2.43" },
-          "compatibilityNote": "glibc versions below 2.43 are not yet verified; Alpine/musl, ARM, and 32-bit systems are not covered.",
+          "tested": { "distribution": "Kali Linux", "distroIds": ["kali"], "glibc": "2.43" },
+          "compatibleTargets": [
+            { "name": "Kali Linux", "distroIds": ["kali"], "verified": true },
+            { "name": "Other glibc derivatives", "fallback": true, "verified": false, "warning": "This build has not been verified on this Linux derivative or glibc version." }
+          ],
+          "compatibilityNote": "Tested on Kali Linux with glibc 2.43. Other distributions and earlier glibc versions are not yet verified; Alpine/musl, ARM, and 32-bit systems are not covered.",
           "artifact": {
             "name": "GhostSurfer-Linux-x86_64-v0.2.6.tar.gz",
             "url": "https://github.com/ghostventure/GhostVenture-Projects/releases/download/v0.2.6/GhostSurfer-Linux-x86_64-v0.2.6.tar.gz",
