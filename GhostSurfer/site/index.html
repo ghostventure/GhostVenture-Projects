@@ -33,11 +33,11 @@
           <p class="rival-line">Browse your way, with more say over how your browser behaves.</p>
           <p class="maker">Developed by Black Lion Studios.</p>
           <div class="actions">
-            <a class="button primary" id="recommended-download" href="#download">Choose your platform</a>
-            <a class="button secondary" href="#download">See all platforms</a>
+            <a class="button primary" id="recommended-download" href="#download">Download for this device</a>
+            <a class="button secondary" href="#download">Choose a platform</a>
             <a class="button secondary" href="#interface">See the browser</a>
           </div>
-          <p id="download-route-status" class="route-status" aria-live="polite">The site will detect your desktop platform and route you to its installation manager.</p>
+          <p id="download-route-status" class="route-status" aria-live="polite">Choose “Download for this device.” The site identifies your platform; its manager checks compatibility and selects a browser version.</p>
         </div>
 
         <aside class="browser-preview" aria-label="Ghost Surfer browser preview">
@@ -96,18 +96,24 @@
       </section>
 
       <section id="download" class="section shell">
+        <div class="section-heading">
+          <p class="eyebrow">A guided installation</p>
+          <h2>Your device gets the right manager.</h2>
+          <p>The site detects your platform and routes you to its installation manager. The manager checks your system, selects the newest compatible Ghost Surfer release, verifies the download, and starts installation. You can also choose a platform below.</p>
+        </div>
+
         <div class="download-card" data-platform="linux">
           <div>
-            <p class="eyebrow">Latest Linux release · Version 0.2.6</p>
+            <p class="eyebrow">Current Linux catalog · Version 0.2.6</p>
             <h2>Ghost Surfer for Linux</h2>
-            <p>For 64-bit x86 Linux. Download the archive and run the installer for your user; no administrator password is needed. Includes privacy controls, tabs, bookmarks, downloads, and optional extensions. <span class="ghost-wordmark">Ghost Surfer</span> can let you know when an update is available; you choose whether to download and install it.</p>
+            <p>For 64-bit x86 Linux. The manager checks system compatibility, verifies the selected release, then starts the per-user installer; no administrator password is needed. The current catalog build was tested on Kali Linux with glibc 2.43; older glibc versions are not yet verified.</p>
             <details class="hash">
               <summary>Linux compatibility and feature details</summary>
               <p>Built and smoke-checked on Kali Linux with glibc 2.43; older distributions are not yet verified. Alpine/musl, ARM, and 32-bit systems are not covered by this package. Personal Data Vault is not available on Linux.</p>
             </details>
             <details class="hash">
-              <summary>Verify the Linux package</summary>
-              <p>Linux archive SHA-256: <code>D282375058005AE63C1F9C7791ABE1201E195D8334E127768CD1D08F8C4A6A52</code></p>
+              <summary>Linux release verification</summary>
+              <p>Linux release SHA-256: <code>D282375058005AE63C1F9C7791ABE1201E195D8334E127768CD1D08F8C4A6A52</code></p>
               <p>The complete checksum list is available in <a href="downloads/SHA256SUMS.txt">SHA256SUMS.txt</a>.</p>
             </details>
           </div>
@@ -120,16 +126,16 @@
 
         <div class="download-card" data-platform="macos">
           <div>
-            <p class="eyebrow">Latest Mac release · Version 0.2.3</p>
+            <p class="eyebrow">Current Mac catalog · Version 0.2.3</p>
             <h2>Ghost Surfer for Mac</h2>
-            <p>A native browser app for Apple silicon and Intel Macs running macOS 14 or later. Browse with private tabs, WebKit tracking protection, HTTPS upgrades, bookmarks, and history.</p>
+            <p>For Apple silicon and Intel Macs running macOS 14 or later. The Mac manager checks the system version and architecture, selects a compatible release, verifies it, then hands off to the Mac installer.</p>
             <details class="hash">
               <summary>Mac app details and installation help</summary>
-              <p>Mac uses WebKit cookie handling; per-site cookie controls and optional local Tor routing are currently available in the Windows and Linux apps. The installer package has no Apple Developer ID signature. If macOS asks you to approve it, open it once, then choose Apple menu → System Settings → Privacy &amp; Security → Open Anyway and confirm Open. Automatic update checks are optional and require your consent; update archives are signed. Existing version 0.1.0 installs need a one-time reinstall to enable in-app updates.</p>
+              <p>Mac uses WebKit cookie handling; per-site cookie controls and optional local Tor routing are currently available in the Windows and Linux apps. The manager installs the verified app archive for your user. The app does not have an Apple Developer ID signature, so macOS may ask you to approve it in Privacy &amp; Security. Automatic update checks are optional and require your consent; update archives are signed. Existing version 0.1.0 installs need a one-time reinstall to enable in-app updates.</p>
             </details>
             <details class="hash">
               <summary>Verify the Mac package</summary>
-              <p>Package SHA-256: <code>85C0D9C9CFA0CB659EBAA94A47564B010C6C730C72AE8525D125E6103B817C96</code></p>
+              <p>Mac app archive SHA-256: <code>EF187F9FE4D8A42D21CC24B84867287D83F7FA21EB57AE3061BD1E2E201484C5</code></p>
               <p>The complete checksum list is available in <a href="downloads/SHA256SUMS.txt">SHA256SUMS.txt</a>.</p>
             </details>
           </div>
@@ -143,9 +149,9 @@
 
         <div class="download-card" data-platform="windows">
           <div>
-            <p class="eyebrow">Latest Windows release · Version 0.2.6</p>
+            <p class="eyebrow">Current Windows catalog · Version 0.2.6</p>
             <h2>Ghost Surfer for Windows</h2>
-            <p>Version 0.2.6 makes everyday tasks easier with searchable tabs, new-tab choices, bookmark reordering, improved extension tools, and a chance to review links and download names before proceeding.</p>
+            <p>For x64 PCs running Windows 10 version 1809 or newer, or Windows 11. The Windows manager checks the OS build and required runtime, then selects and verifies a compatible browser release before installation.</p>
             <details class="hash">
               <summary>Package, updater, and security details</summary>
               <p>Package size: 262,622,161 bytes (about 250.3 MiB). GS Install Manager checks the staged browser files before replacing the installed app. The browser updater verifies release assets before staging. Windows binaries are not Authenticode-signed.</p>

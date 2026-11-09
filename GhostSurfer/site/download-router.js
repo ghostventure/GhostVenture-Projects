@@ -64,7 +64,7 @@
       if (!response.ok) throw new Error(`Manifest request failed (${response.status})`);
       manifest = await response.json();
     } catch (_error) {
-      status.textContent = "Choose your platform below to get its installer.";
+      status.textContent = "Device detection is unavailable right now. Choose a platform below to find its installation manager.";
       return;
     }
 
@@ -102,10 +102,10 @@
     const managers = platformInfo?.managerPackages || {};
     const manager = managers[target.architecture] || Object.values(managers).find((item) => item.architectures?.includes(target.architecture));
     if (!platformInfo) {
-      chooser.textContent = "Choose a platform";
+      chooser.textContent = "Choose an installation manager";
       chooser.href = "#download";
       chooser.removeAttribute("aria-disabled");
-      status.textContent = "This device is not supported by the desktop installers. Choose Windows, Linux, or Mac below.";
+      status.textContent = "The site could not identify a supported desktop platform. Choose Windows, Linux, or Mac below.";
       return;
     }
     if (!manager) {
@@ -125,8 +125,8 @@
     chooser.toggleAttribute("aria-disabled", !managerReady);
     chooser.dataset.platform = platform;
     status.textContent = managerReady
-      ? `Detected ${platformInfo.displayName} (${target.architecture}). Download its manager, then open it to check this system and choose the newest compatible Ghost Surfer version.`
-      : `Detected ${platformInfo.displayName} (${target.architecture}). Its manager package and checksum are not available yet.`;
+      ? `Detected ${platformInfo.displayName} (${target.architecture}). Download and open its manager; it checks this system, verifies the package, and installs the newest compatible browser version.`
+      : `Detected ${platformInfo.displayName} (${target.architecture}). Its manager download will be available when the verified manager bundle is published.`;
 
     document.querySelectorAll(".download-card[data-platform]").forEach((card) => {
       card.classList.toggle("recommended-platform", card.dataset.platform === platform);
