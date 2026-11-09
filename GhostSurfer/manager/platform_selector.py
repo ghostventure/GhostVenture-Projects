@@ -130,14 +130,22 @@ def load_manifest(source: str) -> dict[str, Any]:
             raise ValueError("The release manifest must be loaded over HTTPS.")
         request = Request(source, headers={"User-Agent": "GhostSurfer-Installation-Manager"})
         with urlopen(request, timeout=15) as response:
+            if urlparse(response.geturl()).scheme != "https":
+                raise ValueError("The release manifest redirected away from HTTPS.")
             body = response.read(MAX_MANIFEST_BYTES + 1)
     else:
         body = Path(source).read_bytes()
     if len(body) > MAX_MANIFEST_BYTES:
         raise ValueError("The release manifest exceeds the 1 MiB safety limit.")
     manifest = json.loads(body.decode("utf-8"))
-    if manifest.get("schemaVersion") != 1 or not isinstance(manifest.get("platforms"), dict):
+    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 1 or not isinstance(manifest.get("platforms"), dict):
         raise ValueError("The release manifest has an unsupported schema.")
+    for platform_name, platform_info in manifest["platforms"].items():
+        if not isinstance(platform_info, dict) or not isinstance(platform_info.get("releases"), list):
+            raise ValueError(f"The release manifest has invalid data for {platform_name}.")
+        for release in platform_info["releases"]:
+            if not isinstance(release, dict) or not isinstance(release.get("artifact"), dict):
+                raise ValueError(f"The release manifest has an invalid release for {platform_name}.")
     return manifest
 
 

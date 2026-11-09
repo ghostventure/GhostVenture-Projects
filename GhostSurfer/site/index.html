@@ -37,7 +37,7 @@
             <a class="button secondary" href="#download">See all platforms</a>
             <a class="button secondary" href="#interface">See the browser</a>
           </div>
-          <p id="download-route-status" class="route-status" aria-live="polite">Choose a platform below to get its installer.</p>
+          <p id="download-route-status" class="route-status" aria-live="polite">The site will detect your desktop platform and route you to its installation manager.</p>
         </div>
 
         <aside class="browser-preview" aria-label="Ghost Surfer browser preview">
@@ -112,7 +112,7 @@
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary platform-download" data-manager-platform="linux" href="downloads/managers/linux/ghost-surfer-manager-linux-x86_64.tar.gz">Download Linux Manager</a>
+            <a class="button primary platform-download manager-unavailable" data-manager-platform="linux" href="#download" aria-disabled="true">Linux Manager is being prepared</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="support.html">Install help</a>
           </div>
@@ -134,7 +134,7 @@
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary platform-download" data-manager-platform="macos" href="downloads/managers/macos/ghost-surfer-manager-macos-universal.zip">Download Mac Manager</a>
+            <a class="button primary platform-download manager-unavailable" data-manager-platform="macos" href="#download" aria-disabled="true">Mac Manager is being prepared</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
             <a class="button secondary" href="support.html">Install help</a>
@@ -153,7 +153,7 @@
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary platform-download" data-manager-platform="windows" href="downloads/managers/windows/ghost-surfer-manager-windows-x86_64.zip">Download Windows Manager</a>
+            <a class="button primary platform-download manager-unavailable" data-manager-platform="windows" href="#download" aria-disabled="true">Windows Manager is being prepared</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
             <a class="button secondary" href="support.html">Install help</a>
@@ -163,6 +163,6 @@
     </main>
 
     <footer class="site-footer"><div class="shell footer-grid"><span><span class="ghost-wordmark">Ghost Surfer</span> Browser</span><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/#download">Downloads</a><a href="/faq.html">FAQ</a><a href="/reading.html">Reading Room</a><a href="/legal.html">Legal and policies</a><a href="/support.html">Support</a></nav></div></footer>
-  <script src="download-router.js" defer></script>
+  <script src="download-router.js?v=manager-workflow-20261109" defer></script>
   </body>
 </html>

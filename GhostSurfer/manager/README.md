@@ -20,10 +20,19 @@ path. The website keeps the route disabled until both conditions are met.
 Manager bundles must not include a pinned browser build; they fetch the catalog
 and select a compatible release at install time.
 
-The manager reads `https://ghost-surfer-browser.web.app/downloads/installer-manifest.json`.
-Each app release entry supplies its OS constraints, architecture, download URL,
-and SHA-256. The manager must verify the downloaded package against that hash
-before installation.
+The shared implementation in `platform_selector.py` detects the target and
+chooses the newest compatible release. `release_workflow.py` loads the catalog
+over HTTPS, resolves the selected app URL, downloads into a private cache, and
+checks SHA-256 before returning a package path to the OS-specific install
+adapter. It rejects non-HTTPS package URLs, unsafe filenames, oversized files,
+and mismatched checksums. Local manifests are supported for development with
+`--manifest site/downloads/installer-manifest.json --select-only`.
+
+The manager reads
+`https://ghost-surfer-browser.web.app/downloads/installer-manifest.json`.
+Each app release entry supplies OS constraints, architecture, package URL, and
+SHA-256. The selected manager must finish its install/update/reinstall adapter
+only after `release_workflow.py` has verified the package.
 
 ## Lifecycle contract
 

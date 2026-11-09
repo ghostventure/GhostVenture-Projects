@@ -83,9 +83,9 @@
           "tested": { "architectures": ["arm64", "x86_64"] },
           "artifact": {
             "name": "Ghost-Surfer-macOS-0.2.3.pkg",
-            "url": "downloads/Ghost-Surfer-macOS-0.2.3.pkg",
-            "sha256": "85C0D9C9CFA0CB659EBAA94A47564B010C6C730C72AE8525D125E6103B817C96",
-            "format": "pkg"
+            "url": "../updates/Ghost-Surfer-macOS-0.2.3.zip",
+            "sha256": "EF187F9FE4D8A42D21CC24B84867287D83F7FA21EB57AE3061BD1E2E201484C5",
+            "format": "zip"
           },
           "manager": {
             "entrypoint": "macOS Installer and in-app updater",

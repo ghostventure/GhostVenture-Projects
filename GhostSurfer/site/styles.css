@@ -584,6 +584,7 @@ h2 {
 .button.manager-unavailable[aria-disabled="true"] {
   opacity: .62;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 code {

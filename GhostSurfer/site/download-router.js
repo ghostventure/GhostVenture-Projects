@@ -5,6 +5,21 @@
   const status = document.getElementById("download-route-status");
   if (!chooser || !status) return;
 
+  const validSha256 = (value) => /^[a-f0-9]{64}$/i.test(value || "");
+
+  async function managerPackageAvailable(managerPackage) {
+    if (managerPackage?.status !== "ready" || !validSha256(managerPackage.sha256)) return false;
+    try {
+      const url = new URL(managerPackage.url, document.baseURI);
+      if (url.origin !== window.location.origin || !url.pathname.startsWith("/downloads/managers/")) return false;
+      const response = await fetch(url.href, { method: "HEAD", cache: "no-store" });
+      const length = Number(response.headers.get("Content-Length") || 0);
+      return response.ok && (!length || length > 0);
+    } catch (_error) {
+      return false;
+    }
+  }
+
   async function detectSystem() {
     const userAgent = navigator.userAgent || "";
     const platform = navigator.userAgentData?.platform || navigator.platform || userAgent;
@@ -53,16 +68,26 @@
       return;
     }
 
-    document.querySelectorAll(".platform-download[data-manager-platform]").forEach((link) => {
+    const target = await detectSystem();
+    const platformLinks = [...document.querySelectorAll(".platform-download[data-manager-platform]")];
+    await Promise.all(platformLinks.map(async (link) => {
       const linkPlatform = link.dataset.managerPlatform;
       const linkInfo = manifest.platforms?.[linkPlatform];
-      const candidates = Object.entries(linkInfo?.managerPackages || {});
-      const readyManager = candidates.find(([, item]) => item.status === "ready" && /^[a-f0-9]{64}$/i.test(item.sha256 || ""));
-      if (!readyManager) {
+      const managers = linkInfo?.managerPackages || {};
+      const desiredArchitecture = linkPlatform === target.platform
+        ? target.architecture
+        : (managers.universal ? "universal" : "x86_64");
+      const readyManager = managers[desiredArchitecture]
+        ? [desiredArchitecture, managers[desiredArchitecture]]
+        : Object.entries(managers).find(([, item]) => item.architectures?.includes(desiredArchitecture));
+      const isAvailable = readyManager && await managerPackageAvailable(readyManager[1]);
+      if (!isAvailable) {
         link.href = "#download";
         link.setAttribute("aria-disabled", "true");
         link.classList.add("manager-unavailable");
-        link.textContent = `${linkInfo?.displayName || "Platform"} Manager is being prepared`;
+        link.textContent = readyManager
+          ? `${linkInfo?.displayName || "Platform"} Manager is being prepared`
+          : `No ${linkInfo?.displayName || "platform"} manager for this architecture`;
       } else {
         const [architecture, managerPackage] = readyManager;
         link.href = new URL(managerPackage.url, document.baseURI).href;
@@ -70,9 +95,8 @@
         link.classList.remove("manager-unavailable");
         link.textContent = `Download ${linkInfo.displayName} Manager${architecture === "universal" ? "" : ` (${architecture})`}`;
       }
-    });
+    }));
 
-    const target = await detectSystem();
     const platform = target.platform;
     const platformInfo = platform && manifest.platforms?.[platform];
     const managers = platformInfo?.managerPackages || {};
@@ -94,15 +118,15 @@
       return;
     }
 
+    const managerReady = await managerPackageAvailable(manager);
     const managerUrl = new URL(manager.url, document.baseURI).href;
-    const managerReady = manager.status === "ready" && /^[a-f0-9]{64}$/i.test(manager.sha256 || "");
     chooser.textContent = managerReady ? `Download ${platformInfo.displayName} Manager` : `${platformInfo.displayName} Manager is being prepared`;
     chooser.href = managerReady ? managerUrl : "#download";
     chooser.toggleAttribute("aria-disabled", !managerReady);
     chooser.dataset.platform = platform;
     status.textContent = managerReady
-      ? `Detected ${platformInfo.displayName} (${target.architecture}). Its manager will check this system and choose the newest compatible Ghost Surfer version.`
-      : `Detected ${platformInfo.displayName} (${target.architecture}). The manager route is reserved; its verified package is awaiting upload.`;
+      ? `Detected ${platformInfo.displayName} (${target.architecture}). Download its manager, then open it to check this system and choose the newest compatible Ghost Surfer version.`
+      : `Detected ${platformInfo.displayName} (${target.architecture}). Its manager package and checksum are not available yet.`;
 
     document.querySelectorAll(".download-card[data-platform]").forEach((card) => {
       card.classList.toggle("recommended-platform", card.dataset.platform === platform);
