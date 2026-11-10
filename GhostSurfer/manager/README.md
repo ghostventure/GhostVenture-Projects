@@ -13,7 +13,7 @@ decision and selects an app release from the catalog.
 | --- | --- | --- |
 | Linux x86_64 | [`ghost-surfer-manager-linux-x86_64.tar.gz`](../site/downloads/managers/linux/ghost-surfer-manager-linux-x86_64.tar.gz) | Ready; SHA-256 is in the manifest |
 | Windows x86_64 | `downloads/managers/windows/ghost-surfer-manager-windows-x86_64.zip` | Awaiting platform manager upload |
-| Mac universal | `downloads/managers/macos/ghost-surfer-manager-macos-universal.zip` | Awaiting platform manager upload |
+| Mac, Intel x86_64 | [`Ghost-Surfer-Install-Manager-macOS-1.0.zip`](../site/downloads/managers/macos/Ghost-Surfer-Install-Manager-macOS-1.0.zip) | Ready; runs on Apple silicon through Rosetta 2 |
 
 Do not mark an entry `ready` until its package exists at the declared path and
 its SHA-256 has been checked. Managers fetch the catalog at install time; they
@@ -63,7 +63,7 @@ GO111MODULE=off CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflag
 ## Other platform managers
 
 The catalog currently describes Windows 10 build 17763 or newer / Windows 11
-on x86_64, and Mac on macOS 14 or newer for Apple silicon or Intel. Their app
-release entries do not make their manager routes available: Windows and Mac
-manager packages are still awaiting upload. The Mac app uses its native
-installer and optional signed Sparkle updates once a Mac manager is supplied.
+on x86_64, and Mac on macOS 14 or newer for Apple silicon or Intel. The Mac
+manager bundle is an Intel x86_64 app; Apple silicon users may need to install
+Rosetta 2 to launch it. The Windows manager package is still awaiting upload.
+The Mac app uses its native installer and optional signed Sparkle updates.

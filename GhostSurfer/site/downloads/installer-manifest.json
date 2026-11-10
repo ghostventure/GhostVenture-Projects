@@ -73,11 +73,12 @@
       "managerPackages": {
         "universal": {
           "name": "Ghost Surfer Installation Manager for Mac",
-          "url": "downloads/managers/macos/ghost-surfer-manager-macos-universal.zip",
+          "url": "downloads/managers/macos/Ghost-Surfer-Install-Manager-macOS-1.0.zip",
           "format": "zip",
-          "sha256": null,
-          "architectures": ["arm64", "x86_64"],
-          "status": "awaiting-platform-manager-upload"
+          "sha256": "4ee816d52429e7803507454e713775b91694120aea2e9cd6d8561264ac65b33c",
+          "architectures": ["x86_64"],
+          "status": "ready",
+          "compatibilityNote": "Intel x86_64 manager. Apple silicon Macs may run it using Rosetta 2."
         }
       },
       "releases": [
