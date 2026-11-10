@@ -86,14 +86,17 @@
         link.setAttribute("aria-disabled", "true");
         link.classList.add("manager-unavailable");
         link.textContent = readyManager
-          ? `${linkInfo?.displayName || "Platform"} Manager is being prepared`
+          ? (readyManager[1].status === "ready"
+              ? `${linkInfo?.displayName || "Platform"} Manager temporarily unavailable`
+              : `${linkInfo?.displayName || "Platform"} Manager is not yet available`)
           : `No ${linkInfo?.displayName || "platform"} manager for this architecture`;
       } else {
         const [architecture, managerPackage] = readyManager;
         link.href = new URL(managerPackage.url, document.baseURI).href;
         link.removeAttribute("aria-disabled");
         link.classList.remove("manager-unavailable");
-        link.textContent = `Download ${linkInfo.displayName} Manager${architecture === "universal" ? "" : ` (${architecture})`}`;
+        const architectureLabel = managerPackage.architectureLabel || (architecture === "universal" ? "" : architecture);
+        link.textContent = `Download ${linkInfo.displayName} Manager${architectureLabel ? ` (${architectureLabel})` : ""}`;
       }
     }));
 
@@ -120,13 +123,21 @@
 
     const managerReady = await managerPackageAvailable(manager);
     const managerUrl = new URL(manager.url, document.baseURI).href;
-    chooser.textContent = managerReady ? `Download ${platformInfo.displayName} Manager` : `${platformInfo.displayName} Manager is being prepared`;
+    const architectureLabel = manager.architectureLabel || (target.architecture === "universal" ? "" : target.architecture);
+    const detectedManagerTarget = architectureLabel || target.architecture;
+    chooser.textContent = managerReady
+      ? `Download ${platformInfo.displayName} Manager${architectureLabel ? ` (${architectureLabel})` : ""}`
+      : manager.status === "ready"
+        ? `${platformInfo.displayName} Manager temporarily unavailable`
+        : `${platformInfo.displayName} Manager is not yet available`;
     chooser.href = managerReady ? managerUrl : "#download";
     chooser.toggleAttribute("aria-disabled", !managerReady);
     chooser.dataset.platform = platform;
     status.textContent = managerReady
-      ? `Detected ${platformInfo.displayName} (${target.architecture}). Download and open its manager; it checks this system, verifies the package, and installs the newest compatible browser version.`
-      : `Detected ${platformInfo.displayName} (${target.architecture}). Its manager download will be available when the verified manager bundle is published.`;
+      ? `Detected ${platformInfo.displayName} (${detectedManagerTarget}). Download and open its manager; it checks this system, verifies the package, and installs the newest compatible browser version.`
+      : manager.status === "ready"
+        ? `Detected ${platformInfo.displayName} (${target.architecture}), but the manager download could not be reached. Try again shortly or choose a platform below.`
+        : `Detected ${platformInfo.displayName} (${target.architecture}), but its installation manager has not been published yet.`;
 
     document.querySelectorAll(".download-card[data-platform]").forEach((card) => {
       card.classList.toggle("recommended-platform", card.dataset.platform === platform);

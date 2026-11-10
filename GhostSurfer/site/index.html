@@ -29,7 +29,7 @@
           <p class="eyebrow">An Encouraging Approach to Everyday Browsing</p>
           <h1><span class="ghost-wordmark">Ghost Surfer</span></h1>
           <p class="lead">A desktop browser for Windows, Linux, and Mac. Helpful controls, a distinctive look, and the everyday tools you need, all in one place.</p>
-          <p class="slogan">Don&apos;t Be Exposed.</p>
+          <p class="slogan">Don&apos;t get Exposed.</p>
           <p class="rival-line">Browse your way, with more say over how your browser behaves.</p>
           <p class="maker">Developed by Black Lion Studios.</p>
           <div class="actions">
@@ -112,13 +112,14 @@
               <p>Built and smoke-checked on Kali Linux with glibc 2.43; older distributions are not yet verified. Alpine/musl, ARM, and 32-bit systems are not covered by this package. Personal Data Vault is not available on Linux.</p>
             </details>
             <details class="hash">
-              <summary>Linux release verification</summary>
-              <p>Linux release SHA-256: <code>D282375058005AE63C1F9C7791ABE1201E195D8334E127768CD1D08F8C4A6A52</code></p>
+              <summary>Verify the Linux manager and app</summary>
+              <p>Linux manager archive SHA-256: <code>adeb74aa8ac3a01ecf8bfa3dc3120d553dfe61fdab8a5f015179618c3595a3a2</code></p>
+              <p>Linux app archive SHA-256: <code>D282375058005AE63C1F9C7791ABE1201E195D8334E127768CD1D08F8C4A6A52</code></p>
               <p>The complete checksum list is available in <a href="downloads/SHA256SUMS.txt">SHA256SUMS.txt</a>.</p>
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary platform-download manager-unavailable" data-manager-platform="linux" href="#download" aria-disabled="true">Linux Manager is being prepared</a>
+            <a class="button primary platform-download" data-manager-platform="linux" href="downloads/managers/linux/ghost-surfer-manager-linux-x86_64.tar.gz">Download Linux Manager (x86_64)</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="support.html">Install help</a>
           </div>
@@ -128,19 +129,20 @@
           <div>
             <p class="eyebrow">Current Mac catalog · Version 0.2.3</p>
             <h2>Ghost Surfer for Mac</h2>
-            <p>For Apple silicon and Intel Macs running macOS 14 or later. Download the Mac installation manager to start setup. It selects the compatible Mac release, verifies it, then hands off to the installer.</p>
+            <p>For Apple silicon and Intel Macs running macOS 14 or later. Download the Mac installation manager to start setup. The manager is Intel x86_64; Apple silicon may need Rosetta 2 to open it. It selects the compatible Mac release, verifies it, then hands off to the installer.</p>
             <details class="hash">
               <summary>Mac app details and installation help</summary>
               <p>The Mac installation manager is an Intel x86_64 app. Apple silicon Macs can run it through Rosetta 2, which macOS may ask you to install. Mac uses WebKit cookie handling; per-site cookie controls and optional local Tor routing are currently available in the Windows and Linux apps. The manager installs the verified app archive for your user. The app does not have an Apple Developer ID signature, so macOS may ask you to approve it in Privacy &amp; Security. Automatic update checks are optional and require your consent; update archives are signed. Existing version 0.1.0 installs need a one-time reinstall to enable in-app updates.</p>
             </details>
             <details class="hash">
-              <summary>Verify the Mac package</summary>
+              <summary>Verify the Mac manager and app</summary>
+              <p>Mac manager ZIP SHA-256: <code>4ee816d52429e7803507454e713775b91694120aea2e9cd6d8561264ac65b33c</code></p>
               <p>Mac app archive SHA-256: <code>EF187F9FE4D8A42D21CC24B84867287D83F7FA21EB57AE3061BD1E2E201484C5</code></p>
               <p>The complete checksum list is available in <a href="downloads/SHA256SUMS.txt">SHA256SUMS.txt</a>.</p>
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary platform-download manager-unavailable" data-manager-platform="macos" href="#download" aria-disabled="true">Mac Manager is being prepared</a>
+            <a class="button primary platform-download" data-manager-platform="macos" href="downloads/managers/macos/Ghost-Surfer-Install-Manager-macOS-1.0.zip">Download Mac Manager (Intel x86_64)</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
             <a class="button secondary" href="support.html">Install help</a>
@@ -154,12 +156,13 @@
             <p>For x64 PCs running Windows 10 version 1809 or newer, or Windows 11. The Windows manager checks the OS build and required runtime, then selects and verifies a compatible browser release before installation.</p>
             <details class="hash">
               <summary>Package, updater, and security details</summary>
-              <p>The Windows manager ZIP is about 41.7 MiB and contains only GS Install Manager.exe. The browser setup is a separate 250.3 MiB release download. The manager checks staged browser files before replacing the installed app. Windows binaries are not Authenticode-signed.</p>
-              <p>Windows ZIP SHA-256: <code>B6BF707DEB45ED99DB0609AEF58B4A3E0DED34C4E63DE736E99FA391FD8C0839</code></p>
+              <p>The Windows manager ZIP is about 41.7 MiB and contains only GS Install Manager.exe. It gets the browser setup separately. Windows binaries are not Authenticode-signed.</p>
+              <p>Manager ZIP SHA-256: <code>19b6c6ba106a61749ed930ca96af13f229f03d5a862cf57c5539d910dd917d0a</code></p>
+              <p>Separate browser setup ZIP SHA-256: <code>B6BF707DEB45ED99DB0609AEF58B4A3E0DED34C4E63DE736E99FA391FD8C0839</code></p>
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary platform-download manager-unavailable" data-manager-platform="windows" href="#download" aria-disabled="true">Windows Manager is being prepared</a>
+            <a class="button primary platform-download" data-manager-platform="windows" href="downloads/managers/windows/GSIM-for-Windows.zip">Download Windows Manager (x86_64)</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
             <a class="button secondary" href="support.html">Install help</a>

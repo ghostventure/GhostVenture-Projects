@@ -72,15 +72,15 @@
           </details>
           <details class="faq-item">
             <summary>Which Mac computers can run <span class="ghost-wordmark">Ghost Surfer</span>?</summary>
-            <div class="faq-answer"><p>The current Mac package is universal for Apple silicon and Intel Macs running macOS 14 or later. It installs <span class="ghost-wordmark">Ghost Surfer</span> in Applications.</p></div>
+            <div class="faq-answer"><p>The Mac app supports Apple silicon and Intel Macs running macOS 14 or later. Its current installation manager is Intel x86_64; Apple silicon Macs may need Rosetta 2 to open the manager. The app installs in Applications.</p></div>
           </details>
           <details class="faq-item">
             <summary>Which Linux computers can run this release?</summary>
-            <div class="faq-answer"><p>The current Linux archive targets x86_64 systems using glibc. It was built and smoke-checked on Kali Linux with glibc 2.43; older distributions have not been verified. ARM, 32-bit Linux, and musl-based systems such as Alpine are not supported by this archive.</p></div>
+            <div class="faq-answer"><p>The Linux manager supports x86_64 systems using glibc. Kali Linux with glibc 2.43 is the verified target. Other glibc distributions show an unverified compatibility warning; ARM, 32-bit Linux, and musl-based systems such as Alpine are not supported.</p></div>
           </details>
           <details class="faq-item">
             <summary>Does Linux installation need sudo?</summary>
-            <div class="faq-answer"><p>No. Extract the downloaded archive, open its folder, and run <code>./install-linux.sh</code>. It installs for your user account. See <a href="/support.html">Support</a> for the steps.</p></div>
+            <div class="faq-answer"><p>No. Download and extract the Linux Installation Manager, then run <code>./ghost-surfer-manager</code> as your regular user. It detects your distribution and installs for your account. See <a href="/support.html">Support</a> for details.</p></div>
           </details>
           <details class="faq-item">
             <summary>Does <span class="ghost-wordmark">Ghost Surfer</span> include a password manager?</summary>
@@ -97,12 +97,20 @@
         <h2 id="faq-downloads">Downloads, updates, and support</h2>
         <div class="faq-list">
           <details class="faq-item">
+            <summary>How does the site choose an installation manager?</summary>
+            <div class="faq-answer"><p>Your browser identifies its desktop platform and available architecture hints. The site checks the shared manager catalog and offers a matching published download. The Linux manager then checks the exact distribution, version, architecture, and glibc on your computer before selecting a browser release. The website does not identify your Linux distribution.</p></div>
+          </details>
+          <details class="faq-item">
+            <summary>Does the manager download include the browser?</summary>
+            <div class="faq-answer"><p>No. The Windows, Linux, and Mac manager downloads contain the manager only. After launch, the manager checks compatibility and gets the matching browser package separately. The Windows manager ZIP includes <em>GS Install Manager.exe</em> without the browser payload.</p></div>
+          </details>
+          <details class="faq-item">
             <summary>Are the current downloads free?</summary>
             <div class="faq-answer"><p>Yes. The current Windows, Linux, and Mac downloads are offered free of charge. The website does not require an account or collect payment.</p></div>
           </details>
           <details class="faq-item">
             <summary>How do updates work?</summary>
-            <div class="faq-answer"><p>Windows updates are available through the browser's update controls and official releases. Linux checks for a newer release at startup by default; you can turn off automatic checks in app settings, and downloads and installation always require confirmation. On Mac, Sparkle update checks and background downloads start only if you choose “Agree and Enable.”</p></div>
+            <div class="faq-answer"><p>Use the website's platform manager to select and download the current Windows or Linux release. Inside the Linux app, update checks run at startup by default; you can turn them off in settings, and downloading and applying an update require confirmation. On Mac, Sparkle checks and background downloads start only if you choose “Agree and Enable.”</p></div>
           </details>
           <details class="faq-item">
             <summary>Why does macOS warn me about the installer?</summary>
