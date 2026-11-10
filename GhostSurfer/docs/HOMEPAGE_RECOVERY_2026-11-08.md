@@ -22,12 +22,13 @@ manifest SHA-256. The Go manager's local plan identified Kali Linux with glibc
 2.43 and selected Ghost Surfer 0.2.6. This verifies package publication and
 catalog selection; it does not claim that a fresh app installation was run.
 
-The Linux x86_64 and Mac manager routes are available. The Mac manager is an
-Intel x86_64 app; Apple silicon may run it with Rosetta 2. The Windows manager
-route remains unavailable until its package is supplied. The Linux app itself
-remains the x86_64/glibc release published on GitHub. Kali is the verified
-target; other glibc distributions require explicit opt-in to the manager's
-compatibility warning.
+The Linux x86_64, Mac, and Windows manager routes are available. The Mac
+manager is an Intel x86_64 app; Apple silicon may run it with Rosetta 2. The
+Windows route serves the v0.2.6 setup ZIP, which includes `GS Install
+Manager.exe` and the browser payload. The Linux app itself remains the
+x86_64/glibc release published on GitHub. Kali is the verified target; other
+glibc distributions require explicit opt-in to the manager's compatibility
+warning.
 
 ## Previous Recovery Checkpoint — 2026-11-08
 

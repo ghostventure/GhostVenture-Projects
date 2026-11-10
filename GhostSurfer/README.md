@@ -18,7 +18,7 @@ The desktop app is built with Python, PySide6, and QtWebEngine. It includes a la
 - `macOS/`: native SwiftUI and WebKit app for Mac, reusing the iOS browser state and privacy rules.
 - `installer/macos/`: universal `.pkg` build script and installer notes.
 
-The website is the installation orchestrator: it detects the visitor's OS family and architecture, then offers a manager only when its package is marked ready and available. The manager checks the system in more detail and selects an app release from `site/downloads/installer-manifest.json`. Linux x86_64 and Mac manager packages are live on Firebase Hosting; the Windows manager remains unavailable until its package is provided. The Mac manager is Intel x86_64 and may require Rosetta 2 on Apple silicon. The Linux and Windows desktop releases are published on GitHub v0.2.6. The Mac app archive and its signed Sparkle updates are hosted on Firebase. App filenames and hashes are listed in `site/downloads/SHA256SUMS.txt`.
+The website is the installation orchestrator: it detects the visitor's OS family and architecture, then offers a manager only when its package is marked ready and available. The manager checks the system in more detail and selects an app release from `site/downloads/installer-manifest.json`. Linux x86_64, Mac, and Windows manager packages are live on Firebase Hosting. The Windows manager ZIP contains only `GS Install Manager.exe`, without the browser payload. The Mac manager is Intel x86_64 and may require Rosetta 2 on Apple silicon. The Linux and Windows desktop releases are published on GitHub v0.2.6. The Mac app archive and its signed Sparkle updates are hosted on Firebase. App filenames and hashes are listed in `site/downloads/SHA256SUMS.txt`.
 
 ## Website presentation
 

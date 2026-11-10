@@ -7,10 +7,10 @@
       "managerPackages": {
         "x86_64": {
           "name": "Ghost Surfer Installation Manager for Windows",
-          "url": "downloads/managers/windows/ghost-surfer-manager-windows-x86_64.zip",
+          "url": "downloads/managers/windows/GSIM-for-Windows.zip",
           "format": "zip",
-          "sha256": null,
-          "status": "awaiting-platform-manager-upload"
+          "sha256": "19b6c6ba106a61749ed930ca96af13f229f03d5a862cf57c5539d910dd917d0a",
+          "status": "ready"
         }
       },
       "architectures": ["x86_64"],
