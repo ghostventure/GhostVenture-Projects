@@ -2,66 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <link rel="icon" type="image/svg+xml" href="/assets/ghost-surfer-icon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#05080d">
-    <title>Ghost Surfer Browser | Windows and Mac</title>
-    <meta name="description" content="Download Ghost Surfer for Windows or Mac. The native Mac preview includes private tabs, tracker blocking, HTTPS upgrades, bookmarks, and history.">
-    <link rel="stylesheet" href="styles.css">
+    <meta name="theme-color" content="#05080d">
+    <link rel="icon" type="image/svg+xml" href="/assets/ghost-surfer-icon.svg">
+    <title>Ghost Surfer Browser | Windows, Linux, and Mac</title>
+    <meta name="description" content="Meet Ghost Surfer: a desktop browser with practical privacy controls for Windows, Linux, and Mac. Choose your platform and explore.">
+    <link rel="stylesheet" href="styles.css?v=20261108-wordmark">
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="#top">
-        <img src="assets/ghost-surfer-icon.svg" alt="Ghost Surfer icon">
-        <span>
-          <strong>Ghost Surfer</strong>
-          <small>Browser</small>
-        </span>
+      <a class="brand" href="/" aria-label="Ghost Surfer home">
+        <img src="/assets/ghost-surfer-icon.svg" alt="">
+        <span><strong><span class="ghost-wordmark">Ghost Surfer</span></strong><small>Browser</small></span>
       </a>
-      <nav aria-label="Primary navigation">
-        <a href="#privacy">Privacy</a>
-        <a href="#interface">Interface</a>
-        <a href="#install">Install</a>
-        <a href="#download">Download</a>
-        <a href="legal.html">Legal</a>
-        <a href="compliance.html">Compliance</a>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="/">Home</a>
+        <a href="/#download">Downloads</a><a href="/faq.html">FAQ</a><a href="/reading.html">Reading Room</a>
+        <a href="/legal.html">Legal</a>
+        <a href="/support.html">Support</a>
       </nav>
-      <a class="button secondary compact" href="downloads/Ghost-Surfer-macOS-0.2.4.pkg" download>Get Ghost Surfer for Mac</a>
     </header>
 
     <main id="top">
       <section class="hero shell">
         <div class="hero-copy">
-          <p class="eyebrow">Windows browser and native Mac preview</p>
-          <h1>Ghost Surfer</h1>
-          <p class="lead">
-            Ghost Surfer brings a full privacy control center to Windows and a native WebKit browser to Mac,
-            with private tabs, tracker blocking, HTTPS upgrades, bookmarks, and history.
-          </p>
-          <p class="rival-line">Chrome, Safari, and Firefox had the spotlight. Ghost Surfer is built to take privacy seriously.</p>
+          <p class="eyebrow">An Encouraging Approach to Everyday Browsing</p>
+          <h1><span class="ghost-wordmark">Ghost Surfer</span></h1>
+          <p class="lead">A desktop browser for Windows, Linux, and Mac. Helpful controls, a distinctive look, and the everyday tools you need, all in one place.</p>
+          <p class="slogan">Don&apos;t Be Exposed.</p>
+          <p class="rival-line">Browse your way, with more say over how your browser behaves.</p>
           <p class="maker">Developed by Black Lion Studios.</p>
           <div class="actions">
-            <a class="button primary" href="https://github.com/ghostventure/GhostVenture-Projects/releases/download/v0.2.6/GhostSurfer-Setup-v0.2.6.zip">Download for Windows</a>
-            <a class="button secondary" href="downloads/Ghost-Surfer-macOS-0.2.4.pkg" download>Download for Mac</a>
+            <a class="button primary" id="recommended-download" href="#download">Download for this device</a>
+            <a class="button secondary" href="#download">Choose a platform</a>
             <a class="button secondary" href="#interface">See the browser</a>
           </div>
-          <div class="hero-facts" aria-label="Release facts">
-            <span>Windows app</span>
-            <span>Native Mac app</span>
-            <span>Windows cookie approval</span>
-            <span>Spy alerts</span>
-            <span>12 theme colors</span>
-            <span>Control center</span>
-            <span>Cookie manager</span>
-          </div>
+          <p id="download-route-status" class="route-status" aria-live="polite">Choose “Download for this device.” The site identifies your platform; its manager checks compatibility and selects a browser version.</p>
         </div>
 
         <aside class="browser-preview" aria-label="Ghost Surfer browser preview">
           <div class="preview-top">
             <img src="assets/ghost-surfer-icon.svg" alt="">
             <div>
-              <strong>Ghost Surfer</strong>
-              <span>2033 privacy console</span>
+              <strong><span class="ghost-wordmark">Ghost Surfer</span></strong>
+              <span>Your browsing, your way. Don&apos;t get Exposed.</span>
             </div>
             <em>Ghost Guard: On</em>
           </div>
@@ -75,167 +59,116 @@
           <div class="preview-body">
             <div class="preview-card large">
               <p class="eyebrow">Ghost Guard</p>
-              <h2>Browse with cookie clearance, tracker alerts, and permission blocking on your side.</h2>
+              <h2>More choice over cookies, permissions, and your browsing experience.</h2>
             </div>
             <div class="preview-card"><strong>Cookies</strong><span>Approve or decline per website</span></div>
-            <div class="preview-card"><strong>Spy Alerts</strong><span>Warns when blocked tracking appears</span></div>
+              <div class="preview-card"><strong>Privacy alerts</strong><span>Know when a known tracker is blocked</span></div>
             <div class="preview-card"><strong>Theme Grid</strong><span>12 futuristic accent colors</span></div>
           </div>
         </aside>
       </section>
 
-      <section class="metric-band">
-        <div class="shell metric-grid">
-          <div><strong>Ghost Guard</strong><span>Blocks nosy permissions, tracker cookies, and unwanted access attempts</span></div>
-          <div><strong>Windows Cookie Choice</strong><span>Choose per-site cookie approval in the Windows browser</span></div>
-          <div><strong>Future Console</strong><span>A sharper privacy cockpit with 12 theme-aware colors</span></div>
-          <div><strong>Mac Preview</strong><span>A native WebKit browser for Apple silicon and Intel Macs</span></div>
-        </div>
-      </section>
-
-      <section class="release-band">
-        <div class="shell release-grid">
-          <div>
-            <p class="eyebrow">Latest build</p>
-          <h2>The native Mac browser is now available in preview.</h2>
-          </div>
-          <div class="release-list">
-            <span>Universal Mac installer for Apple silicon and Intel</span>
-            <span>Native tabs, bookmarks, and browsing history</span>
-            <span>Private tabs use temporary WebKit storage</span>
-            <span>Known tracker blocking and HTTPS upgrades</span>
-            <span>Windows release retains per-site cookie controls</span>
-            <span>Automatic signed update archives; installer remains unsigned and requires Gatekeeper approval</span>
-          </div>
-        </div>
-      </section>
-
       <section id="privacy" class="section shell">
         <div class="section-heading">
           <p class="eyebrow">Ghost Guard</p>
-          <h2>Privacy controls you do not need a tech degree to use.</h2>
-          <p>
-            Ghost Surfer does not promise magic invisibility. It gives you clear, practical privacy controls:
-            the Windows browser offers per-site cookie decisions, tracker blocks, and permission controls.
-            The native Mac preview uses Apple's WebKit protections and adds private tabs, tracker blocking,
-            and HTTPS upgrades. It does not yet include every Windows privacy control.
-          </p>
+          <h2>Practical privacy, without the fuss.</h2>
+          <p><span class="ghost-wordmark">Ghost Surfer</span> gives you straightforward ways to manage browser activity across Windows, Linux, and Mac. Windows and Linux include tracker filtering and grouped alerts; Mac includes WebKit tracking protection, private tabs, and HTTPS upgrades. Each version has its own feature set, and none makes you anonymous.</p>
         </div>
         <div class="feature-grid">
-          <article class="feature"><strong>Stops Location Requests</strong><span>Websites are blocked from asking the browser for your exact location by default.</span></article>
-          <article class="feature"><strong>One Consent Panel</strong><span>Cookie choices and privacy notices share one bottom panel. Allow or block a site, dismiss informational notices, or choose a global first-party cookie policy in Ghost Control.</span></article>
-          <article class="feature"><strong>Cookie Decisions Manager</strong><span>Review allowed and denied sites, then forget one choice or reset them all from Ghost Control.</span></article>
-          <article class="feature"><strong>Grouped Privacy Alerts</strong><span>Tracker and blocked-permission notices use the same panel and are grouped to avoid a chain of separate pop-ups.</span></article>
-          <article class="feature"><strong>Optional Tor Support</strong><span>If you already use Tor on your computer, Ghost Surfer can use that route when it is available.</span></article>
-          <article class="feature"><strong>Locks Down Nosy Permissions</strong><span>Camera, microphone, notifications, screen sharing, clipboard, and local font access are blocked by default.</span></article>
-          <article class="feature"><strong>Future Console Look</strong><span>A sharper 2033-style privacy console with neon edge lighting, dark glass panels, and 12 theme-aware accent colors.</span></article>
-          <article class="feature"><strong>Tamper Warning</strong><span>If local browser settings are changed outside the app, Ghost Surfer warns you before you keep browsing.</span></article>
-          <article class="feature"><strong>Startpage Home</strong><span>The browser opens with Startpage so search starts cleaner from the first tab.</span></article>
-          <article class="feature"><strong>HTTPS Preferred</strong><span>Ghost Surfer upgrades plain HTTP pages to HTTPS when the secure version is available.</span></article>
+          <article class="feature"><strong>Site permissions</strong><span>Windows and Linux block sensitive site requests by default.</span></article>
+          <article class="feature"><strong>Cookie choices</strong><span>Choose a cookie policy and review saved site choices on Windows and Linux.</span></article>
+          <article class="feature"><strong>Tracker alerts</strong><span>Known trackers are filtered, with related alerts grouped together.</span></article>
+          <article class="feature"><strong>Optional Tor connection</strong><span>Connect through a compatible Tor service already running on your computer. Tor is not included.</span></article>
         </div>
       </section>
 
       <section id="interface" class="section shell split-section">
         <div>
           <p class="eyebrow">Interface</p>
-          <h2>A browser tuned for each desktop.</h2>
-          <p>
-            The Windows edition groups privacy status, cookie decisions, alerts, downloads, bookmarks,
-            history, themes, and cleanup in its control center. The Mac preview uses a native window with a
-            tab and library sidebar, private tabs, and a central Ghost Control panel.
-          </p>
+          <h2>The tools you use, all in one place.</h2>
+          <p>On Windows and Linux, find your tabs, downloads, bookmarks, history, and settings together in Ghost Control.</p>
           <ul class="check-list">
-            <li>Consistent control sizing, spacing, focus states, and a simplified address row</li>
-            <li>Windows: one privacy notice panel for cookie consent and grouped alerts</li>
-            <li>Windows: per-site consent or global first-party cookie rules</li>
-            <li>Mac: WebKit browser with private tabs, bookmarks, and history</li>
-            <li>Persistent page zoom from 80% to 150% for more comfortable reading</li>
-            <li>Speed Mode and optional image blocking for heavier pages</li>
-            <li>Familiar keyboard shortcuts for tabs, address focus, reload, and stop loading</li>
-            <li>Confirmed cleanup for cookies, cache, history, saved cookie choices, and alerts</li>
+            <li>Adjust page size for easier reading</li>
+            <li>Speed Mode and optional image controls for heavier pages</li>
+            <li>Quick keyboard shortcuts for everyday browsing</li>
           </ul>
-        </div>
-        <div class="panel-stack">
-          <article><span>01</span><strong>Privacy Status</strong><p>Ghost Guard, Tor status, Speed Mode, blocked trackers, spy alerts, tabs, and Startpage status stay visible.</p></article>
-          <article><span>02</span><strong>One Consent Panel</strong><p>Choose per site, allow first-party cookies globally, or block cookies globally. Third-party cookies and sensitive permissions stay blocked.</p></article>
-          <article><span>03</span><strong>Ghost Style</strong><p>Dark glass panels, neon edge lighting, sharper controls, and theme colors give it its own identity.</p></article>
-        </div>
-      </section>
-
-      <section id="install" class="section install-band">
-        <div class="shell install-grid">
-          <div>
-            <p class="eyebrow">Install</p>
-            <h2>Choose your platform.</h2>
-            <p>Windows has a per-user setup package. Mac has a universal installer for Apple silicon and Intel, offered with consent-based automatic updates.</p>
-          </div>
-          <ol class="steps">
-            <li><strong>Download and extract</strong><span>Download the current setup ZIP and choose Extract All.</span></li>
-            <li><strong>Run GS Install Manager</strong><span>Open the included manager and follow its setup flow. It validates the staged Qt WebEngine runtime before replacing program files.</span></li>
-            <li><strong>Mac: open the package</strong><span>Open Ghost-Surfer-macOS-0.2.4.pkg and follow Installer. It places Ghost Surfer in Applications. Requires macOS 14 or later.</span></li>
-            <li><strong>Mac: approve the installer if asked</strong><span>Ghost Surfer is published by Black Lion Studios. If macOS asks you to approve this download, try opening it once, then go to Apple menu → System Settings → Privacy &amp; Security → Open Anyway and confirm Open. Version 0.2.4 keeps the black outline visible around the full ghost icon. The app icon appears in the Dock while Ghost Surfer is open; pinning it is optional. Existing 0.1.0 installs need one reinstall before in-app updates are available.</span></li>
-          </ol>
         </div>
       </section>
 
       <section id="download" class="section shell">
-        <div class="download-card">
+        <div class="section-heading">
+          <p class="eyebrow">A guided installation</p>
+          <h2>Your device gets the right manager.</h2>
+          <p>The site detects your platform and routes you to its installation manager. The manager checks your system, selects the newest compatible Ghost Surfer release, verifies the download, and starts installation. You can also choose a platform below.</p>
+        </div>
+
+        <div class="download-card" data-platform="linux">
           <div>
-            <p class="eyebrow">Mac · Version 0.2.4</p>
-            <h2>Ghost-Surfer-macOS-0.2.4.pkg</h2>
-            <p>Universal installer for Apple silicon and Intel Macs running macOS 14 or later. Installs Ghost Surfer.app into Applications. Includes private tabs, WebKit tracking protections, known tracker blocking, HTTPS upgrades, bookmarks, and history. The Mac preview uses WebKit cookie handling and does not include the Windows app's per-site cookie approval or local Tor routing.</p>
-            <p><strong>Published by Black Lion Studios.</strong> If macOS asks you to approve the installer, open it once, then choose Apple menu → System Settings → Privacy &amp; Security → Open Anyway and confirm Open. The installer package has no Apple Developer ID signature. Existing version 0.1.0 installs need this one-time reinstall to enable future in-app updates.</p>
+            <p class="eyebrow">Current Linux catalog · Version 0.2.6</p>
+            <h2>Ghost Surfer for Linux</h2>
+            <p>For 64-bit x86 Linux. The manager identifies your distribution and version, checks its compatibility group and glibc, then selects and verifies a suitable release before starting the per-user installer. Similar derivatives can share one build when their compatibility is verified. The current tested target is Kali Linux with glibc 2.43.</p>
             <details class="hash">
-              <summary>Verify the Mac package</summary>
-              <p>Package SHA-256: <code>82894ECFCDE3BD86C14FA739E01B8B6247D5AA195FF539B203D54654DBC2B28D</code></p>
+              <summary>Linux compatibility and feature details</summary>
+              <p>Built and smoke-checked on Kali Linux with glibc 2.43; older distributions are not yet verified. Alpine/musl, ARM, and 32-bit systems are not covered by this package. Personal Data Vault is not available on Linux.</p>
+            </details>
+            <details class="hash">
+              <summary>Linux release verification</summary>
+              <p>Linux release SHA-256: <code>D282375058005AE63C1F9C7791ABE1201E195D8334E127768CD1D08F8C4A6A52</code></p>
               <p>The complete checksum list is available in <a href="downloads/SHA256SUMS.txt">SHA256SUMS.txt</a>.</p>
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary" href="downloads/Ghost-Surfer-macOS-0.2.4.pkg" download>Download Mac installer</a>
+            <a class="button primary platform-download manager-unavailable" data-manager-platform="linux" href="#download" aria-disabled="true">Linux Manager is being prepared</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
-            <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
+            <a class="button secondary" href="support.html">Install help</a>
           </div>
         </div>
 
-        <div class="download-card">
-        <div class="download-card">
+        <div class="download-card" data-platform="macos">
           <div>
-            <p class="eyebrow">Current Windows Build · Version 0.2.6</p>
-            <h2>GhostSurfer-Setup-v0.2.6.zip</h2>
-            <p>Windows release package (262,622,161 bytes; about 250.3 MiB). Version 0.2.6 adds searchable tab management, new-tab preferences, bookmark reordering, URL and download filename review prompts, and extension-manager improvements. GS Install Manager validates the staged Qt WebEngine runtime before replacing program files. The browser updater verifies release assets before staging. Windows binaries are not Authenticode-signed.</p>
+            <p class="eyebrow">Current Mac catalog · Version 0.2.4</p>
+            <h2>Ghost Surfer for Mac</h2>
+            <p>For Apple silicon and Intel Macs running macOS 14 or later. Download the Mac installation manager to start setup. It selects the compatible Mac release, verifies it, then hands off to the installer.</p>
             <details class="hash">
-              <summary>Want to verify the file?</summary>
+              <summary>Mac app details and installation help</summary>
+              <p>The Mac installation manager is an Intel x86_64 app. Apple silicon Macs can run it through Rosetta 2, which macOS may ask you to install. Mac uses WebKit cookie handling; per-site cookie controls and optional local Tor routing are currently available in the Windows and Linux apps. The manager installs the verified app archive for your user. The app does not have an Apple Developer ID signature, so macOS may ask you to approve it in Privacy &amp; Security. Automatic update checks are optional and require your consent; update archives are signed. Existing version 0.1.0 installs need a one-time reinstall to enable in-app updates.</p>
+            </details>
+            <details class="hash">
+              <summary>Verify the Mac package</summary>
+              <p>Mac app archive SHA-256: <code>EF187F9FE4D8A42D21CC24B84867287D83F7FA21EB57AE3061BD1E2E201484C5</code></p>
+              <p>The complete checksum list is available in <a href="downloads/SHA256SUMS.txt">SHA256SUMS.txt</a>.</p>
+            </details>
+          </div>
+          <div class="download-actions">
+            <a class="button primary platform-download manager-unavailable" data-manager-platform="macos" href="#download" aria-disabled="true">Mac Manager is being prepared</a>
+            <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
+            <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
+            <a class="button secondary" href="support.html">Install help</a>
+          </div>
+        </div>
+
+        <div class="download-card" data-platform="windows">
+          <div>
+            <p class="eyebrow">Current Windows catalog · Version 0.2.6</p>
+            <h2>Ghost Surfer for Windows</h2>
+            <p>For x64 PCs running Windows 10 version 1809 or newer, or Windows 11. The Windows manager checks the OS build and required runtime, then selects and verifies a compatible browser release before installation.</p>
+            <details class="hash">
+              <summary>Package, updater, and security details</summary>
+              <p>Package size: 262,622,161 bytes (about 250.3 MiB). GS Install Manager checks the staged browser files before replacing the installed app. The browser updater verifies release assets before staging. Windows binaries are not Authenticode-signed.</p>
               <p>Windows ZIP SHA-256: <code>B6BF707DEB45ED99DB0609AEF58B4A3E0DED34C4E63DE736E99FA391FD8C0839</code></p>
             </details>
           </div>
           <div class="download-actions">
-            <a class="button primary" href="https://github.com/ghostventure/GhostVenture-Projects/releases/download/v0.2.6/GhostSurfer-Setup-v0.2.6.zip">Download Windows release ZIP</a>
+            <a class="button primary platform-download manager-unavailable" data-manager-platform="windows" href="#download" aria-disabled="true">Windows Manager is being prepared</a>
             <a class="button secondary" href="downloads/SHA256SUMS.txt">Verify file</a>
             <a class="button secondary" href="downloads/CHANGELOG.txt">What's new</a>
+            <a class="button secondary" href="support.html">Install help</a>
           </div>
         </div>
       </section>
     </main>
 
-    <footer class="site-footer">
-      <div class="shell footer-grid">
-        <span>Ghost Surfer Browser</span>
-        <span>A privacy-focused Windows browser and native Mac preview. Developed by Black Lion Studios.</span>
-        <span class="footer-links">
-          <a href="privacy.html">Privacy</a>
-          <a href="terms.html">Terms</a>
-          <a href="license.html">License</a>
-          <a href="cookies.html">Cookies</a>
-          <a href="refunds.html">Refunds</a>
-          <a href="security.html">Security</a>
-          <a href="accessibility.html">Accessibility</a>
-          <a href="acceptable-use.html">Acceptable Use</a>
-          <a href="copyright.html">Copyright</a>
-          <a href="notices.html">Notices</a>
-          <a href="support.html">Support</a>
-        </span>
-      </div>
-    </footer>
+    <footer class="site-footer"><div class="shell footer-grid"><span><span class="ghost-wordmark">Ghost Surfer</span> Browser</span><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/#download">Downloads</a><a href="/faq.html">FAQ</a><a href="/reading.html">Reading Room</a><a href="/legal.html">Legal and policies</a><a href="/support.html">Support</a></nav></div></footer>
+  <script src="download-router.js?v=manager-workflow-20261109" defer></script>
   </body>
 </html>

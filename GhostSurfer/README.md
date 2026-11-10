@@ -1,12 +1,14 @@
 # Ghost Surfer
 
-This folder is the consolidated Ghost Surfer project: the Windows browser app, native iOS and macOS browser clients, installer scripts, and the Firebase Hosting website.
+This folder is the consolidated Ghost Surfer project: Windows and Linux desktop browsers, native iOS and macOS browser clients, installation managers, installer scripts, and the Firebase Hosting website.
 
 The desktop app is built with Python, PySide6, and QtWebEngine. It includes a labeled navigation rail, consistent rounded controls, a scrollable control center, download actions, theme and zoom controls, and a single privacy notice for cookie choices and Ghost Guard alerts. See the [user guide](docs/USER_GUIDE.md) for browser controls, shortcuts, and consent behavior.
 
 ## Project contents
 
 - `ghost_surfer.py` and `Ghost Surfer.spec`: Windows browser application and PyInstaller build definition.
+- `manager/linux/`: compiled, standalone Go installation manager for Linux x86_64/glibc; see [the Linux guide](docs/LINUX.md).
+- `manager/platform_selector.py` and `manager/release_workflow.py`: shared platform and verified-release selection logic used by manager workflows.
 - `requirements.txt`: Python dependencies for building the desktop app.
 - `installer/`: per-user PowerShell installer and uninstaller scripts.
 - `site/`: public website, policies, icons, release notes, and checksum manifest.
@@ -16,7 +18,15 @@ The desktop app is built with Python, PySide6, and QtWebEngine. It includes a la
 - `macOS/`: native SwiftUI and WebKit app for Mac, reusing the iOS browser state and privacy rules.
 - `installer/macos/`: universal `.pkg` build script and installer notes.
 
-Release installers stay on Firebase Hosting rather than being committed to GitHub. Their names and hashes are recorded in `site/downloads/SHA256SUMS.txt`.
+The website is the installation orchestrator: it detects the visitor's OS family and architecture, then offers a manager only when its package is marked ready and available. The manager checks the system in more detail and selects an app release from `site/downloads/installer-manifest.json`. Linux x86_64 and Mac manager packages are live on Firebase Hosting; the Windows manager remains unavailable until its package is provided. The Mac manager is Intel x86_64 and may require Rosetta 2 on Apple silicon. The Linux and Windows desktop releases are published on GitHub v0.2.6. The Mac app archive and its signed Sparkle updates are hosted on Firebase. App filenames and hashes are listed in `site/downloads/SHA256SUMS.txt`.
+
+## Website presentation
+
+The site-wide Ghost Surfer name uses a spectral serif, icy gradient, and blue-purple glow across visible page copy. This is a CSS treatment on the existing static HTML/CSS site; it does not add a framework or change the site's runtime.
+
+## Production Homepage Recovery
+
+The current consolidated homepage baseline and exact Firebase recovery commands are recorded in [docs/HOMEPAGE_RECOVERY_2026-11-08.md](docs/HOMEPAGE_RECOVERY_2026-11-08.md). Keep that record updated after any Hosting release so the last known-good page can be restored without reconstructing it from memory.
 
 ## Run and build the desktop app
 
@@ -42,11 +52,23 @@ npm run build:desktop
 
 Open `iOS/GhostSurfer.xcodeproj` to build the iPhone and iPad app, or `macOS/GhostSurferMac.xcodeproj` to build the Mac app. Both targets use SwiftUI and WebKit and support macOS 14 or iOS 17 and later.
 
-To create the universal Mac package, run `installer/macos/build-installer.sh` from this folder. It creates `installer/macos/Ghost-Surfer-macOS-0.2.4.pkg`, a Sparkle update ZIP, and a signed appcast under `site/`. The app bundle is ad-hoc signed; the installer itself has no Apple Developer ID signature, so macOS may ask for one-time approval. The site documents that step. Existing 0.1.0 installs need a one-time reinstall before in-app updates are available.
+To create a universal Mac package, run `installer/macos/build-installer.sh` from this folder. The script currently defaults to version 0.2.0; set `VERSION` to the intended release and update the app's version metadata before creating a new public release. The hosted Mac app is version 0.2.4. The package is unsigned and unnotarized; the app bundle is ad-hoc signed. A Developer ID Application and Installer identity is recommended for Gatekeeper-friendly distribution. Existing 0.1.0 installs need a one-time reinstall before in-app updates are available.
 
-The Mac app includes its own Ghost Surfer icon for Finder, the Dock while the app is open, and the app switcher; it does not need to be pinned to the Dock. Version 0.2.4 keeps the ghost's black outline visible around its full shape, including beneath the glossy highlight. See the [Mac documentation](macOS/README.md) for update behavior and platform details.
+## Linux installation and manager build
+
+The Linux app release is an x86_64/glibc archive, built and smoke-checked on Kali Linux with glibc 2.43. The standalone Linux manager detects the distribution ID, version, `ID_LIKE` family, architecture, and glibc before selecting a release. Only Kali is currently verified; other glibc distributions receive a warning, and Alpine/musl, ARM, and 32-bit systems are unsupported. See [docs/LINUX.md](docs/LINUX.md) for installation, manager commands, compatibility, and build details.
+
+To compile the manager from this folder:
+
+```bash
+cd manager/linux
+GO111MODULE=off go test ./...
+GO111MODULE=off CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o ghost-surfer-manager .
+```
 
 ## Deploy the website
+
+Use the GitHub [`codex/ghost-surfer-site-linux-20261108`](https://github.com/ghostventure/GhostVenture-Projects/tree/codex/ghost-surfer-site-linux-20261108) site source. Before deploying, restore the Mac 0.2.4 package and signed update assets from the current Hosting release; release binaries are excluded from Git. Restore the signed `appcast-macos.xml` and referenced update archives without editing their contents. Verify the installer against `site/downloads/SHA256SUMS.txt`, then deploy **Hosting only** (`firebase deploy --only hosting --project ghost-surfer-browser`).
 
 Install Node.js, then run these commands from this folder:
 
@@ -56,4 +78,4 @@ npx firebase login
 npm run deploy
 ```
 
-The deploy command downloads the current Windows release ZIP from GitHub and checks its SHA-256 before Firebase CLI publishes the website. The Mac `.pkg` and Windows ZIP are hosted as Firebase download assets; checksums are listed in `site/downloads/SHA256SUMS.txt`.
+The deployment command publishes only Firebase Hosting. The app-release hashes are listed in `site/downloads/SHA256SUMS.txt`; manager package checksums and readiness states are in `site/downloads/installer-manifest.json`. The Linux manager archive is part of the source tree. Restore other ignored Mac release files as described above before deploying.
