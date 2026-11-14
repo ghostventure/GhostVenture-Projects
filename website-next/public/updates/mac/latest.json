@@ -2,5 +2,5 @@
   "version": "0.1.0",
   "minimumSystemVersion": "14.0",
   "downloadURL": "https://overhead-office.web.app/downloads/mac/OverHead-Mac-0.1.0.zip",
-  "notes": "Initial public Intel Mac preview (x86_64). Unsigned and not notarized; see the install notes on the download page. macOS 14 or later."
+  "notes": "OverHead for Mac 0.1.0, the first Mac release (Intel x86_64). Unsigned and not notarized; see the install notes on the download page. macOS 14 or later."
 }

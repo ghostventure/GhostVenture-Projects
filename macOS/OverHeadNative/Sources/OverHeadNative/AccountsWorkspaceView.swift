@@ -15,7 +15,7 @@ struct AccountsWorkspaceView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Accounts and access").font(.system(size: 28, weight: .bold, design: .rounded))
-                Text("Assign each staff member the smallest role they need. Staff profiles and credentials in this native preview are local to this encrypted Mac workspace.")
+                Text("Assign each staff member the smallest role they need. Staff profiles and credentials in this native Mac app are local to this encrypted Mac workspace.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
                 HStack(alignment: .top, spacing: 16) {
                     invitePanel.frame(maxWidth: 360)

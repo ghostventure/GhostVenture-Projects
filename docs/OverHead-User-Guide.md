@@ -1,9 +1,9 @@
 # OverHead User Guide
 
-**Windows desktop · Native Mac preview · Website account**  
+**Windows desktop · Native Mac app · Website account**  
 Release guide · November 2026
 
-OverHead brings customer context, everyday work, owner review, and recovery tools into one practical workspace. This guide covers what to do in the Windows release, the native Mac preview, and the OverHead website, and calls out where those experiences differ.
+OverHead brings customer context, everyday work, owner review, and recovery tools into one practical workspace. This guide covers what to do in the Windows release, the native Mac app, and the OverHead website, and calls out where those experiences differ.
 
 ---PAGE---
 
@@ -13,9 +13,9 @@ OverHead brings customer context, everyday work, owner review, and recovery tool
 
 The Windows desktop release is the full installed office workspace. Use it for customer records, work queues, workflows, Microsoft imports, role management, approvals, reports, and the local recovery tools available in your installed release. Download the current installer or ZIP from the OverHead website and follow the release-specific installation notes.
 
-## Native Mac preview
+## Native Mac app
 
-The SwiftUI Mac app is a native preview available as a download from the OverHead website. It has its own encrypted Mac workspace and can sign in with the shared OverHead account. The current package is an unsigned Intel (x86_64) build for macOS 14 or later. macOS may require you to approve the app in **System Settings → Privacy & Security** the first time you open it. The app checks the OverHead update feed on launch and from **Settings → About**.
+The SwiftUI Mac app is available as a download from the OverHead website. This is the first Mac release, version 0.1.0. It has its own encrypted Mac workspace and can sign in with the shared OverHead account. The current package is an unsigned Intel (x86_64) build for macOS 14 or later. macOS may require you to approve the app in **System Settings → Privacy & Security** the first time you open it. The app checks the OverHead update feed on launch and from **Settings → About**.
 
 ## Website
 
@@ -38,7 +38,7 @@ The Mac app uses Firebase Authentication for shared identity and selected accoun
 
 ## Use role-based access
 
-Give each person only the access their work requires. OverHead includes owner, front desk, bookkeeper, support, and customer access paths. Owners manage protected settings and approvals. The Mac preview’s staff profiles are local to that Mac workspace; they do not automatically provision Windows or website staff accounts.
+Give each person only the access their work requires. OverHead includes owner, front desk, bookkeeper, support, and customer access paths. Owners manage protected settings and approvals. The Mac app’s staff profiles are local to that Mac workspace; they do not automatically provision Windows or website staff accounts.
 
 Customer access is separate from team access. A customer invitation must match the email and workspace invitation. Customer pages are intended for support requests and account help, not access to staff records, billing controls, or the office work queue.
 
@@ -77,9 +77,9 @@ Use only the read permissions shown in OverHead’s setup guidance. Never enter 
 
 ## Stripe and Square
 
-The Mac preview can open provider setup pages and store non-secret configuration or manually imported reference summaries. Square token values are hashed before local storage. Stripe test-mode details and Square/Stripe count summaries do not authorize a live merchant, charge a card, or grant paid access.
+The Mac app can open provider setup pages and store non-secret configuration or manually imported reference summaries. Square token values are hashed before local storage. Stripe test-mode details and Square/Stripe count summaries do not authorize a live merchant, charge a card, or grant paid access.
 
-The native Mac preview does not offer paid checkout, subscription cancellation, or live payment processing. Review plan access and billing through the secure website flow when available. A payment status typed or imported as a reference is not proof of payment.
+The native Mac app does not offer paid checkout, subscription cancellation, or live payment processing. Review plan access and billing through the secure website flow when available. A payment status typed or imported as a reference is not proof of payment.
 
 ---PAGE---
 
@@ -105,16 +105,16 @@ Include the app version, macOS or Windows version, the workflow, the last succes
 
 ## Plans and trials
 
-Review plan capacity and the Free Trial Policy before requesting a change. The native Mac preview can start the no-card trial through the secure shared service when that service is available. Paid checkout and cancellation are not implemented in the Mac preview. A local plan label or manually entered payment record does not activate a paid subscription.
+Review plan capacity and the Free Trial Policy before requesting a change. The native Mac app can start the no-card trial through the secure shared service when that service is available. Paid checkout and cancellation are not implemented in the Mac app. A local plan label or manually entered payment record does not activate a paid subscription.
 
-## Updating the Mac preview
+## Updating the Mac app
 
-The Mac app checks `overhead-office.web.app/updates/mac/latest.json` on launch. To check manually, open **Settings → About → Check for updates now**. When a newer published version includes a download package, the app shows its version and link. The Mac preview does not silently replace itself; download and install a newer package when one is published.
+The Mac app checks `overhead-office.web.app/updates/mac/latest.json` on launch. To check manually, open **Settings → About → Check for updates now**. When a newer published version includes a download package, the app shows its version and link. The app does not silently replace itself; download and install a newer version when one is published.
 
 ## Keep the platform boundaries in mind
 
 - Windows, Mac, and website features can differ by release and service configuration.
-- The Mac preview’s local operational records are separate from Windows records.
+- The Mac app’s local operational records are separate from Windows records.
 - Microsoft and provider integrations require their own configured accounts and permissions.
 - Billing references and test-mode setup are not live payment processing.
 - OverHead supports organization and follow-through; it does not replace owner review, legal/accounting/security advice, or your required backup and compliance plans.

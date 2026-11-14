@@ -310,7 +310,7 @@ export default function HomePage() {
               <strong>Before you download</strong>
               <p>
                 The Windows release is the full desktop workspace. The native
-                Mac preview is an unsigned Intel build; macOS may ask you to
+                Mac version 0.1.0 is an unsigned Intel build; macOS may ask you to
                 approve it in Privacy & Security after opening it.
               </p>
             </div>
@@ -319,7 +319,7 @@ export default function HomePage() {
                 Download for Windows
               </Link>
               <Link className="secondary" href={macDownloadHref}>
-                Download the Mac preview
+                Download for Mac
               </Link>
               <Link className="text-link" href={checksumHref}>
                 Get the checksum
