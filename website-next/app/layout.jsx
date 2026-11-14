@@ -8,6 +8,7 @@ export const metadata = {
   },
   description: 'OverHead gives owner-led teams a clearer command center for customer follow-through, staff approvals, revenue work, and operational evidence.',
   applicationName: 'OverHead',
+  icons: { icon: '/favicon.svg', shortcut: '/favicon.svg' },
   keywords: ['small business operations', 'customer follow-up', 'office management', 'workflow approvals', 'Windows Server office software', 'Windows IoT office software', 'OverHead Cylinder', 'OverHead'],
   authors: [{ name: 'Black Lion Studios' }],
   creator: 'Black Lion Studios',
@@ -21,13 +22,13 @@ export const metadata = {
     siteName: 'OverHead',
     title: 'OverHead | Clearer small-business operations',
     description: 'A focused operating system for owner-led business teams.',
-    images: [{ url: '/assets/overhead-desktop.png', width: 1440, height: 900, alt: 'OverHead desktop workspace' }],
+    images: [{ url: '/assets/overhead-social-card.png', width: 1200, height: 630, alt: 'OverHead brings customers, workflows, and decisions together' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'OverHead | Clearer small-business operations',
     description: 'A focused operating system for owner-led business teams.',
-    images: ['/assets/overhead-desktop.png'],
+    images: ['/assets/overhead-social-card.png'],
   },
   robots: { index: true, follow: true },
 }

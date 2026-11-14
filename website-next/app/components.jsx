@@ -6,8 +6,7 @@ export function SiteShell({ children, tone = 'dark' }) {
     <>
       <header className={`site-header ${tone}`}>
         <Link className="brand" href="/">
-          <span>OH</span>
-          <strong>OverHead</strong>
+          <img src="/assets/overhead-logo.svg" alt="OverHead business operations" width="190" height="48" />
         </Link>
         <nav aria-label="Main navigation">
           {navItems.map((item) => (
