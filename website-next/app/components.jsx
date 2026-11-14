@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { businessGuideHref, checksumHref, cylinderPageHref, downloadHref, investorBrochureHref, navItems } from './data'
+import { businessGuideHref, checksumHref, cylinderPageHref, downloadHref, investorBrochureHref, macDownloadHref, navItems } from './data'
 
 export function SiteShell({ children, tone = 'dark' }) {
   return (
@@ -62,10 +62,11 @@ export function CTA() {
       <div>
         <p className="eyebrow">Download</p>
         <h2>Ready to get organized?</h2>
-        <p>Download OverHead, install it on Windows, and start with one customer or one task.</p>
+        <p>Choose the Windows desktop release or try the native Mac preview.</p>
       </div>
       <div className="cta-actions">
         <Link className="primary" href={downloadHref}>Get OverHead for Windows</Link>
+        <Link className="secondary" href={macDownloadHref}>Download the Mac preview</Link>
         <Link className="secondary" href={cylinderPageHref}>Explore Cylinder for Server / IoT</Link>
         <Link className="secondary" href="/support/">Installation help</Link>
         <Link className="secondary" href={checksumHref}>Verify download</Link>

@@ -1,6 +1,6 @@
 # OverHead User Guide
 
-**Windows desktop · Native Mac preview · Website account**
+**Windows desktop · Native Mac preview · Website account**  
 Release guide · November 2026
 
 OverHead brings customer context, everyday work, owner review, and recovery tools into one practical workspace. This guide covers what to do in the Windows release, the native Mac preview, and the OverHead website, and calls out where those experiences differ.
@@ -15,7 +15,7 @@ The Windows desktop release is the full installed office workspace. Use it for c
 
 ## Native Mac preview
 
-The SwiftUI Mac app is a native preview installed locally at `~/Applications/OverHead.app`. It has its own encrypted Mac workspace and can sign in with the shared OverHead account. It is currently an unsigned local build; there is no public Mac download package yet. The app checks the OverHead update feed on launch and from **Settings → About**.
+The SwiftUI Mac app is a native preview available as a download from the OverHead website. It has its own encrypted Mac workspace and can sign in with the shared OverHead account. The current package is an unsigned Intel (x86_64) build for macOS 14 or later. macOS may require you to approve the app in **System Settings → Privacy & Security** the first time you open it. The app checks the OverHead update feed on launch and from **Settings → About**.
 
 ## Website
 
@@ -109,7 +109,7 @@ Review plan capacity and the Free Trial Policy before requesting a change. The n
 
 ## Updating the Mac preview
 
-The Mac app checks `overhead-office.web.app/updates/mac/latest.json` on launch. To check manually, open **Settings → About → Check for updates now**. When a newer published version includes a download package, the app shows its version and link. The current Mac preview is a local unsigned build and does not silently replace itself.
+The Mac app checks `overhead-office.web.app/updates/mac/latest.json` on launch. To check manually, open **Settings → About → Check for updates now**. When a newer published version includes a download package, the app shows its version and link. The Mac preview does not silently replace itself; download and install a newer package when one is published.
 
 ## Keep the platform boundaries in mind
 

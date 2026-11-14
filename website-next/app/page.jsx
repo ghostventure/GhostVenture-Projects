@@ -7,6 +7,7 @@ import {
   cylinderDeployment,
   cylinderPageHref,
   downloadHref,
+  macDownloadHref,
   plans,
 } from "./data";
 
@@ -308,13 +309,17 @@ export default function HomePage() {
             <div>
               <strong>Before you download</strong>
               <p>
-                OverHead currently runs on Windows. The ZIP is the official
-                manual download; use the checksum if you want to verify it.
+                The Windows release is the full desktop workspace. The native
+                Mac preview is an unsigned Intel build; macOS may ask you to
+                approve it in Privacy & Security after opening it.
               </p>
             </div>
             <div>
               <Link className="primary" href={downloadHref}>
                 Download for Windows
+              </Link>
+              <Link className="secondary" href={macDownloadHref}>
+                Download the Mac preview
               </Link>
               <Link className="text-link" href={checksumHref}>
                 Get the checksum

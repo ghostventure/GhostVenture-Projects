@@ -10,6 +10,7 @@ export const navItems = [
 ]
 
 export const downloadHref = '/downloads/OverHead-Desktop-0.3.5-win-x64.zip'
+export const macDownloadHref = '/downloads/mac/OverHead-Mac-0.1.0.zip'
 export const cylinderDownloadHref = '/downloads/OverHead-Cylinder-0.3.4-win-x64.zip'
 export const checksumHref = '/downloads/SHA256SUMS.txt'
 export const cylinderChecksumHref = '/downloads/CYLINDER-SHA256SUMS.txt'
