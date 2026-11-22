@@ -1,77 +1,79 @@
-# Stripe embedded checkout setup
+# Future Stripe billing setup
 
-The Stripe billing server lives in `functions/`. It is deliberately separate from the Electron app and hosted browser workspace: Stripe secret keys and webhook secrets must never be packaged into OverHead or included in the website bundle.
+**Current status (2026-11-22): paid checkout, the Stripe portal, and paid cancellation/refunds are not enabled.** Firebase has a no-Stripe `billingApi` compatibility endpoint from the `trial` codebase; it serves trials and entitlement reads, and returns 503 for paid actions. It cannot process Stripe payments or webhooks. The full Stripe implementation in `functions/index.js` is not deployed. The public account page is read-only.
 
-## Where to install it
+This document is a setup checklist for a later test-mode billing rollout. Do not follow it with live Stripe values or present a payment flow as available until the full test checklist passes.
 
-Use the existing Firebase project: `overhead-office`.
+## Service boundary
 
-1. In Firebase Console, open **overhead-office** and upgrade to the Blaze plan. Firebase Functions requires a billing-enabled project for this server workload.
-2. In Stripe Dashboard, create three recurring monthly Products/Prices: Silver, Gold, and Black.
-3. In this repository, install the function dependencies:
+The paid billing server source is in `functions/`, deployed as the Firebase `default` codebase. Stripe secret keys and webhook secrets must never be packaged into OverHead or included in the website bundle.
 
-   ```powershell
-   cd C:\Users\solid\Documents\Codex\OverHead\functions
+The no-card trial service is isolated in `functions-trial/` and exports `overheadTrialApi` for Mac Suite and `billingApi` for the currently published Windows app. Neither uses Stripe credentials. Deploy them independently with:
+
+```sh
+firebase deploy --config firebase.overhead.json --only functions:trial:overheadTrialApi,functions:trial:billingApi --project overhead-office --non-interactive
+```
+
+The same codebase exports `checkWorkspaceDuplicate` for pre-signup duplicate detection. It compares a submitted business name with existing workspace profiles using exact and similar-name matching, with owner-name similarity considered only alongside a partial business-name match. It returns only `possibleDuplicate: true/false`, not matched workspace names, emails, or IDs. The endpoint is limited to 12 requests per IP address per 15 minutes. A possible match prompts users to reuse/sign in to the existing account or confirm creation of a separate workspace; if the endpoint is unavailable, signup stops before creating an account. This is an advisory duplicate-workspace/trial guard, not a billing action. Paid checkout and cancellation remain disabled.
+
+## Configure Stripe test mode
+
+1. Confirm `overhead-office` is on the Firebase Blaze plan.
+2. In Stripe test mode, create recurring monthly Prices for Silver, Gold, and Black.
+3. Install dependencies from `functions/`:
+
+   ```sh
+   cd functions
    npm install
    ```
 
-4. Set the two server-only secrets. Do not put these in the desktop app, website, source code, or a `.env` file committed to git:
+4. Set the Stripe **test-mode** API secret through Firebase CLI. Enter the real test-mode value when prompted; never put it in source control, chat, the desktop app, or a website `.env` file.
 
-   ```powershell
-   npx firebase-tools functions:secrets:set STRIPE_SECRET_KEY --project overhead-office
-   npx firebase-tools functions:secrets:set STRIPE_WEBHOOK_SECRET --project overhead-office
+   ```sh
+   firebase functions:secrets:set STRIPE_SECRET_KEY --project overhead-office
    ```
 
-5. Create a local `functions/.env.overhead-office` file with the publishable key, three Stripe Price IDs, and a real HTTPS return page. The repository ignores `functions/.env*`; do not commit this file:
+5. Create an ignored local `functions/.env.overhead-office` file for non-secret test configuration:
 
    ```text
    STRIPE_PUBLISHABLE_KEY=pk_test_replace_me
    STRIPE_PRICE_SILVER=price_replace_me
    STRIPE_PRICE_GOLD=price_replace_me
    STRIPE_PRICE_BLACK=price_replace_me
-   BILLING_RETURN_URL=https://overhead-office.web.app/billing-return
+   BILLING_RETURN_URL=https://overhead-office.web.app/account/
    ```
 
-6. Deploy test mode only. The browser workspace calls this same protected endpoint, so deploy Functions before publishing browser billing controls:
+   Replace each placeholder with the correct Stripe test-mode value. Do not commit the file.
 
-   ```powershell
-   cd C:\Users\solid\Documents\Codex\OverHead
-   npx firebase-tools deploy --config firebase.overhead.json --only functions --project overhead-office
+6. **Plan the Functions codebase migration before deploying paid billing.** The current `billingApi` name belongs to the no-Stripe `trial` codebase. The Stripe implementation in `functions/index.js` uses the same function name. Do not deploy it over the existing endpoint without a planned replacement and continuity procedure. The current compatibility endpoint does not process webhooks.
+
+7. After the full Stripe implementation owns its endpoint, add that endpoint's `/webhook` path in Stripe test mode. Subscribe to `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, and `customer.subscription.deleted`. Store its signing secret in Firebase Secret Manager:
+
+   ```sh
+   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET --project overhead-office
    ```
 
-7. In Stripe Dashboard, add the deployed `billingApi/webhook` URL as a webhook endpoint. Subscribe at minimum to `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`, and `refund.created`. Copy that endpoint's signing secret into `STRIPE_WEBHOOK_SECRET`.
+8. Deploy only the migrated paid API and expiration scheduler from the intended codebase. Avoid deploying the entire default codebase: it contains older exports that are not represented by current source.
 
-Only switch the values from `pk_test`/`sk_test`/test Price IDs to live values after an embedded test checkout updates the Firestore billing entitlement correctly.
+## Required checks before enabling paid billing
 
-The billing function refuses to create a second checkout when the workspace already has the requested active tier. It also places a short-lived checkout lock while a payment form is open, so a double-click or a second app window cannot start another subscription attempt.
+Use Stripe test mode and a dedicated test workspace. Confirm:
 
-## Billing workflow
+1. No-card trial start creates no Stripe customer, Checkout Session, or charge; a second trial request is refused.
+2. Trial status and a license for each active member are recorded, then suspended at expiry.
+3. Embedded test checkout completes and a valid signed webhook activates the correct tier.
+4. Duplicate checkout is blocked.
+5. Cancellation and any unused-time refund occur once, with matching billing activity and suspended licenses.
+6. Replayed webhooks do not duplicate entitlement or refund changes.
+7. Browser account and Mac entitlement views resolve the same workspace state.
 
-1. An administrator can choose a tier from OverHead Desktop or from the signed-in website account page. Both use the same Firebase Authentication identity and `billingApi` endpoint.
-2. A new workspace can instead select **Start Free 30-Day Gold Trial**. It requires no card, creates a one-time Gold-equivalent entitlement, and records an exact 30-day end time.
-3. OverHead checks the central billing entitlement.
-4. If the same tier is already active, OverHead confirms that no new charge was created.
-5. If another checkout is already pending, OverHead blocks the second attempt.
-6. Otherwise, OverHead opens embedded Stripe Checkout. Card details are handled by Stripe, not OverHead Desktop or the website.
-7. Only Stripe's signed webhook activates, changes, suspends, or cancels a paid entitlement.
-8. The scheduled `expireTrials` function and the entitlement check enforce trial expiration. Expired trial access and licenses are suspended; a workspace cannot start a second free trial.
-9. After confirmation, OverHead refreshes the entitlement and silently updates each member's tier license.
-10. When a customer requests proof of purchase, the owner or bookkeeper chooses **Create Full Receipt PDF** from Plans. OverHead creates a letter-size summary from the confirmed plan, billing record, payment references, and assigned licenses; no new checkout or charge is created.
-11. When an owner chooses **Cancel Now & Refund Unused Time**, the server immediately cancels the Stripe subscription, calculates the unused fraction of its current paid billing period, and refunds that amount to the original payment method. The request is administrator-only, idempotent per subscription, and recorded in the central billing record. Access and workspace licenses are suspended immediately. A trial or a fully used period is canceled without a refund because no unused paid amount exists.
+Do not change test keys or Prices to live values until every check passes and final customer billing terms are ready.
 
-When the billing entitlement changes, the function automatically issues or updates a private tier license for every active workspace member. The desktop app remembers the member's assigned license locally after the next entitlement refresh; users do not need to enter or copy license numbers.
+## Current client behavior
 
-## Shared browser and desktop subscription service
+- The website `/account/` panel reads the entitlement but does not start trials or paid billing actions.
+- Mac Suite 0.1.4 uses `overheadTrialApi` for its no-card trial and entitlement refresh. It does not offer paid checkout or paid cancellation.
+- Windows Suite 0.3.27 calls the no-Stripe `billingApi` compatibility endpoint. Trial and entitlement actions are supported; checkout and paid cancellation return 503 without starting a payment or changing billing.
+- A local plan label or manually entered payment reference is not proof of an active paid entitlement.
 
-The subscription source of truth is shared by the EXE and website:
-
-- Identity and role: `profiles/{userUid}` through Firebase Authentication.
-- Workspace entitlement: `workspaces/{workspaceId}/billing/current`.
-- Member license: `workspaces/{workspaceId}/licenses/{userUid}`.
-- Protected service: `https://us-central1-overhead-office.cloudfunctions.net/billingApi`.
-
-The website `/account/` page reads the entitlement and license in real time. Administrators can start the one-time trial, choose a plan, open the Stripe billing portal, and request cancellation; managers and staff can view their reflected access but cannot change billing. The EXE receives the same entitlement during its next shared sign-in or entitlement refresh.
-
-`billingApi` accepts browser calls only from `https://overhead-office.web.app` and `https://overhead-office.firebaseapp.com`. Do not broaden this allow-list without a reviewed production domain and a corresponding Functions deployment.
-
-After building `website-next`, copy its `out` directory to `website-deploy` and deploy Hosting. Do not publish the browser billing controls as a live payment feature until the Functions deployment and the Stripe test checklist both succeed.
+The trial endpoints allow browser requests only from `https://overhead-office.web.app` and `https://overhead-office.firebaseapp.com`. The duplicate-check endpoint uses the same browser origin allow-list; native Mac requests omit the Origin header and are limited by IP rate control. Keep the browser CORS allow-list narrow. Before publishing any account UI that starts charges, first migrate the paid API, deploy it, and complete every test above.

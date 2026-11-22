@@ -1,4 +1,6 @@
-# OverHead current handoff — 2026-08-21
+# Historical handoff — 2026-08-21
+
+Superseded by [the current OverHead handoff](current-handoff-2026-11-22.md). This file records the August state and its historical details; its release numbers, download URLs, deployment state, and operational instructions are no longer current.
 
 This document records the deployed product, website, licensing, policy, and release work completed through desktop version `0.3.5` and the Windows Server/IoT Cylinder version `0.3.4`. It is written for the next Codex or operator taking over in PowerShell.
 

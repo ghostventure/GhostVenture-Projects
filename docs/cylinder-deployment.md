@@ -20,14 +20,16 @@ Continued Cylinder access at the published $499/month or $4,990/year price requi
 
 ## Install
 
-1. Download the current `OverHead-Cylinder-0.3.4-win-x64.zip` from `https://overhead-office.web.app/downloads/OverHead-Cylinder-0.3.4-win-x64.zip` on a supported Windows Server or Windows IoT host.
-2. Verify `CYLINDER-SHA256SUMS.txt` inside the ZIP when the file came from an untrusted transfer path.
-3. Extract the ZIP locally and run `OverHead-Cylinder-Setup-0.3.4-win-x64.exe` with an administrator account.
+1. Open <https://overhead-office.web.app/download/> on a supported Windows Server or Windows IoT host and choose the Cylinder download. The current website catalog points to Cylinder 0.3.27 on its official GitHub release.
+2. Compare the downloaded installer with the SHA-256 value linked from that release. A matching checksum confirms file integrity, not publisher identity.
+3. Run `OverHead-Cylinder-Setup-0.3.27-win-x64.exe` with an administrator account. The current installer is unsigned; Windows may show a publisher warning.
 4. Launch OverHead Cylinder and create or sign in to the intended workspace.
 
 ## Updates
 
-Cylinder never uses the regular desktop update feed. Its channel is:
+Cylinder never uses the regular desktop update feed. Its `/updates/cylinder/latest.yml` manifest advertises 0.3.27 and points to the matching official GitHub release installer. The installer and blockmap links return HTTP 200. Verify the update from a prior installed Cylinder build before treating the full update flow as confirmed. The current manual install is through the Download page above.
+
+The intended isolated channel is:
 
 `https://overhead-office.web.app/updates/cylinder/latest.yml`
 
