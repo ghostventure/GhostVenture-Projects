@@ -10,6 +10,10 @@
     {
       "source": "functions-cylinder",
       "codebase": "cylinder"
+    },
+    {
+      "source": "functions-staff",
+      "codebase": "staff"
     }
   ],
   "hosting": {

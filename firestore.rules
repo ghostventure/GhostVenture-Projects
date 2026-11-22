@@ -35,6 +35,13 @@ service cloud.firestore {
       return hasRole(workspaceId, ['Administrator', 'Manager', 'Staff']);
     }
 
+    function staffFeatureAllows(workspaceId, featureId) {
+      let flagPath = /databases/$(database)/documents/workspaces/$(workspaceId)/feature_flags/$(featureId);
+      return !exists(flagPath)
+        || get(flagPath).data.enabled == true
+        || (get(flagPath).data.expires_at != null && get(flagPath).data.expires_at <= request.time);
+    }
+
     function inviteFor(workspaceId) {
       return get(/databases/$(database)/documents/workspaces/$(workspaceId)/invites/$(request.auth.token.email));
     }
@@ -60,15 +67,25 @@ service cloud.firestore {
         && request.resource.data.business_name is string;
     }
 
+    match /overhead_staff_audit/{eventId} {
+      allow read, write: if false;
+    }
+
     match /profiles/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isManager(resource.data.workspace_id));
       allow list: if signedIn() && isManager(resource.data.workspace_id);
       allow create: if createsWorkspaceAdministrator(userId) || createsInvitedMember(userId);
       allow update: if (isAdministrator(resource.data.workspace_id)
+          && staffFeatureAllows(resource.data.workspace_id, 'roles')
           && request.resource.data.workspace_id == resource.data.workspace_id
           && request.resource.data.email == resource.data.email
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['owner_name', 'business_name', 'role', 'status', 'updated_at']))
+            .hasOnly([
+              'owner_name', 'business_name', 'role', 'status', 'access_level', 'primary_workflow',
+              'workflow_load_limit', 'approval_threshold', 'data_scope', 'customer_visibility',
+              'risk_status', 'risk_notes', 'onboarding_stage', 'deactivation_reason',
+              'last_activity_at', 'updated_at'
+            ]))
         || (request.auth.uid == userId
           && request.resource.data.workspace_id == resource.data.workspace_id
           && request.resource.data.email == resource.data.email
@@ -92,31 +109,46 @@ service cloud.firestore {
         allow get: if signedIn() && request.auth.token.email == email;
         allow list: if isAdministrator(workspaceId);
         allow create, update, delete: if isAdministrator(workspaceId)
+          && staffFeatureAllows(workspaceId, 'roles')
           && (request.method == 'delete' || request.resource.data.email == email);
+      }
+
+      match /feature_flags/{featureId} {
+        allow get, list: if isMember(workspaceId)
+          && resource.data.keys().hasOnly(['feature_id', 'enabled', 'source', 'expires_at', 'updated_at']);
+        allow create, update, delete: if false;
+      }
+
+      match /staff_feature_overrides/{featureId} {
+        allow read, write: if false;
       }
 
       match /tasks/{taskId} {
         allow get, list: if isMember(workspaceId);
         allow create: if isMember(workspaceId)
+          && staffFeatureAllows(workspaceId, 'tasks')
           && request.resource.data.workspace_id == workspaceId
           && request.resource.data.created_by == request.auth.uid;
         allow update: if isMember(workspaceId)
+          && staffFeatureAllows(workspaceId, 'tasks')
           && request.resource.data.workspace_id == resource.data.workspace_id
           && request.resource.data.created_by == resource.data.created_by
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['title', 'done', 'status', 'area', 'priority', 'customer_id', 'due_at', 'updated_at']);
-        allow delete: if isManager(workspaceId);
+        allow delete: if isManager(workspaceId) && staffFeatureAllows(workspaceId, 'tasks');
       }
 
       match /customers/{customerId} {
         allow get, list: if isMember(workspaceId);
         allow create: if isMember(workspaceId)
+          && staffFeatureAllows(workspaceId, 'customers')
           && request.resource.data.workspace_id == workspaceId
           && request.resource.data.created_by == request.auth.uid;
         allow update: if isMember(workspaceId)
+          && staffFeatureAllows(workspaceId, 'customers')
           && request.resource.data.workspace_id == resource.data.workspace_id
           && request.resource.data.created_by == resource.data.created_by;
-        allow delete: if isManager(workspaceId);
+        allow delete: if isManager(workspaceId) && staffFeatureAllows(workspaceId, 'customers');
       }
 
       match /approvals/{approvalId} {

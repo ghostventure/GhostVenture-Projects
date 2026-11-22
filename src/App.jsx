@@ -34,6 +34,7 @@ import { customerDatabaseSchema } from './customerDatabase'
 import { complianceBadges, helpArticles, legalDocuments, marketableFeatures, planTiers, supportChannels } from './productBlueprint'
 import { themes } from './themes'
 import './App.css'
+import StaffPortalSection from './StaffPortalSection'
 
 const navSections = [
   { id: 'overview', label: 'Team Dashboard', detail: 'Priorities, ownership, readiness', icon: Gauge },
@@ -51,6 +52,7 @@ const navSections = [
   { id: 'square', label: 'Square', detail: 'Browser verify, import data', icon: PanelTopOpen },
   { id: 'security', label: 'Security', detail: 'Recovery, privacy, compliance', icon: ShieldCheck },
   { id: 'settings', label: 'Settings', detail: 'Themes, toggles, backup', icon: Settings2 },
+  { id: 'staff-portal', label: 'Staff Portal', detail: 'Cross-workspace administration', icon: ShieldCheck },
 ]
 
 const sectionFeatures = {
@@ -148,6 +150,7 @@ function App() {
   const [launching, setLaunching] = useState(true)
   const [authMode, setAuthMode] = useState('team')
   const [verification, setVerification] = useState({ email: '', code: '', delivery: null })
+  const [staffAuthorized, setStaffAuthorized] = useState(false)
 
   const selectedModule = useMemo(
     () => modules.find((module) => module.id === activeModule) ?? modules[0],
@@ -159,6 +162,16 @@ function App() {
   )
   const secureView = session.signedIn && !privacyMode
   const teamSections = allowedSectionsForRole(session.role)
+  const visibleSections = navSections.filter((section) => teamSections.includes(section.id) && (section.id !== 'staff-portal' || staffAuthorized))
+
+  useEffect(() => {
+    let active = true
+    if (!session.signedIn || !window.overheadBackend?.staffPortalApi) { setStaffAuthorized(false); return () => { active = false } }
+    window.overheadBackend.staffPortalApi({ action: 'access_check' })
+      .then((response) => { if (active) setStaffAuthorized(response.authorized === true) })
+      .catch(() => { if (active) setStaffAuthorized(false) })
+    return () => { active = false }
+  }, [session.signedIn, session.email])
   const quickCommands = [
     { id: 'today', label: 'Open Current Work', area: 'Navigation', detail: 'Jump to the dashboard queue.', action: () => setActiveSection('overview') },
     { id: 'customers', label: 'Open Customer Records', area: 'Navigation', detail: 'Review profiles and workflow rules.', action: () => setActiveSection('customers') },
@@ -308,12 +321,19 @@ function App() {
       const accessLane = authMode === 'customer' || authMode === 'customer-enroll' ? 'customer' : authMode === 'team' ? 'team' : ''
       const authPayload = { ...draftSession, selectedTier: activePlan, accessLane }
       const authenticated = window.overheadBackend?.signIn
-        ? authMode === 'create'
+        ? authMode === 'staff-invite'
+          ? await window.overheadBackend.registerStaffInvite({ ...draftSession, email: draftSession.email, inviteAlias: draftSession.inviteAlias, inviteCode: draftSession.inviteCode })
+          : authMode === 'create'
           ? await window.overheadBackend.register(authPayload)
           : authMode === 'customer-enroll'
             ? await window.overheadBackend.registerCustomerAccess(authPayload)
             : await window.overheadBackend.signIn(authPayload)
         : { ...draftSession, signedIn: true, acceptedTerms: Boolean(draftSession.acceptedTerms) }
+      if (authenticated.staffEnrollmentPending) {
+        setBackendError('A verification link was sent to your personal email. Open it, then return here and sign in with that personal email and password.')
+        setAuthMode('team')
+        return
+      }
       if (authenticated.verificationRequired) {
         setVerification({ email: authenticated.email, code: '', delivery: authenticated.delivery || null })
         setAuthMode('verify')
@@ -450,7 +470,7 @@ function App() {
           </div>
 
           <nav className="nav-list">
-            {navSections.filter((section) => teamSections.includes(section.id)).map((section) => {
+            {visibleSections.map((section) => {
               const Icon = section.icon
               const badge = navBadge(section.id, backendState)
               return (
@@ -637,6 +657,7 @@ function App() {
                 setActivePlan={setActivePlan}
               />
             )}
+            {activeSection === 'staff-portal' && staffAuthorized && <StaffPortalSection />}
           </section>
         </main>
       </div>
@@ -824,6 +845,7 @@ function SplashScreen({ theme }) {
 
 function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backendError, authMode, setAuthMode, activePlan, setActivePlan, verification, setVerification, verifyEmail }) {
   const isCreate = authMode === 'create'
+  const isStaffInvite = authMode === 'staff-invite'
   const isTeam = authMode === 'team' || authMode === 'manager' || authMode === 'staff' || authMode === 'sign-in'
   const isCustomer = authMode === 'customer' || authMode === 'customer-enroll'
   const isCustomerEnroll = authMode === 'customer-enroll'
@@ -877,8 +899,8 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
           <PublicHelp />
         ) : (
           <>
-        <h2>{isCreate ? 'Create workspace' : isCustomerEnroll ? 'Create customer account' : isCustomer ? 'Customer access' : 'OverHead Team access'}</h2>
-        <p>{isCreate
+        <h2>{isCreate ? 'Create workspace' : isCustomerEnroll ? 'Create customer account' : isStaffInvite ? 'Accept Staff Invitation' : isCustomer ? 'Customer access' : 'OverHead Team access'}</h2>
+        <p>{isStaffInvite ? 'Enter the personal email you will use to sign in, the company alias on your invitation, and the invitation code.' : isCreate
           ? `Selected plan: ${selectedPlanName(activePlan)}. This creates the shared website and desktop workspace account.`
           : isCustomer
             ? isCustomerEnroll ? 'Use the workspace code in your OverHead customer invitation to activate your separate customer account.' : 'Use the customer account issued by your service team. Customer access is kept separate from internal office records and controls.'
@@ -893,7 +915,9 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
           <strong>{isCustomer ? 'Customer account required' : 'Team account required'}</strong>
           <span>{isCustomer ? 'Customer Members can request support without opening the internal office console.' : 'Members use daily work and support tools. Managers add team operations. Administrators control people, plans, billing, and settings.'}</span>
         </div>
-        <FormField label="Email Address" value={draftSession.email} onChange={(value) => updateDraft('email', value)} placeholder={isCustomer ? 'customer@example.com' : 'team@example.com'} />
+        {isStaffInvite && <FormField label="OverHead company alias" value={draftSession.inviteAlias || ''} onChange={(value) => updateDraft('inviteAlias', value)} placeholder="name@overheadteam.com" />}
+        <FormField label={isStaffInvite ? 'Personal sign-in email' : 'Email Address'} value={draftSession.email} onChange={(value) => updateDraft('email', value)} placeholder={isCustomer ? 'customer@example.com' : isStaffInvite ? 'you@example.com' : 'team@example.com'} />
+        {isStaffInvite && <FormField label="Invitation code" value={draftSession.inviteCode || ''} onChange={(value) => updateDraft('inviteCode', value)} placeholder="Code from your invitation" />}
         {isCustomerEnroll && <FormField label="Workspace code" value={draftSession.workspaceId || ''} onChange={(value) => updateDraft('workspaceId', value)} placeholder="Code from your invitation" />}
         <label>
           Desktop Password
@@ -909,7 +933,8 @@ function LoginScreen({ draftSession, updateDraft, signIn, theme, setTheme, backe
           <input type="checkbox" checked={draftSession.acceptedTerms} onChange={(event) => updateDraft('acceptedTerms', event.target.checked)} />
           I accept the Terms of Use and Privacy Notice for this shared workspace.
         </label>}
-        <button className="primary-action full" type="button" onClick={signIn}>{isCreate ? 'Create Workspace' : isCustomerEnroll ? 'Create Customer Account' : isCustomer ? 'Open Customer Support' : 'Open Team Workspace'}</button>
+        <button className="primary-action full" type="button" onClick={signIn}>{isCreate ? 'Create Workspace' : isStaffInvite ? 'Accept Staff Invitation' : isCustomerEnroll ? 'Create Customer Account' : isCustomer ? 'Open Customer Support' : 'Open Team Workspace'}</button>
+        {isTeam && <button className="ghost-button full" type="button" onClick={() => setAuthMode('staff-invite')}>Accept Staff Invitation</button>}
         {authMode === 'customer' && <button className="ghost-button full" type="button" onClick={() => setAuthMode('customer-enroll')}>Create customer account from invitation</button>}
         {isCustomerEnroll && <button className="ghost-button full" type="button" onClick={() => setAuthMode('customer')}>I already have a customer account</button>}
         {backendError && <p className="form-error" role="alert">{backendError}</p>}
@@ -1181,6 +1206,7 @@ function sectionTitle(section) {
     square: 'Square Connection',
     security: 'Security And Recovery',
     settings: 'Settings',
+    'staff-portal': 'OverHead Staff Portal',
   }[section]
 }
 

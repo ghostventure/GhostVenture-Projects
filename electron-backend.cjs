@@ -355,6 +355,9 @@ const firebaseConfig = {
   projectId: 'overhead-office',
   billingApiUrl: 'https://us-central1-overhead-office.cloudfunctions.net/billingApi',
   cylinderMembersApiUrl: 'https://us-central1-overhead-office.cloudfunctions.net/cylinderMembersApi',
+  staffPortalApiUrl: 'https://us-central1-overhead-office.cloudfunctions.net/staffPortalApi',
+  checkStaffInviteUrl: 'https://us-central1-overhead-office.cloudfunctions.net/checkStaffInvite',
+  acceptStaffInviteUrl: 'https://us-central1-overhead-office.cloudfunctions.net/acceptStaffInvite',
 }
 
 function firebaseError(body, fallback) {
@@ -382,6 +385,91 @@ async function billingApiRequest(action, payload = {}) {
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error([401, 403, 404].includes(response.status) ? billingErrorMessage(response.status) : body.error || billingErrorMessage(response.status))
   return body
+}
+
+async function staffPortalApi(payload = {}) {
+  requireSession('OverHead Staff portal access')
+  if (!activeSession?.firebaseIdToken) throw new Error('Sign out and sign back in with your shared OverHead account before opening Staff portal.')
+  if (activeSession.firebaseRefreshToken) {
+    const refreshed = await firebaseRequest(`https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: activeSession.firebaseRefreshToken }),
+    })
+    activeSession.firebaseIdToken = refreshed.id_token || activeSession.firebaseIdToken
+    activeSession.firebaseRefreshToken = refreshed.refresh_token || activeSession.firebaseRefreshToken
+  }
+  return firebaseCallableRequest(firebaseConfig.staffPortalApiUrl, activeSession.firebaseIdToken, payload)
+}
+
+async function firebaseCallableRequest(url, idToken, payload) {
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(20000),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+    body: JSON.stringify({ data: payload }),
+  })
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok || body.error) throw new Error(body.error?.message || `Staff portal service failed (${response.status}).`)
+  return body.result || {}
+}
+
+async function registerStaffInvite(payload = {}) {
+  const email = String(payload.email || '').trim().toLowerCase()
+  const alias = String(payload.inviteAlias || '').trim().toLowerCase()
+  const password = String(payload.desktopPassword || '')
+  const code = String(payload.inviteCode || '').trim()
+  const ownerName = String(payload.ownerName || '').trim().slice(0, 100)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter the personal email address you will use to sign in and verify your account.')
+  if (!/@overheadteam\.com$/.test(alias)) throw new Error('Enter the @overheadteam.com alias that received your invitation.')
+  if (!code || password.length < 12) throw new Error('Enter the invitation code and choose a password with at least 12 characters.')
+  await firebaseCallableRequest(firebaseConfig.checkStaffInviteUrl, '', { email: alias, code })
+
+  let account
+  try {
+    account = await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    })
+  } catch (error) {
+    if (!/EMAIL_EXISTS|email.+already.+use/i.test(error.message)) throw error
+    account = await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    })
+  }
+
+  await firebaseCallableRequest(firebaseConfig.acceptStaffInviteUrl, account.idToken, { alias, code, name: ownerName })
+  await firebaseRequest(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseConfig.apiKey}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestType: 'VERIFY_EMAIL', idToken: account.idToken }),
+  }).catch(() => undefined)
+  return { staffEnrollmentPending: true, email, delivery: { channel: 'firebase-link' } }
+}
+
+async function sendStaffInvitationEmail(payload = {}) {
+  requireSession('staff invitations')
+  await staffPortalApi({ action: 'access_check' })
+  const email = String(payload.email || '').trim().toLowerCase()
+  const code = String(payload.code || '').trim()
+  const expiresAt = String(payload.expiresAt || '')
+  if (!/@overheadteam\.com$/.test(email) || !/^[A-Za-z0-9_-]{24,80}$/.test(code)) throw new Error('The staff invitation details are invalid. Create a fresh invitation and try again.')
+  const text = [
+    'You have been invited to the OverHead Staff team.',
+    '',
+    'To activate your account:',
+    '1. Open OverHead Desktop and choose OverHead Team.',
+    '2. Select Accept Staff Invitation.',
+    '3. Enter this company alias, your personal email, and invitation code, then choose your password.',
+    '4. Open the verification link sent to your personal email, then return to OverHead Team and sign in with that personal email.',
+    '',
+    `Company alias: ${email}`,
+    `Invitation code: ${code}`,
+    `Expires: ${expiresAt}`,
+    '',
+    'If you were not expecting this invitation, contact your OverHead administrator.',
+  ].join('\n')
+  return deliverOutboundEmail({ to: email, subject: 'Your OverHead Staff invitation', text, tag: 'overhead-staff-invite', metadata: { expiresAt } })
 }
 
 async function cylinderMembersApiRequest(action, payload = {}) {
@@ -650,7 +738,7 @@ async function signInSharedProfile(payload) {
   }
   const user = syncSharedProfile(sharedProfile, session.localId, emailVerified)
   recordAudit('auth.shared_sign_in', 'Shared Firebase desktop sign-in completed', { email, workspaceId: user.workspace_id, accessLane: accessLane || 'standard' }, email)
-  return synchronizeCustomersAfterSignIn(startSession(user, { firebaseIdToken: session.idToken, firebaseUid: session.localId }))
+  return synchronizeCustomersAfterSignIn(startSession(user, { firebaseIdToken: session.idToken, firebaseRefreshToken: session.refreshToken, firebaseUid: session.localId }))
 }
 
 async function registerSharedProfile(payload) {
@@ -1213,7 +1301,7 @@ function deliverOutboundEmail({ to, subject, text, tag = 'message', metadata = {
       from: process.env.OVERHEAD_SMTP_FROM || process.env.OVERHEAD_SMTP_USER,
       to,
       subject,
-      text: body,
+      text,
     }).catch((error) => {
       recordAudit('email.send_failed', 'Outbound email send failed', { email: to, tag, error: error.message || String(error) })
     })
@@ -1269,7 +1357,7 @@ function startSession(user, sharedIdentity = {}) {
     ended_at: '',
   }
   state.sessions.unshift(session)
-  activeSession = { id: session.id, email: user.email, role: user.role, firebaseIdToken: sharedIdentity.firebaseIdToken || '', firebaseUid: sharedIdentity.firebaseUid || user.firebase_uid || '' }
+  activeSession = { id: session.id, email: user.email, role: user.role, firebaseIdToken: sharedIdentity.firebaseIdToken || '', firebaseRefreshToken: sharedIdentity.firebaseRefreshToken || '', firebaseUid: sharedIdentity.firebaseUid || user.firebase_uid || '' }
   persist()
 
   return {
@@ -3455,6 +3543,9 @@ function getHealth() {
 }
 
 module.exports = {
+  staffPortalApi,
+  registerStaffInvite,
+  sendStaffInvitationEmail,
   acknowledgeLegal,
   createBackup,
   createCustomer,
