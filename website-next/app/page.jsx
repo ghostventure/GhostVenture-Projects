@@ -1,18 +1,18 @@
 import Link from "next/link";
 import { CTA, CardGrid, SiteShell } from "./components";
+import DemoWorkspace from "./demo/demo-workspace";
 import { businessFoundation } from "./business-foundation";
 import {
   businessGuideHref,
-  checksumHref,
   cylinderDeployment,
   cylinderPageHref,
-  downloadHref,
+  downloadPageHref,
   plans,
 } from "./data";
 
 const trustItems = [
   [
-    "Windows desktop workspace",
+    "OverHead Suite",
     "Keep the work close to the desk where it happens.",
   ],
   [
@@ -26,10 +26,10 @@ const trustItems = [
 ];
 
 const startSteps = [
-  ["1", "Download", "Get the official Windows ZIP."],
-  ["2", "Install", "Extract it locally, then run the installer."],
-  ["3", "Set up", "Create the owner workspace and sign in."],
-  ["4", "Start small", "Add one customer or task that needs attention."],
+  ["1", "Explore", "Try the free browser demo with fictional sample records."],
+  ["2", "Choose", "Pick the Windows or Mac app that fits your computer."],
+  ["3", "Install", "Follow the instructions on the download page."],
+  ["4", "Start small", "Begin with one customer or task that needs attention."],
 ];
 
 const outcomes = [
@@ -109,18 +109,19 @@ export default function HomePage() {
       <main>
         <section className="home-hero">
           <div className="hero-inner">
-            <p className="eyebrow">
-              Windows office software for owner-led businesses
-            </p>
-            <h1>Find the customer work that is costing you money.</h1>
+            <p className="eyebrow">Free interactive demo · No account required</p>
+            <h1>Try the office workflow before you download OverHead Suite.</h1>
             <p className="lede">
-              Use OverHead to run an Office Revenue Leak Check: find open
-              quotes, unpaid invoices, missed follow-up, waiting approvals, and
-              work assigned to nobody before they quietly become lost revenue.
+              Explore a sample workspace, see what needs a next step, and mark
+              demo tasks complete. When it feels right, choose the installed
+              app for your office.
             </p>
             <div className="hero-actions">
-              <Link className="primary" href={downloadHref}>
-                Start your Revenue Leak Check
+              <a className="primary" href="#try-demo">
+                Try the free demo
+              </a>
+              <Link className="secondary" href={downloadPageHref}>
+                Choose a download
               </Link>
               <Link
                 className="text-link hero-guide-link"
@@ -129,10 +130,7 @@ export default function HomePage() {
                 See how it works
               </Link>
             </div>
-            <p className="hero-note">
-              <strong>30-day free Gold trial.</strong> No card is required to
-              evaluate the workflow. Start with one customer and one task.
-            </p>
+            <p className="hero-note"><strong>Fictional sample records.</strong> Demo changes are temporary and reset when you leave or refresh.</p>
             <div className="hero-readout" aria-label="Product capabilities">
               <div>
                 <span>01</span>
@@ -150,6 +148,8 @@ export default function HomePage() {
           </div>
         </section>
 
+        <DemoWorkspace />
+
         <section className="section revenue-check">
           <div className="revenue-check-intro">
             <p className="eyebrow">Office Revenue Leak Check</p>
@@ -163,8 +163,8 @@ export default function HomePage() {
               or follow through. Start with one list—not a complicated rollout.
             </p>
             <div className="home-proof-actions">
-              <Link className="primary" href={downloadHref}>
-                Get the Windows workspace
+              <Link className="primary" href={downloadPageHref}>
+                Choose your download
               </Link>
               <Link className="text-link" href="#get-started">
                 See the four-step setup
@@ -267,8 +267,8 @@ export default function HomePage() {
               are from the installed product.
             </p>
             <div className="home-proof-actions">
-              <Link className="primary" href={downloadHref}>
-                Get the Windows download
+              <Link className="primary" href={downloadPageHref}>
+                Choose your app
               </Link>
               <Link className="text-link" href="/support/">
                 See installation help
@@ -308,16 +308,14 @@ export default function HomePage() {
             <div>
               <strong>Before you download</strong>
               <p>
-                OverHead currently runs on Windows. The ZIP is the official
-                manual download; use the checksum if you want to verify it.
+                OverHead Suite for Windows is the full desktop workspace. The
+                native Mac Suite version 0.1.4 is an unsigned Intel build; macOS may ask you to
+                approve it in Privacy & Security after opening it.
               </p>
             </div>
             <div>
-              <Link className="primary" href={downloadHref}>
-                Download for Windows
-              </Link>
-              <Link className="text-link" href={checksumHref}>
-                Get the checksum
+              <Link className="primary" href={downloadPageHref}>
+                Choose an app and download
               </Link>
             </div>
           </div>
@@ -327,10 +325,9 @@ export default function HomePage() {
           <p className="eyebrow">Plans and deployments</p>
           <h2>Choose the setup that fits the office and its host.</h2>
           <p className="section-copy">
-            Start with a 30-day free Gold trial for the standard desktop
-            application. No card is required for the trial; commercial
-            activation is available when secure production billing and account
-            services are enabled.
+            Explore the browser demo for free with no account. The installed
+            Windows and Mac apps are separate downloads; check each app's
+            requirements and unsigned-build notes before installing.
           </p>
           <div className="plan-grid">
             {plans.map((plan) => (

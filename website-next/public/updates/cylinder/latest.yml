@@ -1,8 +1,8 @@
-version: 0.3.4
+version: 0.3.27
 files:
-  - url: OverHead-Cylinder-Setup-0.3.4-win-x64.exe
-    sha512: O7UuxLNta7dH5fQHw/ZCuYHY3w/MiIhJNfMc3hvK6I550QrZP/VaR+M9sZuEkgWq7UtzAfZ+AOCh/72xav1ROQ==
-    size: 103946559
-path: OverHead-Cylinder-Setup-0.3.4-win-x64.exe
-sha512: O7UuxLNta7dH5fQHw/ZCuYHY3w/MiIhJNfMc3hvK6I550QrZP/VaR+M9sZuEkgWq7UtzAfZ+AOCh/72xav1ROQ==
-releaseDate: '2026-08-22T00:00:00.000Z'
+  - url: https://github.com/ghostventure/GhostVenture-Projects/releases/download/overhead-cylinder-v0.3.27/OverHead-Cylinder-Setup-0.3.27-win-x64.exe
+    sha512: f1MttNC1rLdtOWtDAF0FRrKcrdaJP+2O6p8mwA6vOozsNZlDFFDrcUfoTx6GWTA+OdmlbkTIX8xRCz7v9m3j9g==
+    size: 472537259
+path: https://github.com/ghostventure/GhostVenture-Projects/releases/download/overhead-cylinder-v0.3.27/OverHead-Cylinder-Setup-0.3.27-win-x64.exe
+sha512: f1MttNC1rLdtOWtDAF0FRrKcrdaJP+2O6p8mwA6vOozsNZlDFFDrcUfoTx6GWTA+OdmlbkTIX8xRCz7v9m3j9g==
+releaseDate: '2026-11-01T21:18:59.856Z'

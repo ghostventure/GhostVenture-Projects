@@ -1,13 +1,12 @@
 import Link from 'next/link'
-import { businessGuideHref, checksumHref, cylinderPageHref, downloadHref, investorBrochureHref, navItems } from './data'
+import { businessGuideHref, checksumHref, cylinderPageHref, downloadPageHref, investorBrochureHref, navItems } from './data'
 
 export function SiteShell({ children, tone = 'dark' }) {
   return (
     <>
       <header className={`site-header ${tone}`}>
         <Link className="brand" href="/">
-          <span>OH</span>
-          <strong>OverHead</strong>
+          <img src="/assets/overhead-logo.svg" alt="OverHead business operations" width="190" height="48" />
         </Link>
         <nav aria-label="Main navigation">
           {navItems.map((item) => (
@@ -32,12 +31,16 @@ export function Footer() {
       </div>
       <div className="footer-links">
         <Link href="/about/">About</Link>
+        <Link href="/demo/">Free Demo</Link>
+        <Link href={downloadPageHref}>Download</Link>
         <Link href="/investors/">Investors</Link>
         <Link href={investorBrochureHref}>Investor Brochure</Link>
         <Link href={businessGuideHref}>Business Guide</Link>
         <Link href="/careers/">Careers</Link>
         <Link href={cylinderPageHref}>Cylinder</Link>
         <Link href="/support/">Support</Link>
+        <Link href="/faq/">FAQ</Link>
+        <Link href="/contact/">Contact</Link>
         <Link href="/legal/">Legal</Link>
         <Link href={checksumHref}>Checksums</Link>
       </div>
@@ -61,13 +64,14 @@ export function CTA() {
   return (
     <section className="cta-band">
       <div>
-        <p className="eyebrow">Download</p>
-        <h2>Ready to get organized?</h2>
-        <p>Download OverHead, install it on Windows, and start with one customer or one task.</p>
+        <p className="eyebrow">See it, then install it</p>
+        <h2>Start with the demo. Choose OverHead Suite when you are ready.</h2>
+        <p>Explore the sample workspace for free, then choose the Windows or Mac Suite download that fits your computer.</p>
       </div>
       <div className="cta-actions">
-        <Link className="primary" href={downloadHref}>Get OverHead for Windows</Link>
-        <Link className="secondary" href={cylinderPageHref}>Explore Cylinder for Server / IoT</Link>
+        <Link className="primary" href="/demo/">Try the free browser demo</Link>
+        <Link className="secondary" href={downloadPageHref}>Choose a download</Link>
+        <Link className="secondary" href={cylinderPageHref}>Cylinder for Server / IoT</Link>
         <Link className="secondary" href="/support/">Installation help</Link>
         <Link className="secondary" href={checksumHref}>Verify download</Link>
       </div>

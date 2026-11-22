@@ -1,0 +1,70 @@
+import {
+  checksumHref,
+  cylinderChecksumHref,
+  cylinderDownloadHref,
+  cylinderPageHref,
+  cylinderReleaseHref,
+  desktopReleaseHref,
+  downloadHref,
+  managerChecksumHref,
+  managerDownloadHref,
+  managerReleaseHref,
+  macDownloadHref,
+} from '../data'
+
+export const windowsDownloads = [
+  {
+    key: 'suite-windows',
+    versionLabel: 'Desktop · 0.3.27',
+    name: 'OverHead Suite for Windows',
+    description: 'The full Windows workspace for customer context, current work, quote and invoice follow-up, and owner review.',
+    requirements: ['For standard Windows 10 and Windows 11 computers', 'Direct installer from the official GitHub release'],
+    unsigned: 'Unsigned build; Windows may show a publisher warning',
+    downloadLabel: 'Download OverHead Suite',
+    downloadHref,
+    downloadStyle: 'primary',
+    checksumLabel: 'SHA-256 checksums',
+    checksumHref,
+    releaseLabel: 'Release notes',
+    releaseHref: desktopReleaseHref,
+    featured: true,
+  },
+  {
+    key: 'install-manager',
+    versionLabel: 'Install Manager · 2026-11-01',
+    name: 'OverHead Install Manager',
+    description: 'A separate Windows executable with the OverHead Install Manager product identity.',
+    requirements: ['Windows executable, approximately 105 MiB'],
+    unsigned: 'Unsigned build; Windows may show a publisher warning',
+    downloadLabel: 'Download Install Manager',
+    downloadHref: managerDownloadHref,
+    downloadStyle: 'secondary',
+    checksumLabel: 'SHA-256 checksum',
+    checksumHref: managerChecksumHref,
+    releaseLabel: 'Manager release details',
+    releaseHref: managerReleaseHref,
+  },
+]
+
+export const macDownload = {
+  versionLabel: 'Mac · 0.1.4',
+  name: 'OverHead Suite for Mac',
+  requirements: 'Intel (x86_64) Mac running macOS 14 or later.',
+  unsigned: 'This package is unsigned and not notarized, so macOS may require approval in System Settings → Privacy & Security.',
+  downloadLabel: 'Download OverHead Suite for Mac',
+  downloadHref: macDownloadHref,
+  checksumLabel: 'SHA-256 checksum',
+  checksumHref: '/downloads/mac/SHA256SUMS.txt',
+  notesLabel: 'Install instructions',
+  notesHref: '/downloads/mac/README.txt',
+}
+
+export const cylinderDownload = {
+  version: '0.3.27',
+  downloadHref: cylinderDownloadHref,
+  checksumHref: cylinderChecksumHref,
+  releaseHref: cylinderReleaseHref,
+  productHref: cylinderPageHref,
+  requirementsLabel: 'Windows Server or Windows IoT',
+  description: 'Choose Cylinder only for a supported Windows Server or Windows IoT host. It is not the regular Windows desktop app and does not install on standard Windows 10 or Windows 11 editions.',
+}

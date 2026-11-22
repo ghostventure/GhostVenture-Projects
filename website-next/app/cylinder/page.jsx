@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { CTA, PageHero, SiteShell } from '../components'
-import { cylinderChecksumHref, cylinderDeployment, cylinderDownloadHref, downloadHref } from '../data'
+import { cylinderChecksumHref, cylinderDeployment, cylinderDownloadHref, downloadPageHref } from '../data'
 
 const installSteps = [
   ['1. Confirm the host', 'Cylinder is for Windows Server or Windows IoT, including Windows IoT Enterprise. It will not run on standard Windows 10 or Windows 11 editions.'],
@@ -22,7 +22,7 @@ export default function CylinderPage() {
       <div className="cylinder-hero-actions"><Link className="primary" href={cylinderDownloadHref}>Start the 30-day Cylinder evaluation</Link><Link className="text-link" href="#requirements">Check host requirements</Link></div>
     </PageHero>
 
-    <section id="requirements" className="section cylinder-fit"><article><span>Choose Cylinder when</span><strong>You run a supported Windows Server or Windows IoT host and need the separate server deployment tier.</strong><p>Start with one 30-day, no-card evaluation per server workspace. It creates no payment and does not automatically renew.</p><strong className="cylinder-fit-price">{cylinderDeployment.price} flat · {cylinderDeployment.annualPrice} annually</strong></article><article><span>Choose standard OverHead when</span><strong>You are installing on a normal Windows 10 or Windows 11 office computer.</strong><p>The standard desktop application is the correct choice for regular Windows editions.</p><Link className="text-link" href={downloadHref}>Get standard OverHead for Windows</Link></article></section>
+    <section id="requirements" className="section cylinder-fit"><article><span>Choose Cylinder when</span><strong>You run a supported Windows Server or Windows IoT host and need the separate server deployment tier.</strong><p>Start with one 30-day, no-card evaluation per server workspace. It creates no payment and does not automatically renew.</p><strong className="cylinder-fit-price">{cylinderDeployment.price} flat · {cylinderDeployment.annualPrice} annually</strong></article><article><span>Choose standard OverHead when</span><strong>You are installing on a normal Windows 10 or Windows 11 office computer.</strong><p>The standard desktop application is the correct choice for regular Windows editions.</p><Link className="text-link" href={downloadPageHref}>Choose standard OverHead</Link></article></section>
 
     <section className="page-body cylinder-overview"><div><p className="eyebrow">Server deployment tier</p><h2>Built for a dedicated host—not a larger desktop download.</h2><p className="section-copy">Cylinder is deliberately kept separate from the standard desktop application so its host compatibility, local data location, entitlement limits, and update channel remain clear.</p></div><div className="cylinder-signal"><span>Current entitlement profile</span><strong>Up to 50 users and 100,000 customer records.</strong><p>It includes the server deployment controls in addition to the core customer, task, backup, support, workflow, approval, export, restore-validation, and fraud-detection capabilities.</p></div></section>
 

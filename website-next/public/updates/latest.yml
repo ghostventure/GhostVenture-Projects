@@ -1,8 +1,8 @@
-version: 0.3.5
+version: 0.3.27
 files:
-  - url: OverHead-Setup-0.3.5-win-x64.exe
-    sha512: 98e6dGqyIkXpauOkzKVZiimsPHEyXd6/V7nFxjUaaG4s6KQf5N+jK/dsI/grartvbzlmEHAtVYsBBIAmuBCGlw==
-    size: 103946649
-path: OverHead-Setup-0.3.5-win-x64.exe
-sha512: 98e6dGqyIkXpauOkzKVZiimsPHEyXd6/V7nFxjUaaG4s6KQf5N+jK/dsI/grartvbzlmEHAtVYsBBIAmuBCGlw==
-releaseDate: '2026-08-22T00:00:00.000Z'
+  - url: https://github.com/ghostventure/GhostVenture-Projects/releases/download/overhead-v0.3.27/OverHead-Setup-0.3.27-win-x64.exe
+    sha512: Pic96b0lauyB91hArcvrtWjtBQZFOXNMg/myzVfDYv0jreHnjXlSSC9qGM6WwzaCx0zKb015dv10ryJXL4/16w==
+    size: 236287528
+path: https://github.com/ghostventure/GhostVenture-Projects/releases/download/overhead-v0.3.27/OverHead-Setup-0.3.27-win-x64.exe
+sha512: Pic96b0lauyB91hArcvrtWjtBQZFOXNMg/myzVfDYv0jreHnjXlSSC9qGM6WwzaCx0zKb015dv10ryJXL4/16w==
+releaseDate: '2026-11-01T21:15:33.125Z'

@@ -1,18 +1,24 @@
 export const navItems = [
-  { href: '/about/', label: 'About' },
+  { href: '/demo/', label: 'Try the Demo' },
+  { href: '/download/', label: 'Download' },
+  { href: '/about/', label: 'Product' },
   { href: '/cylinder/', label: 'Cylinder' },
-  { href: '/careers/', label: 'Careers' },
-  { href: '/dashboard/', label: 'Workspace' },
-  { href: '/investors/', label: 'Investors' },
   { href: '/faq/', label: 'FAQ' },
   { href: '/support/', label: 'Support' },
-  { href: '/contact/', label: 'Contact' },
 ]
 
-export const downloadHref = '/downloads/OverHead-Desktop-0.3.5-win-x64.zip'
-export const cylinderDownloadHref = '/downloads/OverHead-Cylinder-0.3.4-win-x64.zip'
-export const checksumHref = '/downloads/SHA256SUMS.txt'
-export const cylinderChecksumHref = '/downloads/CYLINDER-SHA256SUMS.txt'
+const releaseRoot = 'https://github.com/ghostventure/GhostVenture-Projects/releases/download'
+export const downloadPageHref = '/download/'
+export const desktopReleaseHref = 'https://github.com/ghostventure/GhostVenture-Projects/releases/tag/overhead-v0.3.27'
+export const downloadHref = `${releaseRoot}/overhead-v0.3.27/OverHead-Setup-0.3.27-win-x64.exe`
+export const checksumHref = `${releaseRoot}/overhead-v0.3.27/SHA256SUMS.txt`
+export const managerReleaseHref = 'https://github.com/ghostventure/GhostVenture-Projects/releases/tag/overhead-install-manager-2026-11-01'
+export const managerDownloadHref = `${releaseRoot}/overhead-install-manager-2026-11-01/OverHead-Install-Manager.exe`
+export const managerChecksumHref = `${releaseRoot}/overhead-install-manager-2026-11-01/SHA256SUMS.txt`
+export const macDownloadHref = '/downloads/mac/OverHead-Mac-0.1.4.zip'
+export const cylinderReleaseHref = 'https://github.com/ghostventure/GhostVenture-Projects/releases/tag/overhead-cylinder-v0.3.27'
+export const cylinderDownloadHref = `${releaseRoot}/overhead-cylinder-v0.3.27/OverHead-Cylinder-Setup-0.3.27-win-x64.exe`
+export const cylinderChecksumHref = `${releaseRoot}/overhead-cylinder-v0.3.27/SHA256SUMS.txt`
 export const cylinderPageHref = '/cylinder/'
 export const investorBrochureHref = '/downloads/OverHead-Investor-Brochure.pdf'
 export const businessGuideHref = '/downloads/OverHead-Business-Office-Guide.pdf'
@@ -76,7 +82,7 @@ export const capabilityGroups = [
 export const legalSections = [
   {
     title: 'Business Scope and Product Boundary',
-    body: 'OverHead is a local-first Windows workspace for customer follow-through, revenue operations, role-aware approvals, and support-ready records. It supports practical business administration; it does not replace the owner’s judgment, professional advisers, required security practices, or industry-specific compliance program.',
+    body: 'OverHead Suite is a local-first desktop workspace for customer follow-through, revenue operations, role-aware approvals, and support-ready records. It supports practical business administration; it does not replace the owner’s judgment, professional advisers, required security practices, or industry-specific compliance program.',
   },
   {
     title: 'Terms of Use Draft',

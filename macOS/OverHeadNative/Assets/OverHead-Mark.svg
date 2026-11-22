@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 174 174" role="img" aria-labelledby="title description">
+  <title id="title">OverHead symbol</title>
+  <desc id="description">An overhead arch organizing connected business workflow tasks.</desc>
+  <defs>
+    <linearGradient id="mark" x1="16" y1="20" x2="154" y2="164" gradientUnits="userSpaceOnUse"><stop stop-color="#273A5A"/><stop offset="1" stop-color="#131E32"/></linearGradient>
+    <linearGradient id="arch" x1="42" y1="37" x2="110" y2="74" gradientUnits="userSpaceOnUse"><stop stop-color="#B8A8FF"/><stop offset="1" stop-color="#8171FF"/></linearGradient>
+  </defs>
+  <rect x="10" y="10" width="154" height="154" rx="38" fill="url(#mark)"/>
+  <path d="M39 66c0-26 19-45 48-45s48 19 48 45" fill="none" stroke="url(#arch)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M34 67h106" fill="none" stroke="#F7F8FC" stroke-width="7" stroke-linecap="round"/>
+  <path d="M47 88h33M47 105h45M47 122h27" fill="none" stroke="#D9DFF0" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="103" cy="88" r="5" fill="#54D6B5"/>
+  <circle cx="115" cy="105" r="5" fill="#8171FF"/>
+  <circle cx="91" cy="122" r="5" fill="#54D6B5"/>
+</svg>

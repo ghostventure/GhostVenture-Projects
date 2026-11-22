@@ -4,7 +4,7 @@ import { businessFoundation } from '../business-foundation'
 import { investorBrochureHref } from '../data'
 
 const snapshot = [
-  ['Stage', 'Pre-seed operating product', 'A packaged Windows application and public product surface are available for review today.'],
+  ['Stage', 'Pre-seed operating product', 'A Windows desktop app, a native Mac app, and an interactive browser demo are available for review.'],
   ['Initial buyer', 'Owner-led service businesses', 'The first customer is feeling the daily cost of scattered follow-through and missing context.'],
   ['Commercial model', 'Desktop subscription plus server deployment', 'Silver, Gold, and Black serve standard Windows offices; Cylinder is the separate Windows Server and Windows IoT deployment tier.'],
   ['Current objective', 'Pilot evidence to paid proof', 'The next work is disciplined activation, repeat use, conversion, and retention measurement.'],

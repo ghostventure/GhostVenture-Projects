@@ -5,11 +5,23 @@ import { businessFoundation, businessPrinciples } from "../business-foundation";
 const faqs = [
   [
     "Is OverHead a website or desktop app?",
-    "OverHead is an installed Windows desktop app. This website explains the product and hosts the Windows ZIP, installer checksum, support information, and legal boilerplates.",
+    "OverHead has an installed Windows and native Mac product called OverHead Suite, plus a free browser demo with fictional sample records. The demo is a preview, not a browser replacement for the installed Suite.",
+  ],
+  [
+    "Can I try OverHead without installing it?",
+    "Yes. The free browser demo lets you explore a sample dashboard, work queue, customer records, and activity view without an account. Its fictional records and temporary changes are not saved or sent anywhere.",
   ],
   [
     "Which computers can run OverHead?",
-    "The current release is for Windows. A Mac, mobile, or browser-only edition is not offered as a substitute for the installed Windows workspace.",
+    "OverHead Suite for Windows is available as version 0.3.27 for standard Windows 10 and Windows 11 computers. The native Mac Suite is version 0.1.4 for Intel Macs running macOS 14 or later. Both are unsigned releases, so the operating system may show a publisher warning. The browser demo is a preview, not a browser replacement for the installed Suite.",
+  ],
+  [
+    "Do Mac and Windows share customer records automatically?",
+    "No. The Mac and Windows apps keep their operational records in separate local workspaces. Your OverHead account identity may be shared, but customer and task records do not automatically sync between platforms.",
+  ],
+  [
+    "How do I update the Mac app?",
+    "The Mac app checks for updates on launch and from Settings → About. When an update is available, it shows the version and download link; you download and install it yourself. It does not silently replace the app.",
   ],
   [
     "What is OverHead Cylinder?",
@@ -77,11 +89,11 @@ const faqs = [
   ],
   [
     "Can I pay for a plan in the app today?",
-    "The product has billing, trial, receipt, cancellation, and refund workflow design, but public production billing depends on configured provider credentials and deployed billing services. Do not assume a payment is live unless you receive provider confirmation and a receipt.",
+    "The product has billing, trial, receipt, cancellation, and refund workflow design, but live billing is not enabled yet. Do not assume a payment is live unless you receive provider confirmation and a receipt.",
   ],
   [
     "Is there a free trial?",
-    "Yes—OverHead is designed to offer one no-card, 30-day Gold-equivalent trial per workspace. Trial activation becomes publicly available when the secure production billing and account service are enabled; no payment is created for the trial.",
+    "A workspace administrator can request one no-card, 30-day Gold-equivalent trial through OverHead Suite for Windows 0.3.27 or Mac 0.1.4. Trial activation creates no payment. Paid checkout and cancellations are not currently available. Account creation checks for a possible matching workspace and asks users to confirm before creating a separate one.",
   ],
   [
     "What happens if I cancel?",
@@ -89,7 +101,7 @@ const faqs = [
   ],
   [
     "Will OverHead update itself?",
-    "Packaged OverHead and Cylinder releases check their separate secure update feeds before opening. When an update is available, the package downloads and installs when the app closes. New installations still begin with the manual Windows ZIP download. Do not mix the standard desktop and Cylinder installers or update channels.",
+    "Windows desktop and Cylinder releases use separate update feeds and install updates when the app closes. The Mac app checks on launch or from Settings → About, then provides a download link for you to install. New installations begin from the official download page. Do not mix the standard desktop and Cylinder installers or update channels.",
   ],
   [
     "Does OverHead protect data automatically?",
@@ -109,7 +121,7 @@ const faqs = [
   ],
   [
     "How do I know the download is legitimate?",
-    "Use the official OverHead download link and compare the downloaded ZIP against its published SHA-256 checksum when source confidence matters. For Cylinder, extract the ZIP first, then compare the installer against the separate Cylinder checksum.",
+    "Download from the OverHead download page or its linked official GitHub release. The Windows desktop and Install Manager releases are unsigned; compare the downloaded file with the SHA-256 value on that release page. A matching checksum checks file integrity, but does not verify publisher identity. The Mac and Cylinder downloads have separate checksum files.",
   ],
   [
     "What does the investor page prove?",
@@ -121,20 +133,20 @@ const faqs = [
   ],
   [
     "Where are downloads?",
-    "The standard Windows ZIP and checksum are available from the Download buttons. Cylinder has its own Server/IoT download and separate checksum on the Cylinder page.",
+    "Use the Download page to choose OverHead Suite for Windows or Mac, the Install Manager, or Cylinder. Each current release links to its own download and checksum.",
   ],
 ];
 
 const installSteps = [
   [
     "1. Download",
-    "Get the Windows ZIP from the official OverHead download link.",
+    "Try the browser demo, or choose OverHead Suite for Windows or Mac, the Install Manager, or Cylinder from the Download page.",
   ],
   [
     "2. Verify",
-    "Compare the package with the published SHA-256 checksum before installation when source confidence matters.",
+    "Use the Windows app on Windows 10 or 11, or the Mac 0.1.4 package on an Intel Mac running macOS 14 or later.",
   ],
-  ["3. Install", "Extract the ZIP locally and run the Windows installer."],
+  ["3. Install", "Follow the platform-specific instructions on the Download page. Windows and Mac packages are unsigned; your operating system may show a publisher warning."],
   [
     "4. Start a workspace",
     "Create an owner profile, choose a plan, and begin with the workflow or customer record that matters first.",
@@ -144,7 +156,7 @@ const installSteps = [
 const expectations = [
   [
     "What you get now",
-    "A Windows desktop workspace, customer and task tools, workflow and approval surfaces, support utilities, a manual ZIP installer, and published download verification.",
+    "OverHead Suite for Windows and Mac, plus a free browser demo with fictional records. The installed Suite provides the real customer and task workspaces, workflow and approval surfaces, and support utilities.",
   ],
   [
     "What needs setup",
@@ -152,7 +164,7 @@ const expectations = [
   ],
   [
     "What is not being promised yet",
-    "A browser-only app, mobile app, live self-service public billing for every tier, or a substitute for professional legal, security, accounting, or compliance advice.",
+    "Automatic record syncing between Mac and Windows, a browser-only or mobile replacement for the desktop apps, live self-service public billing for every tier, or a substitute for professional legal, security, accounting, or compliance advice.",
   ],
 ];
 
@@ -190,6 +202,15 @@ export default function FAQPage() {
               <p>{answer}</p>
             </article>
           ))}
+        </section>
+
+        <section className="section demo-faq-callout">
+          <div>
+            <p className="eyebrow">Try it before you install</p>
+            <h2>Explore the workflow with fictional sample records.</h2>
+            <p>No sign-in, uploads, integrations, messages, or payments are connected in the demo.</p>
+          </div>
+              <Link className="primary" href="/demo/">Open the free demo</Link>
         </section>
 
         <section className="section cylinder-faq-callout">

@@ -1,0 +1,6 @@
+{
+  "version": "0.1.4",
+  "minimumSystemVersion": "14.0",
+  "downloadURL": "https://overhead-office.web.app/downloads/mac/OverHead-Mac-0.1.4.zip",
+  "notes": "OverHead Suite for Mac 0.1.4 (Intel x86_64). Account creation checks existing workspaces for similar business information, offers prior local account reuse, and confirms separate workspace creation; trial activation and entitlement refresh use the trial service. Unsigned and not notarized; see the install notes on the download page. macOS 14 or later."
+}

@@ -7,6 +7,8 @@ export default function sitemap() {
     ['/careers/', 0.6],
     ['/contact/', 0.7],
     ['/faq/', 0.7],
+    ['/demo/', 0.8],
+    ['/download/', 0.9],
     ['/investors/', 0.6],
     ['/legal/', 0.4],
     ['/support/', 0.6],

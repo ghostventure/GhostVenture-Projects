@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="624" viewBox="0 0 1640 624" role="img" aria-labelledby="title description">
+  <title id="title">OverHead Facebook cover</title>
+  <desc id="description">OverHead brings customer context, workflow follow-through, and business decisions into one clear operating workspace.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1640" y2="624" gradientUnits="userSpaceOnUse"><stop stop-color="#111B2D"/><stop offset="1" stop-color="#243858"/></linearGradient>
+    <linearGradient id="glow" x1="1080" y1="40" x2="1560" y2="510" gradientUnits="userSpaceOnUse"><stop stop-color="#8272FF" stop-opacity=".27"/><stop offset="1" stop-color="#51D5B5" stop-opacity=".08"/></linearGradient>
+    <linearGradient id="arch" x1="42" y1="37" x2="110" y2="74" gradientUnits="userSpaceOnUse"><stop stop-color="#B8A8FF"/><stop offset="1" stop-color="#8171FF"/></linearGradient>
+  </defs>
+  <rect width="1640" height="624" fill="url(#bg)"/>
+  <circle cx="1390" cy="190" r="360" fill="url(#glow)"/>
+  <path d="M0 548h1640" stroke="#FFFFFF" stroke-opacity=".08"/>
+  <g transform="translate(122 166) scale(1.54)">
+    <rect x="10" y="10" width="154" height="154" rx="38" fill="#101A2B" stroke="#FFFFFF" stroke-opacity=".13"/>
+    <path d="M39 66c0-26 19-45 48-45s48 19 48 45" fill="none" stroke="url(#arch)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M34 67h106" fill="none" stroke="#F7F8FC" stroke-width="7" stroke-linecap="round"/>
+    <path d="M47 88h33M47 105h45M47 122h27" fill="none" stroke="#D9DFF0" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="103" cy="88" r="5" fill="#54D6B5"/><circle cx="115" cy="105" r="5" fill="#8171FF"/><circle cx="91" cy="122" r="5" fill="#54D6B5"/>
+  </g>
+  <text x="520" y="221" font-family="Avenir Next, Inter, Helvetica Neue, Arial, sans-serif" font-size="32" font-weight="700" letter-spacing="6" fill="#B9ADFF">OVERHEAD · BUSINESS OPERATIONS</text>
+  <text x="516" y="324" font-family="Avenir Next, Inter, Helvetica Neue, Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="-2.5" fill="#F7F8FC">A little less overhead.</text>
+  <text x="520" y="382" font-family="Avenir Next, Inter, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="450" fill="#C5D0E1">Customer context, useful workflows, and clearer decisions.</text>
+  <g transform="translate(520 442)">
+    <circle cx="6" cy="11" r="6" fill="#54D6B5"/><text x="24" y="18" font-family="Avenir Next, Inter, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" letter-spacing="1.4" fill="#E4EAF4">CUSTOMERS</text>
+    <circle cx="218" cy="11" r="6" fill="#9D8EFF"/><text x="236" y="18" font-family="Avenir Next, Inter, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" letter-spacing="1.4" fill="#E4EAF4">WORKFLOWS</text>
+    <circle cx="454" cy="11" r="6" fill="#54D6B5"/><text x="472" y="18" font-family="Avenir Next, Inter, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" letter-spacing="1.4" fill="#E4EAF4">DECISIONS</text>
+  </g>
+  <text x="520" y="584" font-family="Avenir Next, Inter, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="500" letter-spacing=".7" fill="#9EABC1">A focused operating workspace for owner-led teams.</text>
+</svg>

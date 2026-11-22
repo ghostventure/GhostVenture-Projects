@@ -23,7 +23,7 @@ export default function AboutPage() {
             <p className="section-copy">{businessFoundation.scope}</p>
           </div>
           <div className="metrics">
-            <article className="metric"><span>Platform</span><strong>Windows</strong><p>Installed desktop app with local workflow state.</p></article>
+            <article className="metric"><span>Platforms</span><strong>Windows + Mac</strong><p>Installed desktop apps with local workflow data.</p></article>
             <article className="metric"><span>Audience</span><strong>SMB</strong><p>Local service offices and owner-run teams.</p></article>
             <article className="metric"><span>Model</span><strong>Local first</strong><p>Provider connections are explicit handoffs.</p></article>
             <article className="metric"><span>Focus</span><strong>Daily control</strong><p>Practical visibility for owners and managers.</p></article>
@@ -45,7 +45,7 @@ export default function AboutPage() {
         <ProductProof
           eyebrow="Installed product"
           title="See the office at a glance."
-          body="The desktop app puts customer records, current work, office checks, and useful tools in one Windows view."
+          body="The installed desktop apps put customer records, current work, office checks, and useful tools close to the team doing the work."
           image="/assets/overhead-console-proof.png"
           alt="OverHead Desktop command console showing workspace status, customer database, action queue, and office readiness"
           caption="Actual OverHead Desktop smoke-test capture"
