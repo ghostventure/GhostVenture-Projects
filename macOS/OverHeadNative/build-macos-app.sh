@@ -17,6 +17,25 @@ fi
 
 mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
 cp "$EXECUTABLE" "$APP_PATH/Contents/MacOS/OverHead"
+BILLING_EXECUTABLE="$(swift build -c "$CONFIGURATION" --show-bin-path)/OverHeadBilling"
+BILLING_APP="$APP_PATH/Contents/PlugIns/OverHeadBilling.app"
+mkdir -p "$BILLING_APP/Contents/MacOS"
+cp "$BILLING_EXECUTABLE" "$BILLING_APP/Contents/MacOS/OverHeadBilling"
+SYNC_EXECUTABLE="$(swift build -c "$CONFIGURATION" --show-bin-path)/OverHeadBillingSync"
+cp "$SYNC_EXECUTABLE" "$BILLING_APP/Contents/MacOS/OverHeadBillingSync"
+cat > "$BILLING_APP/Contents/Info.plist" <<'BILLING_PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>OverHeadBilling</string>
+<key>CFBundleIdentifier</key><string>com.blacklion.overhead.billing</string>
+<key>CFBundleName</key><string>OverHead Billing</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+</dict></plist>
+BILLING_PLIST
 ICONSET="$ROOT/.build/OverHead.iconset"
 rm -rf "$ICONSET"
 mkdir -p "$ICONSET"
@@ -49,5 +68,12 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+# Give the Billing sync helper the same local code identity as the Billing app so
+# their Keychain-backed authenticated archive remains accessible to both processes.
+codesign --force --sign - --identifier com.blacklion.overhead.billing "$BILLING_APP/Contents/MacOS/OverHeadBillingSync"
+# Ad-hoc signatures seal nested code and resources for local tamper detection.
+codesign --force --sign - "$BILLING_APP"
+codesign --force --sign - "$APP_PATH"
+
 echo "Created $APP_PATH"
-echo "This local build is unsigned. Sign and notarize before distributing outside your Mac."
+echo "This local build is ad-hoc signed. Use Developer ID signing and notarization for distribution outside your Mac."

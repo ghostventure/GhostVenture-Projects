@@ -133,17 +133,16 @@ struct SettingsView: View {
                         Text(plan.price).font(.system(size: 23, weight: .bold, design: .rounded))
                         Text(plan.summary).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         ForEach(plan.features, id: \.self) { feature in Label(feature, systemImage: "checkmark").font(.system(size: 10)).foregroundStyle(.secondary) }
-                        Button(plan.id == store.archive.activePlan ? "Current plan" : "Request plan change") {
-                            store.requestApproval(title: "Change plan to \(plan.name)", details: "A billing owner must confirm pricing and recurring terms before a subscription change.", actionType: "billing_change")
-                            if store.canManageWorkspace { store.notice = "Review the approval queue before changing billing. No charge was created." }
-                        }.buttonStyle(.bordered).disabled(plan.id == store.archive.activePlan)
+                        Button(plan.id == store.archive.activePlan ? "Current plan · Manage" : "Manage in Billing") {
+                            BillingModuleLauncher.open()
+                        }.buttonStyle(.borderedProminent).disabled(!store.canManageWorkspace)
                     }
                     .padding(17).frame(maxWidth: .infinity, alignment: .leading).background(.background, in: RoundedRectangle(cornerRadius: 14)).overlay(RoundedRectangle(cornerRadius: 14).stroke(plan.id == store.archive.activePlan ? OHStyle.blue.opacity(0.5) : OHStyle.line, lineWidth: 1))
                 }
             }
             SettingsGroup(title: "Billing profile", detail: "Details used for invoices and account records") {
-                Button("Edit billing profile", systemImage: "pencil") { store.selectedSection = .plans }.buttonStyle(.bordered)
-                Text("Payment processing is not enabled in this native Mac build. Plan changes remain pending until a secure billing connection is configured.").font(.system(size: 11)).foregroundStyle(.secondary)
+                Button("Open Billing & Licensing", systemImage: "creditcard") { BillingModuleLauncher.open() }.buttonStyle(.borderedProminent).disabled(!store.canManageWorkspace)
+                Text("OverHead subscriber plan billing lives in the separate module. Customer invoices and payments remain in Customer and Invoices workflows.").font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }

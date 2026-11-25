@@ -1,9 +1,13 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+extension Notification.Name { static let importOverHeadLicense = Notification.Name("importOverHeadLicense") }
 
 struct MacRootView: View {
     @Environment(OverHeadStore.self) private var store
     @State private var searchText = ""
     @State private var showCommandCenter = false
+    @State private var showLicenseImporter = false
 
     var body: some View {
         Group {
@@ -45,6 +49,31 @@ struct MacRootView: View {
                 showCommandCenter = false
             }
             .frame(width: 650, height: 510)
+        }
+        .fileImporter(isPresented: $showLicenseImporter, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+            do {
+                guard let url = try result.get().first else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                let payload = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] ?? [:]
+                guard payload["product"] as? String == "OverHead", let key = payload["licenseKey"] as? String, !key.isEmpty else {
+                    store.errorMessage = "This file is not a valid OverHead license export."
+                    return
+                }
+                _ = store.addRecord("licenses", fields: [
+                    "title": payload["customer"] as? String ?? "Imported OverHead license",
+                    "license_key": key,
+                    "tier": payload["tier"] as? String ?? "Standard",
+                    "status": "Imported · verification pending",
+                    "issued_at": payload["issuedAt"] as? String ?? "",
+                    "format_version": String(describing: payload["formatVersion"] ?? 1)
+                ], auditTitle: "Imported OverHead license")
+            } catch { store.errorMessage = "Could not import this license: \(error.localizedDescription)" }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .importOverHeadLicense)) { _ in showLicenseImporter = true }
+        .task(id: "\(store.isSignedIn)-\(store.isLocked)") {
+            guard store.isSignedIn, !store.isLocked, store.canManageWorkspace else { return }
+            await store.syncSharedBilling(silent: true)
         }
     }
 
@@ -119,6 +148,9 @@ struct MacRootView: View {
                     }
                     .keyboardShortcut("k", modifiers: .command)
                     .help("Search workspace (⌘K)")
+                    if store.isSignedIn && !store.isLocked && store.role == .owner {
+                        Button("Billing & Licensing") { BillingModuleLauncher.open() }
+                    }
                     Button {
                         store.setPrivacyMode(!store.privacyMode)
                     } label: {
@@ -140,9 +172,14 @@ struct MacRootView: View {
     }
 
     private var visibleSections: [WorkspaceSection] {
-        if store.role == .owner { return WorkspaceSection.allCases }
+        if store.role == .owner {
+            return WorkspaceSection.allCases.filter { section in
+                section != .automations || store.billingMetadataFeature("workflowAutomation", fallback: store.archive.activePlan != "silver")
+            }
+        }
         if [.frontDesk, .bookkeeper].contains(store.role) {
-            return [.overview, .work, .customers, .imports, .automations, .evidence, .support, .tools, .accounts, .licenses, .security]
+            let common: [WorkspaceSection] = [.overview, .work, .customers, .imports, .evidence, .support, .tools, .accounts, .licenses, .security]
+            return store.billingMetadataFeature("workflowAutomation", fallback: store.archive.activePlan != "silver") ? common + [.automations] : common
         }
         return [.overview, .work, .customers, .support, .tools, .security]
     }

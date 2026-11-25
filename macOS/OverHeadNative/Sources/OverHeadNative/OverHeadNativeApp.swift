@@ -33,6 +33,13 @@ struct OverHeadNativeApp: App {
                 Divider()
                 Button("Lock Session") { store.lockSession() }.keyboardShortcut("L", modifiers: [.command, .option])
                 Button("Sign Out") { store.signOut() }
+                Divider()
+                Button("Import OverHead License…") { NotificationCenter.default.post(name: .importOverHeadLicense, object: nil) }
+                    .disabled(!store.isSignedIn || store.isLocked || store.role != .owner)
+            }
+            CommandMenu("Billing") {
+                Button("Open Billing & Licensing…") { BillingModuleLauncher.open() }
+                    .disabled(!store.isSignedIn || store.isLocked || store.role != .owner)
             }
         }
     }

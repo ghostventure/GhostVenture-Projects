@@ -348,7 +348,7 @@ final class OverHeadStore {
 
     func importMicrosoftPreview(selectedIDs: Set<String>) {
         guard canManageWorkspace else { errorMessage = "Only the owner can import Microsoft customer records."; return }
-        let maximum = archive.activePlan == "black" ? 10_000 : archive.activePlan == "gold" ? 1_500 : 250
+        let maximum = billingMetadataLimit("customers", fallback: archive.activePlan == "black" ? 10_000 : archive.activePlan == "gold" ? 1_500 : 250)
         var imported = 0, skipped = 0
         for item in microsoftPreviewContacts where selectedIDs.contains(item.id) {
             let duplicate = customers.contains { existing in
@@ -406,7 +406,7 @@ final class OverHeadStore {
     func createStaffAccount(name: String, email: String, role: WorkspaceRole, temporaryPassword: String, recoveryPhrase: String) {
         guard canManageWorkspace else { errorMessage = "Only the workspace owner can invite staff."; return }
         guard [.frontDesk, .bookkeeper, .support].contains(role) else { errorMessage = "Choose Front Desk, Bookkeeper, or Support for a staff account."; return }
-        let maximum = archive.activePlan == "black" ? 10 : archive.activePlan == "gold" ? 3 : 1
+        let maximum = billingMetadataLimit("staffProfiles", fallback: archive.activePlan == "black" ? 10 : archive.activePlan == "gold" ? 3 : 1)
         guard archive.profiles.count < maximum else { errorMessage = "The \(archive.activePlan.capitalized) plan allows up to \(maximum) profile(s). Review Plans before adding staff."; return }
         let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty, normalized.contains("@"), !archive.profiles.contains(where: { $0.email == normalized }) else { errorMessage = "Enter a new, valid staff email address."; return }
@@ -655,40 +655,127 @@ final class OverHeadStore {
         notice = due.isEmpty ? "No due workflow jobs were waiting." : "Reviewed \(due.count) due workflow job\(due.count == 1 ? "" : "s")."
     }
 
-    func createFreeTrial(acceptedPolicy: Bool) async {
-        guard canManageWorkspace else { errorMessage = "Only the workspace owner can start a trial."; return }
-        guard acceptedPolicy else { errorMessage = "Review and accept the Free Trial Policy before starting the trial."; return }
-        guard records("subscriptions").isEmpty else { errorMessage = "This workspace already has a subscription or trial record."; return }
-        guard let token = try? await refreshSharedTokenIfNeeded() else { errorMessage = "Sign in again with your shared OverHead account before starting billing."; return }
-        do {
-            let result = try await FirebaseWorkspaceAPI.billing(action: "start_free_gold_trial", payload: ["acceptTrialPolicy": true], idToken: token)
-            archive.activePlan = "gold"
-            _ = addRecord("subscriptions", fields: ["title": "Gold free trial", "tier": "gold", "payment_provider": "manual", "payment_status": "trial", "status": "Active", "trial_ends_at": result["trialEndsAt"] as? String ?? ""])
-            notice = "Gold trial access refreshed from your OverHead account."
-        } catch { errorMessage = error.localizedDescription }
-    }
-
-    func syncSharedBilling() async {
-        guard canManageWorkspace else { errorMessage = "Only the owner can sync shared billing."; return }
-        guard let token = try? await refreshSharedTokenIfNeeded() else { errorMessage = "Sign in again with your shared OverHead account before opening billing."; return }
+    func syncSharedBilling(silent: Bool = false) async {
+        guard canManageWorkspace else {
+            if !silent { errorMessage = "Only the owner can sync shared billing." }
+            return
+        }
+        let hasVerifiedCache = records("billingProfiles").contains { $0["source"] == "billing-module" && !$0["verified_at"].isEmpty }
+        if !hasVerifiedCache, archive.activePlan != "silver" {
+            archive.activePlan = "silver"
+            persist()
+        }
         isSyncingBilling = true
         defer { isSyncingBilling = false }
         do {
-            let result = try await FirebaseWorkspaceAPI.billing(action: "entitlements", payload: [:], idToken: token)
-            let entitlement = result["entitlement"] as? [String: Any] ?? [:]
-            let tier = entitlement["tier"] as? String ?? ""
-            let status = entitlement["status"] as? String ?? "No shared plan"
-            if !tier.isEmpty { archive.activePlan = tier.lowercased() }
-            billingSyncMessage = tier.isEmpty ? "No shared billing record exists yet. No paid plan was activated." : "Shared plan and license refreshed from the same records used by the website."
-            _ = addRecord("billingProfiles", fields: ["title": "Shared billing status", "tier": tier, "status": status, "last_synced_at": ISO8601DateFormatter().string(from: .now)])
-            let activity = try await FirebaseWorkspaceAPI.billing(action: "billing_activity", payload: [:], idToken: token)
-            for event in activity["events"] as? [[String: Any]] ?? [] {
-                _ = addRecord("billingActivity", fields: ["title": event["label"] as? String ?? "Billing activity", "occurred_at": event["at"] as? String ?? "", "details": event["detail"] as? String ?? "", "status": "Synced"])
+            guard let token = try await refreshSharedTokenIfNeeded(), !token.isEmpty else {
+                throw FirebaseWorkspaceError.message("Sign in again with your shared OverHead account before checking the plan.")
             }
-            appendAudit("billing.shared_synced", "Shared billing records refreshed", details: "\(tier) · \(status)")
-            notice = billingSyncMessage
+            let result = try await BillingModuleLauncher.syncEntitlements(idToken: token)
+            guard result["product"] as? String == "OverHead", result["metadataVersion"] as? Int == 1 else {
+                throw FirebaseWorkspaceError.message("The Billing module returned unsupported plan metadata.")
+            }
+            let entitlement = result["entitlement"] as? [String: Any] ?? [:]
+            let license = result["license"] as? [String: Any] ?? [:]
+            let metadata = result["metadata"] as? [String: Any] ?? [:]
+            guard metadata["product"] as? String == "OverHead", metadata["schemaVersion"] as? Int == 1 else {
+                throw FirebaseWorkspaceError.message("The Billing metadata schema is invalid or unsupported.")
+            }
+            let planMetadata = metadata["plan"] as? [String: Any] ?? result["plan"] as? [String: Any] ?? [:]
+            let tier = (planMetadata["tier"] as? String ?? entitlement["tier"] as? String ?? "").lowercased()
+            let status = (result["status"] as? String ?? entitlement["status"] as? String ?? "inactive").lowercased()
+            let paidTierIsEntitled = ["active", "trialing", "past_due"].contains(status)
+                && ["silver", "gold", "black"].contains(tier)
+            let effectiveTier = paidTierIsEntitled ? tier : "silver"
+            let checkedAt = result["checkedAt"] as? String ?? ISO8601DateFormatter().string(from: .now)
+            let priorTier = archive.activePlan
+            archive.activePlan = effectiveTier
+            billingSyncMessage = "Billing module verified \(effectiveTier.capitalized) · \(status.replacingOccurrences(of: "_", with: " "))."
+            let profileFields = [
+                "title": "Verified subscriber plan", "tier": effectiveTier, "billing_status": status,
+                "status": status.capitalized, "source": "billing-module", "verified_at": checkedAt,
+                "stripe_subscription_id": entitlement["stripe_subscription_id"] as? String ?? "",
+                "trial_ends_at": entitlement["trial_ends_at"] as? String ?? ""
+            ]
+            upsertBillingRecord("billingProfiles", id: "billing-module-entitlement", fields: profileFields)
+            let json: (Any) -> String = { value in
+                guard JSONSerialization.isValidJSONObject(value),
+                      let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+                      let string = String(data: data, encoding: .utf8) else { return "{}" }
+                return string
+            }
+            upsertBillingRecord("entitlements", id: "billing-module-metadata-v1", fields: [
+                "title": "Verified \(effectiveTier.capitalized) plan metadata", "product": "OverHead",
+                "metadata_version": "1", "schema_version": "1", "tier": effectiveTier,
+                "status": status, "billing_type": result["billingType"] as? String ?? "Unknown",
+                "amount_cents": "\(planMetadata["amountCents"] as? Int ?? 0)",
+                "currency": planMetadata["currency"] as? String ?? "USD",
+                "billing_interval": planMetadata["interval"] as? String ?? "month",
+                "description": planMetadata["description"] as? String ?? "",
+                "limits_json": json(planMetadata["limits"] as? [String: Int] ?? [:]),
+                "features_json": json(planMetadata["features"] as? [String: Bool] ?? [:]),
+                "inclusions_json": json(planMetadata["inclusions"] as? [String] ?? []),
+                "metadata_json": json(metadata), "checked_at": checkedAt, "source": "billing-module"
+            ])
+            if let licenseNumber = license["license_number"] as? String, !licenseNumber.isEmpty {
+                upsertBillingRecord("licenses", id: "billing-module-license-\(profile?.id ?? "owner")", fields: [
+                    "title": "Verified OverHead subscriber license", "license_number": licenseNumber,
+                    "subscription_number": license["subscription_number"] as? String ?? "",
+                    "tier": license["tier"] as? String ?? effectiveTier,
+                    "status": license["status"] as? String ?? status.capitalized,
+                    "issued_at": license["issued_at"] as? String ?? "", "source": "billing-module"
+                ])
+            }
+            for event in result["events"] as? [[String: Any]] ?? [] {
+                let title = event["label"] as? String ?? "Billing activity"
+                let occurredAt = event["at"] as? String ?? ""
+                let eventID = "billing-module-event-" + String(SHA256.hash(data: Data("\(title)|\(occurredAt)".utf8)).prefix(8).map { String(format: "%02x", $0) }.joined())
+                upsertBillingRecord("billingActivity", id: eventID, fields: [
+                    "title": title, "occurred_at": occurredAt, "details": event["detail"] as? String ?? "",
+                    "status": "Synced from billing module", "source": "billing-module"
+                ])
+            }
+            persist()
+            if priorTier != effectiveTier {
+                appendAudit("billing.plan_applied", "Subscriber plan applied", details: "\(priorTier) → \(effectiveTier) · \(status)")
+            }
+            appendAudit("billing.module_verified", "Subscriber plan checked by Billing module", details: "\(effectiveTier) · \(status)")
+            if !silent { notice = billingSyncMessage }
             errorMessage = nil
-        } catch { billingSyncMessage = error.localizedDescription; errorMessage = error.localizedDescription }
+        } catch {
+            billingSyncMessage = "Could not verify the plan through Billing: \(error.localizedDescription)"
+            if !hasVerifiedCache {
+                archive.activePlan = "silver"
+                persist()
+            }
+            if !silent { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func upsertBillingRecord(_ collection: String, id: String, fields: [String: String]) {
+        var values = fields
+        values["id"] = id
+        if let existing = records(collection).first(where: { $0.id == id }) {
+            updateRecord(collection, record: existing, fields: values)
+        } else {
+            _ = addRecord(collection, fields: values)
+        }
+    }
+
+    private func billingMetadataLimit(_ name: String, fallback: Int) -> Int {
+        guard let raw = records("entitlements").first(where: { $0["source"] == "billing-module" })?["limits_json"],
+              let data = raw.data(using: .utf8),
+              let limits = (try? JSONSerialization.jsonObject(with: data)) as? [String: Int],
+              let value = limits[name], value > 0 else { return fallback }
+        return value
+    }
+
+    func billingMetadataFeature(_ name: String, fallback: Bool) -> Bool {
+        guard let raw = records("entitlements").first(where: { $0["source"] == "billing-module" })?["features_json"],
+              let data = raw.data(using: .utf8),
+              let features = (try? JSONSerialization.jsonObject(with: data)) as? [String: Bool],
+              let value = features[name] else { return fallback }
+        return value
     }
 
     func saveStripeTestConnection(clientID: String, accountID: String, publishableKey: String) {

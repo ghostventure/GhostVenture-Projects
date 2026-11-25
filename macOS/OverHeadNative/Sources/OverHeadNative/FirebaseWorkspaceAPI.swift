@@ -18,7 +18,7 @@ enum FirebaseWorkspaceAPI {
     static let projectID = "overhead-office"
     private static let identityRoot = "https://identitytoolkit.googleapis.com/v1"
     private static let firestoreRoot = "https://firestore.googleapis.com/v1/projects/\(projectID)/databases/(default)/documents"
-    private static let billingRoot = "https://us-central1-overhead-office.cloudfunctions.net/billingApi"
+    private static let duplicateCheckRoot = "https://us-central1-overhead-office.cloudfunctions.net/checkWorkspaceDuplicate"
 
     static func signIn(email: String, password: String, accessLane: String) async throws -> SharedIdentity {
         let response = try await identityPost("accounts:signInWithPassword", body: ["email": email.lowercased(), "password": password, "returnSecureToken": true])
@@ -83,6 +83,14 @@ enum FirebaseWorkspaceAPI {
         return SharedIdentity(uid: uid, workspaceID: uid, email: email.lowercased(), ownerName: ownerName, businessName: businessName, sharedRole: "Administrator", role: .owner, idToken: token, refreshToken: string(auth["refreshToken"]), expiresIn: Double(string(auth["expiresIn"])) ?? 3600)
     }
 
+    static func checkWorkspaceDuplicate(ownerName: String, businessName: String) async throws -> Bool {
+        var request = URLRequest(url: URL(string: duplicateCheckRoot)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["ownerName": ownerName, "businessName": businessName])
+        return try await send(request)["possibleDuplicate"] as? Bool ?? false
+    }
+
     static func registerCustomer(email: String, password: String, workspaceID: String) async throws {
         let auth = try await identityPost("accounts:signUp", body: ["email": email.lowercased(), "password": password, "returnSecureToken": true])
         let token = string(auth["idToken"])
@@ -105,17 +113,6 @@ enum FirebaseWorkspaceAPI {
 
     static func sendPasswordReset(email: String) async throws {
         _ = try await identityPost("accounts:sendOobCode", body: ["requestType": "PASSWORD_RESET", "email": email.lowercased()])
-    }
-
-    static func billing(action: String, payload: [String: Any], idToken: String) async throws -> [String: Any] {
-        var request = URLRequest(url: URL(string: billingRoot)!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
-        var body = payload
-        body["action"] = action
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try await send(request)
     }
 
     static func refreshToken(_ refreshToken: String) async throws -> (idToken: String, refreshToken: String, expiresIn: TimeInterval) {
