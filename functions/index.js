@@ -174,8 +174,15 @@ exports.billingApi = onRequest({
   }
   try {
     const user = await verifyUser(req)
-    const profile = await ownerProfile(user.uid)
     const body = req.body || {}
+    // Every active workspace member needs the same server-side tier gate at
+    // app startup. Management actions below still require an administrator.
+    const profile = body.action === 'entitlements'
+      ? (await getFirestore().doc(`profiles/${user.uid}`).get()).data()
+      : await ownerProfile(user.uid)
+    if (!profile || profile.status !== 'Active' || typeof profile.workspace_id !== 'string' || !profile.workspace_id || profile.workspace_id.includes('/')) {
+      throw new Error('An active OverHead workspace profile is required for plan verification.')
+    }
     const db = getFirestore()
     const billing = db.doc(`workspaces/${profile.workspace_id}/billing/current`)
     if (body.action === 'entitlements') {

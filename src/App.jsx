@@ -141,6 +141,7 @@ function App() {
   const [draftSession, setDraftSession] = useState(defaultSession)
   const [backendState, setBackendState] = useState(emptyBackendState)
   const [backendError, setBackendError] = useState('')
+  const [planVerified, setPlanVerified] = useState(false)
   const [operationNotice, setOperationNotice] = useState('')
   const [activePlan, setActivePlan] = useState('gold')
   const [commandOpen, setCommandOpen] = useState(false)
@@ -242,8 +243,7 @@ function App() {
             role: next.role,
             acceptedTerms: next.acceptedTerms,
           }))
-          return window.overheadBackend.bootstrap()
-            .then((bootstrap) => setBackendState({ ...emptyBackendState, ...bootstrap }))
+          return refreshBackend({ signedIn: true })
         })
         .catch((error) => setBackendError(userFacingError(error, 'Could not restore the previous session.')))
     }
@@ -298,8 +298,13 @@ function App() {
       const bootstrap = await window.overheadBackend.bootstrap()
       setBackendState({ ...emptyBackendState, ...bootstrap })
       setBackendError('')
+      setPlanVerified(true)
+      return true
     } catch (error) {
+      setPlanVerified(false)
+      setBackendState(emptyBackendState)
       setBackendError(userFacingError(error, 'Backend unavailable.'))
+      return false
     }
   }
 
@@ -418,6 +423,10 @@ function App() {
         verifyEmail={verifyEmail}
       />
     )
+  }
+
+  if (session.role !== 'Customer' && !planVerified) {
+    return <main className="login-shell"><section className="login-card"><p className="eyebrow">Plan access verification</p><h1>OverHead is waiting for billing verification</h1><p>{backendError || 'Checking the active workspace plan with the OverHead billing service…'}</p><button type="button" onClick={() => refreshBackend({ signedIn: true })}>Retry verification</button><button type="button" onClick={lockSession}>Sign out</button></section></main>
   }
 
   if (session.role === 'Customer') return <CustomerSupportPortal session={session} lockSession={lockSession} />
@@ -2165,6 +2174,16 @@ function PlansSection({ backendState, activePlan, setActivePlan, draftSession, r
           <h2>Billing profile and entitlements</h2>
         </div>
         <BadgeCheck size={20} />
+      </div>
+      <div className="billing-protection-note">
+        <strong>OverHead Billing module</strong>
+        <span>Open the dedicated billing window to choose a plan, complete Stripe checkout, and manage your subscription.</span>
+        <button className="ghost-button" type="button" onClick={async () => {
+          try {
+            if (!window.overheadBackend?.openBillingModule) throw new Error('The Billing module is unavailable in this build.')
+            await window.overheadBackend.openBillingModule()
+          } catch (error) { setOperationNotice(userFacingError(error, 'Billing module could not be opened.')) }
+        }}>Open Billing &amp; Payments</button>
       </div>
       <div className="plan-grid">
         {planTiers.map((plan) => (

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('overheadDesktop', {
 })
 
 contextBridge.exposeInMainWorld('overheadBackend', {
+  openBillingModule: () => ipcRenderer.invoke('billing:open-module'),
   bootstrap: () => ipcRenderer.invoke('backend:bootstrap'),
   health: () => ipcRenderer.invoke('backend:health'),
   register: (payload) => ipcRenderer.invoke('auth:register', payload),

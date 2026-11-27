@@ -1,16 +1,24 @@
 {
   "name": "overhead",
   "private": true,
-  "version": "0.3.13",
+  "version": "0.3.14",
   "description": "Installed desktop console for reducing small-business admin overload.",
-  "author": "Black Lion Media Studio",
+  "author": {
+    "name": "Black Lion Media Studio",
+    "email": "solidartentertainment@gmail.com"
+  },
+  "homepage": "https://overhead-office.web.app/",
+  "desktopName": "com.blacklion.overhead",
   "main": "electron-main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "desktop": "cmd /c npm run build && electron .",
+    "desktop:linux": "npm run build && electron .",
+    "billing:linux": "npm run build && electron . --billing",
     "dist:win": "cmd /c npm run build && electron-builder --win nsis --x64",
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb --x64 && node scripts/write-linux-release-metadata.cjs",
     "dist:cylinder": "cmd /c npm run build && electron-builder --win nsis --x64 --config.extraMetadata.main=electron-server-main.cjs --config.productName=OverHead-Cylinder --config.appId=com.blacklion.overhead.cylinder --config.win.artifactName=OverHead-Cylinder-Setup-${version}-win-x64.${ext} --config.nsis.shortcutName=OverHead-Cylinder",
     "release:checksums": "powershell -ExecutionPolicy Bypass -File scripts/write-release-checksums.ps1",
     "release:cylinder-checksums": "powershell -ExecutionPolicy Bypass -File scripts/write-cylinder-release-checksums.ps1",
@@ -28,9 +36,11 @@
     "files": [
       "dist/**/*",
       "public/overhead.ico",
+      "public/overhead-linux.png",
       "electron-main.cjs",
       "electron-server-main.cjs",
       "electron-backend.cjs",
+      "billing-preload.cjs",
       "stripe-connector.cjs",
       "electron-preload.cjs",
       "package.json",
@@ -58,6 +68,24 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "OverHead"
+    },
+    "linux": {
+      "icon": "public/overhead-linux.png",
+      "category": "Office",
+      "maintainer": "Black Lion Media Studio <solidartentertainment@gmail.com>",
+      "syncDesktopName": true,
+      "artifactName": "OverHead-${version}-${arch}.${ext}",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "desktop": {
+        "entry": {
+          "Name": "OverHead",
+          "Comment": "Small business operations and billing",
+          "Categories": "Office;Finance;"
+        }
+      }
     }
   },
   "dependencies": {

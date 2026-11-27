@@ -7,16 +7,21 @@ const path = require('node:path')
 const backend = require('./electron-backend.cjs')
 
 let mainWindow = null
+let billingWindow = null
+let openBillingOnReady = false
 let lockTimer = null
 let backendInitError = ''
 let tray = null
 let appReady = false
-const iconPath = path.join(__dirname, 'public', 'overhead.ico')
+const iconPath = path.join(__dirname, 'public', process.platform === 'linux' ? 'overhead-linux.png' : 'overhead.ico')
 const INACTIVITY_LOCK_MS = 30 * 60 * 1000
 const MAX_RECOVERY_RETRIES = 3
 const DEVELOPER_EMAIL = 'solidartentertainment@gmail.com'
 const DEPLOYMENT_MODE = process.env.OVERHEAD_DEPLOYMENT_MODE === 'cylinder' ? 'cylinder' : 'desktop'
-const UPDATE_FEED_URL = process.env.OVERHEAD_UPDATE_URL || `https://overhead-office.web.app/updates${DEPLOYMENT_MODE === 'cylinder' ? '/cylinder' : ''}`
+const platformUpdatePath = process.platform === 'linux' ? '/linux' : ''
+const UPDATE_FEED_URL = process.env.OVERHEAD_UPDATE_URL || (process.platform === 'linux' && DEPLOYMENT_MODE !== 'cylinder'
+  ? 'https://github.com/ghostventure/GhostVenture-Projects/releases/download/overhead-linux-latest'
+  : `https://overhead-office.web.app/updates${DEPLOYMENT_MODE === 'cylinder' ? '/cylinder' : platformUpdatePath}`)
 const STARTUP_UPDATE_TIMEOUT_MS = 2500
 const STARTUP_RECOVERY_HTML = 'data:text/html;charset=utf-8,' + encodeURIComponent([
   '<!doctype html><html><head><meta charset="utf-8"><title>OverHead Recovery</title>',
@@ -162,11 +167,66 @@ function integrityReport() {
 function isTrustedSender(event) {
   try {
     const senderUrl = event.senderFrame?.url || ''
-    const expectedUrl = new URL(`file://${path.join(__dirname, 'dist', 'index.html').replace(/\\/g, '/')}`).href
-    return event.sender === mainWindow?.webContents && senderUrl === expectedUrl
+    const parsed = new URL(senderUrl)
+    const expectedPath = path.resolve(__dirname, 'dist', 'index.html')
+    const senderPath = decodeURIComponent(parsed.pathname)
+    const trustedDocument = parsed.protocol === 'file:' && senderPath === expectedPath
+    const isMainWindow = event.sender === mainWindow?.webContents && trustedDocument && !parsed.search
+    const isBillingWindow = event.sender === billingWindow?.webContents
+      && trustedDocument
+      && parsed.searchParams.get('module') === 'billing'
+      && [...parsed.searchParams.keys()].length === 1
+    return isMainWindow || isBillingWindow
   } catch {
     return false
   }
+}
+
+function createBillingWindow() {
+  if (billingWindow && !billingWindow.isDestroyed()) {
+    if (billingWindow.isMinimized()) billingWindow.restore()
+    billingWindow.webContents.reload()
+    billingWindow.show()
+    billingWindow.focus()
+    return billingWindow
+  }
+  const appPage = path.join(__dirname, 'dist', 'index.html')
+  if (!fs.existsSync(appPage)) throw new Error('OverHead Billing files are missing. Rebuild or reinstall OverHead and try again.')
+  billingWindow = new BrowserWindow({
+    width: 1120,
+    height: 860,
+    minWidth: 720,
+    minHeight: 680,
+    title: 'OverHead Billing & Payments',
+    icon: iconPath,
+    backgroundColor: '#0b1019',
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      preload: path.join(__dirname, 'billing-preload.cjs'),
+    },
+  })
+  try { billingWindow.setContentProtection(true) } catch (error) { log.warn('OverHead Billing could not enable window content protection', error) }
+  billingWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (openAllowedExternal(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  billingWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) {
+      event.preventDefault()
+      if (openAllowedExternal(url)) shell.openExternal(url)
+    }
+  })
+  billingWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
+  billingWindow.on('closed', () => { billingWindow = null })
+  billingWindow.loadFile(appPage, { query: { module: 'billing' } }).catch((error) => {
+    log.error('OverHead Billing could not start', error)
+    if (billingWindow && !billingWindow.isDestroyed()) billingWindow.close()
+  })
+  return billingWindow
 }
 
 function trustedHandler(handler) {
@@ -359,7 +419,8 @@ function installDownloadedUpdate() {
 }
 
 async function verifyUpdateFeed() {
-  const manifestUrl = `${UPDATE_FEED_URL.replace(/\/+$/, '')}/latest.yml`
+  const manifestName = process.platform === 'linux' ? 'latest-linux.yml' : 'latest.yml'
+  const manifestUrl = `${UPDATE_FEED_URL.replace(/\/+$/, '')}/${manifestName}`
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), STARTUP_UPDATE_TIMEOUT_MS)
   try {
@@ -426,7 +487,13 @@ if (!singleInstanceLock) {
 }
 
 if (singleInstanceLock) {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, commandLine) => {
+    if (commandLine.includes('--billing')) {
+      if (appReady) createBillingWindow()
+      else openBillingOnReady = true
+      focusMainWindow()
+      return
+    }
     if (!focusMainWindow()) log.info(`OverHead second launch received before startup completed (ready: ${appReady}).`)
   })
 }
@@ -526,6 +593,11 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('square:list-connections', trustedHandler(() => backend.listSquareConnections()))
     ipcMain.handle('square:list-imports', trustedHandler(() => backend.listSquareImports()))
     ipcMain.handle('billing:create-embedded-checkout', trustedHandler((_event, payload) => backend.createEmbeddedCheckout(payload)))
+  ipcMain.handle('billing:open-module', trustedHandler(() => { createBillingWindow(); return { opened: true } }))
+  ipcMain.handle('billing:close-module', trustedHandler((event) => {
+    if (event.sender === billingWindow?.webContents) billingWindow.close()
+    return { closed: true }
+  }))
     ipcMain.handle('billing:start-free-gold-trial', trustedHandler(() => backend.startFreeGoldTrial()))
     ipcMain.handle('billing:cancel-with-unused-time-refund', trustedHandler(() => backend.cancelSubscriptionWithUnusedTimeRefund()))
     ipcMain.handle('billing:get-entitlements', trustedHandler(() => backend.getRemoteEntitlements()))
@@ -533,6 +605,7 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('entitlements:get', trustedHandler(() => backend.getEntitlementState()))
     ipcMain.handle('billing:save-profile', trustedHandler((_event, payload) => backend.saveBillingProfile(payload)))
     ipcMain.handle('billing:list-profiles', trustedHandler(() => backend.listBillingProfiles()))
+    ipcMain.handle('billing:get-active-profile', trustedHandler(() => backend.getActiveBillingProfile()))
     ipcMain.handle('users:list', trustedHandler(() => backend.listUserProfiles()))
     ipcMain.handle('users:create-staff', trustedHandler((_event, payload) => backend.createStaffAccount(payload)))
     ipcMain.handle('users:update', trustedHandler((_event, payload) => backend.updateUserProfile(payload)))
@@ -567,6 +640,7 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     createWindow()
     createTray()
     appReady = true
+    if (openBillingOnReady || process.argv.includes('--billing')) createBillingWindow()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })

@@ -349,6 +349,7 @@ let state = null
 let schedulerStarted = false
 let secureStore = null
 let activeSession = null
+let serverEntitlementVerifiedForSession = ''
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA2bxXMdNsXVgPaYv3jbWJXGlosVYtBd8U',
@@ -369,7 +370,7 @@ async function firebaseRequest(url, options = {}) {
 }
 
 async function billingApiRequest(action, payload = {}) {
-  requireRole(['Owner'], 'billing')
+  if (action !== 'entitlements') requireRole(['Owner'], 'billing')
   if (!activeSession?.firebaseIdToken) {
     throw new Error('Sign out and sign back in with your shared OverHead account before opening billing.')
   }
@@ -420,19 +421,11 @@ async function getRemoteEntitlements() {
   if (activeSession.role === 'Customer' || isCylinderDeployment()) throw new Error('Standard desktop billing sync is available to staff in a standard workspace.')
   if (!activeSession.firebaseIdToken || !activeSession.firebaseUid) throw new Error('Sign in with your shared OverHead account to synchronize billing.')
   const sessionId = activeSession.id
-  const workspaceId = activeWorkspaceId()
-  if (!workspaceId) throw new Error('Your shared workspace could not be found.')
-  const token = activeSession.firebaseIdToken
-  const read = async (suffix) => {
-    const response = await fetch(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/workspaces/${encodeURIComponent(workspaceId)}/${suffix}`, {
-      headers: firebaseHeaders(token), signal: AbortSignal.timeout(15000),
-    })
-    if (response.status === 404) return null
-    if (!response.ok) throw new Error(billingErrorMessage(response.status))
-    return firestoreDocument(await response.json())
-  }
-  const [sharedEntitlement, license] = await Promise.all([read('billing/current'), read(`licenses/${encodeURIComponent(activeSession.firebaseUid)}`)])
+  const response = await billingApiRequest('entitlements')
+  const sharedEntitlement = response.entitlement || { tier: 'silver', status: 'inactive' }
+  const license = response.license || null
   if (activeSession?.id !== sessionId) throw new Error('The account changed during billing sync. Retry from the current account.')
+  serverEntitlementVerifiedForSession = sessionId
   const remote = { entitlement: sharedEntitlement || {}, license }
   const entitlement = remote.entitlement || {}
   if (!['silver', 'gold', 'black'].includes(entitlement.tier)) {
@@ -1268,6 +1261,7 @@ function startSession(user, sharedIdentity = {}) {
     last_seen_at: now(),
     ended_at: '',
   }
+  serverEntitlementVerifiedForSession = ''
   state.sessions.unshift(session)
   activeSession = { id: session.id, email: user.email, role: user.role, firebaseIdToken: sharedIdentity.firebaseIdToken || '', firebaseUid: sharedIdentity.firebaseUid || user.firebase_uid || '' }
   persist()
@@ -1289,18 +1283,14 @@ function resumeRememberedSession() {
   const user = state.userProfiles.find((item) => item.id === openSession.user_profile_id && item.status === 'Active')
   if (!user) return null
 
+  // Firebase ID tokens are intentionally not persisted. Require a fresh
+  // authenticated sign-in so startup cannot trust a stale local plan.
+  openSession.lock_state = 'locked'
+  openSession.ended_at = now()
   openSession.last_seen_at = now()
-  activeSession = { id: openSession.id, email: user.email, role: user.role }
   persist()
-  return {
-    signedIn: true,
-    ownerName: user.owner_name,
-    businessName: user.business_name,
-    email: user.email,
-    role: user.role,
-    acceptedTerms: Boolean(user.terms_accepted_at),
-    sessionId: openSession.id,
-  }
+  return null
+
 }
 
 function ensureManagerProfile(user) {
@@ -1401,6 +1391,9 @@ function currentPlan() {
 }
 
 function requireFeature(feature) {
+  if (!activeSession || serverEntitlementVerifiedForSession !== activeSession.id) {
+    throw new Error('Plan access has not been verified by the OverHead billing service. Reconnect and retry before using workspace features.')
+  }
   const plan = currentPlan()
   if (!plan.features.includes(feature)) {
     recordFraudSignal('plan_feature_denied', 'Medium', { feature, plan: plan.name })
@@ -1424,6 +1417,7 @@ function lockSession(sessionId) {
     persist()
   }
   activeSession = null
+  serverEntitlementVerifiedForSession = ''
   recordAudit('session.locked', 'Desktop session locked', { sessionId })
   return { locked: true }
 }
@@ -1514,8 +1508,13 @@ function recordDeveloperEditorLaunch(editor, workspacePath) {
   return { workspacePath: resolvedPath }
 }
 
-function getBootstrap() {
+async function getBootstrap() {
   requireSession('workspace bootstrap')
+  if (!isCylinderDeployment() && activeSession.role !== 'Customer') {
+    // The shared billing service is the source of truth. No paid features may
+    // bootstrap from a cached local plan while this request is unavailable.
+    await getRemoteEntitlements()
+  }
   return {
     dataRoot,
     health: getHealth(),
@@ -3047,6 +3046,12 @@ function listBillingProfiles() {
   return [...state.billingProfiles].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
 }
 
+function getActiveBillingProfile() {
+  requireRole(['Owner'], 'billing profile viewing')
+  const email = String(activeSession?.email || '').toLowerCase()
+  return state.billingProfiles.find((item) => String(item.manager_email || '').toLowerCase() === email) || null
+}
+
 async function createSupportTicket(payload = {}) {
   requireRole(['Owner', 'Front Desk', 'Support', 'Customer'], 'support ticket creation')
   const createdAt = now()
@@ -3356,6 +3361,7 @@ function restoreFromPackage(payload = {}) {
   recordAudit('restore.completed', 'Local workspace restored from validated package', { filePath: validation.filePath, safetyBackupPath: backup.backupPath })
   persist()
   activeSession = null
+  serverEntitlementVerifiedForSession = ''
   return { restored: true, safetyBackupPath: backup.backupPath }
 }
 
@@ -3504,6 +3510,7 @@ module.exports = {
   listAuditEvents,
   listApprovalRequests,
   listBillingProfiles,
+  getActiveBillingProfile,
   listCustomers,
   syncCustomersWithWorkspace,
   syncTasksWithWorkspace,
