@@ -172,20 +172,25 @@ function isTrustedSender(event) {
     const senderPath = decodeURIComponent(parsed.pathname)
     const trustedDocument = parsed.protocol === 'file:' && senderPath === expectedPath
     const isMainWindow = event.sender === mainWindow?.webContents && trustedDocument && !parsed.search
+    const queryKeys = [...parsed.searchParams.keys()]
+    const queryTier = parsed.searchParams.get('tier') || ''
     const isBillingWindow = event.sender === billingWindow?.webContents
       && trustedDocument
       && parsed.searchParams.get('module') === 'billing'
-      && [...parsed.searchParams.keys()].length === 1
+      && queryKeys.every((key) => ['module', 'tier'].includes(key))
+      && (!queryTier || ['silver', 'gold', 'black'].includes(queryTier))
     return isMainWindow || isBillingWindow
   } catch {
     return false
   }
 }
 
-function createBillingWindow() {
+function createBillingWindow(tier = '') {
+  const requestedTier = ['silver', 'gold', 'black'].includes(String(tier).toLowerCase()) ? String(tier).toLowerCase() : ''
+  const query = { module: 'billing', ...(requestedTier ? { tier: requestedTier } : {}) }
   if (billingWindow && !billingWindow.isDestroyed()) {
     if (billingWindow.isMinimized()) billingWindow.restore()
-    billingWindow.webContents.reload()
+    billingWindow.loadFile(path.join(__dirname, 'dist', 'index.html'), { query }).catch((error) => log.error('OverHead Billing could not refresh', error))
     billingWindow.show()
     billingWindow.focus()
     return billingWindow
@@ -222,7 +227,7 @@ function createBillingWindow() {
   })
   billingWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
   billingWindow.on('closed', () => { billingWindow = null })
-  billingWindow.loadFile(appPage, { query: { module: 'billing' } }).catch((error) => {
+  billingWindow.loadFile(appPage, { query }).catch((error) => {
     log.error('OverHead Billing could not start', error)
     if (billingWindow && !billingWindow.isDestroyed()) billingWindow.close()
   })
@@ -593,10 +598,34 @@ if (singleInstanceLock) app.whenReady().then(async () => {
     ipcMain.handle('square:list-connections', trustedHandler(() => backend.listSquareConnections()))
     ipcMain.handle('square:list-imports', trustedHandler(() => backend.listSquareImports()))
     ipcMain.handle('billing:create-embedded-checkout', trustedHandler((_event, payload) => backend.createEmbeddedCheckout(payload)))
-  ipcMain.handle('billing:open-module', trustedHandler(() => { createBillingWindow(); return { opened: true } }))
+  ipcMain.handle('billing:open-module', trustedHandler((_event, tier) => { createBillingWindow(tier); return { opened: true } }))
   ipcMain.handle('billing:close-module', trustedHandler((event) => {
     if (event.sender === billingWindow?.webContents) billingWindow.close()
+    focusMainWindow()
     return { closed: true }
+  }))
+  ipcMain.handle('billing:confirm-checkout', trustedHandler(async (event, tier) => {
+    if (event.sender !== billingWindow?.webContents) throw new Error('Checkout confirmation is only available in the Billing window.')
+    const requestedTier = String(tier || '').toLowerCase()
+    if (!['silver', 'gold', 'black'].includes(requestedTier)) throw new Error('The selected plan is not valid.')
+    let latest = null
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      latest = await backend.getRemoteEntitlements()
+      const current = latest?.entitlement || {}
+      if (current.tier === requestedTier && ['active', 'trialing'].includes(String(current.status || '').toLowerCase())) {
+        return { confirmed: true, entitlement: current, license: latest.license || null }
+      }
+      if (attempt < 11) await new Promise((resolve) => setTimeout(resolve, 2500))
+    }
+    throw new Error('Stripe completed checkout, but the signed billing update has not reached OverHead yet. Retry plan confirmation in a moment.')
+  }))
+  ipcMain.handle('billing:return-to-overhead', trustedHandler((event, details = {}) => {
+    if (event.sender !== billingWindow?.webContents) throw new Error('Only the Billing window can return a completed transaction.')
+    const tier = ['silver', 'gold', 'black'].includes(details.tier) ? details.tier : ''
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('billing:transaction-complete', { tier })
+    if (billingWindow && !billingWindow.isDestroyed()) billingWindow.close()
+    focusMainWindow()
+    return { returned: true }
   }))
     ipcMain.handle('billing:start-free-gold-trial', trustedHandler(() => backend.startFreeGoldTrial()))
     ipcMain.handle('billing:cancel-with-unused-time-refund', trustedHandler(() => backend.cancelSubscriptionWithUnusedTimeRefund()))

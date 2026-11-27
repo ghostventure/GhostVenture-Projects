@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('overheadBilling', {
   getProfile: () => ipcRenderer.invoke('billing:get-active-profile'),
   saveProfile: (payload) => ipcRenderer.invoke('billing:save-profile', payload),
   createCheckout: (payload) => ipcRenderer.invoke('billing:create-embedded-checkout', payload),
+  confirmCheckout: (tier) => ipcRenderer.invoke('billing:confirm-checkout', tier),
+  returnToOverhead: (details) => ipcRenderer.invoke('billing:return-to-overhead', details),
   startTrial: (payload) => ipcRenderer.invoke('billing:start-free-gold-trial', payload),
   cancelAndRefund: () => ipcRenderer.invoke('billing:cancel-with-unused-time-refund'),
   createReceipt: () => ipcRenderer.invoke('billing:create-receipt'),

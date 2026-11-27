@@ -16,7 +16,12 @@ contextBridge.exposeInMainWorld('overheadDesktop', {
 })
 
 contextBridge.exposeInMainWorld('overheadBackend', {
-  openBillingModule: () => ipcRenderer.invoke('billing:open-module'),
+  openBillingModule: (tier) => ipcRenderer.invoke('billing:open-module', tier),
+  onBillingTransactionComplete: (callback) => {
+    const listener = (_event, details) => callback(details)
+    ipcRenderer.on('billing:transaction-complete', listener)
+    return () => ipcRenderer.removeListener('billing:transaction-complete', listener)
+  },
   bootstrap: () => ipcRenderer.invoke('backend:bootstrap'),
   health: () => ipcRenderer.invoke('backend:health'),
   register: (payload) => ipcRenderer.invoke('auth:register', payload),

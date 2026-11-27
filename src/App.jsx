@@ -150,6 +150,11 @@ function App() {
   const [authMode, setAuthMode] = useState('team')
   const [verification, setVerification] = useState({ email: '', code: '', delivery: null })
 
+  async function openBillingModule(tier = '') {
+    if (!window.overheadBackend?.openBillingModule) throw new Error('The Billing module is unavailable in this build.')
+    await window.overheadBackend.openBillingModule(tier)
+  }
+
   const selectedModule = useMemo(
     () => modules.find((module) => module.id === activeModule) ?? modules[0],
     [activeModule],
@@ -163,7 +168,7 @@ function App() {
   const quickCommands = [
     { id: 'today', label: 'Open Current Work', area: 'Navigation', detail: 'Jump to the dashboard queue.', action: () => setActiveSection('overview') },
     { id: 'customers', label: 'Open Customer Records', area: 'Navigation', detail: 'Review profiles and workflow rules.', action: () => setActiveSection('customers') },
-    { id: 'plans', label: 'Open Billing And Plans', area: 'Navigation', detail: 'Manage Silver, Gold, Black, billing, and Stripe.', action: () => setActiveSection('plans') },
+    { id: 'plans', label: 'Open Billing And Plans', area: 'Navigation', detail: 'Manage Silver, Gold, Black, billing, and Stripe.', action: () => openBillingModule() },
     { id: 'security', label: 'Open Security Center', area: 'Navigation', detail: 'Recovery, privacy requests, risk, and compliance.', action: () => setActiveSection('security') },
     { id: 'pdf', label: 'Create Fillable PDF', area: 'Tool', detail: 'Generate a customer intake packet.', action: async () => {
       if (!window.overheadBackend?.createFillablePdf) return
@@ -264,6 +269,20 @@ function App() {
     return window.overheadDesktop.onSecurityLock(() => lockSession())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
+
+  useEffect(() => {
+    if (!window.overheadDesktop?.onBillingTransactionComplete) return undefined
+    return window.overheadDesktop.onBillingTransactionComplete(async ({ tier } = {}) => {
+      if (['silver', 'gold', 'black'].includes(tier)) setActivePlan(tier)
+      setActiveSection('overview')
+      const refreshed = await refreshBackend({ signedIn: true })
+      setOperationNotice(refreshed
+        ? `${selectedPlanName(tier || 'silver')} plan confirmed, saved, and ready in OverHead.`
+        : 'The Billing window confirmed the transaction. Retry workspace refresh to load the updated plan.')
+    })
+    // The main window handles this completion message for the lifetime of the app.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     function handleEscape(event) {
@@ -467,7 +486,13 @@ function App() {
                   className={section.id === activeSection ? 'nav-item active' : 'nav-item'}
                   type="button"
                   key={section.id}
-                  onClick={() => setActiveSection(section.id)}
+                  onClick={() => {
+                    if (section.id === 'payments') {
+                      openBillingModule().catch((error) => setOperationNotice(userFacingError(error, 'Billing module could not be opened.')))
+                      return
+                    }
+                    setActiveSection(section.id)
+                  }}
                 >
                   <Icon size={18} />
                   <span>
@@ -602,6 +627,7 @@ function App() {
                 backendState={backendState}
                 activePlan={activePlan}
                 setActivePlan={setActivePlan}
+                openBillingModule={openBillingModule}
                 draftSession={draftSession}
                 refreshBackend={refreshBackend}
                 setOperationNotice={setOperationNotice}
@@ -2052,238 +2078,42 @@ function LicensesSection({ backendState, refreshBackend, setOperationNotice }) {
   )
 }
 
-function PlansSection({ backendState, activePlan, setActivePlan, draftSession, refreshBackend, setOperationNotice }) {
-  const savedBilling = backendState.savedFormMemory?.billing || {}
-  const [billing, setBilling] = useState({
-    legalName: savedBilling.legalName || '',
-    billingEmail: savedBilling.billingEmail || draftSession.email || 'owner@overhead.local',
-    phone: savedBilling.phone || '',
-    addressLine1: savedBilling.addressLine1 || '',
-    addressLine2: savedBilling.addressLine2 || '',
-    city: savedBilling.city || '',
-    region: savedBilling.region || '',
-    postalCode: savedBilling.postalCode || '',
-    country: savedBilling.country || 'US',
-    taxIdType: savedBilling.taxIdType || '',
-    taxIdLast4: '',
-    invoiceTerms: savedBilling.invoiceTerms || 'Due on receipt',
-    invoiceFooter: savedBilling.invoiceFooter || 'Thank you for using OverHead.',
-    consentToRecurringBilling: false,
-    cancellationPathAcknowledged: false,
-    billingPolicyAcknowledged: false,
-    freeTrialPolicyAcknowledged: false,
-  })
-  const [checkout, setCheckout] = useState(null)
-  const [billingError, setBillingError] = useState('')
-  const [billingBusy, setBillingBusy] = useState(false)
-  const [billingActivity, setBillingActivity] = useState([])
-
-  async function persistBillingProfile() {
-    if (!window.overheadBackend?.saveBillingProfile) return
-    await window.overheadBackend.saveBillingProfile({ ...billing, managerEmail: draftSession.email || 'owner@overhead.local' })
-  }
-
-  async function saveBillingAndTier() {
-    if (billingBusy) return
+function PlansSection({ backendState, activePlan, setActivePlan, openBillingModule, setOperationNotice }) {
+  const activeTier = backendState.entitlements?.activeTier || 'silver'
+  async function choosePlan(tier) {
+    setActivePlan(tier)
     try {
-      setBillingError('')
-      setBillingBusy(true)
-      await persistBillingProfile()
-      setOperationNotice('Billing profile saved. Complete secure checkout to activate a paid tier.')
-      await refreshBackend()
-    } catch (error) { setBillingError(userFacingError(error, 'The billing profile could not be saved.')) }
-    finally { setBillingBusy(false) }
-  }
-
-  async function openEmbeddedCheckout() {
-    if (billingBusy) return
-    try {
-      setBillingError('')
-      setBillingBusy(true)
-      await persistBillingProfile()
-      if (!window.overheadBackend?.createEmbeddedCheckout) throw new Error('The secure billing service is not available in this build yet.')
-      const result = await window.overheadBackend.createEmbeddedCheckout({ tier: activePlan, acceptBillingPolicy: billing.billingPolicyAcknowledged })
-      if (result.alreadySubscribed) {
-        setOperationNotice(result.message || `You already have the ${selectedPlanName(activePlan)} plan. No charge was created.`)
-        return
-      }
-      setCheckout(result)
-    } catch (error) { setBillingError(userFacingError(error, 'Secure checkout could not be opened.')) }
-    finally { setBillingBusy(false) }
-  }
-
-  async function startFreeGoldTrial() {
-    const confirmed = window.confirm('Start your one free 30-day Gold trial? No card is required and no charge will be made.')
-    if (!confirmed) return
-    try {
-      setBillingError('')
-      setBillingBusy(true)
-      if (!window.overheadBackend?.startFreeGoldTrial) throw new Error('The secure free-trial service is not available in this build yet.')
-      const result = await window.overheadBackend.startFreeGoldTrial({ acceptTrialPolicy: billing.freeTrialPolicyAcknowledged })
-      await window.overheadBackend?.getRemoteEntitlements?.()
-      await refreshBackend()
-      setActivePlan('gold')
-      setOperationNotice(`Free Gold trial started — no card charged. It ends ${new Date(result.trialEndsAt).toLocaleDateString()}.`)
-    } catch (error) { setBillingError(userFacingError(error, 'The free trial could not be started.')) }
-    finally { setBillingBusy(false) }
-  }
-
-  async function createReceipt() {
-    try {
-      if (!window.overheadBackend?.createSubscriptionReceipt) throw new Error('The receipt service is not available.')
-      const result = await window.overheadBackend.createSubscriptionReceipt()
-      setOperationNotice(`Full subscription receipt created: ${result.pdfPath}`)
-    } catch (error) { setBillingError(userFacingError(error, 'The subscription receipt could not be created.')) }
-  }
-
-  async function refreshBillingActivity() {
-    try {
-      setBillingError('')
-      if (!window.overheadBackend?.getRemoteBillingActivity) throw new Error('The secure billing activity service is not available in this build yet.')
-      const result = await window.overheadBackend.getRemoteBillingActivity()
-      setBillingActivity(result.events || [])
-    } catch (error) { setBillingError(userFacingError(error, 'Billing activity could not be refreshed.')) }
-  }
-
-  async function cancelWithUnusedTimeRefund() {
-    const confirmed = window.confirm('Cancel the subscription now? OverHead will calculate unused paid time and refund that amount to the original payment method. Access will end immediately.')
-    if (!confirmed) return
-    try {
-      setBillingError('')
-      setBillingBusy(true)
-      if (!window.overheadBackend?.cancelSubscriptionWithUnusedTimeRefund) throw new Error('The secure cancellation service is not available in this build yet.')
-      const result = await window.overheadBackend.cancelSubscriptionWithUnusedTimeRefund()
-      const amount = Number(result.refundAmount || 0) / 100
-      const refundSummary = result.refundStatus === 'not_applicable' ? 'No unused paid time was available to refund.' : `${amount.toLocaleString(undefined, { style: 'currency', currency: String(result.currency || 'usd').toUpperCase() })} was sent back to the original payment method.`
-      await window.overheadBackend?.getRemoteEntitlements?.()
-      await refreshBackend()
-      setOperationNotice(`Subscription canceled. ${refundSummary}`)
-    } catch (error) { setBillingError(userFacingError(error, 'The subscription could not be canceled and refunded.')) }
-    finally { setBillingBusy(false) }
-  }
-
-  function updateBilling(key, value) {
-    setBilling((current) => ({ ...current, [key]: value }))
+      await openBillingModule(tier)
+    } catch (error) {
+      setOperationNotice(userFacingError(error, 'Billing module could not be opened.'))
+    }
   }
 
   return (
     <section className="panel page-panel">
       <div className="section-head">
-        <div>
-          <p className="eyebrow">Plans</p>
-          <h2>Billing profile and entitlements</h2>
-        </div>
+        <div><p className="eyebrow">Plans</p><h2>Choose a workspace plan</h2></div>
         <BadgeCheck size={20} />
       </div>
-      <div className="billing-protection-note">
-        <strong>OverHead Billing module</strong>
-        <span>Open the dedicated billing window to choose a plan, complete Stripe checkout, and manage your subscription.</span>
-        <button className="ghost-button" type="button" onClick={async () => {
-          try {
-            if (!window.overheadBackend?.openBillingModule) throw new Error('The Billing module is unavailable in this build.')
-            await window.overheadBackend.openBillingModule()
-          } catch (error) { setOperationNotice(userFacingError(error, 'Billing module could not be opened.')) }
-        }}>Open Billing &amp; Payments</button>
-      </div>
+      <p className="plan-note">Current workspace plan: {selectedPlanName(activeTier)}. Select a tier to open Billing &amp; Payments and review checkout details.</p>
       <div className="plan-grid">
         {planTiers.map((plan) => (
-          <button className={activePlan === plan.id ? 'plan-card active' : 'plan-card'} type="button" key={plan.id} onClick={() => setActivePlan(plan.id)}>
-            <strong>{plan.name} {!isPlanUnlocked(plan.id, backendState.entitlements?.activeTier) && <span className="lock-word">Locked</span>}</strong>
+          <button className={activePlan === plan.id ? 'plan-card active' : 'plan-card'} type="button" key={plan.id} onClick={() => choosePlan(plan.id)}>
+            <strong>{plan.name} {!isPlanUnlocked(plan.id, activeTier) && <span className="lock-word">Locked</span>}</strong>
             <em>{plan.level}</em>
             <span>{plan.price}</span>
             <p>{plan.summary}</p>
             <small>{plan.audience}</small>
-            <ul>
-              {plan.features.map((feature) => {
-                const unlocked = isPlanUnlocked(plan.id, backendState.entitlements?.activeTier)
-                return <li className={unlocked ? 'unlocked-feature' : 'locked-feature'} key={feature}>{unlocked ? 'Open' : 'Locked'} - {feature}</li>
-              })}
-            </ul>
+            <ul>{plan.features.map((feature) => <li className={isPlanUnlocked(plan.id, activeTier) ? 'unlocked-feature' : 'locked-feature'} key={feature}>{isPlanUnlocked(plan.id, activeTier) ? 'Open' : 'Locked'} - {feature}</li>)}</ul>
           </button>
         ))}
       </div>
       <div className="billing-protection-note">
-        <strong>Protected checkout</strong>
-        <span>Before a charge is started, OverHead checks whether this workspace already has the selected plan and blocks duplicate checkout attempts.</span>
+        <strong>Secure billing</strong>
+        <span>Plan changes, billing details, receipts, trials, and cancellation are handled in the dedicated Billing &amp; Payments window. OverHead refreshes and saves the workspace plan after Stripe confirms a transaction.</span>
       </div>
-      <div className="billing-protection-note">
-        <strong>Free 30-day Gold trial</strong>
-        <span>One per workspace. No card, no charge, and every Gold feature is available until the trial ends.</span>
-      </div>
-      <div className="billing-form">
-        <FormField label="Legal billing name" value={billing.legalName} onChange={(value) => updateBilling('legalName', value)} placeholder="Business legal name" />
-        <FormField label="Billing email" value={billing.billingEmail} onChange={(value) => updateBilling('billingEmail', value)} placeholder="billing@example.com" />
-        <FormField label="Phone" value={billing.phone} onChange={(value) => updateBilling('phone', value)} placeholder="Billing phone" />
-        <FormField label="Address line 1" value={billing.addressLine1} onChange={(value) => updateBilling('addressLine1', value)} placeholder="Street address" />
-        <FormField label="Address line 2" value={billing.addressLine2} onChange={(value) => updateBilling('addressLine2', value)} placeholder="Suite, unit, optional" />
-        <FormField label="City" value={billing.city} onChange={(value) => updateBilling('city', value)} placeholder="City" />
-        <FormField label="State/region" value={billing.region} onChange={(value) => updateBilling('region', value)} placeholder="State" />
-        <FormField label="Postal code" value={billing.postalCode} onChange={(value) => updateBilling('postalCode', value)} placeholder="ZIP" />
-        <FormField label="Country" value={billing.country} onChange={(value) => updateBilling('country', value)} placeholder="US" />
-        <FormField label="Tax ID type" value={billing.taxIdType} onChange={(value) => updateBilling('taxIdType', value)} placeholder="EIN, VAT, GST" />
-        <FormField label="Tax ID last 4" value={billing.taxIdLast4} onChange={(value) => updateBilling('taxIdLast4', value)} placeholder="Last 4 only" />
-        <FormField label="Invoice terms" value={billing.invoiceTerms} onChange={(value) => updateBilling('invoiceTerms', value)} placeholder="Due on receipt" />
-        <FormField label="Invoice footer" value={billing.invoiceFooter} onChange={(value) => updateBilling('invoiceFooter', value)} placeholder="Footer text" />
-        <label className="checkbox-line">
-          <input type="checkbox" checked={billing.consentToRecurringBilling} onChange={(event) => updateBilling('consentToRecurringBilling', event.target.checked)} />
-          I authorize recurring billing for the selected tier.
-        </label>
-        <label className="checkbox-line">
-          <input type="checkbox" checked={billing.cancellationPathAcknowledged} onChange={(event) => updateBilling('cancellationPathAcknowledged', event.target.checked)} />
-          I acknowledge the cancellation path must be available before launch.
-        </label>
-        <label className="checkbox-line">
-          <input type="checkbox" checked={billing.billingPolicyAcknowledged} onChange={(event) => updateBilling('billingPolicyAcknowledged', event.target.checked)} />
-          I have reviewed and accept the Subscription Billing &amp; Authorization Policy.
-        </label>
-        <label className="checkbox-line">
-          <input type="checkbox" checked={billing.freeTrialPolicyAcknowledged} onChange={(event) => updateBilling('freeTrialPolicyAcknowledged', event.target.checked)} />
-          I have reviewed and accept the Free Trial Policy before starting a free trial.
-        </label>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={saveBillingAndTier}>{billingBusy ? 'Saving billing profile…' : 'Save Billing Profile'}</button>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={startFreeGoldTrial}>{billingBusy ? 'Starting trial…' : 'Start Free 30-Day Gold Trial'}</button>
-        <button className="primary-action" type="button" disabled={billingBusy || !billing.billingPolicyAcknowledged} onClick={openEmbeddedCheckout}>{billingBusy ? 'Preparing secure checkout…' : 'Continue To Secure Checkout'}</button>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={createReceipt}>Create Full Receipt PDF</button>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={refreshBillingActivity}>Refresh Billing Activity</button>
-        <button className="ghost-button" type="button" disabled={billingBusy} onClick={cancelWithUnusedTimeRefund}>{billingBusy ? 'Processing cancellation…' : 'Cancel Now & Refund Unused Time'}</button>
-      </div>
-      <p className="form-hint">Free trial: one no-card, 30-day Gold-equivalent trial per workspace when secure billing services are enabled. Accept the billing policy above to enable secure checkout. Canceling a paid plan ends access immediately; the intended live flow calculates eligible unused time for a refund to the original payment method. Trial periods have no payment to refund.</p>
-      {billingActivity.length > 0 && <div className="backend-health"><strong>Billing activity</strong>{billingActivity.map(([title, at, detail]) => <span key={`${title}-${at}`}>{title}: {new Date(at).toLocaleString()} {detail ? `— ${detail}` : ''}</span>)}</div>}
-      <p className="plan-note">Active: {backendState.entitlements?.activePlan?.name || 'Silver'} / {backendState.entitlements?.activePlan?.level || 'Basic'}</p>
-      {billingError && <p className="form-error" role="alert">{billingError}</p>}
-      {checkout && <EmbeddedBillingCheckout checkout={checkout} onClose={() => setCheckout(null)} onComplete={async () => { setCheckout(null); await window.overheadBackend?.getRemoteEntitlements?.(); await refreshBackend(); setOperationNotice('Payment submitted. Your plan will update after Stripe confirms it.') }} />}
     </section>
   )
-}
-
-function EmbeddedBillingCheckout({ checkout, onClose, onComplete }) {
-  const [error, setError] = useState('')
-  const mountCheckout = useCallback(async () => {
-    try {
-      if (!window.Stripe) throw new Error('Stripe checkout could not be loaded.')
-      const stripe = window.Stripe(checkout.publishableKey)
-      const embedded = await stripe.initEmbeddedCheckout({ fetchClientSecret: async () => checkout.clientSecret, onComplete })
-      embedded.mount('#overhead-embedded-checkout')
-      return () => embedded.destroy()
-    } catch (reason) { setError(userFacingError(reason, 'Stripe checkout could not be started.')); return undefined }
-  }, [checkout, onComplete])
-  useEffect(() => {
-    let cleanup
-    const existing = document.querySelector('script[data-overhead-stripe]')
-    const ready = async () => { cleanup = await mountCheckout() }
-    if (existing) ready()
-    else {
-      const script = document.createElement('script')
-      script.src = 'https://js.stripe.com/clover/stripe.js'
-      script.async = true
-      script.dataset.overheadStripe = 'true'
-      script.onload = ready
-      script.onerror = () => setError('Stripe checkout could not be loaded. Check your connection and try again.')
-      document.head.appendChild(script)
-    }
-    return () => { if (cleanup) cleanup() }
-  }, [mountCheckout])
-  return <div className="checkout-overlay" role="dialog" aria-modal="true" aria-label="Secure Stripe checkout"><div className="checkout-panel"><button className="mini-button" type="button" onClick={onClose}>Close</button><h3>Complete your plan securely</h3><p>Your card details go directly to Stripe. OverHead will update access only after Stripe confirms payment.</p><div id="overhead-embedded-checkout" />{error && <p className="form-error">{error}</p>}</div></div>
 }
 
 function PaymentsSection({ backendState, refreshBackend, setOperationNotice }) {
